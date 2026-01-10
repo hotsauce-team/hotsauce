@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test-deno:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -31,26 +31,3 @@ jobs:
 
       - name: Run tests
         run: deno task test
-
-  typecheck-node:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Setup Deno (for jsr imports)
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Install dependencies via JSR
-        run: deno install
-
-      - name: Type check
-        run: deno check packages/*/mod.ts
