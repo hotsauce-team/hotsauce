@@ -1,8 +1,11 @@
 // Form wrapper component
 
 import { html, attrs, raw } from '../html.ts';
-import { formFields } from './field.ts';
+import { formFields, type RelationOption } from './field.ts';
 import type { CMSField } from '@drizzle-cms/core';
+
+// Re-export RelationOption for convenience
+export type { RelationOption } from './field.ts';
 
 /**
  * Options for rendering a form
@@ -31,7 +34,8 @@ export function form(
   fields: CMSField[],
   options: FormOptions,
   values: Record<string, unknown> = {},
-  errors: Record<string, string> = {}
+  errors: Record<string, string> = {},
+  relationData: Record<string, RelationOption[]> = {}
 ): string {
   const method = options.method ?? 'POST';
   const submitText = options.submitText ?? 'Save';
@@ -43,7 +47,7 @@ export function form(
     class: `cms-form ${options.class ?? ''}`.trim(),
     enctype: options.multipart ? 'multipart/form-data' : undefined,
   })}>
-  ${raw(formFields(fields, values, errors))}
+  ${raw(formFields(fields, values, errors, relationData))}
   
   <div class="cms-form-actions">
     <button type="submit" class="cms-btn cms-btn-primary">${submitText}</button>

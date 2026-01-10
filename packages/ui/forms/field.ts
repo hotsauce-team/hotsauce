@@ -1,8 +1,11 @@
 // Form field wrapper component
 
 import { html, attrs, raw, when } from '../html.ts';
-import { renderFieldInput, type FieldInputOptions } from './inputs.ts';
+import { renderFieldInput, type FieldInputOptions, type RelationOption } from './inputs.ts';
 import type { CMSField } from '@drizzle-cms/core';
+
+// Re-export for convenience
+export type { RelationOption } from './inputs.ts';
 
 /**
  * Options for rendering a form field
@@ -46,12 +49,14 @@ export function formField(field: CMSField, options: FormFieldOptions = {}): stri
 export function formFields(
   fields: CMSField[],
   values: Record<string, unknown> = {},
-  errors: Record<string, string> = {}
+  errors: Record<string, string> = {},
+  relationData: Record<string, RelationOption[]> = {}
 ): string {
   return fields
     .map(field => formField(field, {
       value: values[field.column.propertyName],
       error: errors[field.column.propertyName],
+      relationOptions: relationData[field.column.propertyName],
     }))
     .join('\n');
 }

@@ -114,6 +114,7 @@ export async function parseFormData(request: Request): Promise<Record<string, st
 
 /**
  * Convert form data to typed values based on column types
+ * Form fields use propertyName (camelCase), and Drizzle expects propertyName too
  */
 export function coerceFormValues(
   formData: Record<string, string | string[]>,
@@ -122,12 +123,13 @@ export function coerceFormValues(
   const result: Record<string, unknown> = {};
   
   for (const column of columns) {
-    const rawValue = formData[column.name];
+    // Form fields use propertyName (e.g., authorId)
+    const rawValue = formData[column.propertyName];
     
     // Handle missing values
     if (rawValue === undefined || rawValue === '') {
       if (!column.notNull) {
-        result[column.name] = null;
+        result[column.propertyName] = null;
       }
       continue;
     }
@@ -138,13 +140,13 @@ export function coerceFormValues(
     // Skip empty strings for non-nullable columns
     if (value === '') {
       if (!column.notNull) {
-        result[column.name] = null;
+        result[column.propertyName] = null;
       }
       continue;
     }
     
-    // Coerce based on data type
-    result[column.name] = coerceValue(value, column.dataType ?? 'string');
+    // Coerce based on data type, output using propertyName for Drizzle
+    result[column.propertyName] = coerceValue(value, column.dataType ?? 'string');
   }
   
   return result;

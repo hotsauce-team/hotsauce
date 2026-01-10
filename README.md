@@ -177,7 +177,7 @@ Deno.serve(handler);
 - [x] HTML5 native form validation (required, maxlength, pattern)
 - [x] Auto-generated CRUD routes (BYOS: Bring Your Own Server)
 - [x] Web Standard Request/Response handlers
-- [ ] Relation field pickers
+- [x] Relation field pickers (FK → select dropdown)
 - [ ] File uploads (local + S3)
 - [ ] Session auth (cookie-based)
 - [ ] RLS policy integration (Postgres)

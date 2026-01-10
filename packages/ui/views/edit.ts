@@ -1,7 +1,7 @@
 // Edit view - form for creating/editing records
 
 import { html, attrs, raw } from '../html.ts';
-import { form } from '../forms/form.ts';
+import { form, type RelationOption } from '../forms/form.ts';
 import type { CMSField } from '@drizzle-cms/core';
 
 /**
@@ -26,7 +26,8 @@ export function editView(
   fields: CMSField[],
   options: EditViewOptions,
   values: Record<string, unknown> = {},
-  errors: Record<string, string> = {}
+  errors: Record<string, string> = {},
+  relationData: Record<string, RelationOption[]> = {}
 ): string {
   const isEdit = options.id !== undefined;
   const action = options.action ?? (isEdit 
@@ -44,7 +45,7 @@ export function editView(
     submitText,
     cancelUrl: options.baseUrl,
     class: 'cms-edit-form',
-  }, values, errors))}
+  }, values, errors, relationData))}
 </div>`;
 }
 
@@ -56,7 +57,8 @@ export function createView(
   fields: CMSField[],
   options: Omit<EditViewOptions, 'id'>,
   values: Record<string, unknown> = {},
-  errors: Record<string, string> = {}
+  errors: Record<string, string> = {},
+  relationData: Record<string, RelationOption[]> = {}
 ): string {
-  return editView(title, fields, options, values, errors);
+  return editView(title, fields, options, values, errors, relationData);
 }

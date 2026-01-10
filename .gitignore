@@ -27,14 +27,13 @@ coverage/
 Thumbs.db
 
 # Deno
-deno.lock
 .deno_cache/
 
 # Logs
 *.log
 
+# Tidy up
 agent-reference/*
-
-
 /agent-reference
+
 /examples/deno-server/data

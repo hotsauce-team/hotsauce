@@ -3,6 +3,7 @@
 
   "tasks": {
     "dev": "deno run --permission-set=example-deno-server main.ts",
+    "dev:watch": "deno run --watch --permission-set=example-deno-server main.ts",
     "seed": "deno run --permission-set=example-deno-server seed.ts"
   },
 

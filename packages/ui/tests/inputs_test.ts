@@ -13,6 +13,7 @@ import {
   jsonInput,
   hiddenInput,
   renderFieldInput,
+  relationInput,
 } from '../forms/inputs.ts';
 import type { CMSField, IntrospectedColumn } from '@drizzle-cms/core';
 
@@ -251,4 +252,147 @@ Deno.test('renderFieldInput: routes to correct input by fieldType', () => {
     renderFieldInput(createMockField({ fieldType: 'boolean' })).includes('type="checkbox"'),
     true
   );
+});
+
+// relationInput tests
+Deno.test('relationInput: renders select element', () => {
+  const field = createMockField({
+    fieldType: 'relation',
+    column: {
+      name: 'author_id',
+      propertyName: 'authorId',
+      dataType: 'number',
+      columnType: 'PgInteger',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      references: { table: 'users', column: 'id' },
+    },
+  });
+  const result = relationInput(field);
+  
+  assertStringIncludes(result, '<select');
+  assertStringIncludes(result, 'name="authorId"');
+  assertStringIncludes(result, 'class="cms-input cms-select cms-relation"');
+});
+
+Deno.test('relationInput: shows placeholder with table name', () => {
+  const field = createMockField({
+    fieldType: 'relation',
+    column: {
+      name: 'author_id',
+      propertyName: 'authorId',
+      dataType: 'number',
+      columnType: 'PgInteger',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      references: { table: 'users', column: 'id' },
+    },
+  });
+  const result = relationInput(field);
+  
+  assertStringIncludes(result, '-- Select users --');
+});
+
+Deno.test('relationInput: renders options from relationOptions', () => {
+  const field = createMockField({
+    fieldType: 'relation',
+    column: {
+      name: 'author_id',
+      propertyName: 'authorId',
+      dataType: 'number',
+      columnType: 'PgInteger',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      references: { table: 'users', column: 'id' },
+    },
+  });
+  const result = relationInput(field, {
+    relationOptions: [
+      { value: 1, label: 'Alice' },
+      { value: 2, label: 'Bob' },
+    ],
+  });
+  
+  assertStringIncludes(result, '<option');
+  assertStringIncludes(result, 'value="1"');
+  assertStringIncludes(result, '>Alice</option>');
+  assertStringIncludes(result, 'value="2"');
+  assertStringIncludes(result, '>Bob</option>');
+});
+
+Deno.test('relationInput: marks selected option', () => {
+  const field = createMockField({
+    fieldType: 'relation',
+    column: {
+      name: 'author_id',
+      propertyName: 'authorId',
+      dataType: 'number',
+      columnType: 'PgInteger',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      references: { table: 'users', column: 'id' },
+    },
+  });
+  const result = relationInput(field, {
+    value: 2,
+    relationOptions: [
+      { value: 1, label: 'Alice' },
+      { value: 2, label: 'Bob' },
+    ],
+  });
+  
+  assertStringIncludes(result, 'value="2" selected');
+});
+
+Deno.test('relationInput: adds required for notNull fields', () => {
+  const field = createMockField({
+    fieldType: 'relation',
+    column: {
+      name: 'author_id',
+      propertyName: 'authorId',
+      dataType: 'number',
+      columnType: 'PgInteger',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      references: { table: 'users', column: 'id' },
+    },
+  });
+  const result = relationInput(field);
+  
+  assertStringIncludes(result, 'required');
+});
+
+Deno.test('renderFieldInput: routes relation to relationInput', () => {
+  const field = createMockField({
+    fieldType: 'relation',
+    column: {
+      name: 'author_id',
+      propertyName: 'authorId',
+      dataType: 'number',
+      columnType: 'PgInteger',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      references: { table: 'users', column: 'id' },
+    },
+  });
+  const result = renderFieldInput(field, {
+    relationOptions: [
+      { value: 1, label: 'Alice' },
+    ],
+  });
+  
+  assertStringIncludes(result, '<select');
+  assertStringIncludes(result, '>Alice</option>');
 });

@@ -8,7 +8,8 @@ import { listView } from '@drizzle-cms/ui';
 import { detailView } from '@drizzle-cms/ui';
 import { editView, createView } from '@drizzle-cms/ui';
 import { html, raw } from '@drizzle-cms/ui';
-import type { RouteContext } from './types.ts';
+import type { RelationOption } from '@drizzle-cms/ui';
+import type { RouteContext, ResolvedCmsOptions } from './types.ts';
 import { htmlResponse, redirect, notFound, parseFormData, coerceFormValues, getPagination, getSort } from './utils.ts';
 import { cmsUrl, formatTableName, formatColumnName } from './router.ts';
 import type { NavItem, ListColumn, ListViewOptions, DetailViewOptions, EditViewOptions } from '@drizzle-cms/ui';
@@ -128,6 +129,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Build columns for list
   const listColumns = getListColumns(table);
   
+  // Fetch relation data for FK columns
+  const relationData = await fetchAllRelationOptions(options, table);
+  
   // List view options
   const listOptions: ListViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -151,6 +155,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     listColumns,
     records,
     listOptions,
+    relationData,
   );
   
   // Add pagination if needed
@@ -188,6 +193,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   
   const navItems = buildNavItems(options.introspected.tables, basePath, table.name);
   const cmsFields = tableToCmsFields(table);
+  const relationData = await fetchAllRelationOptions(options, table);
   
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -202,6 +208,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     cmsFields,
     record,
     detailOptions,
+    relationData,
   );
   
   const page = layout(content, {
@@ -240,12 +247,12 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
       // Re-render form with error
-      return renderCreateForm(ctx, recordToValues(formData), String(error));
+      return await renderCreateForm(ctx, recordToValues(formData), String(error));
     }
   }
   
   // Handle GET - show form
-  return renderCreateForm(ctx);
+  return await renderCreateForm(ctx);
 }
 
 /**
@@ -281,12 +288,12 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
       // Re-render form with error
-      return renderEditForm(ctx, recordToValues(formData), String(error));
+      return await renderEditForm(ctx, recordToValues(formData), String(error));
     }
   }
   
   // Handle GET - show form
-  return renderEditForm(ctx, record);
+  return await renderEditForm(ctx, record);
 }
 
 /**
@@ -318,17 +325,18 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
 // Helper functions
 // ============================================================================
 
-function renderCreateForm(
+async function renderCreateForm(
   ctx: RouteContext,
   values: Record<string, unknown> = {},
   error?: string,
-): Response {
+): Promise<Response> {
   const { options, route } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected.tables, basePath, table.name);
   
   const cmsFields = tableToCmsFields(table, true); // editable only
+  const relationData = await fetchAllRelationOptions(options, table);
   
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -347,6 +355,7 @@ function renderCreateForm(
     editOptions,
     values,
     errors,
+    relationData,
   );
   
   const page = layout(content, {
@@ -358,11 +367,11 @@ function renderCreateForm(
   return htmlResponse(page);
 }
 
-function renderEditForm(
+async function renderEditForm(
   ctx: RouteContext,
   values: Record<string, unknown>,
   error?: string,
-): Response {
+): Promise<Response> {
   const { options, route } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
@@ -370,6 +379,7 @@ function renderEditForm(
   const navItems = buildNavItems(options.introspected.tables, basePath, table.name);
   
   const cmsFields = tableToCmsFields(table, true); // editable only
+  const relationData = await fetchAllRelationOptions(options, table);
   
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -388,6 +398,7 @@ function renderEditForm(
     editOptions,
     values,
     errors,
+    relationData,
   );
   
   const page = layout(content, {
@@ -465,7 +476,8 @@ function getListColumns(table: IntrospectedTable): ListColumn[] {
     })
     .slice(0, 6)
     .map(c => ({
-      key: c.name,
+      // Use propertyName for key to match relationData keys and record property access
+      key: c.propertyName,
       label: formatColumnName(c.name),
     }));
 }
@@ -485,4 +497,86 @@ function recordToValues(formData: Record<string, string | string[]>): Record<str
     result[key] = Array.isArray(value) ? value[0] : value;
   }
   return result;
+}
+
+/**
+ * Get the best display column for a table (for relation labels)
+ * Looks for common naming patterns: name, title, label, email, etc.
+ */
+function getDisplayColumn(table: IntrospectedTable): IntrospectedColumn | null {
+  const preferredNames = ['name', 'title', 'label', 'email', 'username', 'slug'];
+  
+  for (const name of preferredNames) {
+    const col = table.columns.find(c => c.name === name);
+    if (col && col.dataType === 'string') {
+      return col;
+    }
+  }
+  
+  // Fall back to first non-PK string column
+  const stringCol = table.columns.find(c => c.dataType === 'string' && !c.isPrimaryKey);
+  if (stringCol) return stringCol;
+  
+  // Last resort: first non-PK column
+  return table.columns.find(c => !c.isPrimaryKey) ?? null;
+}
+
+/**
+ * Fetch all records from a related table for FK picker
+ */
+async function fetchRelationOptions(
+  options: ResolvedCmsOptions,
+  tableName: string
+): Promise<RelationOption[]> {
+  const table = options.introspected.tables.find(t => t.name === tableName);
+  if (!table) return [];
+  
+  const drizzleTable = table.table;
+  const pkColumn = table.columns.find(c => c.isPrimaryKey);
+  const displayColumn = getDisplayColumn(table);
+  
+  if (!pkColumn) return [];
+  
+  try {
+    const records = await options.db.select().from(drizzleTable).limit(500);
+    
+    return (records as Record<string, unknown>[]).map(record => {
+      const value = record[pkColumn.name];
+      const label = displayColumn 
+        ? String(record[displayColumn.name] ?? value)
+        : String(value);
+      
+      return {
+        value: value as string | number,
+        label,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Fetch relation options for all FK columns in a table
+ */
+async function fetchAllRelationOptions(
+  options: ResolvedCmsOptions,
+  table: IntrospectedTable
+): Promise<Record<string, RelationOption[]>> {
+  const relationData: Record<string, RelationOption[]> = {};
+  
+  // Find all columns with foreign key references
+  const fkColumns = table.columns.filter(c => c.references);
+  
+  // Fetch options for each FK column in parallel
+  // Use propertyName as key since that's what forms use for field lookup
+  await Promise.all(
+    fkColumns.map(async (col) => {
+      if (col.references) {
+        relationData[col.propertyName] = await fetchRelationOptions(options, col.references.table);
+      }
+    })
+  );
+  
+  return relationData;
 }

@@ -174,6 +174,27 @@ Deno.test('coerceFormValues: handles array values', () => {
   assertEquals(result.tags, 'one'); // Uses first value
 });
 
+Deno.test('coerceFormValues: uses propertyName for form lookup and output', () => {
+  // Form uses camelCase (propertyName), Drizzle also expects propertyName
+  const formData = {
+    authorId: '42',  // Form field uses propertyName
+    createdAt: '2024-01-01',
+  };
+  
+  const columns: IntrospectedColumn[] = [
+    { name: 'author_id', propertyName: 'authorId', columnType: 'PgInteger', dataType: 'number', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
+    { name: 'created_at', propertyName: 'createdAt', columnType: 'PgTimestamp', dataType: 'date', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
+  ];
+  
+  const result = coerceFormValues(formData, columns);
+  
+  // Output should use propertyName for Drizzle compatibility
+  assertEquals(result.authorId, 42);
+  assertEquals(result.createdAt, '2024-01-01');
+  // And NOT have the snake_case keys
+  assertEquals(result.author_id, undefined);
+});
+
 // =============================================================================
 // getPagination tests
 // =============================================================================

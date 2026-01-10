@@ -4,6 +4,16 @@ import { html, attrs, raw, type SafeHtml } from '../html.ts';
 import type { CMSField } from '@drizzle-cms/core';
 
 /**
+ * An option for a relation select field
+ */
+export interface RelationOption {
+  /** The value (typically the primary key) */
+  value: string | number;
+  /** The display label */
+  label: string;
+}
+
+/**
  * Options for rendering a field input
  */
 export interface FieldInputOptions {
@@ -15,6 +25,8 @@ export interface FieldInputOptions {
   class?: string;
   /** HTML id attribute (defaults to field name) */
   id?: string;
+  /** Options for relation fields (FK select dropdowns) */
+  relationOptions?: RelationOption[];
 }
 
 /**
@@ -210,6 +222,38 @@ export function hiddenInput(field: CMSField, options: FieldInputOptions = {}): s
 }
 
 /**
+ * Render a relation select (FK picker)
+ */
+export function relationInput(field: CMSField, options: FieldInputOptions = {}): string {
+  const relationOptions = options.relationOptions ?? [];
+  const currentValue = options.value != null ? String(options.value) : '';
+  const isRequired = field.column.notNull && !field.column.hasDefault;
+
+  // Build option elements
+  const optionElements = relationOptions.map(opt => {
+    const selected = String(opt.value) === currentValue;
+    return html`<option ${attrs({ value: opt.value, selected })}>${opt.label}</option>`;
+  });
+
+  // Add reference info to help text if available
+  const refInfo = field.column.references;
+  const placeholder = refInfo 
+    ? `-- Select ${refInfo.table} --` 
+    : '-- Select --';
+
+  return html`<select ${attrs({
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    class: `cms-input cms-select cms-relation ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    required: isRequired,
+  })}>
+    <option value="">${placeholder}</option>
+    ${raw(optionElements.join('\n    '))}
+  </select>`;
+}
+
+/**
  * Render the appropriate input for a CMS field
  */
 export function renderFieldInput(field: CMSField, options: FieldInputOptions = {}): string {
@@ -244,8 +288,7 @@ export function renderFieldInput(field: CMSField, options: FieldInputOptions = {
     case 'json':
       return jsonInput(field, options);
     case 'relation':
-      // Relations need special handling with lookup data
-      return textInput(field, options); // Fallback to text for now
+      return relationInput(field, options);
     case 'array':
       return jsonInput(field, options); // Arrays as JSON for now
     case 'file':

@@ -36,7 +36,8 @@
     "lint": "deno lint",
     "fmt": "deno fmt",
     "example:seed": "deno task -f example-deno-server seed",
-    "example:dev": "deno task -f example-deno-server dev"
+    "example:dev": "deno task -f example-deno-server dev",
+    "example:dev:watch": "deno task -f example-deno-server dev:watch"
     // "build:npm": "deno run --allow-read=. --allow-write=./npm --allow-env=HOME scripts/build_npm.ts"
   },
 

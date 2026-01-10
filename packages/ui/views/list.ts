@@ -2,6 +2,7 @@
 
 import { html, attrs, raw, escapeHtml } from '../html.ts';
 import type { CMSField, IntrospectedTable } from '@drizzle-cms/core';
+import type { RelationOption } from '../forms/inputs.ts';
 
 /**
  * Column configuration for list view
@@ -38,10 +39,19 @@ export interface ListViewOptions {
 /**
  * Default value formatter
  */
-function defaultFormat(value: unknown): string {
+function defaultFormat(value: unknown, relationOptions?: RelationOption[]): string {
   if (value === null || value === undefined) {
     return '<span class="cms-null">—</span>';
   }
+  
+  // For relation fields, show ID and display label in brackets
+  if (relationOptions) {
+    const option = relationOptions.find(o => String(o.value) === String(value));
+    if (option) {
+      return escapeHtml(`${String(value)} (${option.label})`);
+    }
+  }
+  
   if (value instanceof Date) {
     return value.toLocaleDateString();
   }
@@ -60,7 +70,8 @@ function defaultFormat(value: unknown): string {
 export function listTable(
   columns: ListColumn[],
   records: Record<string, unknown>[],
-  options: ListViewOptions
+  options: ListViewOptions,
+  relationData: Record<string, RelationOption[]> = {}
 ): string {
   const primaryKey = options.primaryKey ?? 'id';
   const showActions = options.showEdit || options.showDelete || options.showView;
@@ -81,7 +92,9 @@ export function listTable(
     const id = record[primaryKey];
     const cells = columns.map(col => {
       const value = record[col.key];
-      const formatted = col.format ? col.format(value) : defaultFormat(value);
+      const formatted = col.format 
+        ? col.format(value) 
+        : defaultFormat(value, relationData[col.key]);
       return `<td class="cms-td">${formatted}</td>`;
     }).join('\n      ');
 
@@ -140,13 +153,14 @@ export function listView(
   title: string,
   columns: ListColumn[],
   records: Record<string, unknown>[],
-  options: ListViewOptions
+  options: ListViewOptions,
+  relationData: Record<string, RelationOption[]> = {}
 ): string {
   return html`<div class="cms-list-view">
   <header class="cms-list-header">
     <h1>${title}</h1>
     <a href="${options.baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
   </header>
-  ${raw(listTable(columns, records, options))}
+  ${raw(listTable(columns, records, options, relationData))}
 </div>`;
 }

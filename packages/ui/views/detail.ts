@@ -2,6 +2,7 @@
 
 import { html, attrs, raw, escapeHtml } from '../html.ts';
 import type { CMSField } from '@drizzle-cms/core';
+import type { RelationOption } from '../forms/inputs.ts';
 
 /**
  * Options for detail view
@@ -24,9 +25,21 @@ export interface DetailViewOptions {
 /**
  * Format a value for display
  */
-function formatValue(value: unknown, field: CMSField): string {
+function formatValue(
+  value: unknown, 
+  field: CMSField,
+  relationOptions?: RelationOption[]
+): string {
   if (value === null || value === undefined) {
     return '<span class="cms-null">—</span>';
+  }
+  
+  // For relation fields, show ID and display label in brackets
+  if (field.fieldType === 'relation' && relationOptions) {
+    const option = relationOptions.find(o => String(o.value) === String(value));
+    if (option) {
+      return escapeHtml(`${String(value)} (${option.label})`);
+    }
   }
   
   if (value instanceof Date) {
@@ -56,14 +69,18 @@ function formatValue(value: unknown, field: CMSField): string {
 /**
  * Render a field row in detail view
  */
-export function detailField(field: CMSField, value: unknown): string {
+export function detailField(
+  field: CMSField, 
+  value: unknown,
+  relationOptions?: RelationOption[]
+): string {
   if (field.hidden) {
     return '';
   }
   
   return html`<div class="cms-detail-field">
   <dt class="cms-detail-label">${field.label}</dt>
-  <dd class="cms-detail-value">${raw(formatValue(value, field))}</dd>
+  <dd class="cms-detail-value">${raw(formatValue(value, field, relationOptions))}</dd>
 </div>`;
 }
 
@@ -74,11 +91,12 @@ export function detailView(
   title: string,
   fields: CMSField[],
   record: Record<string, unknown>,
-  options: DetailViewOptions
+  options: DetailViewOptions,
+  relationData: Record<string, RelationOption[]> = {}
 ): string {
   const fieldRows = fields
     .filter(f => !f.hidden)
-    .map(f => detailField(f, record[f.column.propertyName]))
+    .map(f => detailField(f, record[f.column.propertyName], relationData[f.column.propertyName]))
     .join('\n  ');
 
   const actions: string[] = [];
