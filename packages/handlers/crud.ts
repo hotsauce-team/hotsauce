@@ -1,14 +1,15 @@
 // CRUD route handlers
 
-import { eq, asc, desc, sql } from 'drizzle-orm';
-import type { IntrospectedTable, IntrospectedColumn, CMSField } from '@drizzle-cms/core';
+import { eq, asc, desc, sql, and, inArray } from 'drizzle-orm';
+import type { IntrospectedTable, IntrospectedColumn, IntrospectedSchema, CMSField, JunctionTable } from '@drizzle-cms/core';
 import { mapColumnToField, mapColumnToFieldType } from '@drizzle-cms/core';
 import { layout, nav, alert, pagination } from '@drizzle-cms/ui';
 import { listView } from '@drizzle-cms/ui';
 import { detailView } from '@drizzle-cms/ui';
 import { editView, createView } from '@drizzle-cms/ui';
 import { html, raw } from '@drizzle-cms/ui';
-import type { RelationOption } from '@drizzle-cms/ui';
+import type { RelationOption, ManyToManyData } from '@drizzle-cms/ui';
+import type { ManyToManyDisplayData } from '@drizzle-cms/ui';
 import type { RouteContext, ResolvedCmsOptions } from './types.ts';
 import { htmlResponse, redirect, notFound, parseFormData, coerceFormValues, getPagination, getSort } from './utils.ts';
 import { cmsUrl, formatTableName, formatColumnName } from './router.ts';
@@ -19,12 +20,14 @@ import type { NavItem, ListColumn, ListViewOptions, DetailViewOptions, EditViewO
  */
 export function handleDashboard(ctx: RouteContext): Response {
   const { options } = ctx;
-  const tables = options.introspected.tables;
   const basePath = options.basePath;
+  
+  // Filter out junction tables from dashboard
+  const visibleTables = options.introspected.tables.filter(t => !t.isJunction);
   
   const navItems: NavItem[] = [
     { href: cmsUrl(basePath), label: 'Dashboard', active: true },
-    ...tables.map(t => ({
+    ...visibleTables.map(t => ({
       href: cmsUrl(basePath, t.name),
       label: formatTableName(t.name),
       active: false,
@@ -37,7 +40,7 @@ export function handleDashboard(ctx: RouteContext): Response {
     
     <h2>Tables</h2>
     <div class="cms-table-grid">
-      ${raw(tables.map(table => html`
+      ${raw(visibleTables.map(table => html`
         <a href="${cmsUrl(basePath, table.name)}" class="cms-table-card">
           <h3>${formatTableName(table.name)}</h3>
           <p>${table.columns.length} columns</p>
@@ -124,13 +127,18 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   const records = await query as Record<string, unknown>[];
   
   // Generate navigation
-  const navItems = buildNavItems(options.introspected.tables, basePath, table.name);
+  const navItems = buildNavItems(options.introspected, basePath, table.name);
   
   // Build columns for list
   const listColumns = getListColumns(table);
   
   // Fetch relation data for FK columns
   const relationData = await fetchAllRelationOptions(options, table);
+  
+  // Fetch M2M display data for all records
+  const pkCol = getPrimaryKeyColumn(table);
+  const recordIds = records.map(r => r[pkCol.propertyName] as string | number);
+  const m2mDisplayData = await fetchManyToManyDisplayData(options, table, recordIds);
   
   // List view options
   const listOptions: ListViewOptions = {
@@ -156,6 +164,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     records,
     listOptions,
     relationData,
+    m2mDisplayData,
   );
   
   // Add pagination if needed
@@ -191,9 +200,15 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     return notFound(`Record not found`);
   }
   
-  const navItems = buildNavItems(options.introspected.tables, basePath, table.name);
+  const navItems = buildNavItems(options.introspected, basePath, table.name);
   const cmsFields = tableToCmsFields(table);
   const relationData = await fetchAllRelationOptions(options, table);
+  
+  // Fetch M2M display data for this record - use actual ID from record, not URL string
+  const pkCol = getPrimaryKeyColumn(table);
+  const actualRecordId = record[pkCol.propertyName] as string | number;
+  const m2mMap = await fetchManyToManyDisplayData(options, table, [actualRecordId]);
+  const m2mDisplayData = m2mMap.get(actualRecordId) ?? [];
   
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -209,6 +224,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     record,
     detailOptions,
     relationData,
+    m2mDisplayData,
   );
   
   const page = layout(content, {
@@ -243,6 +259,9 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       
       const newRecord = result[0] as Record<string, unknown>;
       const newId = getPrimaryKeyValue(table, newRecord);
+      
+      // Save many-to-many relations
+      await saveManyToManyData(options, table, newId, formData);
       
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
@@ -284,6 +303,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
         .update(drizzleTable)
         .set(values)
         .where(eq(pkField as never, recordId as never));
+      
+      // Save many-to-many relations
+      await saveManyToManyData(options, table, recordId, formData);
       
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
@@ -333,10 +355,11 @@ async function renderCreateForm(
   const { options, route } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
-  const navItems = buildNavItems(options.introspected.tables, basePath, table.name);
+  const navItems = buildNavItems(options.introspected, basePath, table.name);
   
   const cmsFields = tableToCmsFields(table, true); // editable only
   const relationData = await fetchAllRelationOptions(options, table);
+  const manyToManyData = await fetchManyToManyData(options, table, undefined);
   
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -356,6 +379,7 @@ async function renderCreateForm(
     values,
     errors,
     relationData,
+    manyToManyData,
   );
   
   const page = layout(content, {
@@ -376,10 +400,11 @@ async function renderEditForm(
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
-  const navItems = buildNavItems(options.introspected.tables, basePath, table.name);
+  const navItems = buildNavItems(options.introspected, basePath, table.name);
   
   const cmsFields = tableToCmsFields(table, true); // editable only
   const relationData = await fetchAllRelationOptions(options, table);
+  const manyToManyData = await fetchManyToManyData(options, table, recordId);
   
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -399,6 +424,7 @@ async function renderEditForm(
     values,
     errors,
     relationData,
+    manyToManyData,
   );
   
   const page = layout(content, {
@@ -411,13 +437,16 @@ async function renderEditForm(
 }
 
 function buildNavItems(
-  tables: IntrospectedTable[],
+  schema: IntrospectedSchema,
   basePath: string,
   activeTable?: string,
 ): NavItem[] {
+  // Filter out junction tables from navigation
+  const visibleTables = schema.tables.filter(t => !t.isJunction);
+  
   return [
     { href: cmsUrl(basePath), label: 'Dashboard', active: !activeTable },
-    ...tables.map(t => ({
+    ...visibleTables.map(t => ({
       href: cmsUrl(basePath, t.name),
       label: formatTableName(t.name),
       active: t.name === activeTable,
@@ -579,4 +608,253 @@ async function fetchAllRelationOptions(
   );
   
   return relationData;
+}
+
+/**
+ * Get junctions where this table is involved (either side)
+ */
+function getJunctionsForTable(
+  junctions: JunctionTable[],
+  tableName: string
+): { junction: JunctionTable; relatedTable: string; thisColumn: string; relatedColumn: string }[] {
+  const result: { junction: JunctionTable; relatedTable: string; thisColumn: string; relatedColumn: string }[] = [];
+
+  for (const junction of junctions) {
+    if (junction.leftTable === tableName) {
+      result.push({
+        junction,
+        relatedTable: junction.rightTable,
+        thisColumn: junction.leftColumn,
+        relatedColumn: junction.rightColumn,
+      });
+    } else if (junction.rightTable === tableName) {
+      result.push({
+        junction,
+        relatedTable: junction.leftTable,
+        thisColumn: junction.rightColumn,
+        relatedColumn: junction.leftColumn,
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Fetch many-to-many data for a record being edited
+ */
+async function fetchManyToManyData(
+  options: ResolvedCmsOptions,
+  table: IntrospectedTable,
+  recordId: string | number | undefined
+): Promise<ManyToManyData[]> {
+  const junctions = getJunctionsForTable(options.introspected.junctions, table.name);
+  if (junctions.length === 0) return [];
+
+  const result: ManyToManyData[] = [];
+
+  for (const { junction, relatedTable, thisColumn, relatedColumn } of junctions) {
+    // Find the junction table
+    const junctionTableInfo = options.introspected.tables.find(t => t.name === junction.tableName);
+    if (!junctionTableInfo) continue;
+
+    // Find the related table
+    const relatedTableInfo = options.introspected.tables.find(t => t.name === relatedTable);
+    if (!relatedTableInfo) continue;
+
+    // Fetch all options from the related table
+    const allOptions = await fetchRelationOptions(options, relatedTable);
+
+    // Fetch current selections if we have a recordId (edit mode)
+    let selectedValues: (string | number)[] = [];
+    if (recordId !== undefined) {
+      try {
+        const junctionTable = junctionTableInfo.table;
+        // Find the column that points to this table
+        const junctionThisCol = junctionTableInfo.columns.find(c => c.propertyName === thisColumn);
+        const junctionRelatedCol = junctionTableInfo.columns.find(c => c.propertyName === relatedColumn);
+
+        if (junctionThisCol && junctionRelatedCol) {
+          // deno-lint-ignore no-explicit-any
+          const drizzleCol = (junctionTable as any)[thisColumn];
+          if (drizzleCol) {
+            const rows = await options.db
+              .select()
+              .from(junctionTable)
+              .where(eq(drizzleCol, recordId));
+
+            selectedValues = (rows as Record<string, unknown>[]).map(
+              row => row[relatedColumn] as string | number
+            );
+          }
+        }
+      } catch {
+        // Ignore errors fetching selections
+      }
+    }
+
+    result.push({
+      fieldName: `${relatedTable}Ids`,
+      label: formatTableName(relatedTable),
+      relatedTable,
+      options: allOptions,
+      selectedValues,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Fetch many-to-many display data for list/detail views
+ * Returns a Map from record ID to array of display data
+ */
+async function fetchManyToManyDisplayData(
+  options: ResolvedCmsOptions,
+  table: IntrospectedTable,
+  recordIds: (string | number)[]
+): Promise<Map<string | number, ManyToManyDisplayData[]>> {
+  const result = new Map<string | number, ManyToManyDisplayData[]>();
+  if (recordIds.length === 0) return result;
+  
+  // Initialize empty arrays for all records
+  for (const id of recordIds) {
+    result.set(id, []);
+  }
+
+  const junctions = getJunctionsForTable(options.introspected.junctions, table.name);
+  if (junctions.length === 0) return result;
+
+  for (const { junction, relatedTable, thisColumn, relatedColumn } of junctions) {
+    // Find the junction table
+    const junctionTableInfo = options.introspected.tables.find(t => t.name === junction.tableName);
+    if (!junctionTableInfo) continue;
+
+    // Find the related table
+    const relatedTableInfo = options.introspected.tables.find(t => t.name === relatedTable);
+    if (!relatedTableInfo) continue;
+
+    // Fetch all options from the related table (for display labels)
+    const allOptions = await fetchRelationOptions(options, relatedTable);
+    const optionLabels = new Map(allOptions.map(o => [String(o.value), o.label]));
+
+    // Fetch junction rows for all recordIds at once
+    try {
+      const junctionTable = junctionTableInfo.table;
+      // deno-lint-ignore no-explicit-any
+      const drizzleCol = (junctionTable as any)[thisColumn];
+      if (drizzleCol) {
+        const rows = await options.db
+          .select()
+          .from(junctionTable)
+          .where(inArray(drizzleCol, recordIds as number[]));
+
+        // Group by this table's ID
+        const groupedByRecord = new Map<string | number, (string | number)[]>();
+        for (const row of rows as Record<string, unknown>[]) {
+          const recordId = row[thisColumn] as string | number;
+          const relatedId = row[relatedColumn] as string | number;
+          if (!groupedByRecord.has(recordId)) {
+            groupedByRecord.set(recordId, []);
+          }
+          groupedByRecord.get(recordId)!.push(relatedId);
+        }
+
+        // Build display data for each record
+        for (const id of recordIds) {
+          const selectedIds = groupedByRecord.get(id) ?? [];
+          const displayValues = selectedIds.map(relId => 
+            optionLabels.get(String(relId)) ?? String(relId)
+          );
+          
+          result.get(id)!.push({
+            fieldName: `${relatedTable}Ids`,
+            label: formatTableName(relatedTable),
+            displayValues,
+          });
+        }
+      }
+    } catch {
+      // Ignore errors - M2M columns won't show
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Save many-to-many junction data after creating/updating a record
+ */
+async function saveManyToManyData(
+  options: ResolvedCmsOptions,
+  table: IntrospectedTable,
+  recordId: string | number,
+  formData: Record<string, string | string[]>
+): Promise<void> {
+  const junctions = getJunctionsForTable(options.introspected.junctions, table.name);
+  if (junctions.length === 0) return;
+
+  for (const { junction, relatedTable, thisColumn, relatedColumn } of junctions) {
+    // Get field name for this relation
+    const fieldName = `${relatedTable}Ids`;
+    const rawValues = formData[fieldName];
+    
+    // Parse selected values from form
+    const selectedIds = new Set<string>();
+    if (rawValues) {
+      const values = Array.isArray(rawValues) ? rawValues : [rawValues];
+      for (const v of values) {
+        if (v) selectedIds.add(v);
+      }
+    }
+
+    // Find the junction table
+    const junctionTableInfo = options.introspected.tables.find(t => t.name === junction.tableName);
+    if (!junctionTableInfo) continue;
+
+    const junctionTable = junctionTableInfo.table;
+    // deno-lint-ignore no-explicit-any
+    const drizzleThisCol = (junctionTable as any)[thisColumn];
+    // deno-lint-ignore no-explicit-any
+    const drizzleRelatedCol = (junctionTable as any)[relatedColumn];
+    
+    if (!drizzleThisCol || !drizzleRelatedCol) continue;
+
+    try {
+      // Get existing junction rows for this record
+      const existingRows = await options.db
+        .select()
+        .from(junctionTable)
+        .where(eq(drizzleThisCol, recordId));
+
+      const existingIds = new Set(
+        (existingRows as Record<string, unknown>[]).map(r => String(r[relatedColumn]))
+      );
+
+      // Calculate what to delete and insert
+      const toDelete = [...existingIds].filter(id => !selectedIds.has(id));
+      const toInsert = [...selectedIds].filter(id => !existingIds.has(id));
+
+      // Delete removed relations
+      if (toDelete.length > 0) {
+        await options.db
+          .delete(junctionTable)
+          .where(and(
+            eq(drizzleThisCol, recordId),
+            inArray(drizzleRelatedCol, toDelete.map(id => parseInt(id, 10) || id))
+          ));
+      }
+
+      // Insert new relations
+      if (toInsert.length > 0) {
+        const insertValues = toInsert.map(relatedId => ({
+          [thisColumn]: recordId,
+          [relatedColumn]: parseInt(relatedId, 10) || relatedId,
+        }));
+        await options.db.insert(junctionTable).values(insertValues);
+      }
+    } catch {
+      // Log but don't fail the whole operation
+    }
+  }
 }

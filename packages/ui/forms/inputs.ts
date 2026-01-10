@@ -14,6 +14,22 @@ export interface RelationOption {
 }
 
 /**
+ * Data for a many-to-many relation (used in edit forms)
+ */
+export interface ManyToManyData {
+  /** Form field name (e.g., 'categoryIds') */
+  fieldName: string;
+  /** Display label (e.g., 'Categories') */
+  label: string;
+  /** The related table name */
+  relatedTable: string;
+  /** All available options from the related table */
+  options: RelationOption[];
+  /** Currently selected values */
+  selectedValues: (string | number)[];
+}
+
+/**
  * Options for rendering a field input
  */
 export interface FieldInputOptions {
@@ -251,6 +267,63 @@ export function relationInput(field: CMSField, options: FieldInputOptions = {}):
     <option value="">${placeholder}</option>
     ${raw(optionElements.join('\n    '))}
   </select>`;
+}
+
+/**
+ * Options for many-to-many checkbox list
+ */
+export interface ManyToManyInputOptions {
+  /** Field name for the form (e.g., 'categoryIds') */
+  name: string;
+  /** HTML id attribute */
+  id?: string;
+  /** Display label */
+  label: string;
+  /** All available options */
+  options: RelationOption[];
+  /** Currently selected values */
+  selectedValues?: (string | number)[];
+  /** Whether the input is disabled */
+  disabled?: boolean;
+  /** Additional CSS classes */
+  class?: string;
+}
+
+/**
+ * Render a checkbox list for many-to-many relations
+ */
+export function checkboxListInput(inputOptions: ManyToManyInputOptions): string {
+  const { name, label, options, selectedValues = [], disabled = false } = inputOptions;
+  const id = inputOptions.id ?? name;
+  const selectedSet = new Set(selectedValues.map(v => String(v)));
+
+  if (options.length === 0) {
+    return html`<div class="cms-checkbox-list cms-checkbox-list-empty">
+  <p class="cms-text-muted">No ${label.toLowerCase()} available.</p>
+</div>`;
+  }
+
+  const checkboxes = options.map((opt, index) => {
+    const checked = selectedSet.has(String(opt.value));
+    const inputId = `${id}-${index}`;
+
+    return html`<label ${attrs({ class: 'cms-checkbox-item', for: inputId })}>
+    <input ${attrs({
+      type: 'checkbox',
+      name,
+      id: inputId,
+      value: opt.value,
+      checked,
+      disabled,
+      class: 'cms-checkbox',
+    })} />
+    <span class="cms-checkbox-label">${opt.label}</span>
+  </label>`;
+  });
+
+  return html`<div ${attrs({ class: `cms-checkbox-list ${inputOptions.class ?? ''}`.trim() })}>
+  ${raw(checkboxes.join('\n  '))}
+</div>`;
 }
 
 /**

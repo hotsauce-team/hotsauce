@@ -18,6 +18,7 @@ const mockTable: IntrospectedTable = {
 const mockSchema: IntrospectedSchema = {
   tables: [mockTable],
   relations: [],
+  junctions: [],
 };
 
 // Mock database

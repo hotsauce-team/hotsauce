@@ -6,6 +6,7 @@ import {
   introspectSchema,
   introspectRelations,
   introspectFullSchema,
+  detectJunctionTables,
 } from '../schema/introspect.ts';
 import * as schema from './fixtures/schema.ts';
 
@@ -228,5 +229,59 @@ Deno.test('introspectFullSchema - returns tables and relations', () => {
   const tableNames = result.tables.map((t) => t.name);
   assertEquals(tableNames.includes('users'), true);
   assertEquals(tableNames.includes('posts'), true);
+});
+
+// Junction table detection tests
+Deno.test('detectJunctionTables - detects posts_to_categories as junction', () => {
+  const tables = introspectSchema(schema);
+  const junctions = detectJunctionTables(tables);
+
+  assertEquals(junctions.length, 1);
+  assertEquals(junctions[0]?.tableName, 'posts_to_categories');
+});
+
+Deno.test('detectJunctionTables - extracts left and right tables', () => {
+  const tables = introspectSchema(schema);
+  const junctions = detectJunctionTables(tables);
+
+  const junction = junctions[0];
+  assertExists(junction);
+
+  // Tables sorted alphabetically: categories < posts
+  assertEquals(junction.leftTable, 'categories');
+  assertEquals(junction.leftColumn, 'categoryId');
+  assertEquals(junction.rightTable, 'posts');
+  assertEquals(junction.rightColumn, 'postId');
+});
+
+Deno.test('detectJunctionTables - does not detect normal tables', () => {
+  const tables = introspectSchema(schema);
+  const junctions = detectJunctionTables(tables);
+
+  const junctionNames = junctions.map(j => j.tableName);
+  assertEquals(junctionNames.includes('users'), false);
+  assertEquals(junctionNames.includes('posts'), false);
+  assertEquals(junctionNames.includes('categories'), false);
+});
+
+Deno.test('introspectFullSchema - includes junctions array', () => {
+  const result = introspectFullSchema(schema);
+
+  assertExists(result.junctions);
+  assertEquals(result.junctions.length, 1);
+  assertEquals(result.junctions[0]?.tableName, 'posts_to_categories');
+});
+
+Deno.test('introspectFullSchema - marks junction tables with isJunction', () => {
+  const result = introspectFullSchema(schema);
+
+  const junctionTable = result.tables.find(t => t.name === 'posts_to_categories');
+  assertExists(junctionTable);
+  assertEquals(junctionTable.isJunction, true);
+
+  // Normal tables should not be marked
+  const postsTable = result.tables.find(t => t.name === 'posts');
+  assertExists(postsTable);
+  assertEquals(postsTable.isJunction, undefined);
 });
 

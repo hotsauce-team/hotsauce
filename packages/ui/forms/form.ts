@@ -35,7 +35,8 @@ export function form(
   options: FormOptions,
   values: Record<string, unknown> = {},
   errors: Record<string, string> = {},
-  relationData: Record<string, RelationOption[]> = {}
+  relationData: Record<string, RelationOption[]> = {},
+  extraContent: string = ''
 ): string {
   const method = options.method ?? 'POST';
   const submitText = options.submitText ?? 'Save';
@@ -48,6 +49,7 @@ export function form(
     enctype: options.multipart ? 'multipart/form-data' : undefined,
   })}>
   ${raw(formFields(fields, values, errors, relationData))}
+  ${raw(extraContent)}
   
   <div class="cms-form-actions">
     <button type="submit" class="cms-btn cms-btn-primary">${submitText}</button>

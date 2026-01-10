@@ -37,10 +37,7 @@ export const categories = pgTable("categories", {
 });
 
 // Junction table for many-to-many: posts <-> categories
-// TODO
-// export const postCategories = pgTable("post_categories", {
-//   postId: integer("post_id").notNull().references(() => posts.id),
-//   categoryId: integer("category_id").notNull().references(() => categories.id),
-// }, (table) => ({
-//   pk: primaryKey({ columns: [table.postId, table.categoryId] }),
-// }));
+export const postCategories = pgTable("post_categories", {
+  postId: integer("post_id").notNull().references(() => posts.id),
+  categoryId: integer("category_id").notNull().references(() => categories.id),
+}, (table) => [primaryKey({ columns: [table.postId, table.categoryId] })]);

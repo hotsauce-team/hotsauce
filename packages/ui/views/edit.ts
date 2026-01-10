@@ -2,6 +2,7 @@
 
 import { html, attrs, raw } from '../html.ts';
 import { form, type RelationOption } from '../forms/form.ts';
+import { checkboxListInput, type ManyToManyData } from '../forms/inputs.ts';
 import type { CMSField } from '@drizzle-cms/core';
 
 /**
@@ -19,6 +20,23 @@ export interface EditViewOptions {
 }
 
 /**
+ * Render many-to-many checkbox sections
+ */
+function renderManyToManySections(manyToManyData: ManyToManyData[]): string {
+  if (manyToManyData.length === 0) return '';
+
+  return manyToManyData.map(m2m => html`<div class="cms-field">
+  <label class="cms-label">${m2m.label}</label>
+  ${raw(checkboxListInput({
+    name: m2m.fieldName,
+    label: m2m.label,
+    options: m2m.options,
+    selectedValues: m2m.selectedValues,
+  }))}
+</div>`).join('\n');
+}
+
+/**
  * Render an edit/create view
  */
 export function editView(
@@ -27,13 +45,16 @@ export function editView(
   options: EditViewOptions,
   values: Record<string, unknown> = {},
   errors: Record<string, string> = {},
-  relationData: Record<string, RelationOption[]> = {}
+  relationData: Record<string, RelationOption[]> = {},
+  manyToManyData: ManyToManyData[] = []
 ): string {
   const isEdit = options.id !== undefined;
   const action = options.action ?? (isEdit 
     ? `${options.baseUrl}/${options.id}` 
     : options.baseUrl);
   const submitText = isEdit ? 'Update' : 'Create';
+
+  const m2mSections = renderManyToManySections(manyToManyData);
 
   return html`<div ${attrs({ class: `cms-edit-view ${options.class ?? ''}`.trim() })}>
   <header class="cms-edit-header">
@@ -45,7 +66,7 @@ export function editView(
     submitText,
     cancelUrl: options.baseUrl,
     class: 'cms-edit-form',
-  }, values, errors, relationData))}
+  }, values, errors, relationData, m2mSections))}
 </div>`;
 }
 
@@ -58,7 +79,8 @@ export function createView(
   options: Omit<EditViewOptions, 'id'>,
   values: Record<string, unknown> = {},
   errors: Record<string, string> = {},
-  relationData: Record<string, RelationOption[]> = {}
+  relationData: Record<string, RelationOption[]> = {},
+  manyToManyData: ManyToManyData[] = []
 ): string {
-  return editView(title, fields, options, values, errors, relationData);
+  return editView(title, fields, options, values, errors, relationData, manyToManyData);
 }

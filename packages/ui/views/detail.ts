@@ -3,6 +3,7 @@
 import { html, attrs, raw, escapeHtml } from '../html.ts';
 import type { CMSField } from '@drizzle-cms/core';
 import type { RelationOption } from '../forms/inputs.ts';
+import type { ManyToManyDisplayData } from './list.ts';
 
 /**
  * Options for detail view
@@ -92,12 +93,24 @@ export function detailView(
   fields: CMSField[],
   record: Record<string, unknown>,
   options: DetailViewOptions,
-  relationData: Record<string, RelationOption[]> = {}
+  relationData: Record<string, RelationOption[]> = {},
+  manyToManyData: ManyToManyDisplayData[] = []
 ): string {
   const fieldRows = fields
     .filter(f => !f.hidden)
     .map(f => detailField(f, record[f.column.propertyName], relationData[f.column.propertyName]))
     .join('\n  ');
+  
+  // Render M2M fields
+  const m2mRows = manyToManyData.map(m2m => {
+    const display = m2m.displayValues.length > 0
+      ? escapeHtml(m2m.displayValues.join(', '))
+      : '<span class="cms-null">—</span>';
+    return html`<div class="cms-detail-field">
+  <dt class="cms-detail-label">${m2m.label}</dt>
+  <dd class="cms-detail-value">${raw(display)}</dd>
+</div>`;
+  }).join('\n  ');
 
   const actions: string[] = [];
   
@@ -124,6 +137,7 @@ export function detailView(
   </header>
   <dl class="cms-detail-list">
     ${raw(fieldRows)}
+    ${raw(m2mRows)}
   </dl>
 </div>`;
 }

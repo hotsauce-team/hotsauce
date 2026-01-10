@@ -14,6 +14,7 @@ import type {
   IntrospectedTable,
   IntrospectedRelation,
   IntrospectedSchema,
+  JunctionTable,
 } from './types.ts';
 
 /** Symbols used by Drizzle to store inline foreign keys (database-specific, no helper exported) */
@@ -334,6 +335,71 @@ export function introspectRelations(
 }
 
 /**
+ * Detect junction tables (many-to-many link tables) from introspected tables
+ *
+ * A junction table is identified by:
+ * - Having exactly 2 FK columns pointing to different tables
+ * - Having a composite primary key of those 2 columns (or no other data columns)
+ * - Few/no other columns besides FKs and timestamps
+ *
+ * @param tables - Array of introspected tables
+ * @returns Array of detected junction tables
+ */
+export function detectJunctionTables(tables: IntrospectedTable[]): JunctionTable[] {
+  const junctions: JunctionTable[] = [];
+
+  for (const table of tables) {
+    // Get FK columns
+    const fkColumns = table.columns.filter(c => c.references);
+
+    // Must have exactly 2 FK columns pointing to different tables
+    if (fkColumns.length !== 2) continue;
+
+    const [fk1, fk2] = fkColumns;
+    if (!fk1?.references || !fk2?.references) continue;
+
+    // Must point to different tables
+    if (fk1.references.table === fk2.references.table) continue;
+
+    // Check if this looks like a junction (few other columns)
+    // Allow: FKs + timestamps (created_at, updated_at) + maybe an order column
+    const nonFkColumns = table.columns.filter(c => !c.references);
+    const allowedExtraColumns = ['created_at', 'updated_at', 'order', 'position', 'sort_order', 'id'];
+    const hasOnlyAllowedExtras = nonFkColumns.every(c =>
+      allowedExtraColumns.includes(c.name) || c.isPrimaryKey
+    );
+
+    if (!hasOnlyAllowedExtras) continue;
+
+    // Check if PKs match the FK columns (composite PK) or it's a simple junction
+    const pkColumns = table.primaryKey;
+    const fkNames = [fk1.name, fk2.name];
+    const isCompositePK = pkColumns.length === 2 &&
+      pkColumns.every(pk => fkNames.includes(pk));
+    const hasSimplePK = pkColumns.length <= 1;
+
+    if (!isCompositePK && !hasSimplePK) continue;
+
+    // Sort tables alphabetically for consistent ordering
+    const sorted = [fk1, fk2].sort((a, b) =>
+      a.references!.table.localeCompare(b.references!.table)
+    );
+    const left = sorted[0]!;
+    const right = sorted[1]!;
+
+    junctions.push({
+      tableName: table.name,
+      leftTable: left.references!.table,
+      leftColumn: left.propertyName,
+      rightTable: right.references!.table,
+      rightColumn: right.propertyName,
+    });
+  }
+
+  return junctions;
+}
+
+/**
  * Fully introspect a schema including tables and relations
  *
  * @param schema - An object containing Drizzle tables and relations
@@ -348,8 +414,20 @@ export function introspectRelations(
 export function introspectFullSchema(
   schema: Record<string, unknown>
 ): IntrospectedSchema {
+  const tables = introspectSchema(schema);
+  const junctions = detectJunctionTables(tables);
+
+  // Mark junction tables
+  const junctionNames = new Set(junctions.map(j => j.tableName));
+  for (const table of tables) {
+    if (junctionNames.has(table.name)) {
+      table.isJunction = true;
+    }
+  }
+
   return {
-    tables: introspectSchema(schema),
+    tables,
     relations: introspectRelations(schema),
+    junctions,
   };
 }

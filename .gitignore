@@ -32,8 +32,8 @@ Thumbs.db
 # Logs
 *.log
 
-# Tidy up
-agent-reference/*
-/agent-reference
+# Agent reference (AI assistant artifacts)
+agent-reference/
 
-/examples/deno-server/data
+# Example data
+examples/deno-server/data/

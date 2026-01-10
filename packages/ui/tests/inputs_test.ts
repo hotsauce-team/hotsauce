@@ -14,6 +14,7 @@ import {
   hiddenInput,
   renderFieldInput,
   relationInput,
+  checkboxListInput,
 } from '../forms/inputs.ts';
 import type { CMSField, IntrospectedColumn } from '@drizzle-cms/core';
 
@@ -395,4 +396,89 @@ Deno.test('renderFieldInput: routes relation to relationInput', () => {
   
   assertStringIncludes(result, '<select');
   assertStringIncludes(result, '>Alice</option>');
+});
+
+// checkboxListInput tests
+Deno.test('checkboxListInput: renders checkbox list', () => {
+  const result = checkboxListInput({
+    name: 'categoryIds',
+    label: 'Categories',
+    options: [
+      { value: 1, label: 'Tech' },
+      { value: 2, label: 'News' },
+    ],
+  });
+  
+  assertStringIncludes(result, '<div');
+  assertStringIncludes(result, 'class="cms-checkbox-list"');
+  assertStringIncludes(result, 'type="checkbox"');
+});
+
+Deno.test('checkboxListInput: renders all options', () => {
+  const result = checkboxListInput({
+    name: 'categoryIds',
+    label: 'Categories',
+    options: [
+      { value: 1, label: 'Tech' },
+      { value: 2, label: 'News' },
+      { value: 3, label: 'Sports' },
+    ],
+  });
+  
+  assertStringIncludes(result, '>Tech</span>');
+  assertStringIncludes(result, '>News</span>');
+  assertStringIncludes(result, '>Sports</span>');
+});
+
+Deno.test('checkboxListInput: marks selected options', () => {
+  const result = checkboxListInput({
+    name: 'categoryIds',
+    label: 'Categories',
+    options: [
+      { value: 1, label: 'Tech' },
+      { value: 2, label: 'News' },
+    ],
+    selectedValues: [2],
+  });
+  
+  // Should have one checked checkbox (News)
+  assertStringIncludes(result, 'value="2" checked');
+  // Tech should not be checked
+  assertEquals(result.includes('value="1" checked'), false);
+});
+
+Deno.test('checkboxListInput: handles empty options', () => {
+  const result = checkboxListInput({
+    name: 'categoryIds',
+    label: 'Categories',
+    options: [],
+  });
+  
+  assertStringIncludes(result, 'cms-checkbox-list-empty');
+  assertStringIncludes(result, 'No categories available');
+});
+
+Deno.test('checkboxListInput: uses correct name attribute', () => {
+  const result = checkboxListInput({
+    name: 'tagIds',
+    label: 'Tags',
+    options: [{ value: 1, label: 'Tag1' }],
+  });
+  
+  assertStringIncludes(result, 'name="tagIds"');
+});
+
+Deno.test('checkboxListInput: generates unique ids', () => {
+  const result = checkboxListInput({
+    name: 'categoryIds',
+    id: 'cats',
+    label: 'Categories',
+    options: [
+      { value: 1, label: 'Tech' },
+      { value: 2, label: 'News' },
+    ],
+  });
+  
+  assertStringIncludes(result, 'id="cats-0"');
+  assertStringIncludes(result, 'id="cats-1"');
 });

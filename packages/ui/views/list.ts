@@ -5,6 +5,18 @@ import type { CMSField, IntrospectedTable } from '@drizzle-cms/core';
 import type { RelationOption } from '../forms/inputs.ts';
 
 /**
+ * Display data for many-to-many relations in list/detail views
+ */
+export interface ManyToManyDisplayData {
+  /** Form field name key (e.g., 'categoriesIds') */
+  fieldName: string;
+  /** Display label (e.g., 'Categories') */
+  label: string;
+  /** The selected values as display labels (pre-resolved) */
+  displayValues: string[];
+}
+
+/**
  * Column configuration for list view
  */
 export interface ListColumn {
@@ -71,7 +83,8 @@ export function listTable(
   columns: ListColumn[],
   records: Record<string, unknown>[],
   options: ListViewOptions,
-  relationData: Record<string, RelationOption[]> = {}
+  relationData: Record<string, RelationOption[]> = {},
+  manyToManyData: Map<string | number, ManyToManyDisplayData[]> = new Map()
 ): string {
   const primaryKey = options.primaryKey ?? 'id';
   const showActions = options.showEdit || options.showDelete || options.showView;
@@ -84,8 +97,23 @@ export function listTable(
 </div>`;
   }
 
+  // Get M2M column labels from first record's M2M data (all records have same relations)
+  const m2mLabels: string[] = [];
+  if (manyToManyData.size > 0) {
+    const firstM2M = manyToManyData.values().next().value as ManyToManyDisplayData[] | undefined;
+    if (firstM2M) {
+      for (const m2m of firstM2M) {
+        m2mLabels.push(m2m.label);
+      }
+    }
+  }
+
   const headerCells = columns.map(col => 
     html`<th class="cms-th">${col.label}</th>`
+  ).join('\n      ');
+  
+  const m2mHeaderCells = m2mLabels.map(label => 
+    html`<th class="cms-th">${label}</th>`
   ).join('\n      ');
 
   const rows = records.map(record => {
@@ -96,6 +124,15 @@ export function listTable(
         ? col.format(value) 
         : defaultFormat(value, relationData[col.key]);
       return `<td class="cms-td">${formatted}</td>`;
+    }).join('\n      ');
+    
+    // Render M2M cells for this record
+    const recordM2M = manyToManyData.get(id as string | number) ?? [];
+    const m2mCells = recordM2M.map(m2m => {
+      const display = m2m.displayValues.length > 0 
+        ? escapeHtml(m2m.displayValues.join(', '))
+        : '<span class="cms-null">—</span>';
+      return `<td class="cms-td">${display}</td>`;
     }).join('\n      ');
 
     const actions: string[] = [];
@@ -117,6 +154,7 @@ export function listTable(
 
     return `<tr class="cms-tr">
       ${cells}
+      ${m2mCells}
       ${actionsCell}
     </tr>`;
   }).join('\n    ');
@@ -125,6 +163,7 @@ export function listTable(
   <thead>
     <tr>
       ${raw(headerCells)}
+      ${raw(m2mHeaderCells)}
       ${raw(showActions ? '<th class="cms-th cms-th-actions">Actions</th>' : '')}
     </tr>
   </thead>
@@ -154,13 +193,14 @@ export function listView(
   columns: ListColumn[],
   records: Record<string, unknown>[],
   options: ListViewOptions,
-  relationData: Record<string, RelationOption[]> = {}
+  relationData: Record<string, RelationOption[]> = {},
+  manyToManyData: Map<string | number, ManyToManyDisplayData[]> = new Map()
 ): string {
   return html`<div class="cms-list-view">
   <header class="cms-list-header">
     <h1>${title}</h1>
     <a href="${options.baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
   </header>
-  ${raw(listTable(columns, records, options, relationData))}
+  ${raw(listTable(columns, records, options, relationData, manyToManyData))}
 </div>`;
 }

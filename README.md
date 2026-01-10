@@ -105,7 +105,47 @@ app.use('/admin', expressAdapter(handler));
 | Foreign key | `relation` | Auto-detected from references |
 | `uuid` + upload ref | `file` | Convention-based |
 
-## CMS Hints
+## Relationships
+
+### Foreign Keys (One-to-Many)
+
+Foreign key columns are automatically detected and rendered as select dropdowns:
+
+```typescript
+export const posts = pgTable('posts', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 200 }).notNull(),
+  authorId: integer('author_id').references(() => users.id),  // → Select dropdown
+});
+```
+
+The CMS will:
+- Show a dropdown with all users on the edit form
+- Display the related record's name (e.g., "Alice Johnson") in list and detail views
+- Format as "ID (Name)" for clarity (e.g., "1 (Alice Johnson)")
+
+### Many-to-Many (Junction Tables)
+
+Junction tables are automatically detected and rendered as checkbox lists:
+
+```typescript
+export const postCategories = pgTable('post_categories', {
+  postId: integer('post_id').notNull().references(() => posts.id),
+  categoryId: integer('category_id').notNull().references(() => categories.id),
+}, (table) => [
+  primaryKey({ columns: [table.postId, table.categoryId] }),
+]);
+```
+
+The CMS will:
+- Detect junction tables (2 FKs to different tables)
+- Hide junction tables from navigation
+- Show checkbox list on the edit form for related records
+- Display comma-separated values in list and detail views (e.g., "Technology, Design")
+
+## CMS Hints (TODO)
+
+> **Note:** This feature is not yet implemented. The API below shows the planned design.
 
 Extend columns with CMS-specific metadata:
 
@@ -177,7 +217,8 @@ Deno.serve(handler);
 - [x] HTML5 native form validation (required, maxlength, pattern)
 - [x] Auto-generated CRUD routes (BYOS: Bring Your Own Server)
 - [x] Web Standard Request/Response handlers
-- [x] Relation field pickers (FK → select dropdown)
+- [x] Relation field pickers (FK → select dropdown with display labels)
+- [x] Many-to-many relationships (junction table detection, checkbox UI)
 - [ ] File uploads (local + S3)
 - [ ] Session auth (cookie-based)
 - [ ] RLS policy integration (Postgres)

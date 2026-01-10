@@ -66,6 +66,37 @@ export interface IntrospectedTable {
 
   /** Reference to the original Drizzle table object */
   table: unknown;
+
+  /** Whether this table is a junction table for many-to-many relations */
+  isJunction?: boolean;
+}
+
+/**
+ * Represents a junction (link) table for many-to-many relations
+ */
+export interface JunctionTable {
+  /** The junction table name */
+  tableName: string;
+
+  /** First related table */
+  leftTable: string;
+  /** FK column pointing to left table (propertyName) */
+  leftColumn: string;
+
+  /** Second related table */
+  rightTable: string;
+  /** FK column pointing to right table (propertyName) */
+  rightColumn: string;
+}
+
+/**
+ * Many-to-many relation metadata attached to a table
+ */
+export interface ManyToManyRelation {
+  /** The related table (the "other side" of the M2M) */
+  relatedTable: string;
+  /** The junction table info */
+  junction: JunctionTable;
 }
 
 /**
@@ -105,4 +136,7 @@ export interface IntrospectedSchema {
 
   /** All relations defined in the schema */
   relations: IntrospectedRelation[];
+
+  /** Detected junction tables for many-to-many relations */
+  junctions: JunctionTable[];
 }

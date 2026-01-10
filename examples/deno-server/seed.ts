@@ -66,14 +66,13 @@ await db.insert(posts).values([
 ]).onConflictDoNothing();
 
 // Seed post-category relationships
-// TODO
-// await db.insert(postCategories).values([
-//   { postId: 1, categoryId: 1 }, // Drizzle post -> Technology
-//   { postId: 2, categoryId: 1 }, // CMS post -> Technology
-//   { postId: 2, categoryId: 2 }, // CMS post -> Design
-//   { postId: 3, categoryId: 1 }, // Web Standards -> Technology
-//   { postId: 3, categoryId: 3 }, // Web Standards -> Business
-// ]).onConflictDoNothing();
+await db.insert(postCategories).values([
+  { postId: 1, categoryId: 1 }, // Drizzle post -> Technology
+  { postId: 2, categoryId: 1 }, // CMS post -> Technology
+  { postId: 2, categoryId: 2 }, // CMS post -> Design
+  { postId: 3, categoryId: 1 }, // Web Standards -> Technology
+  { postId: 3, categoryId: 3 }, // Web Standards -> Business
+]).onConflictDoNothing();
 
 console.log("✅ Database seeded!");
 
