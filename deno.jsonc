@@ -1,0 +1,93 @@
+{
+  // Workspace configuration for drizzle-cms monorepo
+  "name": "@drizzle-cms/workspace",
+  "version": "0.0.1",
+  "exports": "./packages/core/mod.ts",
+
+  // Use local node_modules for npm packages (enables fine-grained permissions)
+  "nodeModulesDir": "auto",
+
+  // Monorepo packages
+  "workspace": [
+    "./packages/core",
+    "./packages/ui",
+    "./packages/handlers",
+
+    // Examples
+    "./examples/deno-server"
+  ],
+
+  // Shared import map for all packages
+  "imports": {
+    "drizzle-orm": "npm:drizzle-orm@^0.38",
+    "drizzle-zod": "npm:drizzle-zod@^0.7",
+    "postgres": "npm:postgres@^3.4",
+    "zod": "npm:zod@^3.24",
+
+    // Dev dependencies (not shipped to users)
+    "@electric-sql/pglite": "npm:@electric-sql/pglite@^0.2"
+  },
+
+  // Tasks
+  "tasks": {
+    "test": "deno test -P",
+    "test:watch": "deno test -P --watch",
+    "check": "deno check packages/*/mod.ts",
+    "lint": "deno lint",
+    "fmt": "deno fmt",
+    "example:seed": "deno task -f example-deno-server seed",
+    "example:dev": "deno task -f example-deno-server dev"
+    // "build:npm": "deno run --allow-read=. --allow-write=./npm --allow-env=HOME scripts/build_npm.ts"
+  },
+
+  // Test configuration with fine-grained permissions
+  "test": {
+    "include": ["packages/*/tests/"],
+    "permissions": {
+      "read": [
+        "./packages",
+        "./node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.data",
+        "./node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.wasm"
+      ],
+      "env": ["DATABASE_URL", "DENO_ENV"],
+      "net": ["localhost:5432"]
+    }
+  },
+
+  "permissions": {
+    "pglite": {
+      "read": [
+        "./node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.data",
+        "./node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.wasm"
+      ]
+    }
+  },
+
+  // Compiler options
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true
+  },
+
+  // Formatting
+  "fmt": {
+    "indentWidth": 2,
+    "singleQuote": true,
+    "proseWrap": "preserve"
+  },
+
+  // Linting
+  "lint": {
+    "rules": {
+      "tags": ["recommended"],
+      "include": ["no-console"]
+    }
+  },
+
+  // Exclude build artifacts
+  "exclude": [
+    "npm/",
+    "coverage/",
+    ".git/"
+  ]
+}

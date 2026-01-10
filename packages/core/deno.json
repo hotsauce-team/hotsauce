@@ -1,0 +1,8 @@
+{
+  "name": "@drizzle-cms/core",
+  "version": "0.0.1",
+  "exports": "./mod.ts",
+  "publish": {
+    "include": ["mod.ts", "schema/", "fields/", "validation/", "README.md", "LICENSE"]
+  }
+}

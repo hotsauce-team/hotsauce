@@ -1,0 +1,256 @@
+// Form field input renderers by field type
+
+import { html, attrs, raw, type SafeHtml } from '../html.ts';
+import type { CMSField } from '@drizzle-cms/core';
+
+/**
+ * Options for rendering a field input
+ */
+export interface FieldInputOptions {
+  /** Current value of the field */
+  value?: unknown;
+  /** Whether the field is disabled */
+  disabled?: boolean;
+  /** Additional CSS classes */
+  class?: string;
+  /** HTML id attribute (defaults to field name) */
+  id?: string;
+}
+
+/**
+ * Get validation attributes based on column metadata
+ */
+function getValidationAttrs(field: CMSField): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const col = field.column;
+
+  if (col.notNull && !col.hasDefault) {
+    result.required = true;
+  }
+  if (col.maxLength) {
+    result.maxlength = col.maxLength;
+  }
+
+  return result;
+}
+
+/**
+ * Render a text input
+ */
+export function textInput(field: CMSField, options: FieldInputOptions = {}): string {
+  return html`<input ${attrs({
+    type: 'text',
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    value: options.value ?? '',
+    class: `cms-input cms-input-text ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    placeholder: field.placeholder,
+    ...getValidationAttrs(field),
+  })} />`;
+}
+
+/**
+ * Render a textarea for long text
+ */
+export function textareaInput(field: CMSField, options: FieldInputOptions = {}): string {
+  const value = options.value ?? '';
+  return html`<textarea ${attrs({
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    class: `cms-input cms-textarea ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    placeholder: field.placeholder,
+    rows: 5,
+    ...getValidationAttrs(field),
+  })}>${value}</textarea>`;
+}
+
+/**
+ * Render a number input
+ */
+export function numberInput(field: CMSField, options: FieldInputOptions = {}): string {
+  return html`<input ${attrs({
+    type: 'number',
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    value: options.value ?? '',
+    class: `cms-input cms-input-number ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    step: field.column.dataType === 'number' ? 'any' : '1',
+    ...getValidationAttrs(field),
+  })} />`;
+}
+
+/**
+ * Render a checkbox for boolean fields
+ */
+export function booleanInput(field: CMSField, options: FieldInputOptions = {}): string {
+  return html`<input ${attrs({
+    type: 'checkbox',
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    checked: Boolean(options.value),
+    class: `cms-input cms-checkbox ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    value: 'true',
+  })} />`;
+}
+
+/**
+ * Render a date input
+ */
+export function dateInput(field: CMSField, options: FieldInputOptions = {}): string {
+  let value = options.value;
+  if (value instanceof Date) {
+    value = value.toISOString().split('T')[0];
+  }
+  return html`<input ${attrs({
+    type: 'date',
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    value: value ?? '',
+    class: `cms-input cms-input-date ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    ...getValidationAttrs(field),
+  })} />`;
+}
+
+/**
+ * Render a datetime-local input
+ */
+export function datetimeInput(field: CMSField, options: FieldInputOptions = {}): string {
+  let value = options.value;
+  if (value instanceof Date) {
+    value = value.toISOString().slice(0, 16);
+  }
+  return html`<input ${attrs({
+    type: 'datetime-local',
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    value: value ?? '',
+    class: `cms-input cms-input-datetime ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    ...getValidationAttrs(field),
+  })} />`;
+}
+
+/**
+ * Render a select dropdown for enum fields
+ */
+export function selectInput(field: CMSField, options: FieldInputOptions = {}): string {
+  const enumValues = field.column.enumValues ?? [];
+  const currentValue = options.value;
+  const isRequired = field.column.notNull && !field.column.hasDefault;
+
+  const optionElements = enumValues.map(val => 
+    html`<option ${attrs({ value: val, selected: val === currentValue })}>${val}</option>`
+  );
+
+  return html`<select ${attrs({
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    class: `cms-input cms-select ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    required: isRequired,
+  })}>
+    ${raw(isRequired ? '' : '<option value="">-- Select --</option>')}
+    ${raw(optionElements.join('\n    '))}
+  </select>`;
+}
+
+/**
+ * Render a UUID input (readonly text display or text input)
+ */
+export function uuidInput(field: CMSField, options: FieldInputOptions = {}): string {
+  // UUIDs are often auto-generated, show as readonly if has value
+  const hasValue = options.value !== undefined && options.value !== null && options.value !== '';
+  return html`<input ${attrs({
+    type: 'text',
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    value: options.value ?? '',
+    class: `cms-input cms-input-uuid ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    readonly: hasValue && field.column.isPrimaryKey,
+    pattern: '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}',
+    placeholder: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    ...getValidationAttrs(field),
+  })} />`;
+}
+
+/**
+ * Render a JSON editor (textarea with JSON)
+ */
+export function jsonInput(field: CMSField, options: FieldInputOptions = {}): string {
+  let value = options.value;
+  if (value !== undefined && value !== null && typeof value !== 'string') {
+    value = JSON.stringify(value, null, 2);
+  }
+  return html`<textarea ${attrs({
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    class: `cms-input cms-json ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    rows: 8,
+    ...getValidationAttrs(field),
+  })}>${value ?? ''}</textarea>`;
+}
+
+/**
+ * Render a hidden input
+ */
+export function hiddenInput(field: CMSField, options: FieldInputOptions = {}): string {
+  return html`<input ${attrs({
+    type: 'hidden',
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    value: options.value ?? '',
+  })} />`;
+}
+
+/**
+ * Render the appropriate input for a CMS field
+ */
+export function renderFieldInput(field: CMSField, options: FieldInputOptions = {}): string {
+  // Hidden fields
+  if (field.hidden) {
+    return hiddenInput(field, options);
+  }
+
+  // Readonly fields shown as disabled
+  if (field.readOnly) {
+    options = { ...options, disabled: true };
+  }
+
+  switch (field.fieldType) {
+    case 'text':
+      return textInput(field, options);
+    case 'textarea':
+    case 'richtext':
+      return textareaInput(field, options);
+    case 'number':
+      return numberInput(field, options);
+    case 'boolean':
+      return booleanInput(field, options);
+    case 'date':
+      return dateInput(field, options);
+    case 'datetime':
+      return datetimeInput(field, options);
+    case 'select':
+      return selectInput(field, options);
+    case 'uuid':
+      return uuidInput(field, options);
+    case 'json':
+      return jsonInput(field, options);
+    case 'relation':
+      // Relations need special handling with lookup data
+      return textInput(field, options); // Fallback to text for now
+    case 'array':
+      return jsonInput(field, options); // Arrays as JSON for now
+    case 'file':
+      return textInput(field, options); // File fields need upload handling
+    default:
+      return textInput(field, options);
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "name": "@drizzle-cms/example-deno-server",
+
+  "tasks": {
+    "dev": "deno run --permission-set=example-deno-server main.ts",
+    "seed": "deno run --permission-set=example-deno-server seed.ts"
+  },
+
+  "imports": {
+    "drizzle-orm": "npm:drizzle-orm@0.38.3",
+    "@electric-sql/pglite": "npm:@electric-sql/pglite@0.2.17"
+  },
+
+  "exports": "./main.ts",
+
+  "permissions": {
+    "example-deno-server" : {
+      "read": [
+        "./data",
+        "../../node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.data",
+        "../../node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.wasm"
+      ],
+      "write": [
+        "./data"
+      ],
+      "net": [
+        "127.0.0.1:3000"
+      ],
+    }
+    }
+}
