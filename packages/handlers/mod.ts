@@ -16,7 +16,7 @@ import {
 // Re-export types
 export type { CmsOptions, Handler, CrudAction, FlashMessage } from './types.ts';
 export { cmsUrl, formatTableName, formatColumnName } from './router.ts';
-export { htmlResponse, redirect, jsonResponse, parseFormData, coerceFormValues } from './utils.ts';
+export { htmlResponse, redirect, redirectWithFlash, parseFlashFromUrl, jsonResponse, parseFormData, coerceFormValues } from './utils.ts';
 
 /**
  * Create a CMS handler function

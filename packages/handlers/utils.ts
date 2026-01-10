@@ -27,6 +27,54 @@ export function redirect(url: string, status = 303): Response {
 }
 
 /**
+ * Predefined flash message codes (secure - no user input echoed)
+ */
+export type FlashCode = 
+  | 'delete_success'
+  | 'delete_fk_error'
+  | 'delete_error'
+  | 'create_success'
+  | 'create_error'
+  | 'update_success'
+  | 'update_error';
+
+const FLASH_MESSAGES: Record<FlashCode, { type: 'success' | 'error' | 'info' | 'warning'; message: string }> = {
+  delete_success: { type: 'success', message: 'Record deleted successfully.' },
+  delete_fk_error: { type: 'error', message: 'Cannot delete this record because it is referenced by other records. Remove those references first.' },
+  delete_error: { type: 'error', message: 'Failed to delete record. Please try again.' },
+  create_success: { type: 'success', message: 'Record created successfully.' },
+  create_error: { type: 'error', message: 'Failed to create record. Please try again.' },
+  update_success: { type: 'success', message: 'Record updated successfully.' },
+  update_error: { type: 'error', message: 'Failed to update record. Please try again.' },
+};
+
+/**
+ * Create a redirect response with a flash message code
+ */
+export function redirectWithFlash(url: string, code: FlashCode, status = 303): Response {
+  const urlObj = new URL(url, 'http://localhost');
+  urlObj.searchParams.set('_flash', code);
+  const redirectUrl = urlObj.pathname + urlObj.search;
+  return new Response(null, {
+    status,
+    headers: {
+      'Location': redirectUrl,
+    },
+  });
+}
+
+/**
+ * Parse flash message from URL query params (looks up predefined messages)
+ */
+export function parseFlashFromUrl(url: URL): { type: 'success' | 'error' | 'info' | 'warning'; message: string } | undefined {
+  const code = url.searchParams.get('_flash');
+  if (code && code in FLASH_MESSAGES) {
+    return FLASH_MESSAGES[code as FlashCode];
+  }
+  return undefined;
+}
+
+/**
  * Create a JSON response
  */
 export function jsonResponse(data: unknown, status = 200): Response {

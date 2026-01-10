@@ -316,6 +316,18 @@ export function defaultStyles(): string {
     color: var(--cms-gray-500);
     margin: 0 0 1rem;
   }
+  
+  /* Alerts */
+  .cms-alert {
+    padding: 0.75rem 1rem;
+    border-radius: var(--cms-radius);
+    margin-bottom: 1rem;
+    font-weight: 500;
+  }
+  .cms-alert-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .cms-alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  .cms-alert-warning { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .cms-alert-info { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
 </style>`;
 }
 

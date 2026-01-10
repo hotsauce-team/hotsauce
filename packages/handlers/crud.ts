@@ -11,7 +11,7 @@ import { html, raw } from '@drizzle-cms/ui';
 import type { RelationOption, ManyToManyData } from '@drizzle-cms/ui';
 import type { ManyToManyDisplayData } from '@drizzle-cms/ui';
 import type { RouteContext, ResolvedCmsOptions } from './types.ts';
-import { htmlResponse, redirect, notFound, parseFormData, coerceFormValues, getPagination, getSort } from './utils.ts';
+import { htmlResponse, redirect, redirectWithFlash, parseFlashFromUrl, notFound, parseFormData, coerceFormValues, getPagination, getSort } from './utils.ts';
 import { cmsUrl, formatTableName, formatColumnName } from './router.ts';
 import type { NavItem, ListColumn, ListViewOptions, DetailViewOptions, EditViewOptions } from '@drizzle-cms/ui';
 
@@ -152,9 +152,10 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Build content
   let content = '';
   
-  // Add flash message if present
-  if (ctx.flash) {
-    content += alert(ctx.flash.message, ctx.flash.type);
+  // Add flash message if present (from URL params or context)
+  const flash = ctx.flash ?? parseFlashFromUrl(url);
+  if (flash) {
+    content += alert(flash.message, flash.type);
   }
   
   // Add list view
@@ -336,10 +337,24 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       .delete(drizzleTable)
       .where(eq(pkField as never, recordId as never));
     
-    return redirect(cmsUrl(basePath, table.name));
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');
   } catch (error) {
+    // Check for foreign key constraint violation (expected case)
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorCode = (error as { code?: string })?.code;
+    const isFkViolation = 
+      errorCode === '23503' || // Postgres FK violation code
+      errorMessage.includes('foreign key constraint') ||
+      errorMessage.includes('FOREIGN KEY') ||
+      errorMessage.includes('violates foreign key');
+    
+    if (isFkViolation) {
+      return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_fk_error');
+    }
+    
+    // Only log unexpected errors
     console.error('Delete failed:', error);
-    return redirect(cmsUrl(basePath, table.name));
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
   }
 }
 
