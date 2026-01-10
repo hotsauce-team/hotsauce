@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+npm/
+dist/
+
+# Coverage
+coverage/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Editor
+.vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Deno
+deno.lock
+.deno_cache/
+
+# Logs
+*.log
+
+agent-reference/*
+
+
+/agent-reference
+/examples/deno-server/data
