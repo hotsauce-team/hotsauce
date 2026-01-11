@@ -19,13 +19,13 @@
 
   // Shared import map for all packages
   "imports": {
-    "drizzle-orm": "npm:drizzle-orm@^0.38",
-    "drizzle-zod": "npm:drizzle-zod@^0.7",
-    "postgres": "npm:postgres@^3.4",
-    "zod": "npm:zod@^3.24",
+    "drizzle-orm": "npm:drizzle-orm@^0.45.1",
+    "drizzle-zod": "npm:drizzle-zod@^0.8.3",
+    "postgres": "npm:postgres@^3.4.8",
+    "zod": "npm:zod@^4.3.5",
 
     // Dev dependencies (not shipped to users)
-    "@electric-sql/pglite": "npm:@electric-sql/pglite@^0.2"
+    "@electric-sql/pglite": "npm:@electric-sql/pglite@^0.3.14"
   },
 
   // Tasks
@@ -47,19 +47,17 @@
     "permissions": {
       "read": [
         "./packages",
-        "./node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.data",
-        "./node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.wasm"
-      ],
-      "env": ["DATABASE_URL", "DENO_ENV"],
-      "net": ["localhost:5432"]
+        "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm"
+      ]
     }
   },
 
   "permissions": {
     "pglite": {
       "read": [
-        "./node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.data",
-        "./node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.wasm"
+        "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm"
       ]
     }
   },

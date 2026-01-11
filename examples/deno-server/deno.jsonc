@@ -7,10 +7,10 @@
     "seed": "deno run --permission-set=example-deno-server seed.ts"
   },
 
-  "imports": {
-    "drizzle-orm": "npm:drizzle-orm@0.38.3",
-    "@electric-sql/pglite": "npm:@electric-sql/pglite@0.2.17"
-  },
+  // "imports": {
+  //   "drizzle-orm": "npm:drizzle-orm@0.38.3",
+  //   "@electric-sql/pglite": "npm:@electric-sql/pglite@0.3.14"
+  // },
 
   "exports": "./main.ts",
 
@@ -18,8 +18,8 @@
     "example-deno-server" : {
       "read": [
         "./data",
-        "../../node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.data",
-        "../../node_modules/.deno/@electric-sql+pglite@0.2.17/node_modules/@electric-sql/pglite/dist/postgres.wasm"
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm"
       ],
       "write": [
         "./data"
