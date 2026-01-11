@@ -4,38 +4,53 @@
 import { assertEquals, assertExists } from 'jsr:@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
+import { drizzle as drizzleSqlJs } from 'drizzle-orm/sql-js';
+import initSqlJs from 'sql.js';
 import { sql } from 'drizzle-orm';
-import * as schema from './fixtures/schema-pg.ts';
+import * as pgSchema from './fixtures/schema-pg.ts';
+import * as sqliteSchema from './fixtures/schema-sqlite.ts';
 
 // These tests explore what metadata Drizzle exposes on schemas
 // Findings here inform the introspection implementation
 
-// Helper to create a fresh database for each test
+// Helper to create a fresh Postgres database for each test
 async function createTestDb() {
   const client = new PGlite();
-  const db = drizzle(client, { schema });
+  const db = drizzle(client, { schema: pgSchema });
   return { client, db };
 }
 
-Deno.test('schema - tables are importable', () => {
+// Helper to create a fresh SQLite database for each test
+async function createSqliteTestDb() {
+  const SQL = await initSqlJs();
+  const client = new SQL.Database();
+  const db = drizzleSqlJs(client, { schema: sqliteSchema });
+  return { client, db };
+}
+
+// ============================================================================
+// PostgreSQL Schema Tests
+// ============================================================================
+
+Deno.test('schema [postgres] - tables are importable', () => {
   // Basic sanity check that our test schema loads
-  assertExists(schema.users);
-  assertExists(schema.posts);
-  assertExists(schema.categories);
-  assertExists(schema.uploads);
-  assertExists(schema.settings);
-  assertExists(schema.postsToCategories);
+  assertExists(pgSchema.users);
+  assertExists(pgSchema.posts);
+  assertExists(pgSchema.categories);
+  assertExists(pgSchema.uploads);
+  assertExists(pgSchema.settings);
+  assertExists(pgSchema.postsToCategories);
 });
 
-Deno.test('schema - enum is defined', () => {
-  assertExists(schema.postStatus);
+Deno.test('schema [postgres] - enum is defined', () => {
+  assertExists(pgSchema.postStatus);
   // pgEnum creates an object with enumValues
-  assertEquals(schema.postStatus.enumValues, ['draft', 'published', 'archived']);
+  assertEquals(pgSchema.postStatus.enumValues, ['draft', 'published', 'archived']);
 });
 
-Deno.test('schema - can access table columns', () => {
+Deno.test('schema [postgres] - can access table columns', () => {
   // Drizzle tables have columns accessible as properties
-  const userColumns = Object.keys(schema.users);
+  const userColumns = Object.keys(pgSchema.users);
   
   // Should include our defined columns
   assertEquals(userColumns.includes('id'), true);
@@ -45,9 +60,9 @@ Deno.test('schema - can access table columns', () => {
   assertEquals(userColumns.includes('isAdmin'), true);
 });
 
-Deno.test('schema - column has metadata', () => {
+Deno.test('schema [postgres] - column has metadata', () => {
   // Each column should have introspectable properties
-  const emailColumn = schema.users.email;
+  const emailColumn = pgSchema.users.email;
   
   assertExists(emailColumn);
   
@@ -59,9 +74,9 @@ Deno.test('schema - column has metadata', () => {
   assertEquals(emailColumn.notNull, true);
 });
 
-Deno.test('schema - foreign key references', () => {
+Deno.test('schema [postgres] - foreign key references', () => {
   // posts.authorId references users.id
-  const authorIdColumn = schema.posts.authorId;
+  const authorIdColumn = pgSchema.posts.authorId;
   
   assertExists(authorIdColumn);
   assertEquals(authorIdColumn.name, 'author_id');
@@ -69,13 +84,81 @@ Deno.test('schema - foreign key references', () => {
   assertEquals(authorIdColumn.notNull, true);
 });
 
-Deno.test('schema - relations are defined', () => {
-  assertExists(schema.usersRelations);
-  assertExists(schema.postsRelations);
-  assertExists(schema.categoriesRelations);
+Deno.test('schema [postgres] - relations are defined', () => {
+  assertExists(pgSchema.usersRelations);
+  assertExists(pgSchema.postsRelations);
+  assertExists(pgSchema.categoriesRelations);
 });
 
-// PGlite integration tests
+// ============================================================================
+// SQLite Schema Tests
+// ============================================================================
+
+Deno.test('schema [sqlite] - tables are importable', () => {
+  // Basic sanity check that our test schema loads
+  assertExists(sqliteSchema.users);
+  assertExists(sqliteSchema.posts);
+  assertExists(sqliteSchema.categories);
+  assertExists(sqliteSchema.uploads);
+  assertExists(sqliteSchema.settings);
+  assertExists(sqliteSchema.postsToCategories);
+});
+
+Deno.test('schema [sqlite] - can access table columns', () => {
+  // Drizzle tables have columns accessible as properties
+  const userColumns = Object.keys(sqliteSchema.users);
+  
+  // Should include our defined columns
+  assertEquals(userColumns.includes('id'), true);
+  assertEquals(userColumns.includes('email'), true);
+  assertEquals(userColumns.includes('name'), true);
+  assertEquals(userColumns.includes('bio'), true);
+  assertEquals(userColumns.includes('isAdmin'), true);
+});
+
+Deno.test('schema [sqlite] - column has metadata', () => {
+  // Each column should have introspectable properties
+  const emailColumn = sqliteSchema.users.email;
+  
+  assertExists(emailColumn);
+  
+  // Key properties available on columns:
+  // - name, columnType, dataType, notNull, hasDefault, isUnique, primary
+  // - length (for text), enumValues (for text enums)
+  assertEquals(emailColumn.name, 'email');
+  assertEquals(emailColumn.columnType, 'SQLiteText');
+  assertEquals(emailColumn.notNull, true);
+});
+
+Deno.test('schema [sqlite] - foreign key references', () => {
+  // posts.authorId references users.id
+  const authorIdColumn = sqliteSchema.posts.authorId;
+  
+  assertExists(authorIdColumn);
+  assertEquals(authorIdColumn.name, 'author_id');
+  assertEquals(authorIdColumn.columnType, 'SQLiteInteger');
+  assertEquals(authorIdColumn.notNull, true);
+});
+
+Deno.test('schema [sqlite] - relations are defined', () => {
+  assertExists(sqliteSchema.usersRelations);
+  assertExists(sqliteSchema.postsRelations);
+  assertExists(sqliteSchema.categoriesRelations);
+});
+
+Deno.test('schema [sqlite] - text enum has values', () => {
+  // SQLite uses text with enum constraint instead of pgEnum
+  const statusColumn = sqliteSchema.posts.status;
+  
+  assertExists(statusColumn);
+  assertEquals(statusColumn.columnType, 'SQLiteText');
+  // SQLite text columns with enum have enumValues property
+  assertEquals(statusColumn.enumValues, ['draft', 'published', 'archived']);
+});
+
+// ============================================================================
+// PGlite Integration Tests
+// ============================================================================
 
 Deno.test('pglite - can connect', async () => {
   const { client, db } = await createTestDb();
@@ -161,7 +244,7 @@ Deno.test('pglite - can insert and query with drizzle', async () => {
   `);
   
   // Insert using Drizzle
-  const inserted = await db.insert(schema.users).values({
+  const inserted = await db.insert(pgSchema.users).values({
     email: 'test@example.com',
     name: 'Test User',
   }).returning();
@@ -174,10 +257,109 @@ Deno.test('pglite - can insert and query with drizzle', async () => {
   assertExists(first.id);
   
   // Query using Drizzle
-  const users = await db.select().from(schema.users);
+  const users = await db.select().from(pgSchema.users);
   assertEquals(users.length, 1);
   assertEquals(users[0]!.email, 'test@example.com');
   
   await client.close();
+});
+
+// ============================================================================
+// SQLite (sql.js) Integration Tests
+// ============================================================================
+
+Deno.test('sql.js - can connect', async () => {
+  const { client, db } = await createSqliteTestDb();
+  
+  // Simple query to verify connection
+  const result = db.get<{ num: number }>(sql`SELECT 1 as num`);
+  assertEquals(result?.num, 1);
+  
+  client.close();
+});
+
+Deno.test('sql.js - can create tables from schema', async () => {
+  const { client, db } = await createSqliteTestDb();
+  
+  // Create users table
+  db.run(sql`
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      bio TEXT,
+      avatar_url TEXT,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    )
+  `);
+  
+  // Create posts table
+  db.run(sql`
+    CREATE TABLE posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      excerpt TEXT,
+      body TEXT,
+      tags TEXT,
+      status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived')),
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      featured_image_id TEXT,
+      published_at INTEGER,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    )
+  `);
+  
+  // Verify tables exist
+  const tables = db.all<{ name: string }>(sql`
+    SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'
+  `);
+  
+  const tableNames = tables.map((r) => r.name);
+  assertEquals(tableNames.includes('users'), true);
+  assertEquals(tableNames.includes('posts'), true);
+  
+  client.close();
+});
+
+Deno.test('sql.js - can insert and query with drizzle', async () => {
+  const { client, db } = await createSqliteTestDb();
+  
+  // Setup tables
+  db.run(sql`
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      bio TEXT,
+      avatar_url TEXT,
+      is_admin INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    )
+  `);
+  
+  // Insert using Drizzle
+  const inserted = db.insert(sqliteSchema.users).values({
+    email: 'test@example.com',
+    name: 'Test User',
+  }).returning().all();
+  
+  const first = inserted[0]!;
+  assertEquals(inserted.length, 1);
+  assertEquals(first.email, 'test@example.com');
+  assertEquals(first.name, 'Test User');
+  assertEquals(first.isAdmin, false);
+  assertExists(first.id);
+  
+  // Query using Drizzle
+  const users = db.select().from(sqliteSchema.users).all();
+  assertEquals(users.length, 1);
+  assertEquals(users[0]!.email, 'test@example.com');
+  
+  client.close();
 });
 
