@@ -53,15 +53,6 @@
     }
   },
 
-  "permissions": {
-    "pglite": {
-      "read": [
-        "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
-        "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm"
-      ]
-    }
-  },
-
   // Compiler options
   "compilerOptions": {
     "strict": true,
