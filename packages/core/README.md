@@ -35,6 +35,8 @@ import { introspectFullSchema, mapColumnToField } from '@drizzle-cms/core';
 Extract metadata from Drizzle tables (columns, types, relations, foreign keys).
 Works with any Drizzle dialect (Postgres, MySQL, SQLite).
 
+> **Tested with both Postgres and SQLite schemas** — see `tests/fixtures/` for examples.
+
 | Export | Purpose |
 |--------|---------|
 | `introspectTable(table)` | Get metadata for a single table |

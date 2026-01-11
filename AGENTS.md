@@ -15,6 +15,7 @@ Guidelines for AI coding assistants working on this project.
 
 ### Dev Dependencies (testing only)
 - `@electric-sql/pglite` — in-memory Postgres for tests
+- `sql.js` — in-memory SQLite for tests
 - `@std/assert` — Deno standard library assertions
 - Dev dependencies are OK since they don't ship to users
 
@@ -170,10 +171,28 @@ packages/handlers/
 
 ## Testing
 
-- Run tests with `deno test`
+- Run tests with `deno test -P` (uses permissions from config)
 - Tests should run on both Deno and Node where applicable (CI will test Node)
 - Use `Deno.test()` for all test files
 - Core/UI tests should be runtime-agnostic (test the logic, not the runtime)
+
+### Test File Organization
+
+```
+packages/core/tests/
+├── schema_test.ts       # Schema metadata inspection (Postgres + SQLite)
+├── introspect_test.ts   # Table/relation introspection
+├── mapping_test.ts      # Column → field mapping
+├── validation_test.ts   # Zod schema generation (Postgres + SQLite)
+├── integration_test.ts  # PGlite + sql.js database tests
+└── fixtures/
+    ├── schema-pg.ts     # Postgres test schema
+    └── schema-sqlite.ts # SQLite test schema
+```
+
+- **Schema tests**: Verify Drizzle exposes expected metadata on tables/columns
+- **Integration tests**: Verify test fixtures work with real in-memory databases
+- Both Postgres and SQLite schemas are tested to ensure cross-database compatibility
 
 ## Common Mistakes to Avoid
 
