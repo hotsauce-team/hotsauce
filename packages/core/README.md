@@ -165,3 +165,7 @@ interface CMSField {
 - **Zero runtime dependencies**: Only uses `drizzle-orm` types at runtime
 - **Pure functions**: No side effects, easy to test
 - **Explicit types**: All public APIs have TypeScript definitions
+
+## TODO
+
+- [ ] **Custom validation refinements**: SQLite stores UUIDs as plain text, so `drizzle-zod` doesn't automatically validate UUID format. Need a way to attach custom Zod refinements to columns (e.g., via `$withMeta()` or a separate config) that get applied when generating validation schemas.

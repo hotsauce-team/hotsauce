@@ -4,9 +4,10 @@
     "jsr:@std/assert@*": "1.0.16",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "npm:@electric-sql/pglite@~0.3.14": "0.3.14",
-    "npm:drizzle-orm@~0.45.1": "0.45.1_@electric-sql+pglite@0.3.14_postgres@3.4.8",
-    "npm:drizzle-zod@~0.8.3": "0.8.3_drizzle-orm@0.45.1__@electric-sql+pglite@0.3.14__postgres@3.4.8_zod@4.3.5_@electric-sql+pglite@0.3.14_postgres@3.4.8",
+    "npm:drizzle-orm@~0.45.1": "0.45.1_@electric-sql+pglite@0.3.14_postgres@3.4.8_sql.js@1.13.0",
+    "npm:drizzle-zod@~0.8.3": "0.8.3_drizzle-orm@0.45.1__@electric-sql+pglite@0.3.14__postgres@3.4.8_zod@4.3.5_@electric-sql+pglite@0.3.14_postgres@3.4.8_sql.js@1.13.0",
     "npm:postgres@^3.4.8": "3.4.8",
+    "npm:sql.js@^1.13.0": "1.13.0",
     "npm:zod@^4.3.5": "4.3.5"
   },
   "jsr": {
@@ -24,18 +25,20 @@
     "@electric-sql/pglite@0.3.14": {
       "integrity": "sha512-3DB258dhqdsArOI1fIt7cb9RpUOgcDg5hXWVgVHAeqVQ/qxtFy605QKs4gx6mFq3jWsSPqDN8TgSEsqC3OfV9Q=="
     },
-    "drizzle-orm@0.45.1_@electric-sql+pglite@0.3.14_postgres@3.4.8": {
+    "drizzle-orm@0.45.1_@electric-sql+pglite@0.3.14_postgres@3.4.8_sql.js@1.13.0": {
       "integrity": "sha512-Te0FOdKIistGNPMq2jscdqngBRfBpC8uMFVwqjf6gtTVJHIQ/dosgV/CLBU2N4ZJBsXL5savCba9b0YJskKdcA==",
       "dependencies": [
         "@electric-sql/pglite",
-        "postgres"
+        "postgres",
+        "sql.js"
       ],
       "optionalPeers": [
         "@electric-sql/pglite",
-        "postgres"
+        "postgres",
+        "sql.js"
       ]
     },
-    "drizzle-zod@0.8.3_drizzle-orm@0.45.1__@electric-sql+pglite@0.3.14__postgres@3.4.8_zod@4.3.5_@electric-sql+pglite@0.3.14_postgres@3.4.8": {
+    "drizzle-zod@0.8.3_drizzle-orm@0.45.1__@electric-sql+pglite@0.3.14__postgres@3.4.8_zod@4.3.5_@electric-sql+pglite@0.3.14_postgres@3.4.8_sql.js@1.13.0": {
       "integrity": "sha512-66yVOuvGhKJnTdiqj1/Xaaz9/qzOdRJADpDa68enqS6g3t0kpNkwNYjUuaeXgZfO/UWuIM9HIhSlJ6C5ZraMww==",
       "dependencies": [
         "drizzle-orm",
@@ -44,6 +47,9 @@
     },
     "postgres@3.4.8": {
       "integrity": "sha512-d+JFcLM17njZaOLkv6SCev7uoLaBtfK86vMUXhW1Z4glPWh4jozno9APvW/XKFJ3CCxVoC7OL38BqRydtu5nGg=="
+    },
+    "sql.js@1.13.0": {
+      "integrity": "sha512-RJbVP1HRDlUUXahJ7VMTcu9Rm1Nzw+EBpoPr94vnbD4LwR715F3CcxE2G2k45PewcaZ57pjetYa+LoSJLAASgA=="
     },
     "zod@4.3.5": {
       "integrity": "sha512-k7Nwx6vuWx1IJ9Bjuf4Zt1PEllcwe7cls3VNzm4CQ1/hgtFUK2bRNG3rvnpPUhFjmqJKAKtjV576KnUkHocg/g=="
@@ -55,6 +61,7 @@
       "npm:drizzle-orm@~0.45.1",
       "npm:drizzle-zod@~0.8.3",
       "npm:postgres@^3.4.8",
+      "npm:sql.js@^1.13.0",
       "npm:zod@^4.3.5"
     ]
   }

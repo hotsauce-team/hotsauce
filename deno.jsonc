@@ -25,7 +25,8 @@
     "zod": "npm:zod@^4.3.5",
 
     // Dev dependencies (not shipped to users)
-    "@electric-sql/pglite": "npm:@electric-sql/pglite@^0.3.14"
+    "@electric-sql/pglite": "npm:@electric-sql/pglite@^0.3.14",
+    "sql.js": "npm:sql.js@^1.13.0"
   },
 
   // Tasks

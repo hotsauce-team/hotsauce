@@ -5,7 +5,7 @@ import { assertEquals, assertExists } from 'jsr:@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
-import * as schema from './fixtures/schema.ts';
+import * as schema from './fixtures/schema-pg.ts';
 
 // These tests explore what metadata Drizzle exposes on schemas
 // Findings here inform the introspection implementation

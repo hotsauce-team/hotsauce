@@ -8,7 +8,7 @@ import {
   introspectFullSchema,
   detectJunctionTables,
 } from '../schema/introspect.ts';
-import * as schema from './fixtures/schema.ts';
+import * as schema from './fixtures/schema-pg.ts';
 
 Deno.test('introspectTable - extracts table name', () => {
   const result = introspectTable(schema.users);
