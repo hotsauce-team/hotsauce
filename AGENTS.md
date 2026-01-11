@@ -102,9 +102,15 @@ html`<div>${raw(trustedHtml)}</div>`;                  // explicitly trusted
 
 ## File Organization
 
+Each package has a README with detailed API documentation:
+- [`packages/core/README.md`](packages/core/README.md) — Schema introspection, field mapping
+- [`packages/ui/README.md`](packages/ui/README.md) — HTML generation, forms, views
+- [`packages/handlers/README.md`](packages/handlers/README.md) — CRUD handlers, routing
+
 ```
 packages/core/
 ├── mod.ts              # Main entry, re-exports public API
+├── README.md           # Package documentation
 ├── schema/
 │   ├── introspect.ts   # Extract metadata from Drizzle schemas
 │   └── types.ts        # Shared type definitions
@@ -115,6 +121,7 @@ packages/core/
 
 packages/ui/
 ├── mod.ts              # Main entry
+├── README.md           # Package documentation
 ├── html.ts             # Tagged template with auto-escaping
 ├── forms/
 │   ├── inputs.ts       # Individual input renderers (text, select, etc.)
@@ -131,6 +138,7 @@ packages/ui/
 
 packages/handlers/
 ├── mod.ts              # Main entry, exports createCmsHandler
+├── README.md           # Package documentation
 ├── router.ts           # URL routing and method dispatch
 ├── crud.ts             # List, create, read, update, delete handlers
 ├── types.ts            # Handler types (CmsOptions, etc.)

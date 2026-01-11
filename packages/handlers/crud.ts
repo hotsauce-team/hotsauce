@@ -341,18 +341,21 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   } catch (error) {
     // Check for foreign key constraint violation (expected case)
     const errorMessage = error instanceof Error ? error.message : String(error);
+    const causedBy = (error as { cause?: { message?: string } })?.cause?.message ?? '';
+    const fullMessage = `${errorMessage} ${causedBy}`;
     const errorCode = (error as { code?: string })?.code;
     const isFkViolation = 
       errorCode === '23503' || // Postgres FK violation code
-      errorMessage.includes('foreign key constraint') ||
-      errorMessage.includes('FOREIGN KEY') ||
-      errorMessage.includes('violates foreign key');
+      fullMessage.includes('foreign key constraint') ||
+      fullMessage.includes('FOREIGN KEY') ||
+      fullMessage.includes('violates foreign key') ||
+      fullMessage.includes('_fkey');
     
     if (isFkViolation) {
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_fk_error');
     }
     
-    // Only log unexpected errors
+    // Log unexpected errors for debugging
     console.error('Delete failed:', error);
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
   }

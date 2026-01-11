@@ -12,6 +12,14 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 
 ## Packages
 
+Each package has its own README with detailed API documentation:
+
+| Package | Purpose | Docs |
+|---------|---------|------|
+| [`@drizzle-cms/core`](packages/core/) | Schema introspection, field mapping, validation | [README](packages/core/README.md) |
+| [`@drizzle-cms/ui`](packages/ui/) | HTML generation, form rendering, views | [README](packages/ui/README.md) |
+| [`@drizzle-cms/handlers`](packages/handlers/) | CRUD route handlers (Request → Response) | [README](packages/handlers/README.md) |
+
 ```
 packages/
 ├── core/           # Schema introspection, field mapping, validation

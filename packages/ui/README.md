@@ -1,0 +1,248 @@
+# @drizzle-cms/ui
+
+HTML generation, form rendering, and view components for the CMS admin interface.
+
+## Installation
+
+```ts
+import { html, raw, layout, editView } from '@drizzle-cms/ui';
+```
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     @drizzle-cms/ui                         │
+├─────────────┬─────────────┬─────────────┬───────────────────┤
+│   html.ts   │   forms/    │   views/    │   components/     │
+│             │             │             │                   │
+│  Template   │  Input      │  Page       │  Layout           │
+│  literals   │  renderers  │  templates  │  helpers          │
+│  + escaping │             │             │                   │
+└─────────────┴─────────────┴─────────────┴───────────────────┘
+        ↓             ↓             ↓             ↓
+   XSS-safe      Form fields    Full pages    Page chrome
+   HTML output   (text, select) (list, edit)  (nav, alerts)
+```
+
+## Design Principles
+
+- **Zero dependencies**: Pure functions returning strings
+- **XSS-safe by default**: All interpolated values are escaped
+- **Server-rendered**: No client-side JavaScript required
+- **HTML5 validation**: Uses native browser validation attributes
+
+## Modules
+
+### `html.ts` - Safe HTML Generation
+
+Tagged template literal with automatic XSS escaping.
+
+| Export | Purpose |
+|--------|---------|
+| `html` | Tagged template that auto-escapes values |
+| `raw(string)` | Mark trusted HTML (skip escaping) |
+| `escapeHtml(value)` | Manual HTML escaping |
+| `attrs(object)` | Build attribute strings safely |
+| `when(condition, content)` | Conditional rendering helper |
+| `join(items, separator)` | Join with SafeHtml support |
+| `SafeHtml` | Class for pre-escaped content |
+
+**Example:**
+
+```ts
+import { html, raw, attrs } from '@drizzle-cms/ui';
+
+// Auto-escaping prevents XSS
+const userInput = '<script>alert("xss")</script>';
+html`<p>${userInput}</p>`;
+// → <p>&lt;script&gt;alert("xss")&lt;/script&gt;</p>
+
+// Trusted HTML with raw()
+html`<div>${raw('<strong>Bold</strong>')}</div>`;
+// → <div><strong>Bold</strong></div>
+
+// Safe attribute building
+html`<input ${attrs({ type: 'text', value: userInput, disabled: false })} />`;
+// → <input type="text" value="&lt;script&gt;..." />
+```
+
+### `forms/` - Form Input Renderers
+
+Individual input components for different field types.
+
+| Export | Purpose |
+|--------|---------|
+| `textInput(opts)` | Text input with maxlength |
+| `textareaInput(opts)` | Multi-line text |
+| `numberInput(opts)` | Numeric input |
+| `booleanInput(opts)` | Checkbox |
+| `dateInput(opts)` | Date picker |
+| `datetimeInput(opts)` | Datetime picker |
+| `selectInput(opts)` | Dropdown select |
+| `relationInput(opts)` | Foreign key select |
+| `checkboxListInput(opts)` | Many-to-many checkboxes |
+| `uuidInput(opts)` | UUID with pattern validation |
+| `jsonInput(opts)` | JSON textarea |
+| `hiddenInput(opts)` | Hidden field |
+| `renderFieldInput(field, value, opts)` | Auto-routes to correct input |
+| `formField(field, value, opts)` | Field with label and wrapper |
+| `form(opts)` | Complete form with fields |
+
+**Example:**
+
+```ts
+import { textInput, selectInput, formField } from '@drizzle-cms/ui';
+
+// Basic text input
+textInput({ name: 'title', value: 'Hello', required: true, maxLength: 200 });
+
+// Select with options
+selectInput({
+  name: 'status',
+  value: 'draft',
+  options: [
+    { value: 'draft', label: 'Draft' },
+    { value: 'published', label: 'Published' },
+  ],
+});
+
+// Full field with label
+formField(cmsField, record.title, { relationOptions });
+```
+
+### `views/` - Page Templates
+
+Complete page views for CRUD operations.
+
+| Export | Purpose |
+|--------|---------|
+| `listView(opts)` | Table listing with pagination |
+| `listTable(opts)` | Just the data table |
+| `fieldsToListColumns(fields)` | Convert fields to table columns |
+| `detailView(opts)` | Read-only record view |
+| `detailField(field, value)` | Single field display |
+| `editView(opts)` | Edit form for existing record |
+| `createView(opts)` | Create form for new record |
+
+**Types:**
+
+```ts
+interface ListViewOptions {
+  title: string;
+  columns: ListColumn[];
+  records: Record<string, unknown>[];
+  primaryKey: string;
+  basePath: string;
+  tableName: string;
+  // pagination, sorting...
+}
+
+interface EditViewOptions {
+  title: string;
+  fields: CMSField[];
+  record: Record<string, unknown>;
+  action: string;
+  errors?: Record<string, string>;
+  relationOptions?: Record<string, RelationOption[]>;
+  manyToMany?: ManyToManyData[];
+}
+```
+
+**Example:**
+
+```ts
+import { listView, editView } from '@drizzle-cms/ui';
+
+// List page
+const html = listView({
+  title: 'Posts',
+  columns: [{ key: 'title', label: 'Title' }, { key: 'status', label: 'Status' }],
+  records: posts,
+  primaryKey: 'id',
+  basePath: '/admin',
+  tableName: 'posts',
+});
+
+// Edit page
+const html = editView({
+  title: 'Edit Post',
+  fields: postFields,
+  record: post,
+  action: '/admin/posts/1',
+});
+```
+
+### `components/` - Layout & UI Components
+
+Page chrome and reusable UI elements.
+
+| Export | Purpose |
+|--------|---------|
+| `layout(opts)` | Full HTML page with CSS |
+| `nav(items)` | Sidebar navigation |
+| `alert(message)` | Flash message display |
+| `pagination(opts)` | Page navigation links |
+
+**Example:**
+
+```ts
+import { layout, nav, alert } from '@drizzle-cms/ui';
+
+layout({
+  title: 'Posts - Admin',
+  nav: nav([
+    { href: '/admin', label: 'Dashboard' },
+    { href: '/admin/posts', label: 'Posts', active: true },
+  ]),
+  content: '...page content...',
+  flash: { type: 'success', message: 'Post saved!' },
+});
+```
+
+## Types
+
+### `RelationOption`
+
+```ts
+interface RelationOption {
+  value: string | number;
+  label: string;
+}
+```
+
+### `ManyToManyData`
+
+```ts
+interface ManyToManyData {
+  name: string;           // Relation name (e.g., "categories")
+  options: RelationOption[];
+  selectedValues: (string | number)[];
+}
+```
+
+### `NavItem`
+
+```ts
+interface NavItem {
+  href: string;
+  label: string;
+  active?: boolean;
+}
+```
+
+### `FlashMessage`
+
+```ts
+interface FlashMessage {
+  type: 'success' | 'error' | 'info' | 'warning';
+  message: string;
+}
+```
+
+## Best Practices
+
+1. **Always use `html` template** - Never concatenate strings with user input
+2. **Use `raw()` sparingly** - Only for HTML you've generated or escaped
+3. **Use `attrs()` for attributes** - Handles escaping and boolean attributes
+4. **Prefer `renderFieldInput`** - Auto-routes to the correct input type

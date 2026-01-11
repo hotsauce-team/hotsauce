@@ -1,6 +1,8 @@
-// Main entry point - creates the CMS request handler
+// @drizzle-cms/handlers
+// CRUD route handlers using Web Standard Request/Response
+// Works with Deno, Node 18+, Bun, Cloudflare Workers
 
-import type { CmsOptions, Handler, ResolvedCmsOptions, RouteContext } from './types.ts';
+import type { CmsOptions, ResolvedCmsOptions, RouteContext, Handler } from './types.ts';
 import { introspectFullSchema } from '@drizzle-cms/core';
 import { parseRoute, resolveAction } from './router.ts';
 import { notFound, forbidden, methodNotAllowed } from './utils.ts';
@@ -13,10 +15,52 @@ import {
   handleDelete,
 } from './crud.ts';
 
-// Re-export types
-export type { CmsOptions, Handler, CrudAction, FlashMessage } from './types.ts';
-export { cmsUrl, formatTableName, formatColumnName } from './router.ts';
-export { htmlResponse, redirect, redirectWithFlash, parseFlashFromUrl, jsonResponse, parseFormData, coerceFormValues } from './utils.ts';
+// ─────────────────────────────────────────────────────────────
+// Types - Handler configuration and request context
+// ─────────────────────────────────────────────────────────────
+export type {
+  Handler,
+  CmsOptions,
+  CrudAction,
+  FlashMessage,
+  ParsedRoute,
+  RouteContext,
+} from './types.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Router - URL parsing and route generation
+// ─────────────────────────────────────────────────────────────
+export {
+  parseRoute,
+  resolveAction,
+  cmsUrl,
+  generateNavLinks,
+  formatTableName,
+  formatColumnName,
+} from './router.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Utils - Response helpers and form parsing
+// ─────────────────────────────────────────────────────────────
+export type { FlashCode } from './utils.ts';
+
+export {
+  htmlResponse,
+  jsonResponse,
+  redirect,
+  redirectWithFlash,
+  parseFlashFromUrl,
+  notFound,
+  forbidden,
+  methodNotAllowed,
+  parseFormData,
+  coerceFormValues,
+  coerceValue,
+  buildUrl,
+  getPagination,
+  getSort,
+} from './utils.ts';
+
 
 /**
  * Create a CMS handler function
@@ -117,6 +161,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           return notFound('Unknown action');
       }
     } catch (error) {
+      // Log unexpected errors for debugging
       console.error('CMS handler error:', error);
       return new Response('Internal Server Error', { status: 500 });
     }
