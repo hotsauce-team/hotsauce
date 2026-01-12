@@ -11,7 +11,7 @@ import * as pgSchema from './fixtures/schema-pg.ts';
 import * as sqliteSchema from './fixtures/schema-sqlite.ts';
 
 // Helper to create a fresh Postgres database for each test
-async function createPgTestDb() {
+function createPgTestDb() {
   const client = new PGlite();
   const db = drizzle(client, { schema: pgSchema });
   return { client, db };
@@ -30,7 +30,7 @@ async function createSqliteTestDb() {
 // ============================================================================
 
 Deno.test('pglite - can connect', async () => {
-  const { client, db } = await createPgTestDb();
+  const { client, db } = createPgTestDb();
 
   // Simple query to verify connection
   const result = await db.execute(sql`SELECT 1 as num`);
@@ -40,7 +40,7 @@ Deno.test('pglite - can connect', async () => {
 });
 
 Deno.test('pglite - can create tables from schema', async () => {
-  const { client, db } = await createPgTestDb();
+  const { client, db } = createPgTestDb();
 
   // Create the enum first (required for posts table)
   await db.execute(sql`
@@ -93,7 +93,7 @@ Deno.test('pglite - can create tables from schema', async () => {
 });
 
 Deno.test('pglite - can insert and query with drizzle', async () => {
-  const { client, db } = await createPgTestDb();
+  const { client, db } = createPgTestDb();
 
   // Setup tables
   await db.execute(sql`

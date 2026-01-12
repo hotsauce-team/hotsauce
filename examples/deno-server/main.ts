@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { createCmsHandler } from "../../packages/handlers/mod.ts";

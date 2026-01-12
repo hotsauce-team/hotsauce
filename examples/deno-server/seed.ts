@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 import { drizzle } from "drizzle-orm/pglite";
 import { PGlite } from "@electric-sql/pglite";
 import { categories, postCategories, posts, users } from "./schema.ts";
