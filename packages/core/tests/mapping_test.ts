@@ -117,6 +117,12 @@ Deno.test('mapColumnToFieldType: long text types map to textarea', () => {
     columnType: 'MySQLMediumText',
   });
   assertEquals(mapColumnToFieldType(clobColumn), 'textarea');
+
+  const sqliteColumn = createMockColumn({
+    dataType: 'string',
+    columnType: 'SQLiteText',
+  });
+  assertEquals(mapColumnToFieldType(sqliteColumn), 'textarea');
 });
 
 Deno.test('mapColumnToFieldType: uuid columns map to uuid', () => {
