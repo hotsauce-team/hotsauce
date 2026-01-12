@@ -135,7 +135,7 @@ Deno.test('mapColumnToFieldType: uuid columns map to uuid', () => {
 
 Deno.test('mapColumnToFieldType: unknown dataType defaults to text', () => {
   const column = createMockColumn({
-    dataType: 'custom' as any,
+    dataType: 'custom',
     columnType: 'CustomType',
   });
   assertEquals(mapColumnToFieldType(column), 'text');

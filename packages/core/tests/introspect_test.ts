@@ -9,6 +9,7 @@ import {
   detectJunctionTables,
 } from '../schema/introspect.ts';
 import * as schema from './fixtures/schema-pg.ts';
+import * as sqliteSchema from './fixtures/schema-sqlite.ts';
 
 Deno.test('introspectTable - extracts table name', () => {
   const result = introspectTable(schema.users);
@@ -285,3 +286,229 @@ Deno.test('introspectFullSchema - marks junction tables with isJunction', () => 
   assertEquals(postsTable.isJunction, undefined);
 });
 
+// ============================================================================
+// SQLite Schema Tests
+// ============================================================================
+
+Deno.test('sqlite: introspectTable - extracts table name', () => {
+  const result = introspectTable(sqliteSchema.users);
+  assertEquals(result.name, 'users');
+});
+
+Deno.test('sqlite: introspectTable - extracts all columns', () => {
+  const result = introspectTable(sqliteSchema.users);
+
+  const columnNames = result.columns.map((c) => c.name);
+  assertEquals(columnNames.includes('id'), true);
+  assertEquals(columnNames.includes('email'), true);
+  assertEquals(columnNames.includes('name'), true);
+  assertEquals(columnNames.includes('bio'), true);
+  assertEquals(columnNames.includes('is_admin'), true);
+  assertEquals(columnNames.includes('created_at'), true);
+});
+
+Deno.test('sqlite: introspectTable - extracts primary key', () => {
+  const result = introspectTable(sqliteSchema.users);
+  assertEquals(result.primaryKey, ['id']);
+});
+
+Deno.test('sqlite: introspectTable - extracts column metadata', () => {
+  const result = introspectTable(sqliteSchema.users);
+
+  const emailColumn = result.columns.find((c) => c.name === 'email');
+  assertExists(emailColumn);
+  assertEquals(emailColumn.columnType, 'SQLiteText');
+  assertEquals(emailColumn.dataType, 'string');
+  assertEquals(emailColumn.notNull, true);
+  assertEquals(emailColumn.hasDefault, false);
+  assertEquals(emailColumn.isUnique, true);
+});
+
+Deno.test('sqlite: introspectTable - extracts nullable column', () => {
+  const result = introspectTable(sqliteSchema.users);
+
+  const bioColumn = result.columns.find((c) => c.name === 'bio');
+  assertExists(bioColumn);
+  assertEquals(bioColumn.notNull, false);
+  assertEquals(bioColumn.columnType, 'SQLiteText');
+});
+
+Deno.test('sqlite: introspectTable - extracts column with default', () => {
+  const result = introspectTable(sqliteSchema.users);
+
+  const isAdminColumn = result.columns.find((c) => c.name === 'is_admin');
+  assertExists(isAdminColumn);
+  assertEquals(isAdminColumn.hasDefault, true);
+  assertEquals(isAdminColumn.notNull, true);
+});
+
+Deno.test('sqlite: introspectTable - extracts text enum column', () => {
+  const result = introspectTable(sqliteSchema.posts);
+
+  const statusColumn = result.columns.find((c) => c.name === 'status');
+  assertExists(statusColumn);
+  assertEquals(statusColumn.columnType, 'SQLiteText');
+  assertEquals(statusColumn.enumValues, ['draft', 'published', 'archived']);
+});
+
+Deno.test('sqlite: introspectTable - extracts foreign key reference', () => {
+  const result = introspectTable(sqliteSchema.posts);
+
+  const authorIdColumn = result.columns.find((c) => c.name === 'author_id');
+  assertExists(authorIdColumn);
+  assertExists(authorIdColumn.references);
+  assertEquals(authorIdColumn.references.table, 'users');
+  assertEquals(authorIdColumn.references.column, 'id');
+});
+
+Deno.test('sqlite: introspectTable - extracts property name (camelCase)', () => {
+  const result = introspectTable(sqliteSchema.users);
+
+  const isAdminColumn = result.columns.find((c) => c.name === 'is_admin');
+  assertExists(isAdminColumn);
+  assertEquals(isAdminColumn.propertyName, 'isAdmin');
+});
+
+Deno.test('sqlite: introspectTable - extracts timestamp columns (integer mode)', () => {
+  const result = introspectTable(sqliteSchema.posts);
+
+  const publishedAt = result.columns.find((c) => c.name === 'published_at');
+  assertExists(publishedAt);
+  assertEquals(publishedAt.columnType, 'SQLiteTimestamp');
+  assertEquals(publishedAt.dataType, 'date');
+  assertEquals(publishedAt.notNull, false);
+
+  const createdAt = result.columns.find((c) => c.name === 'created_at');
+  assertExists(createdAt);
+  assertEquals(createdAt.notNull, true);
+  assertEquals(createdAt.hasDefault, true);
+});
+
+Deno.test('sqlite: introspectTable - extracts JSON column (text mode)', () => {
+  const result = introspectTable(sqliteSchema.uploads);
+
+  const metadataColumn = result.columns.find((c) => c.name === 'metadata');
+  assertExists(metadataColumn);
+  // SQLite JSON is stored as text with mode: 'json'
+  assertEquals(metadataColumn.columnType, 'SQLiteTextJson');
+});
+
+Deno.test('sqlite: introspectTable - extracts composite primary key', () => {
+  const result = introspectTable(sqliteSchema.postsToCategories);
+
+  // Should have both columns as primary key
+  assertEquals(result.primaryKey.length, 2);
+  assertEquals(result.primaryKey.includes('post_id'), true);
+  assertEquals(result.primaryKey.includes('category_id'), true);
+
+  // Individual columns should be marked as primary key
+  const postIdColumn = result.columns.find((c) => c.name === 'post_id');
+  const categoryIdColumn = result.columns.find((c) => c.name === 'category_id');
+  assertExists(postIdColumn);
+  assertExists(categoryIdColumn);
+  assertEquals(postIdColumn.isPrimaryKey, true);
+  assertEquals(categoryIdColumn.isPrimaryKey, true);
+});
+
+Deno.test('sqlite: introspectSchema - extracts all tables', () => {
+  const tables = introspectSchema(sqliteSchema);
+
+  const tableNames = tables.map((t) => t.name);
+  assertEquals(tableNames.includes('users'), true);
+  assertEquals(tableNames.includes('posts'), true);
+  assertEquals(tableNames.includes('categories'), true);
+  assertEquals(tableNames.includes('uploads'), true);
+  assertEquals(tableNames.includes('settings'), true);
+  assertEquals(tableNames.includes('posts_to_categories'), true);
+});
+
+Deno.test('sqlite: introspectSchema - skips non-table exports', () => {
+  const tables = introspectSchema(sqliteSchema);
+
+  // Relations should not be included as tables
+  const tableNames = tables.map((t) => t.name);
+  assertEquals(tableNames.includes('usersRelations'), false);
+});
+
+Deno.test('sqlite: introspectRelations - extracts all relations', () => {
+  const relations = introspectRelations(sqliteSchema);
+
+  // Should find relations for users, posts, categories, postsToCategories
+  assertEquals(relations.length > 0, true);
+
+  // Check users -> posts relation (many)
+  const usersPosts = relations.find(
+    (r) => r.sourceTable === 'users' && r.name === 'posts'
+  );
+  assertExists(usersPosts);
+  assertEquals(usersPosts.type, 'many');
+  assertEquals(usersPosts.targetTable, 'posts');
+});
+
+Deno.test('sqlite: introspectRelations - extracts one relations', () => {
+  const relations = introspectRelations(sqliteSchema);
+
+  // posts.author is a "one" relation
+  const postsAuthor = relations.find(
+    (r) => r.sourceTable === 'posts' && r.name === 'author'
+  );
+  assertExists(postsAuthor);
+  assertEquals(postsAuthor.type, 'one');
+  assertEquals(postsAuthor.targetTable, 'users');
+});
+
+Deno.test('sqlite: introspectFullSchema - returns tables and relations', () => {
+  const result = introspectFullSchema(sqliteSchema);
+
+  // Should have both tables and relations
+  assertEquals(result.tables.length > 0, true);
+  assertEquals(result.relations.length > 0, true);
+
+  // Tables should include our schema tables
+  const tableNames = result.tables.map((t) => t.name);
+  assertEquals(tableNames.includes('users'), true);
+  assertEquals(tableNames.includes('posts'), true);
+});
+
+Deno.test('sqlite: detectJunctionTables - detects posts_to_categories as junction', () => {
+  const tables = introspectSchema(sqliteSchema);
+  const junctions = detectJunctionTables(tables);
+
+  assertEquals(junctions.length, 1);
+  assertEquals(junctions[0]?.tableName, 'posts_to_categories');
+});
+
+Deno.test('sqlite: detectJunctionTables - extracts left and right tables', () => {
+  const tables = introspectSchema(sqliteSchema);
+  const junctions = detectJunctionTables(tables);
+
+  const junction = junctions[0];
+  assertExists(junction);
+
+  // Tables sorted alphabetically: categories < posts
+  assertEquals(junction.leftTable, 'categories');
+  assertEquals(junction.leftColumn, 'categoryId');
+  assertEquals(junction.rightTable, 'posts');
+  assertEquals(junction.rightColumn, 'postId');
+});
+
+Deno.test('sqlite: introspectFullSchema - includes junctions array', () => {
+  const result = introspectFullSchema(sqliteSchema);
+
+  assertExists(result.junctions);
+  assertEquals(result.junctions.length, 1);
+  assertEquals(result.junctions[0]?.tableName, 'posts_to_categories');
+});
+
+Deno.test('sqlite: introspectFullSchema - marks junction tables with isJunction', () => {
+  const result = introspectFullSchema(sqliteSchema);
+
+  const junctionTable = result.tables.find(t => t.name === 'posts_to_categories');
+  assertExists(junctionTable);
+  assertEquals(junctionTable.isJunction, true);
+
+  // Normal tables should not be marked
+  const postsTable = result.tables.find(t => t.name === 'posts');
+  assertExists(postsTable);
+  assertEquals(postsTable.isJunction, undefined);
+});
