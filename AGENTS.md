@@ -155,9 +155,10 @@ packages/handlers/
 
 ### Deno Permissions
 
-- **Never use broad permission flags** like `--allow-env`, `--allow-read`, `--allow-net`
+- **ALWAYS use `deno test -P`** or `deno task test` — never pass `--allow-*` flags manually
+- **Never use broad permission flags** like `--allow-env`, `--allow-read`, `--allow-net`, `--allow-ffi`
 - **Never set `"read": true`** or any permission to `true` in config
-- Always use **fine-grained permissions** in `deno.jsonc` via the `permissions` block
+- All test permissions are pre-configured in `deno.jsonc` under `test.permissions`
 - Specify exact paths, hosts, and env vars needed
 - Use `DENO_DIR=.deno_cache` to keep npm cache local and permission-friendly
 - Example:
