@@ -131,33 +131,64 @@ export function methodNotAllowed(allowed: string[]): Response {
 }
 
 /**
+ * Result of parsing form data with files
+ */
+export interface ParsedFormResult {
+  /** String values from form fields */
+  fields: Record<string, string | string[]>;
+  /** File values from file inputs */
+  files: Record<string, File | File[]>;
+}
+
+/**
  * Parse form data from a Request
  * Returns a plain object with string values (or string[] for multiple values)
  */
 export async function parseFormData(request: Request): Promise<Record<string, string | string[]>> {
+  const result = await parseFormDataWithFiles(request);
+  return result.fields;
+}
+
+/**
+ * Parse form data including file uploads
+ * Returns both string fields and File objects
+ */
+export async function parseFormDataWithFiles(request: Request): Promise<ParsedFormResult> {
   const formData = await request.formData();
-  const result: Record<string, string | string[]> = {};
+  const fields: Record<string, string | string[]> = {};
+  const files: Record<string, File | File[]> = {};
   
   for (const [key, value] of formData.entries()) {
-    // Skip file inputs for now (handle separately)
     if (value instanceof File) {
-      continue;
-    }
-    
-    const existing = result[key];
-    if (existing !== undefined) {
-      // Multiple values with same name
-      if (Array.isArray(existing)) {
-        existing.push(value);
+      // Skip empty file inputs (no file selected)
+      if (value.size === 0 && value.name === '') {
+        continue;
+      }
+      const existing = files[key];
+      if (existing !== undefined) {
+        if (Array.isArray(existing)) {
+          existing.push(value);
+        } else {
+          files[key] = [existing, value];
+        }
       } else {
-        result[key] = [existing, value];
+        files[key] = value;
       }
     } else {
-      result[key] = value;
+      const existing = fields[key];
+      if (existing !== undefined) {
+        if (Array.isArray(existing)) {
+          existing.push(value);
+        } else {
+          fields[key] = [existing, value];
+        }
+      } else {
+        fields[key] = value;
+      }
     }
   }
   
-  return result;
+  return { fields, files };
 }
 
 /**
@@ -174,8 +205,13 @@ export function coerceFormValues(
     // Form fields use propertyName (e.g., authorId)
     const rawValue = formData[column.propertyName];
     
-    // Handle missing values
-    if (rawValue === undefined || rawValue === '') {
+    // Skip fields not present in form data (preserves existing DB value on update)
+    if (rawValue === undefined) {
+      continue;
+    }
+    
+    // Handle empty strings
+    if (rawValue === '') {
       if (!column.notNull) {
         result[column.propertyName] = null;
       }

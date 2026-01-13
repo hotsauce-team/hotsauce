@@ -32,6 +32,7 @@ await client.exec(`
     title VARCHAR(200) NOT NULL,
     slug VARCHAR(200) NOT NULL,
     content TEXT,
+    featured_image VARCHAR(500),
     published BOOLEAN DEFAULT FALSE,
     author_id INTEGER REFERENCES users(id),
     created_at TIMESTAMP DEFAULT NOW(),

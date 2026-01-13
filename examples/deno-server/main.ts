@@ -2,17 +2,32 @@
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { createCmsHandler } from "../../packages/handlers/mod.ts";
+import { createLocalUploads } from "../../packages/storage/deno-fs.ts";
 import * as schema from "./schema.ts";
 
 // Database connection (persisted to ./data)
 const client = new PGlite("./data");
 const db = drizzle(client, { schema });
 
+// File uploads (storage + static handler bundled together)
+const uploads = createLocalUploads({
+  directory: "./uploads",
+  urlPrefix: "/uploads",
+});
+
 // Create CMS handler
 const cmsHandler = createCmsHandler({
   db,
   schema,
   basePath: "/admin",
+  storage: uploads.storage,
+  fileFields: {
+    // Configure posts.featuredImage as a file upload field
+    "posts.featuredImage": {
+      accept: "image/*",
+      directory: "posts",
+    },
+  },
 });
 
 // Simple HTTP server
@@ -26,6 +41,12 @@ Deno.serve({ port: PORT, hostname: "127.0.0.1" }, async (request: Request) => {
   // Redirect root to admin
   if (url.pathname === "/") {
     return Response.redirect(new URL("/admin", request.url), 302);
+  }
+
+  // Serve uploaded files
+  if (url.pathname.startsWith("/uploads")) {
+    const staticResponse = await uploads.handler(request);
+    if (staticResponse) return staticResponse;
   }
 
   // Handle admin routes

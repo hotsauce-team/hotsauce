@@ -15,6 +15,8 @@ export interface EditViewOptions {
   id?: string | number;
   /** Form submit URL override */
   action?: string;
+  /** Enable multipart form data (for file uploads) */
+  multipart?: boolean;
   /** Additional CSS classes */
   class?: string;
 }
@@ -66,6 +68,7 @@ export function editView(
     submitText,
     cancelUrl: options.baseUrl,
     class: 'cms-edit-form',
+    multipart: options.multipart,
   }, values, errors, relationData, m2mSections))}
 </div>`;
 }

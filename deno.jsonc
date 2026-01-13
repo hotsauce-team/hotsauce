@@ -12,6 +12,7 @@
     "./packages/core",
     "./packages/ui",
     "./packages/handlers",
+    "./packages/storage",
 
     // Examples
     "./examples/deno-server"
@@ -51,6 +52,9 @@
         "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
         "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm",
         "./node_modules/.deno/sql.js@1.13.0/node_modules/sql.js/dist/sql-wasm.wasm"
+      ],
+      "write": [
+        "./packages/storage/tests/.test-uploads"
       ]
     }
   },

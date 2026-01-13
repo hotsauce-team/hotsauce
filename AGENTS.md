@@ -32,6 +32,7 @@ Guidelines for AI coding assistants working on this project.
 | `core` | Schema introspection, field mapping, validation | ❌ None | ❌ Generic only |
 | `ui` | HTML generation, form rendering | ❌ None | ❌ Generic only |
 | `handlers` | CRUD route handlers (Request → Response) | ❌ Web Standard only | ✅ Postgres OK |
+| `storage` | File upload storage abstraction | ✅ Deno APIs in deno-fs.ts | ❌ Generic only |
 
 ## Database Guidelines
 
@@ -107,6 +108,7 @@ Each package has a README with detailed API documentation:
 - [`packages/core/README.md`](packages/core/README.md) — Schema introspection, field mapping
 - [`packages/ui/README.md`](packages/ui/README.md) — HTML generation, forms, views
 - [`packages/handlers/README.md`](packages/handlers/README.md) — CRUD handlers, routing
+- [`packages/storage/README.md`](packages/storage/README.md) — File upload storage abstraction
 
 ```
 packages/core/
@@ -144,6 +146,12 @@ packages/handlers/
 ├── crud.ts             # List, create, read, update, delete handlers
 ├── types.ts            # Handler types (CmsOptions, etc.)
 └── utils.ts            # Response helpers, form parsing
+
+packages/storage/
+├── mod.ts              # Main entry, re-exports all
+├── README.md           # Package documentation
+├── storage.ts          # StorageBackend interface, utilities (runtime-agnostic)
+└── deno-fs.ts          # Deno filesystem implementation (uses Deno.* APIs)
 ```
 
 ## Development Environment

@@ -11,7 +11,7 @@ import { html, raw } from '@drizzle-cms/ui';
 import type { RelationOption, ManyToManyData } from '@drizzle-cms/ui';
 import type { ManyToManyDisplayData } from '@drizzle-cms/ui';
 import type { RouteContext, ResolvedCmsOptions } from './types.ts';
-import { htmlResponse, redirect, redirectWithFlash, parseFlashFromUrl, notFound, parseFormData, coerceFormValues, getPagination, getSort } from './utils.ts';
+import { htmlResponse, redirect, redirectWithFlash, parseFlashFromUrl, notFound, parseFormDataWithFiles, coerceFormValues, getPagination, getSort } from './utils.ts';
 import { cmsUrl, formatTableName, formatColumnName } from './router.ts';
 import type { NavItem, ListColumn, ListViewOptions, DetailViewOptions, EditViewOptions } from '@drizzle-cms/ui';
 
@@ -202,7 +202,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   }
   
   const navItems = buildNavItems(options.introspected, basePath, table.name);
-  const cmsFields = tableToCmsFields(table);
+  const cmsFields = tableToCmsFields(table, false, options.fileFields);
   const relationData = await fetchAllRelationOptions(options, table);
   
   // Fetch M2M display data for this record - use actual ID from record, not URL string
@@ -248,9 +248,15 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
   
   // Handle POST - create record
   if (request.method === 'POST') {
-    const formData = await parseFormData(request);
+    const { fields: formData, files } = await parseFormDataWithFiles(request);
     const editableColumns = getEditableColumns(table);
-    const values = coerceFormValues(formData, editableColumns);
+    
+    // Process file uploads if storage is configured
+    const fileValues = await processFileUploads(options, table, files);
+    
+    // Merge file URLs into form data
+    const mergedFormData = { ...formData, ...fileValues };
+    const values = coerceFormValues(mergedFormData, editableColumns);
     
     try {
       const result = await options.db
@@ -267,7 +273,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
       // Re-render form with error
-      return await renderCreateForm(ctx, recordToValues(formData), String(error));
+      return await renderCreateForm(ctx, recordToValues(mergedFormData), String(error));
     }
   }
   
@@ -292,9 +298,45 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   
   // Handle POST - update record
   if (request.method === 'POST') {
-    const formData = await parseFormData(request);
+    const { fields: formData, files } = await parseFormDataWithFiles(request);
     const editableColumns = getEditableColumns(table);
-    const values = coerceFormValues(formData, editableColumns);
+    
+    // Process file uploads if storage is configured
+    const fileValues = await processFileUploads(options, table, files);
+    
+    // Handle file field removal and preservation
+    const fileFieldNames = getFileFieldNames(options, table);
+    const cleanedFormData = { ...formData };
+    const filesToDelete: string[] = [];
+    
+    for (const fieldName of fileFieldNames) {
+      const removeKey = `${fieldName}__remove`;
+      // Find the column to get propertyName for looking up record value
+      const column = table.columns.find(c => c.propertyName === fieldName);
+      const existingUrl = column ? record[column.propertyName] as string | null : null;
+      
+      if (removeKey in formData) {
+        // User checked "Remove" - set field to empty string (will become null)
+        cleanedFormData[fieldName] = '';
+        delete cleanedFormData[removeKey];
+        // Queue file for deletion
+        if (existingUrl) {
+          filesToDelete.push(existingUrl);
+        }
+      } else if (fieldName in fileValues) {
+        // New upload - delete old file if exists
+        if (existingUrl) {
+          filesToDelete.push(existingUrl);
+        }
+      } else {
+        // No new upload and not removing - preserve existing value
+        delete cleanedFormData[fieldName];
+      }
+    }
+    
+    // Merge file URLs into form data (only for fields with new uploads)
+    const mergedFormData = { ...cleanedFormData, ...fileValues };
+    const values = coerceFormValues(mergedFormData, editableColumns);
     
     try {
       const pkColumn = getPrimaryKeyColumn(table);
@@ -305,13 +347,29 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
         .set(values)
         .where(eq(pkField as never, recordId as never));
       
+      // Delete old files from storage after successful DB update
+      if (options.storage && filesToDelete.length > 0) {
+        for (const fileUrl of filesToDelete) {
+          try {
+            // Extract path from URL (remove the base URL prefix)
+            const path = extractPathFromUrl(fileUrl, options);
+            if (path) {
+              await options.storage.delete(path);
+            }
+          } catch (err) {
+            // Log but don't fail the request if file deletion fails
+            console.error(`Failed to delete file ${fileUrl}:`, err);
+          }
+        }
+      }
+      
       // Save many-to-many relations
       await saveManyToManyData(options, table, recordId, formData);
       
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
       // Re-render form with error
-      return await renderEditForm(ctx, recordToValues(formData), String(error));
+      return await renderEditForm(ctx, recordToValues(mergedFormData), String(error));
     }
   }
   
@@ -333,9 +391,40 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
     const pkColumn = getPrimaryKeyColumn(table);
     const pkField = (drizzleTable as Record<string, unknown>)[pkColumn.name];
     
+    // Fetch record first to get file URLs for cleanup
+    const record = await findRecord(options.db, drizzleTable, table, recordId);
+    
+    // Collect file URLs from the record before deletion
+    const fileFieldNames = getFileFieldNames(options, table);
+    const filesToDelete: string[] = [];
+    if (record) {
+      for (const fieldName of fileFieldNames) {
+        const fileUrl = record[fieldName] as string | null;
+        if (fileUrl) {
+          filesToDelete.push(fileUrl);
+        }
+      }
+    }
+    
+    // Delete the record
     await options.db
       .delete(drizzleTable)
       .where(eq(pkField as never, recordId as never));
+    
+    // Delete files from storage after successful DB delete
+    if (options.storage && filesToDelete.length > 0) {
+      for (const fileUrl of filesToDelete) {
+        try {
+          const path = extractPathFromUrl(fileUrl, options);
+          if (path) {
+            await options.storage.delete(path);
+          }
+        } catch (err) {
+          // Log but don't fail - record is already deleted
+          console.error(`Failed to delete file ${fileUrl}:`, err);
+        }
+      }
+    }
     
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');
   } catch (error) {
@@ -375,13 +464,15 @@ async function renderCreateForm(
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
   
-  const cmsFields = tableToCmsFields(table, true); // editable only
+  const cmsFields = tableToCmsFields(table, true, options.fileFields);
+  const hasFileFields = cmsFields.some(f => f.fieldType === 'file');
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, undefined);
   
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     action: cmsUrl(basePath, table.name) + '/new',
+    multipart: hasFileFields,
   };
   
   const errors: Record<string, string> = error ? { _form: error } : {};
@@ -420,13 +511,15 @@ async function renderEditForm(
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
   
-  const cmsFields = tableToCmsFields(table, true); // editable only
+  const cmsFields = tableToCmsFields(table, true, options.fileFields);
+  const hasFileFields = cmsFields.some(f => f.fieldType === 'file');
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, recordId);
   
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
+    multipart: hasFileFields,
   };
   
   const errors: Record<string, string> = error ? { _form: error } : {};
@@ -529,13 +622,105 @@ function getListColumns(table: IntrospectedTable): ListColumn[] {
     }));
 }
 
-function tableToCmsFields(table: IntrospectedTable, editableOnly = false): CMSField[] {
+function tableToCmsFields(
+  table: IntrospectedTable,
+  editableOnly = false,
+  fileFields: Record<string, import('./types.ts').FileFieldConfig> = {}
+): CMSField[] {
   let columns = table.columns;
   if (editableOnly) {
     columns = getEditableColumns(table);
   }
   
-  return columns.map(col => mapColumnToField(col));
+  return columns.map(col => {
+    const field = mapColumnToField(col);
+    // Check if this column is configured as a file field
+    const fileFieldKey = `${table.name}.${col.propertyName}`;
+    const fileConfig = fileFields[fileFieldKey];
+    if (fileConfig) {
+      field.fieldType = 'file';
+      field.fileAccept = fileConfig.accept;
+    }
+    return field;
+  });
+}
+
+/**
+ * Get field names that are configured as file fields for a table
+ */
+function getFileFieldNames(options: ResolvedCmsOptions, table: IntrospectedTable): string[] {
+  const result: string[] = [];
+  for (const key of Object.keys(options.fileFields)) {
+    const [tableName, fieldName] = key.split('.');
+    if (tableName === table.name && fieldName) {
+      result.push(fieldName);
+    }
+  }
+  return result;
+}
+
+/**
+ * Extract the storage path from a file URL
+ * E.g., "/uploads/posts/image_123.jpg" -> "posts/image_123.jpg"
+ */
+function extractPathFromUrl(url: string, _options: ResolvedCmsOptions): string | null {
+  if (!url) return null;
+  
+  // Handle relative URLs like "/uploads/posts/image.jpg"
+  // Remove the leading URL prefix to get the storage path
+  // The URL format is: {baseUrl}/{path} where baseUrl might be "/uploads"
+  
+  // Find the first path segment after the leading slash
+  const match = url.match(/^\/[^/]+\/(.+)$/);
+  if (match && match[1]) {
+    return match[1];
+  }
+  
+  // If no match, try to use the URL as-is (might be just a path)
+  return url.replace(/^\/+/, '');
+}
+
+/**
+ * Process file uploads and return a map of field names to URLs
+ */
+async function processFileUploads(
+  options: ResolvedCmsOptions,
+  table: IntrospectedTable,
+  files: Record<string, File | File[]>
+): Promise<Record<string, string>> {
+  const result: Record<string, string> = {};
+  
+  // Skip if no storage configured or no files
+  if (!options.storage || Object.keys(files).length === 0) {
+    return result;
+  }
+  
+  for (const [fieldName, fileOrFiles] of Object.entries(files)) {
+    // Get file field config
+    const fieldKey = `${table.name}.${fieldName}`;
+    const config = options.fileFields[fieldKey];
+    
+    // Only process fields that are configured as file fields
+    if (!config) {
+      continue;
+    }
+    
+    // Get the first file (for now, we don't support multiple files per field)
+    const file = Array.isArray(fileOrFiles) ? fileOrFiles[0] : fileOrFiles;
+    if (!file) continue;
+    
+    try {
+      const uploaded = await options.storage.store(file, {
+        directory: config.directory ?? table.name,
+      });
+      result[fieldName] = uploaded.url;
+    } catch (error) {
+      console.error(`Failed to upload file for ${fieldName}:`, error);
+      // Continue without the file - the field will be empty
+    }
+  }
+  
+  return result;
 }
 
 function recordToValues(formData: Record<string, string | string[]>): Record<string, unknown> {

@@ -23,6 +23,7 @@ export const posts = pgTable("posts", {
   title: varchar("title", { length: 200 }).notNull(),
   slug: varchar("slug", { length: 200 }).notNull(),
   content: text("content"),
+  featuredImage: varchar("featured_image", { length: 500 }),
   published: boolean("published").default(false),
   authorId: integer("author_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),

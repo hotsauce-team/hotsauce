@@ -18,11 +18,13 @@
     "example-deno-server": {
       "read": [
         "./data",
+        "./uploads",
         "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
         "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm"
       ],
       "write": [
-        "./data"
+        "./data",
+        "./uploads"
       ],
       "net": [
         "127.0.0.1:3000"

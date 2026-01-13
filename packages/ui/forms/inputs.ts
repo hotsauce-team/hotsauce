@@ -63,6 +63,22 @@ function getValidationAttrs(field: CMSField): Record<string, unknown> {
 }
 
 /**
+ * Extract filename from a URL path
+ */
+function getFilenameFromUrl(url: string): string {
+  try {
+    // Handle both full URLs and relative paths
+    const path = url.includes('://') ? new URL(url).pathname : url;
+    const segments = path.split('/').filter(Boolean);
+    return segments[segments.length - 1] || url;
+  } catch {
+    // If URL parsing fails, try simple split
+    const segments = url.split('/').filter(Boolean);
+    return segments[segments.length - 1] || url;
+  }
+}
+
+/**
  * Render a text input
  */
 export function textInput(field: CMSField, options: FieldInputOptions = {}): string {
@@ -226,6 +242,59 @@ export function jsonInput(field: CMSField, options: FieldInputOptions = {}): str
 }
 
 /**
+ * Options for file input
+ */
+export interface FileInputOptions extends FieldInputOptions {
+  /** Accepted file types (e.g., 'image/*', '.pdf') */
+  accept?: string;
+  /** Allow multiple files */
+  multiple?: boolean;
+  /** Current file URL (for display) */
+  currentUrl?: string;
+  /** Current filename (for display) */
+  currentFilename?: string;
+  /** Allow removing the current file (shows checkbox) */
+  allowRemove?: boolean;
+}
+
+/**
+ * Render a file input
+ */
+export function fileInput(field: CMSField, options: FileInputOptions = {}): string {
+  const hasCurrentFile = options.currentUrl || options.currentFilename;
+  const removeName = `${field.column.propertyName}__remove`;
+  
+  const currentFileDisplay = hasCurrentFile ? html`
+    <div class="cms-file-current">
+      <span class="cms-file-label">Current file:</span>
+      ${options.currentUrl 
+        ? html`<a href="${options.currentUrl}" target="_blank" class="cms-file-link">${options.currentFilename || 'View file'}</a>`
+        : html`<span class="cms-file-name">${options.currentFilename}</span>`
+      }
+      ${raw(options.allowRemove !== false ? html`
+      <label class="cms-file-remove">
+        <input type="checkbox" name="${removeName}" value="1" />
+        Remove
+      </label>` : '')}
+    </div>` : '';
+  
+  return html`<div class="cms-file-input-wrapper">
+  ${raw(currentFileDisplay)}
+  <input ${attrs({
+    type: 'file',
+    name: field.column.propertyName,
+    id: options.id ?? field.column.propertyName,
+    class: `cms-input cms-input-file ${options.class ?? ''}`.trim(),
+    disabled: options.disabled,
+    accept: options.accept,
+    multiple: options.multiple,
+    ...getValidationAttrs(field),
+  })} />
+  ${raw(hasCurrentFile ? html`<span class="cms-file-hint">Upload new file to replace</span>` : html`<span class="cms-file-hint">Choose a file to upload</span>`)}
+</div>`;
+}
+
+/**
  * Render a hidden input
  */
 export function hiddenInput(field: CMSField, options: FieldInputOptions = {}): string {
@@ -364,8 +433,16 @@ export function renderFieldInput(field: CMSField, options: FieldInputOptions = {
       return relationInput(field, options);
     case 'array':
       return jsonInput(field, options); // Arrays as JSON for now
-    case 'file':
-      return textInput(field, options); // File fields need upload handling
+    case 'file': {
+      // Use the existing value (URL) as the current file display
+      const fileOptions: FileInputOptions = {
+        ...options,
+        accept: field.fileAccept,
+        currentUrl: options.value ? String(options.value) : undefined,
+        currentFilename: options.value ? getFilenameFromUrl(String(options.value)) : undefined,
+      };
+      return fileInput(field, fileOptions);
+    }
     default:
       return textInput(field, options);
   }

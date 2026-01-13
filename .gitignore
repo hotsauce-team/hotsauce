@@ -37,3 +37,6 @@ agent-reference/
 
 # Example data
 examples/deno-server/data/
+examples/deno-server/uploads/
+# Test artifacts
+packages/storage/tests/.test-uploads/

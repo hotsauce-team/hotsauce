@@ -44,6 +44,9 @@ export interface CMSField {
 
   /** Whether this field is read-only */
   readOnly?: boolean;
+
+  /** Accepted MIME types for file fields (e.g., 'image/*', 'application/pdf') */
+  fileAccept?: string;
 }
 
 /**

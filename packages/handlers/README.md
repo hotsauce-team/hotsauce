@@ -183,10 +183,35 @@ interface CmsOptions {
   basePath?: string;
   /** Site title for the admin UI */
   title?: string;
+  /** Storage backend for file uploads (optional) */
+  storage?: StorageBackend;
   /** Custom authentication check */
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table/action */
   canAccess?: (request: Request, table: IntrospectedTable, action: CrudAction) => Promise<boolean> | boolean;
+}
+```
+
+### `StorageBackend`
+
+```ts
+interface StorageBackend {
+  /** Store a file and return metadata */
+  store(file: File, options?: StoreFileOptions): Promise<UploadedFile>;
+  /** Delete a file by path */
+  delete(path: string): Promise<void>;
+  /** Check if a file exists */
+  exists(path: string): Promise<boolean>;
+  /** Get public URL for a file */
+  getUrl(path: string): string;
+}
+
+interface UploadedFile {
+  filename: string;
+  mimeType: string;
+  size: number;
+  path: string;
+  url: string;
 }
 ```
 
@@ -214,6 +239,80 @@ interface FlashMessage {
   message: string;
 }
 ```
+
+## File Storage
+
+The CMS supports file uploads via a pluggable storage backend. You provide an implementation appropriate for your runtime (local filesystem, S3, etc.).
+
+### Storage Interface
+
+```ts
+import type { StorageBackend, UploadedFile } from '@drizzle-cms/handlers';
+
+// Implement for your runtime
+const storage: StorageBackend = {
+  async store(file, options) {
+    // Write file to disk/cloud
+    return { filename, mimeType, size, path, url };
+  },
+  async delete(path) { /* ... */ },
+  async exists(path) { /* ... */ },
+  getUrl(path) { /* ... */ },
+};
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  storage,
+});
+```
+
+### Local Filesystem (Deno)
+
+See `examples/deno-server/storage.ts` for a complete Deno implementation:
+
+```ts
+import { createLocalStorage, createStaticHandler } from './storage.ts';
+
+// Create storage backend
+const storage = createLocalStorage({
+  directory: './uploads',
+  baseUrl: '/uploads',
+});
+
+// Create CMS handler
+const cmsHandler = createCmsHandler({ db, schema, storage });
+
+// Create static file handler for serving uploads
+const serveUploads = createStaticHandler({
+  directory: './uploads',
+  urlPrefix: '/uploads',
+});
+
+// Combine handlers
+Deno.serve(async (request) => {
+  // Serve static files first
+  const staticResponse = await serveUploads(request);
+  if (staticResponse) return staticResponse;
+  
+  // Then handle CMS routes
+  return cmsHandler(request);
+});
+```
+
+### Utility Functions
+
+| Export | Purpose |
+|--------|---------|
+| `generateUniqueFilename(name)` | Create collision-resistant filename |
+| `sanitizePath(path)` | Prevent directory traversal attacks |
+| `getFileExtension(name)` | Extract file extension |
+| `isAllowedMimeType(type, allowed)` | Check MIME type against patterns |
+| `formatFileSize(bytes)` | `1048576` → `"1.0 MB"` |
+
+### TODO: S3 Storage
+
+S3/cloud storage is on the roadmap. Track progress in the project issues.
 
 ## Authentication & Authorization
 

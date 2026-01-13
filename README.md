@@ -19,6 +19,7 @@ Each package has its own README with detailed API documentation:
 | [`@drizzle-cms/core`](packages/core/) | Schema introspection, field mapping, validation | [README](packages/core/README.md) |
 | [`@drizzle-cms/ui`](packages/ui/) | HTML generation, form rendering, views | [README](packages/ui/README.md) |
 | [`@drizzle-cms/handlers`](packages/handlers/) | CRUD route handlers (Request → Response) | [README](packages/handlers/README.md) |
+| [`@drizzle-cms/storage`](packages/storage/) | File upload storage abstraction | [README](packages/storage/README.md) |
 
 ```
 packages/
@@ -35,11 +36,16 @@ packages/
 │   ├── views/      # List, detail, edit views
 │   └── components/ # Layout, pagination, alerts
 │
-└── handlers/       # CRUD route handlers (Web Standard Request/Response)
-    │               # Bring Your Own Server - works with any framework
-    ├── router.ts   # URL routing and handler dispatch
-    ├── crud.ts     # List, create, read, update, delete handlers
-    └── types.ts    # Handler types and options
+├── handlers/       # CRUD route handlers (Web Standard Request/Response)
+│   │               # Bring Your Own Server - works with any framework
+│   ├── router.ts   # URL routing and handler dispatch
+│   ├── crud.ts     # List, create, read, update, delete handlers
+│   └── types.ts    # Handler types and options
+│
+└── storage/        # File upload storage abstraction
+    │               # Runtime-agnostic interface + Deno implementation
+    ├── storage.ts  # StorageBackend interface and utilities
+    └── deno-fs.ts  # Deno filesystem implementation
 ```
 
 ## Bring Your Own Server

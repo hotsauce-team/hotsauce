@@ -1,6 +1,7 @@
 // Handler types and options
 
 import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
+import type { StorageBackend } from '../storage/storage.ts';
 
 /**
  * A Web Standard handler function: Request → Response
@@ -11,6 +12,18 @@ export type Handler = (request: Request) => Promise<Response> | Response;
  * CRUD action types
  */
 export type CrudAction = 'list' | 'read' | 'create' | 'update' | 'delete';
+
+/**
+ * Configuration for a file field
+ */
+export interface FileFieldConfig {
+  /** Accepted MIME types (e.g., 'image/*', 'application/pdf') */
+  accept?: string;
+  /** Maximum file size in bytes */
+  maxSize?: number;
+  /** Subdirectory within storage root for this field's files */
+  directory?: string;
+}
 
 /**
  * Options for creating the CMS handler
@@ -26,6 +39,14 @@ export interface CmsOptions {
   basePath?: string;
   /** Site title for the admin UI */
   title?: string;
+  /** Storage backend for file uploads (optional) */
+  storage?: StorageBackend;
+  /**
+   * Fields that should be rendered as file uploads.
+   * Maps "tableName.columnName" to file config.
+   * @example { 'posts.featuredImage': { accept: 'image/*' } }
+   */
+  fileFields?: Record<string, FileFieldConfig>;
   /** Custom authentication check */
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table */
@@ -45,6 +66,10 @@ export interface ResolvedCmsOptions {
   basePath: string;
   /** Site title for the admin UI */
   title: string;
+  /** Storage backend for file uploads (optional) */
+  storage?: StorageBackend;
+  /** Fields that should be rendered as file uploads */
+  fileFields: Record<string, FileFieldConfig>;
   /** Custom authentication check */
   isAuthenticated: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table */

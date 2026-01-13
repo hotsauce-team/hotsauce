@@ -328,6 +328,65 @@ export function defaultStyles(): string {
   .cms-alert-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
   .cms-alert-warning { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
   .cms-alert-info { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+
+  /* File inputs */
+  .cms-file-input-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .cms-input-file {
+    padding: 0.5rem;
+    border: 2px dashed var(--cms-gray-300);
+    border-radius: var(--cms-radius);
+    background: var(--cms-gray-50);
+    cursor: pointer;
+  }
+  .cms-input-file:hover {
+    border-color: var(--cms-primary);
+    background: white;
+  }
+  .cms-input-file:focus {
+    outline: none;
+    border-color: var(--cms-primary);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+  }
+  .cms-file-current {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background: var(--cms-gray-100);
+    border-radius: var(--cms-radius);
+    font-size: 0.875rem;
+  }
+  .cms-file-label {
+    color: var(--cms-gray-500);
+  }
+  .cms-file-link {
+    color: var(--cms-primary);
+    text-decoration: none;
+  }
+  .cms-file-link:hover { text-decoration: underline; }
+  .cms-file-name {
+    color: var(--cms-gray-700);
+  }
+  .cms-file-remove {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--cms-danger);
+    cursor: pointer;
+    font-size: 0.8125rem;
+  }
+  .cms-file-remove input {
+    cursor: pointer;
+  }
+  .cms-file-hint {
+    color: var(--cms-gray-500);
+    font-size: 0.875rem;
+  }
 </style>`;
 }
 

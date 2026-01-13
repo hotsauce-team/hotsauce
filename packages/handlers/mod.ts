@@ -25,6 +25,7 @@ export type {
   FlashMessage,
   ParsedRoute,
   RouteContext,
+  FileFieldConfig,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -42,7 +43,7 @@ export {
 // ─────────────────────────────────────────────────────────────
 // Utils - Response helpers and form parsing
 // ─────────────────────────────────────────────────────────────
-export type { FlashCode } from './utils.ts';
+export type { FlashCode, ParsedFormResult } from './utils.ts';
 
 export {
   htmlResponse,
@@ -54,12 +55,30 @@ export {
   forbidden,
   methodNotAllowed,
   parseFormData,
+  parseFormDataWithFiles,
   coerceFormValues,
   coerceValue,
   buildUrl,
   getPagination,
   getSort,
 } from './utils.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Storage - File upload storage abstraction (re-exported from @drizzle-cms/storage)
+// ─────────────────────────────────────────────────────────────
+export type {
+  StorageBackend,
+  UploadedFile,
+  StoreFileOptions,
+} from '../storage/storage.ts';
+
+export {
+  generateUniqueFilename,
+  sanitizePath,
+  getFileExtension,
+  isAllowedMimeType,
+  formatFileSize,
+} from '../storage/storage.ts';
 
 
 /**
@@ -98,6 +117,8 @@ export function createCmsHandler(options: CmsOptions): Handler {
     db: options.db,
     basePath: (options.basePath ?? '/admin').replace(/\/+$/, ''),
     title: options.title ?? 'CMS Admin',
+    storage: options.storage,
+    fileFields: options.fileFields ?? {},
     isAuthenticated: options.isAuthenticated ?? (() => true),
     canAccess: options.canAccess ?? (() => true),
   };
