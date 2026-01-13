@@ -39,6 +39,8 @@ packages/
     │               # Bring Your Own Server - works with any framework
     ├── router.ts   # URL routing and handler dispatch
     ├── crud.ts     # List, create, read, update, delete handlers
+    ├── csrf.ts     # CSRF token generation and validation
+    ├── http.ts     # HTTP response helpers
     └── types.ts    # Handler types and options
 ```
 

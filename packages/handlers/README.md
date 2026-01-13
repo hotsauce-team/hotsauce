@@ -11,19 +11,18 @@ import { createCmsHandler } from '@drizzle-cms/handlers';
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                   @drizzle-cms/handlers                     │
-├─────────────┬─────────────┬─────────────┬───────────────────┤
-│   mod.ts    │  router.ts  │   crud.ts   │   utils.ts        │
-│             │             │             │                   │
-│  Main       │  URL        │  CRUD       │  Response         │
-│  handler    │  parsing    │  operations │  helpers          │
-│  factory    │  + dispatch │             │                   │
-└─────────────┴─────────────┴─────────────┴───────────────────┘
-        ↓             ↓             ↓             ↓
-   Entry point    Route        List/Create/   HTML, JSON,
-   for servers    matching     Read/Update/   redirects
-                               Delete
+┌───────────────────────────────────────────────────────────────────────────┐
+│                        @drizzle-cms/handlers                              │
+├───────────┬───────────┬───────────┬───────────┬───────────┬───────────────┤
+│  mod.ts   │ router.ts │  crud.ts  │  http.ts  │  csrf.ts  │ crud-helpers  │
+│           │           │           │           │           │               │
+│  Main     │  URL      │  CRUD     │  HTTP     │  CSRF     │  Internal     │
+│  handler  │  parsing  │  handlers │  response │  token    │  helpers      │
+│  factory  │  + routes │           │  helpers  │  utils    │               │
+└───────────┴───────────┴───────────┴───────────┴───────────┴───────────────┘
+       ↓           ↓           ↓           ↓           ↓           ↓
+   Entry pt    Route      List/CRUD    Responses   Security   Nav, records,
+   for srvs    matching   operations   redirects   tokens     error msgs
 ```
 
 ## Design Principles
@@ -68,8 +67,8 @@ Deno.serve(handler);
 | `createCmsHandler(options)` | Create the main CMS handler |
 | `CmsOptions` | Configuration options type |
 | `Handler` | `(Request) => Response` type |
-| `CrudAction` | `'list' \| 'read' \| 'create' \| 'update' \| 'delete'` |
-
+| `CrudAction` | `'list' \| 'read' \| 'create' \| 'update' \| 'delete'` || `generateCsrfToken()` | Generate signed CSRF token |
+| `validateCsrfToken(token)` | Validate CSRF token (signature + expiry) |
 **Example:**
 
 ```ts
@@ -136,7 +135,7 @@ Internal handlers for each CRUD operation. These are called by the main handler.
 | `handleUpdate` | POST `/admin/:table/:id/edit` | Update record |
 | `handleDelete` | POST `/admin/:table/:id/delete` | Delete record |
 
-### `utils.ts` - Response Helpers
+### `http.ts` - HTTP Response Helpers
 
 | Export | Purpose |
 |--------|---------|
@@ -168,6 +167,43 @@ const formData = await parseFormData(request);
 const values = coerceFormValues(formData, table.columns);
 // { title: 'Hello', published: true, authorId: 1 }
 ```
+
+### `csrf.ts` - CSRF Protection
+
+| Export | Purpose |
+|--------|---------|  
+| `generateCsrfToken()` | Generate signed token (4-hour expiry) |
+| `validateCsrfToken(token)` | Validate signature and check expiry |
+| `getCsrfTokenFromFormData(data)` | Extract `_csrf` field from form |
+
+**Token Format:** `timestamp.random.signature`
+
+Tokens are automatically validated on all POST operations (create, update, delete). Invalid or expired tokens show an error message and block the operation.
+
+**Example:**
+
+```ts
+import { generateCsrfToken, validateCsrfToken } from '@drizzle-cms/handlers';
+
+// Generate for forms
+const token = generateCsrfToken();
+// → "1736784000000.abc123def456.sig789xyz"
+
+// Validate on submit
+const isValid = validateCsrfToken(token);
+// → true (if signature matches and not expired)
+```
+
+### `crud-helpers.ts` - Internal Helpers
+
+Internal utilities used by crud.ts (not exported from mod.ts).
+
+| Function | Purpose |
+|----------|---------|  
+| `buildNavItems()` | Build sidebar navigation |
+| `findRecord()` | Fetch single record by ID |
+| `getSafeErrorMessage()` | Sanitize error messages for users |
+| `isForeignKeyViolation()` | Detect FK constraint errors |
 
 ## Types
 
