@@ -13,7 +13,7 @@ import {
   coerceValue,
   getPagination,
   getSort,
-} from '../utils.ts';
+} from '../http.ts';
 import type { IntrospectedColumn } from '@drizzle-cms/core';
 
 // =============================================================================

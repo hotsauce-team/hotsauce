@@ -19,6 +19,8 @@ export interface DetailViewOptions {
   showDelete?: boolean;
   /** Show back button */
   showBack?: boolean;
+  /** CSRF token for delete form */
+  csrfToken?: string;
   /** Additional CSS classes */
   class?: string;
 }
@@ -119,7 +121,11 @@ export function detailView(
   }
   
   if (options.showDelete) {
+    const csrfField = options.csrfToken 
+      ? `<input type="hidden" name="_csrf" value="${escapeHtml(options.csrfToken)}" />`
+      : '';
     actions.push(html`<form action="${options.baseUrl}/${options.id}/delete" method="POST" class="cms-inline-form" onsubmit="return confirm('Delete this record?')">
+      ${raw(csrfField)}
       <button type="submit" class="cms-btn cms-btn-danger">Delete</button>
     </form>`);
   }

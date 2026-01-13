@@ -2,6 +2,7 @@
   "version": "5",
   "specifiers": {
     "jsr:@std/assert@*": "1.0.16",
+    "jsr:@std/assert@1.0.16": "1.0.16",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "npm:@electric-sql/pglite@~0.3.14": "0.3.14",
     "npm:drizzle-orm@~0.45.1": "0.45.1_@electric-sql+pglite@0.3.14_postgres@3.4.8_sql.js@1.13.0",

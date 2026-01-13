@@ -25,6 +25,8 @@ export interface FormOptions {
   cancelUrl?: string;
   /** Enable multipart form data (for file uploads) */
   multipart?: boolean;
+  /** CSRF token to embed as hidden field */
+  csrfToken?: string;
 }
 
 /**
@@ -40,6 +42,9 @@ export function form(
 ): string {
   const method = options.method ?? 'POST';
   const submitText = options.submitText ?? 'Save';
+  const csrfField = options.csrfToken 
+    ? html`<input type="hidden" name="_csrf" value="${options.csrfToken}" />`
+    : '';
 
   return html`<form ${attrs({
     action: options.action,
@@ -48,6 +53,7 @@ export function form(
     class: `cms-form ${options.class ?? ''}`.trim(),
     enctype: options.multipart ? 'multipart/form-data' : undefined,
   })}>
+  ${raw(csrfField)}
   ${raw(formFields(fields, values, errors, relationData))}
   ${raw(extraContent)}
   
@@ -68,9 +74,13 @@ export function deleteForm(options: {
   confirmMessage?: string;
   buttonText?: string;
   class?: string;
+  csrfToken?: string;
 }): string {
   const confirmMessage = options.confirmMessage ?? 'Are you sure you want to delete this record?';
   const buttonText = options.buttonText ?? 'Delete';
+  const csrfField = options.csrfToken 
+    ? html`<input type="hidden" name="_csrf" value="${options.csrfToken}" />`
+    : '';
 
   return html`<form ${attrs({
     action: options.action,
@@ -78,6 +88,7 @@ export function deleteForm(options: {
     class: `cms-form-delete ${options.class ?? ''}`.trim(),
     onsubmit: `return confirm('${confirmMessage}')`,
   })}>
+  ${raw(csrfField)}
   <input type="hidden" name="_method" value="DELETE" />
   <button type="submit" class="cms-btn cms-btn-danger">${buttonText}</button>
 </form>`;

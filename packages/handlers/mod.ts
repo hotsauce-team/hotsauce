@@ -5,7 +5,7 @@
 import type { CmsOptions, ResolvedCmsOptions, RouteContext, Handler } from './types.ts';
 import { introspectFullSchema } from '@drizzle-cms/core';
 import { parseRoute, resolveAction } from './router.ts';
-import { notFound, forbidden, methodNotAllowed } from './utils.ts';
+import { notFound, forbidden, methodNotAllowed } from './http.ts';
 import {
   handleDashboard,
   handleList,
@@ -28,6 +28,16 @@ export type {
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
+// CSRF - Token generation and validation
+// ─────────────────────────────────────────────────────────────
+export {
+  generateCsrfToken,
+  validateCsrfToken,
+  getCsrfTokenFromFormData,
+  getCsrfFieldName,
+} from './csrf.ts';
+
+// ─────────────────────────────────────────────────────────────
 // Router - URL parsing and route generation
 // ─────────────────────────────────────────────────────────────
 export {
@@ -42,7 +52,7 @@ export {
 // ─────────────────────────────────────────────────────────────
 // Utils - Response helpers and form parsing
 // ─────────────────────────────────────────────────────────────
-export type { FlashCode } from './utils.ts';
+export type { FlashCode } from './http.ts';
 
 export {
   htmlResponse,
@@ -59,7 +69,7 @@ export {
   buildUrl,
   getPagination,
   getSort,
-} from './utils.ts';
+} from './http.ts';
 
 
 /**
