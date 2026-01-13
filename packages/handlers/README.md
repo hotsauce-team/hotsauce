@@ -11,18 +11,18 @@ import { createCmsHandler } from '@drizzle-cms/handlers';
 ## Architecture
 
 ```
-┌───────────────────────────────────────────────────────────────────────────┐
-│                        @drizzle-cms/handlers                              │
-├───────────┬───────────┬───────────┬───────────┬───────────┬───────────────┤
-│  mod.ts   │ router.ts │  crud.ts  │  http.ts  │  csrf.ts  │ crud-helpers  │
-│           │           │           │           │           │               │
-│  Main     │  URL      │  CRUD     │  HTTP     │  CSRF     │  Internal     │
-│  handler  │  parsing  │  handlers │  response │  token    │  helpers      │
-│  factory  │  + routes │           │  helpers  │  utils    │               │
-└───────────┴───────────┴───────────┴───────────┴───────────┴───────────────┘
-       ↓           ↓           ↓           ↓           ↓           ↓
-   Entry pt    Route      List/CRUD    Responses   Security   Nav, records,
-   for srvs    matching   operations   redirects   tokens     error msgs
+┌──────────────────────────────────────────────────────────────────────────────────────┐
+│                              @drizzle-cms/handlers                                   │
+├──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬────────────────────┤
+│  mod.ts  │router.ts │ crud.ts  │ http.ts  │ csrf.ts  │styles.ts │   validation.ts    │
+│          │          │          │          │          │          │                    │
+│  Main    │  URL     │  CRUD    │  HTTP    │  CSRF    │  CSS     │   Config           │
+│  handler │  parsing │  handlers│  response│  token   │  route   │   validation       │
+│  factory │  + routes│          │  helpers │  utils   │  handler │   (Zod)            │
+└──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴────────────────────┘
+     ↓          ↓          ↓          ↓          ↓          ↓            ↓
+  Entry pt   Route     List/CRUD   Responses  Security  Stylesheet   Throws on
+  for srvs   matching  operations  redirects  tokens    serving      invalid config
 ```
 
 ## Design Principles
@@ -243,6 +243,113 @@ This policy:
 ### CSRF Protection
 
 Forms include CSRF tokens validated on POST. See `csrf.ts` exports.
+
+## Error Handling
+
+The library distinguishes between **configuration errors** (programming mistakes) and **runtime errors** (expected failures).
+
+### Configuration Errors (Throws)
+
+Invalid configuration throws `CmsConfigError` at startup:
+
+```ts
+import { createCmsHandler, CmsConfigError } from '@drizzle-cms/handlers';
+
+try {
+  const handler = createCmsHandler({
+    db: null,  // ❌ Invalid - throws immediately
+    schema: {},
+  });
+} catch (error) {
+  if (error instanceof CmsConfigError) {
+    console.error('Config error:', error.message);
+    // "Invalid CMS configuration:
+    //   - db: db is required and must be a Drizzle database instance
+    //   - schema: schema must contain at least one table"
+  }
+}
+```
+
+| Condition | Behavior |
+|-----------|----------|
+| `db` is null/undefined | Throws `CmsConfigError` |
+| `schema` is empty | Throws `CmsConfigError` |
+| `basePath` doesn't start with `/` | Throws `CmsConfigError` |
+| `csrfSecret` less than 32 chars | Throws `CmsConfigError` |
+| Schema introspection fails | Throws (table not found, etc.) |
+
+### Runtime Errors (HTTP Responses)
+
+Expected failures return appropriate HTTP responses:
+
+| Condition | Response |
+|-----------|----------|
+| Route not found | 404 Not Found |
+| Authentication fails | 403 Forbidden |
+| Authorization denied | 403 Forbidden |
+| Record not found | 404 Not Found |
+| Validation errors | 400 with form errors |
+| CSRF token invalid | 403 with error message |
+| Foreign key violation on delete | Error flash message |
+| Unexpected database error | 500 Internal Server Error |
+
+### Error Logging with `onError`
+
+Unexpected errors (database failures, etc.) return a generic 500 to users. Use `onError` to log details to your monitoring service:
+
+```ts
+import { createCmsHandler, ErrorContext } from '@drizzle-cms/handlers';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  
+  onError: (error: Error, context: ErrorContext) => {
+    // Log to your monitoring service
+    logger.error('CMS error', {
+      message: error.message,
+      stack: error.stack,
+      path: context.url.pathname,
+      table: context.table?.name,
+      action: context.action,
+    });
+    
+    // Or send to Sentry, Datadog, etc.
+    Sentry.captureException(error, {
+      extra: {
+        table: context.table?.name,
+        action: context.action,
+      },
+    });
+  },
+});
+```
+
+The `ErrorContext` includes:
+
+```ts
+interface ErrorContext {
+  request: Request;       // Original request
+  url: URL;               // Parsed URL
+  route: ParsedRoute | null;  // Route info (if parsed)
+  table?: IntrospectedTable;  // Table being accessed
+  action?: CrudAction | 'dashboard';  // Action attempted
+}
+```
+
+### Validation Schema
+
+You can use the Zod schema directly for custom validation:
+
+```ts
+import { CmsOptionsSchema } from '@drizzle-cms/handlers';
+
+// Validate options before creating handler
+const result = CmsOptionsSchema.safeParse(myOptions);
+if (!result.success) {
+  console.error(result.error.issues);
+}
+```
 
 ## Types
 

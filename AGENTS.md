@@ -124,6 +124,7 @@ packages/ui/
 ├── mod.ts              # Main entry
 ├── README.md           # Package documentation
 ├── html.ts             # Tagged template with auto-escaping
+├── styles.ts           # CSS stylesheet content
 ├── forms/
 │   ├── inputs.ts       # Individual input renderers (text, select, etc.)
 │   ├── field.ts        # Form field with label/error wrapper
@@ -133,7 +134,7 @@ packages/ui/
 │   ├── detail.ts       # Single record view
 │   └── edit.ts         # Edit/create form view
 └── components/
-    ├── layout.ts       # Page layout, sidebar, CSS
+    ├── layout.ts       # Page layout, sidebar
     ├── alert.ts        # Flash messages
     └── pagination.ts   # Page navigation
 
@@ -142,8 +143,12 @@ packages/handlers/
 ├── README.md           # Package documentation
 ├── router.ts           # URL routing and method dispatch
 ├── crud.ts             # List, create, read, update, delete handlers
-├── types.ts            # Handler types (CmsOptions, etc.)
-└── utils.ts            # Response helpers, form parsing
+├── crud-helpers.ts     # Internal CRUD utilities
+├── http.ts             # Response helpers, form parsing
+├── csrf.ts             # CSRF token generation and validation
+├── styles.ts           # Stylesheet route handler
+├── validation.ts       # Zod config validation
+└── types.ts            # Handler types (CmsOptions, ErrorContext, etc.)
 ```
 
 ## Development Environment

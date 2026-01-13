@@ -11,18 +11,18 @@ import { html, raw, layout, editView } from '@drizzle-cms/ui';
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                     @drizzle-cms/ui                         │
-├─────────────┬─────────────┬─────────────┬───────────────────┤
-│   html.ts   │   forms/    │   views/    │   components/     │
-│             │             │             │                   │
-│  Template   │  Input      │  Page       │  Layout           │
-│  literals   │  renderers  │  templates  │  helpers          │
-│  + escaping │             │             │                   │
-└─────────────┴─────────────┴─────────────┴───────────────────┘
-        ↓             ↓             ↓             ↓
-   XSS-safe      Form fields    Full pages    Page chrome
-   HTML output   (text, select) (list, edit)  (nav, alerts)
+┌──────────────────────────────────────────────────────────────────────┐
+│                         @drizzle-cms/ui                              │
+├────────────┬────────────┬────────────┬────────────┬──────────────────┤
+│  html.ts   │ styles.ts  │   forms/   │   views/   │   components/    │
+│            │            │            │            │                  │
+│  Template  │  CSS       │  Input     │  Page      │  Layout          │
+│  literals  │  stylesheet│  renderers │  templates │  helpers         │
+│  + escaping│            │            │            │                  │
+└────────────┴────────────┴────────────┴────────────┴──────────────────┘
+      ↓            ↓            ↓            ↓            ↓
+  XSS-safe    External CSS  Form fields  Full pages   Page chrome
+  HTML output (CSP-safe)   (text, select)(list, edit) (nav, alerts)
 ```
 
 ## Design Principles
@@ -65,6 +65,23 @@ html`<div>${raw('<strong>Bold</strong>')}</div>`;
 // Safe attribute building
 html`<input ${attrs({ type: 'text', value: userInput, disabled: false })} />`;
 // → <input type="text" value="&lt;script&gt;..." />
+```
+
+### `styles.ts` - CSS Stylesheet
+
+External CSS stylesheet for strict CSP compliance.
+
+| Export | Purpose |
+|--------|---------|
+| `cmsStylesheet` | Complete CSS as a string |
+
+The stylesheet is served externally at `{basePath}/styles.css` by the handlers package. This enables strict Content Security Policy (`style-src 'self'`) without requiring nonces.
+
+```ts
+import { cmsStylesheet } from '@drizzle-cms/ui';
+
+// Raw CSS content (useful for custom serving)
+console.log(cmsStylesheet.length); // ~8KB
 ```
 
 ### `forms/` - Form Input Renderers

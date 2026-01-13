@@ -13,6 +13,16 @@ const cmsHandler = createCmsHandler({
   db,
   schema,
   basePath: "/admin",
+  // Log errors to console (in production, use a proper logging service)
+  onError: (error, context) => {
+    console.error("CMS Error:", {
+      message: error.message,
+      stack: error.stack,
+      path: context.url.pathname,
+      table: context.table?.name,
+      action: context.action,
+    });
+  },
 });
 
 // Simple HTTP server

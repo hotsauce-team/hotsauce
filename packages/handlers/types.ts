@@ -13,6 +13,22 @@ export type Handler = (request: Request) => Promise<Response> | Response;
 export type CrudAction = 'list' | 'read' | 'create' | 'update' | 'delete';
 
 /**
+ * Context passed to error handler
+ */
+export interface ErrorContext {
+  /** The original request */
+  request: Request;
+  /** Parsed URL */
+  url: URL;
+  /** Route info (may be null if error occurred before routing) */
+  route: ParsedRoute | null;
+  /** The table being accessed (if any) */
+  table?: IntrospectedTable;
+  /** The action being performed (if any) */
+  action?: CrudAction | 'dashboard';
+}
+
+/**
  * Options for creating the CMS handler
  */
 export interface CmsOptions {
@@ -44,6 +60,27 @@ export interface CmsOptions {
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table */
   canAccess?: (request: Request, table: IntrospectedTable, action: CrudAction) => Promise<boolean> | boolean;
+  /**
+   * Error handler for unexpected errors.
+   * 
+   * Called when an unexpected error occurs (database failures, etc.).
+   * Use this to log errors to your monitoring service (Sentry, Datadog, etc.).
+   * The user receives a generic 500 response regardless.
+   * 
+   * @example
+   * ```ts
+   * onError: (error, context) => {
+   *   logger.error('CMS error', {
+   *     message: error.message,
+   *     stack: error.stack,
+   *     path: context.url.pathname,
+   *     table: context.table?.name,
+   *     action: context.action,
+   *   });
+   * }
+   * ```
+   */
+  onError?: (error: Error, context: ErrorContext) => void;
 }
 
 /**
@@ -65,6 +102,8 @@ export interface ResolvedCmsOptions {
   isAuthenticated: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table */
   canAccess: (request: Request, table: IntrospectedTable, action: CrudAction) => Promise<boolean> | boolean;
+  /** Error handler for unexpected errors */
+  onError?: (error: Error, context: ErrorContext) => void;
 }
 
 /**
