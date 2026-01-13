@@ -1,11 +1,12 @@
 // @drizzle-cms/handlers
 // CRUD route handlers using Web Standard Request/Response
-// Works with Deno, Node 18+, Bun, Cloudflare Workers
+// Works with Deno, Node 20+, Bun, Cloudflare Workers
 
 import type { CmsOptions, ResolvedCmsOptions, RouteContext, Handler } from './types.ts';
 import { introspectFullSchema } from '@drizzle-cms/core';
 import { parseRoute, resolveAction } from './router.ts';
 import { notFound, forbidden, methodNotAllowed } from './http.ts';
+import { generateCsrfSecret } from './csrf.ts';
 import {
   handleDashboard,
   handleList,
@@ -35,6 +36,7 @@ export {
   validateCsrfToken,
   getCsrfTokenFromFormData,
   getCsrfFieldName,
+  generateCsrfSecret,
 } from './csrf.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -102,12 +104,16 @@ export function createCmsHandler(options: CmsOptions): Handler {
     ? options.schema as unknown as import('@drizzle-cms/core').IntrospectedSchema
     : introspectFullSchema(options.schema);
   
+  // Generate CSRF secret if not provided (won't survive restarts)
+  const csrfSecret = options.csrfSecret ?? generateCsrfSecret();
+  
   // Apply defaults
   const opts: ResolvedCmsOptions = {
     introspected,
     db: options.db,
     basePath: (options.basePath ?? '/admin').replace(/\/+$/, ''),
     title: options.title ?? 'CMS Admin',
+    csrfSecret,
     isAuthenticated: options.isAuthenticated ?? (() => true),
     canAccess: options.canAccess ?? (() => true),
   };

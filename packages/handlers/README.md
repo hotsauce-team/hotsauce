@@ -28,7 +28,7 @@ import { createCmsHandler } from '@drizzle-cms/handlers';
 ## Design Principles
 
 - **Web Standard APIs**: Uses `Request` and `Response` (no framework lock-in)
-- **BYOS (Bring Your Own Server)**: Works with Deno, Node 18+, Bun, Workers
+- **BYOS (Bring Your Own Server)**: Works with Deno, Node 20+, Bun, Workers
 - **Database-agnostic routing**: CRUD logic works with any Drizzle dialect
 - **Postgres query execution**: Actual database queries use Drizzle's Postgres driver
 
@@ -53,7 +53,7 @@ const handler = createCmsHandler({
 // Deno
 Deno.serve(handler);
 
-// Node 18+ (with adapter)
+// Node 20+ (with adapter)
 // Hono: app.all('/admin/*', (c) => handler(c.req.raw));
 // Express: app.use('/admin', expressAdapter(handler));
 ```
@@ -172,25 +172,29 @@ const values = coerceFormValues(formData, table.columns);
 
 | Export | Purpose |
 |--------|---------|  
-| `generateCsrfToken()` | Generate signed token (4-hour expiry) |
-| `validateCsrfToken(token)` | Validate signature and check expiry |
+| `generateCsrfToken(secret)` | Generate HMAC-SHA256 signed token (4-hour expiry) |
+| `validateCsrfToken(token, secret)` | Validate signature and check expiry |
 | `getCsrfTokenFromFormData(data)` | Extract `_csrf` field from form |
+| `generateCsrfSecret()` | Generate a secure random secret (32 bytes) |
 
 **Token Format:** `timestamp.random.signature`
 
-Tokens are automatically validated on all POST operations (create, update, delete). Invalid or expired tokens show an error message and block the operation.
+Tokens are signed with HMAC-SHA256 using `crypto.subtle` (Web Crypto API). They are automatically validated on all POST operations (create, update, delete). Invalid or expired tokens show an error message and block the operation.
 
 **Example:**
 
 ```ts
-import { generateCsrfToken, validateCsrfToken } from '@drizzle-cms/handlers';
+import { generateCsrfToken, validateCsrfToken, generateCsrfSecret } from '@drizzle-cms/handlers';
 
-// Generate for forms
-const token = generateCsrfToken();
-// → "1736784000000.abc123def456.sig789xyz"
+// Generate a secret once at startup (or load from env)
+const secret = Deno.env.get('CSRF_SECRET') ?? generateCsrfSecret();
 
-// Validate on submit
-const isValid = validateCsrfToken(token);
+// Generate token for forms (async)
+const token = await generateCsrfToken(secret);
+// → "lq2abc.0123456789abcdef...signature"
+
+// Validate on submit (async)
+const isValid = await validateCsrfToken(token, secret);
 // → true (if signature matches and not expired)
 ```
 
@@ -219,6 +223,12 @@ interface CmsOptions {
   basePath?: string;
   /** Site title for the admin UI */
   title?: string;
+  /** 
+   * Secret for CSRF token signing (HMAC-SHA256).
+   * Must be at least 32 characters. Use generateCsrfSecret() to create one.
+   * If not provided, a random secret is generated (tokens won't survive restarts).
+   */
+  csrfSecret?: string;
   /** Custom authentication check */
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table/action */

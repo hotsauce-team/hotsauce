@@ -22,7 +22,7 @@ Guidelines for AI coding assistants working on this project.
 ### Runtime Compatibility
 - All packages must be **runtime-agnostic**
 - No `Deno.*` or Node-specific APIs — use Web Standard APIs only
-- Handlers use Web Standard `Request`/`Response` (works in Deno, Node 18+, Bun, Workers)
+- Handlers use Web Standard `Request`/`Response` (works in Deno, Node 20+, Bun, Workers)
 - BYOS (Bring Your Own Server) architecture — users wire handlers to their server
 
 ## Package Boundaries

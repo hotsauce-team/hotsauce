@@ -16,7 +16,13 @@ export type CrudAction = 'list' | 'read' | 'create' | 'update' | 'delete';
  * Options for creating the CMS handler
  */
 export interface CmsOptions {
-  /** Drizzle database instance */
+  /**
+   * Drizzle database instance.
+   * 
+   * Uses `any` intentionally for cross-dialect compatibility (Postgres, MySQL, SQLite).
+   * There's no common base type across Drizzle dialects, and importing all dialect types
+   * would add dependencies.
+   */
   // deno-lint-ignore no-explicit-any
   db: any;
   /** Drizzle schema object (e.g., { users, posts }) */
@@ -26,6 +32,14 @@ export interface CmsOptions {
   basePath?: string;
   /** Site title for the admin UI */
   title?: string;
+  /**
+   * Secret for CSRF token signing (HMAC-SHA256).
+   * Should be at least 32 bytes of entropy.
+   * 
+   * Generate with `generateCsrfSecret()` or use a secure environment variable.
+   * If not provided, a random secret is generated (tokens won't survive restarts).
+   */
+  csrfSecret?: string;
   /** Custom authentication check */
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table */
@@ -45,6 +59,8 @@ export interface ResolvedCmsOptions {
   basePath: string;
   /** Site title for the admin UI */
   title: string;
+  /** Secret for CSRF token signing */
+  csrfSecret: string;
   /** Custom authentication check */
   isAuthenticated: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table */

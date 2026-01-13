@@ -226,7 +226,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const m2mDisplayData = m2mMap.get(actualRecordId) ?? [];
   
   // Generate CSRF token for delete form
-  const csrfToken = generateCsrfToken();
+  const csrfToken = await generateCsrfToken(options.csrfSecret);
   
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -270,7 +270,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
-    if (!validateCsrfToken(csrfToken)) {
+    if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
       return await renderCreateForm(ctx, recordToValues(formData), 'Invalid or expired form. Please try again.');
     }
     
@@ -322,7 +322,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
-    if (!validateCsrfToken(csrfToken)) {
+    if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
       return await renderEditForm(ctx, recordToValues(formData), 'Invalid or expired form. Please try again.');
     }
     
@@ -367,7 +367,7 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   if (request.method === 'POST') {
     const formData = await parseFormData(request);
     const csrfToken = getCsrfTokenFromFormData(formData);
-    if (!validateCsrfToken(csrfToken)) {
+    if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
     }
   }
@@ -410,7 +410,7 @@ async function renderCreateForm(
   const manyToManyData = await fetchManyToManyData(options, table, undefined);
   
   // Generate CSRF token
-  const csrfToken = generateCsrfToken();
+  const csrfToken = await generateCsrfToken(options.csrfSecret);
   
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -459,7 +459,7 @@ async function renderEditForm(
   const manyToManyData = await fetchManyToManyData(options, table, recordId);
   
   // Generate CSRF token
-  const csrfToken = generateCsrfToken();
+  const csrfToken = await generateCsrfToken(options.csrfSecret);
   
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),

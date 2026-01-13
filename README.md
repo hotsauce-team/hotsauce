@@ -62,7 +62,7 @@ const handler = createCmsHandler({
 // Deno
 Deno.serve(handler);
 
-// Node 18+
+// Node 20+
 import { createServer } from 'node:http';
 // ... convert Request/Response
 

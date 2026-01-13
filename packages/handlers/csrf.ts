@@ -1,27 +1,80 @@
 // CSRF protection utilities
-// Uses signed tokens to prevent cross-site request forgery
+// Uses HMAC-SHA256 signed tokens via Web Crypto API
 
 const CSRF_TOKEN_NAME = '_csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
+const TOKEN_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
 
 /**
- * CSRF secret for signing tokens
- * In production, this should be configured via options
+ * Import a secret string as an HMAC key for signing
  */
-let csrfSecret = 'drizzle-cms-default-secret';
+async function importKey(secret: string): Promise<CryptoKey> {
+  const encoder = new TextEncoder();
+  return crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign', 'verify']
+  );
+}
 
 /**
- * Set the CSRF secret (call at startup with a secure random value)
+ * Sign a payload using HMAC-SHA256
+ * Returns base64url-encoded signature
  */
-export function setCsrfSecret(secret: string): void {
-  csrfSecret = secret;
+async function signPayload(payload: string, secret: string): Promise<string> {
+  const key = await importKey(secret);
+  const encoder = new TextEncoder();
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+  // Convert to base64url (URL-safe base64)
+  return btoa(String.fromCharCode(...new Uint8Array(signature)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+/**
+ * Verify a payload signature using HMAC-SHA256
+ * Uses crypto.subtle.verify for timing-safe comparison
+ */
+async function verifyPayload(payload: string, signature: string, secret: string): Promise<boolean> {
+  const key = await importKey(secret);
+  const encoder = new TextEncoder();
+  
+  // Decode base64url signature
+  const base64 = signature.replace(/-/g, '+').replace(/_/g, '/');
+  // Pad to multiple of 4
+  const padded = base64 + '==='.slice(0, (4 - base64.length % 4) % 4);
+  
+  try {
+    const signatureBytes = Uint8Array.from(atob(padded), c => c.charCodeAt(0));
+    // crypto.subtle.verify is timing-safe
+    return crypto.subtle.verify('HMAC', key, signatureBytes, encoder.encode(payload));
+  } catch {
+    // Invalid base64 or other decoding error
+    return false;
+  }
 }
 
 /**
  * Generate a CSRF token
  * Token format: timestamp.randomPart.signature
+ * 
+ * @param secret - HMAC secret for signing (should be at least 32 bytes of entropy)
+ * @returns Signed CSRF token string
+ * 
+ * @example
+ * ```ts
+ * const token = await generateCsrfToken(csrfSecret);
+ * // Include in form: <input type="hidden" name="_csrf" value="${token}">
+ * ```
  */
-export function generateCsrfToken(): string {
+export async function generateCsrfToken(secret: string): Promise<string> {
+  if (!secret || secret.length < 32) {
+    throw new Error('CSRF secret must be at least 32 characters (use generateCsrfSecret())');
+  }
+  
   const timestamp = Date.now().toString(36);
   const random = crypto.getRandomValues(new Uint8Array(16));
   const randomPart = Array.from(random)
@@ -29,17 +82,28 @@ export function generateCsrfToken(): string {
     .join('');
   
   const payload = `${timestamp}.${randomPart}`;
-  const signature = signPayload(payload);
+  const signature = await signPayload(payload, secret);
   
   return `${payload}.${signature}`;
 }
 
 /**
  * Validate a CSRF token
- * Returns true if valid, false otherwise
+ * 
+ * @param token - The token to validate
+ * @param secret - HMAC secret used for signing
+ * @returns true if valid, false otherwise
+ * 
+ * @example
+ * ```ts
+ * const isValid = await validateCsrfToken(formToken, csrfSecret);
+ * if (!isValid) {
+ *   return new Response('Invalid CSRF token', { status: 403 });
+ * }
+ * ```
  */
-export function validateCsrfToken(token: string | null): boolean {
-  if (!token) return false;
+export async function validateCsrfToken(token: string | null, secret: string): Promise<boolean> {
+  if (!token || !secret) return false;
   
   const parts = token.split('.');
   if (parts.length !== 3) return false;
@@ -47,20 +111,22 @@ export function validateCsrfToken(token: string | null): boolean {
   const [timestamp, randomPart, signature] = parts;
   if (!timestamp || !randomPart || !signature) return false;
   
-  // Verify signature
+  // Verify signature using timing-safe comparison
   const payload = `${timestamp}.${randomPart}`;
-  const expectedSignature = signPayload(payload);
+  const isValidSignature = await verifyPayload(payload, signature, secret);
   
-  if (!constantTimeCompare(signature, expectedSignature)) {
+  if (!isValidSignature) {
     return false;
   }
   
-  // Check token age (max 4 hours)
+  // Check token age (not too old AND not in the future)
   const tokenTime = parseInt(timestamp, 36);
   const now = Date.now();
-  const maxAge = 4 * 60 * 60 * 1000; // 4 hours
+  const CLOCK_SKEW_MS = 60_000; // 1 minute tolerance for clock drift
   
-  if (isNaN(tokenTime) || now - tokenTime > maxAge) {
+  if (isNaN(tokenTime) || 
+      now - tokenTime > TOKEN_MAX_AGE_MS ||
+      tokenTime > now + CLOCK_SKEW_MS) {
     return false;
   }
   
@@ -68,16 +134,10 @@ export function validateCsrfToken(token: string | null): boolean {
 }
 
 /**
- * Extract CSRF token from request (checks form data and header)
+ * Extract CSRF token from request header
  */
-export async function getCsrfTokenFromRequest(request: Request): Promise<string | null> {
-  // Check header first
-  const headerToken = request.headers.get(CSRF_HEADER_NAME);
-  if (headerToken) return headerToken;
-  
-  // For form submissions, we need to clone the request to read the body
-  // The caller should pass the already-parsed form data if available
-  return null;
+export function getCsrfTokenFromHeader(request: Request): string | null {
+  return request.headers.get(CSRF_HEADER_NAME);
 }
 
 /**
@@ -97,36 +157,24 @@ export function getCsrfFieldName(): string {
 }
 
 /**
- * Sign a payload using the CSRF secret
- * Uses a simple HMAC-like approach with Web Crypto
+ * Generate a cryptographically secure random secret for CSRF signing
+ * Call this once at application startup and store the result
+ * 
+ * @returns A 32-byte random secret encoded as base64
+ * 
+ * @example
+ * ```ts
+ * // At startup, generate or load from environment
+ * const csrfSecret = Deno.env.get('CSRF_SECRET') ?? generateCsrfSecret();
+ * 
+ * const handler = createCmsHandler({
+ *   db,
+ *   schema,
+ *   csrfSecret,
+ * });
+ * ```
  */
-function signPayload(payload: string): string {
-  // Simple hash-based signature
-  // For a production system, use Web Crypto's subtle.sign with HMAC
-  // This is a simplified version using string operations
-  let hash = 0;
-  const combined = csrfSecret + payload;
-  for (let i = 0; i < combined.length; i++) {
-    const char = combined.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash).toString(36);
-}
-
-/**
- * Constant-time string comparison to prevent timing attacks
- */
-function constantTimeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    // Still do the comparison to maintain constant time
-    b = a;
-  }
-  
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  
-  return result === 0 && a.length === b.length;
+export function generateCsrfSecret(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return btoa(String.fromCharCode(...bytes));
 }

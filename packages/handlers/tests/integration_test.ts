@@ -10,6 +10,9 @@ import { relations } from 'drizzle-orm';
 import { createCmsHandler } from '../mod.ts';
 import { generateCsrfToken } from '../csrf.ts';
 
+// Test CSRF secret (long enough to pass validation)
+const TEST_CSRF_SECRET = 'test-csrf-secret-for-integration-tests-min-32-chars';
+
 // ============================================================================
 // Test Schema - Simple blog schema for testing
 // ============================================================================
@@ -159,10 +162,11 @@ Deno.test('integration: create record via POST', async () => {
     db,
     schema,
     basePath: '/admin',
+    csrfSecret: TEST_CSRF_SECRET,
   });
   
   // Create a user
-  const csrfToken = generateCsrfToken();
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
   const formData = createFormData({
     _csrf: csrfToken,
     email: 'test@example.com',
@@ -294,10 +298,11 @@ Deno.test('integration: update record via POST', async () => {
     db,
     schema,
     basePath: '/admin',
+    csrfSecret: TEST_CSRF_SECRET,
   });
   
   // Update the user
-  const csrfToken = generateCsrfToken();
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
   const formData = createFormData({
     _csrf: csrfToken,
     email: 'updated@example.com',
@@ -342,10 +347,11 @@ Deno.test('integration: delete record via POST', async () => {
     db,
     schema,
     basePath: '/admin',
+    csrfSecret: TEST_CSRF_SECRET,
   });
   
   // Delete the user
-  const csrfToken = generateCsrfToken();
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
   const formData = createFormData({
     _csrf: csrfToken,
   });
@@ -475,10 +481,11 @@ Deno.test('integration: create post with foreign key', async () => {
     db,
     schema,
     basePath: '/admin',
+    csrfSecret: TEST_CSRF_SECRET,
   });
   
   // Create a post
-  const csrfToken = generateCsrfToken();
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
   const formData = createFormData({
     _csrf: csrfToken,
     title: 'Test Post',
