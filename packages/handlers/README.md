@@ -209,6 +209,41 @@ Internal utilities used by crud.ts (not exported from mod.ts).
 | `getSafeErrorMessage()` | Sanitize error messages for users |
 | `isForeignKeyViolation()` | Detect FK constraint errors |
 
+### `styles.ts` - External Stylesheet
+
+CSS served as an external file for strict CSP compliance.
+
+| Export | Purpose |
+|--------|---------|
+| `cmsStylesheet` | Raw CSS string for custom serving |
+| `handleStylesheet()` | Route handler returning CSS response |
+| `cssResponse(css)` | Create a CSS response with caching headers |
+
+The stylesheet is automatically served at `{basePath}/styles.css`. This enables strict Content Security Policy (`style-src 'self'`) without requiring nonces.
+
+## Security
+
+### Content Security Policy
+
+All HTML responses include security headers:
+
+```
+Content-Security-Policy: default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+```
+
+This policy:
+- Restricts all resources to same-origin
+- Allows only external stylesheets (no inline `<style>` tags)
+- Blocks the CMS from being embedded in iframes (clickjacking protection)
+- Limits referrer information leakage
+
+### CSRF Protection
+
+Forms include CSRF tokens validated on POST. See `csrf.ts` exports.
+
 ## Types
 
 ### `CmsOptions`

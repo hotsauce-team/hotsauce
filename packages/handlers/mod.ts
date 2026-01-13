@@ -15,6 +15,7 @@ import {
   handleUpdate,
   handleDelete,
 } from './crud.ts';
+import { handleStylesheet } from './styles.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Types - Handler configuration and request context
@@ -73,6 +74,11 @@ export {
   getSort,
 } from './http.ts';
 
+// ─────────────────────────────────────────────────────────────
+// Styles - CSS stylesheet served as external file
+// ─────────────────────────────────────────────────────────────
+export { cmsStylesheet, handleStylesheet, cssResponse } from './styles.ts';
+
 
 /**
  * Create a CMS handler function
@@ -120,6 +126,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
   
   return async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
+    const pathname = url.pathname.replace(/\/+$/, '') || '/';
+    
+    // Serve stylesheet at {basePath}/styles.css
+    if (pathname === `${opts.basePath}/styles.css` && request.method === 'GET') {
+      return handleStylesheet();
+    }
     
     // Parse the route
     const route = parseRoute(url, opts.basePath, opts.introspected.tables);

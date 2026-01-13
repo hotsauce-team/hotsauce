@@ -3,13 +3,30 @@
 import type { IntrospectedColumn } from '@drizzle-cms/core';
 
 /**
- * Create an HTML response
+ * Security headers for HTML responses
+ * 
+ * These headers enable strict Content Security Policy and other protections:
+ * - CSP: Restricts resources to same-origin, enabling strict style-src
+ * - X-Content-Type-Options: Prevents MIME sniffing
+ * - X-Frame-Options: Prevents clickjacking
+ * - Referrer-Policy: Limits referrer information leakage
+ */
+const SECURITY_HEADERS: Record<string, string> = {
+  'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'",
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+};
+
+/**
+ * Create an HTML response with security headers
  */
 export function htmlResponse(html: string, status = 200): Response {
   return new Response(html, {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
+      ...SECURITY_HEADERS,
     },
   });
 }

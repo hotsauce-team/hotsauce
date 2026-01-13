@@ -61,43 +61,13 @@ export function handleDashboard(ctx: RouteContext): Response {
         </a>
       `).join(''))}
     </div>
-    
-    <style>
-      .cms-table-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-        gap: 1rem;
-        margin-top: 1rem;
-      }
-      .cms-table-card {
-        display: block;
-        padding: 1rem;
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 4px;
-        text-decoration: none;
-        color: inherit;
-      }
-      .cms-table-card:hover {
-        background: #e9ecef;
-        border-color: #adb5bd;
-      }
-      .cms-table-card h3 {
-        margin: 0 0 0.5rem;
-        color: #212529;
-      }
-      .cms-table-card p {
-        margin: 0;
-        color: #6c757d;
-        font-size: 0.875rem;
-      }
-    </style>
   `;
   
   const page = layout(content, {
     title: 'Dashboard',
     siteName: options.title,
     nav: navItems,
+    stylesheetUrl: `${basePath}/styles.css`,
   });
   
   return htmlResponse(page);
@@ -195,6 +165,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     title: formatTableName(table.name),
     siteName: options.title,
     nav: navItems,
+    stylesheetUrl: `${basePath}/styles.css`,
   });
   
   return htmlResponse(pageHtml);
@@ -250,6 +221,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     title: `View ${formatTableName(table.name)}`,
     siteName: options.title,
     nav: navItems,
+    stylesheetUrl: `${basePath}/styles.css`,
   });
   
   return htmlResponse(page);
@@ -438,6 +410,7 @@ async function renderCreateForm(
     title: `Create ${formatTableName(table.name)}`,
     siteName: options.title,
     nav: navItems,
+    stylesheetUrl: `${basePath}/styles.css`,
   });
   
   return htmlResponse(page);
@@ -487,6 +460,7 @@ async function renderEditForm(
     title: `Edit ${formatTableName(table.name)}`,
     siteName: options.title,
     nav: navItems,
+    stylesheetUrl: `${basePath}/styles.css`,
   });
   
   return htmlResponse(page);

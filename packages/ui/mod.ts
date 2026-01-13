@@ -85,3 +85,8 @@ export { alert, alertStyles } from './components/alert.ts';
 
 export type { PaginationOptions } from './components/pagination.ts';
 export { pagination, paginationStyles } from './components/pagination.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Styles - CSS stylesheet for the CMS UI
+// ─────────────────────────────────────────────────────────────
+export { cmsStylesheet } from './styles.ts';
