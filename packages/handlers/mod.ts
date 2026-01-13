@@ -5,7 +5,7 @@
 import type { CmsOptions, ResolvedCmsOptions, RouteContext, Handler } from './types.ts';
 import { introspectFullSchema } from '@drizzle-cms/core';
 import { parseRoute, resolveAction } from './router.ts';
-import { notFound, forbidden, methodNotAllowed } from './http.ts';
+import { notFound, forbidden, methodNotAllowed, SECURITY_HEADERS } from './http.ts';
 import { generateCsrfSecret } from './csrf.ts';
 import { validateCmsOptions } from './validation.ts';
 import {
@@ -185,23 +185,26 @@ export function createCmsHandler(options: CmsOptions): Handler {
     try {
       switch (action) {
         case 'dashboard':
-          return handleDashboard(ctx);
+          return await handleDashboard(ctx);
         case 'list':
-          return handleList(ctx);
+          return await handleList(ctx);
         case 'read':
-          return handleRead(ctx);
+          return await handleRead(ctx);
         case 'create':
-          return handleCreate(ctx);
+          return await handleCreate(ctx);
         case 'update':
-          return handleUpdate(ctx);
+          return await handleUpdate(ctx);
         case 'delete':
-          return handleDelete(ctx);
+          return await handleDelete(ctx);
         default:
           return notFound('Unknown action');
       }
-    } catch (error) {
+    } catch (err) {
+      // Normalize to Error (handles thrown strings, objects, etc.)
+      const error = err instanceof Error ? err : new Error(String(err));
+      
       // Call user's error handler if provided
-      if (opts.onError && error instanceof Error) {
+      if (opts.onError) {
         opts.onError(error, {
           request,
           url,
@@ -210,7 +213,10 @@ export function createCmsHandler(options: CmsOptions): Handler {
           action,
         });
       }
-      return new Response('Internal Server Error', { status: 500 });
+      return new Response('Internal Server Error', { 
+        status: 500,
+        headers: SECURITY_HEADERS,
+      });
     }
   };
 }

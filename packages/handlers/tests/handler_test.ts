@@ -146,3 +146,69 @@ Deno.test('createCmsHandler: canAccess authorization check', async () => {
   
   assertEquals(response.status, 403);
 });
+
+Deno.test('createCmsHandler: onError callback is called on database error', async () => {
+  let capturedError: Error | undefined;
+  let capturedContext: unknown;
+  
+  // Mock db that throws on select
+  const throwingDb = {
+    select: () => ({ 
+      from: () => { 
+        throw new Error('Database connection failed'); 
+      } 
+    }),
+  };
+  
+  const handler = createCmsHandler({
+    schema: mockSchema,
+    db: throwingDb,
+    basePath: '/admin',
+    onError: (error, context) => {
+      capturedError = error;
+      capturedContext = context;
+    },
+  });
+  
+  const request = new Request('http://localhost/admin/users');
+  const response = await handler(request);
+  
+  // Should return 500
+  assertEquals(response.status, 500);
+  
+  // onError should have been called
+  assertEquals(capturedError !== undefined, true);
+  assertEquals(capturedError!.message, 'Database connection failed');
+  
+  // Context should include request info
+  assertEquals((capturedContext as { action: string }).action, 'list');
+});
+
+Deno.test('createCmsHandler: onError handles non-Error throws', async () => {
+  let capturedError: Error | undefined;
+  
+  // Mock db that throws a string (not an Error)
+  const throwingDb = {
+    select: () => ({ 
+      from: () => { 
+        throw 'string error'; // Non-Error throw
+      } 
+    }),
+  };
+  
+  const handler = createCmsHandler({
+    schema: mockSchema,
+    db: throwingDb,
+    basePath: '/admin',
+    onError: (error) => {
+      capturedError = error;
+    },
+  });
+  
+  const request = new Request('http://localhost/admin/users');
+  const response = await handler(request);
+  
+  assertEquals(response.status, 500);
+  assertEquals(capturedError instanceof Error, true);
+  assertEquals(capturedError!.message, 'string error');
+});

@@ -11,7 +11,7 @@ import type { IntrospectedColumn } from '@drizzle-cms/core';
  * - X-Frame-Options: Prevents clickjacking
  * - Referrer-Policy: Limits referrer information leakage
  */
-const SECURITY_HEADERS: Record<string, string> = {
+export const SECURITY_HEADERS: Record<string, string> = {
   'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'",
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
