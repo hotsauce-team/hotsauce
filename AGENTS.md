@@ -27,20 +27,19 @@ Guidelines for AI coding assistants working on this project.
 
 ## Package Boundaries
 
-| Package | Purpose | Runtime APIs | DB-Specific Code |
-|---------|---------|--------------|------------------|
-| `core` | Schema introspection, field mapping, validation | ❌ None | ❌ Generic only |
-| `ui` | HTML generation, form rendering | ❌ None | ❌ Generic only |
-| `handlers` | CRUD route handlers (Request → Response) | ❌ Web Standard only | ✅ Postgres OK |
+| Package | Purpose | Runtime APIs | DB-Specific Code | DB-Specific Tests |
+|---------|---------|--------------|------------------|-------------------|
+| `core` | Schema introspection, field mapping, validation | ❌ None | ❌ Generic only | ✅ PGlite + sql.js |
+| `ui` | HTML generation, form rendering | ❌ None | ❌ Generic only | ❌ None |
+| `handlers` | CRUD route handlers (Request → Response) | ❌ Web Standard only | ❌ Generic only | ✅ PGlite + sql.js |
 
 ## Database Guidelines
 
-### Postgres-First, Extensible Design
-- Postgres is the primary supported database
+### Database-Agnostic Design
 - Core schema introspection must work with **any** Drizzle schema (pg, mysql, sqlite)
 - Use Drizzle's generic types in core, not `drizzle-orm/pg-core` directly
-- Postgres-specific features (RLS, arrays, enums) should:
-  - Live in Postgres-specific modules or be feature-detected
+- Database-specific features (arrays, enums, JSON) should:
+  - Live in database-specific modules or be feature-detected
   - Degrade gracefully when not available
 
 ### Drizzle ORM Helper Functions
@@ -71,7 +70,7 @@ if (capabilities.arrays) {
   // handle array fields
 }
 
-// Bad: assume Postgres
+// Bad: assume a specific database
 import { pgTable } from 'drizzle-orm/pg-core';
 ```
 
@@ -204,6 +203,6 @@ packages/core/tests/
 
 1. **Adding dependencies** — find a zero-dep solution or use built-in APIs
 2. **Using Deno.* in core** — breaks Node compatibility
-3. **Hardcoding Postgres types in core** — breaks extensibility
+3. **Hardcoding database-specific types in core** — breaks extensibility
 4. **Mixing concerns** — keep schema logic, UI, and HTTP handling separate
-5. **Forgetting feature detection** — not all DBs support arrays, RLS, etc.
+5. **Forgetting feature detection** — not all DBs support arrays, enums, JSON, etc.

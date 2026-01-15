@@ -7,8 +7,7 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 - **Single source of truth**: Your Drizzle schema defines database tables, TypeScript types, validation rules, AND CMS fields
 - **Minimal dependencies**: Core stack is drizzle-orm + zod + postgres (all zero-dep packages)
 - **Cross-runtime**: Works in Deno and Node.js
-- **Postgres-first**: Full support for RLS, arrays, JSONB, and advanced features — designed for extensibility to other databases later
-- **RLS-ready**: Layer Postgres Row-Level Security for bulletproof permissions
+- **Database-agnostic**: Works with any Drizzle-supported database (Postgres, MySQL, SQLite)
 
 ## Packages
 
