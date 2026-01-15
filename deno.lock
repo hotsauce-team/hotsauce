@@ -58,6 +58,7 @@
   },
   "workspace": {
     "dependencies": [
+      "jsr:@std/assert@*",
       "npm:@electric-sql/pglite@~0.3.14",
       "npm:drizzle-orm@~0.45.1",
       "npm:drizzle-zod@~0.8.3",

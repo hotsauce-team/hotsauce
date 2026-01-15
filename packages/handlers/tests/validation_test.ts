@@ -1,6 +1,6 @@
 // Tests for CMS configuration validation
 
-import { assertEquals, assertThrows } from 'jsr:@std/assert';
+import { assertEquals, assertThrows } from '@std/assert';
 import { validateCmsOptions, CmsConfigError, CmsOptionsSchema } from '../validation.ts';
 
 // Mock minimal valid options
