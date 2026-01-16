@@ -2,7 +2,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { createCmsHandler } from '../../packages/handlers/mod.ts';
-import * as schema from './schema.ts';
+import { schema, parsers } from './schema.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
@@ -13,6 +13,7 @@ const cmsHandler = createCmsHandler({
   db,
   schema,
   basePath: '/admin',
+  parsers, // Optional custom parsers for input validation
   // Log errors to console (in production, use a proper logging service)
   onError: (error, context) => console.error('CMS Error:', { error, context }),
 });

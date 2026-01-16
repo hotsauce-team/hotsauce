@@ -206,3 +206,4 @@ packages/core/tests/
 3. **Hardcoding database-specific types in core** — breaks extensibility
 4. **Mixing concerns** — keep schema logic, UI, and HTTP handling separate
 5. **Forgetting feature detection** — not all DBs support arrays, enums, JSON, etc.
+6. **Silent failures** — errors should either be logged via `onError` and/or block the operation with a user-facing message; never silently pass through

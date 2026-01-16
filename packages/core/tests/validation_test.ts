@@ -65,6 +65,37 @@ for (const { name, schema } of schemas) {
     assertEquals(withNullBio.success, true);
   });
 
+  Deno.test(`${name}: createInsertSchema: email column accepts valid email`, () => {
+    const insertSchema = createInsertSchema(schema.users);
+
+    const validEmail = insertSchema.safeParse({
+      email: 'user@example.com',
+      name: 'Test User',
+    });
+    assertEquals(validEmail.success, true);
+  });
+
+  Deno.test(`${name}: createInsertSchema: email column is required`, () => {
+    const insertSchema = createInsertSchema(schema.users);
+
+    // Missing email should fail (notNull constraint)
+    const missingEmail = insertSchema.safeParse({
+      name: 'Test User',
+    });
+    assertEquals(missingEmail.success, false);
+  });
+
+  Deno.test(`${name}: createInsertSchema: email rejects wrong type`, () => {
+    const insertSchema = createInsertSchema(schema.users);
+
+    // Number instead of string should fail
+    const wrongType = insertSchema.safeParse({
+      email: 12345,
+      name: 'Test User',
+    });
+    assertEquals(wrongType.success, false);
+  });
+
   Deno.test(`${name}: createInsertSchema: validates posts table`, () => {
     const insertSchema = createInsertSchema(schema.posts);
 

@@ -8,6 +8,29 @@ import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
 export type Handler = (request: Request) => Promise<Response> | Response;
 
 /**
+ * Parser function signature (validation-library agnostic)
+ * Takes unknown data and returns parsed/validated data or throws on error
+ */
+export type ParserFn = (data: unknown) => unknown;
+
+/**
+ * Parsers for a single table
+ * Only insert and update are used - select validation is not needed for CMS
+ */
+export interface TableParsers {
+  /** Parser for insert operations (new records) */
+  insert?: ParserFn;
+  /** Parser for update operations (existing records) */
+  update?: ParserFn;
+}
+
+/**
+ * User-provided parsers keyed by table name
+ * If not provided for a table, drizzle-zod schemas are generated automatically
+ */
+export type Parsers = Record<string, TableParsers>;
+
+/**
  * CRUD action types
  */
 export type CrudAction = 'list' | 'read' | 'create' | 'update' | 'delete';
@@ -81,6 +104,23 @@ export interface CmsOptions {
    * ```
    */
   onError?: (error: Error, context: ErrorContext) => void;
+  /**
+   * Custom parsers for validation (optional).
+   * 
+   * If not provided, drizzle-zod schemas are generated automatically.
+   * Use this to add custom validation rules (e.g., email format, min/max length).
+   * 
+   * @example
+   * ```ts
+   * parsers: {
+   *   users: {
+   *     insert: (data) => usersInsertSchema.parse(data),
+   *     update: (data) => usersUpdateSchema.parse(data),
+   *   }
+   * }
+   * ```
+   */
+  parsers?: Parsers;
 }
 
 /**
@@ -104,6 +144,8 @@ export interface ResolvedCmsOptions {
   canAccess: (request: Request, table: IntrospectedTable, action: CrudAction) => Promise<boolean> | boolean;
   /** Error handler for unexpected errors */
   onError?: (error: Error, context: ErrorContext) => void;
+  /** Custom parsers for validation */
+  parsers: Parsers;
 }
 
 /**

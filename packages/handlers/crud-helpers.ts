@@ -3,10 +3,11 @@
 
 import { eq, inArray, and } from 'drizzle-orm';
 import type { IntrospectedTable, IntrospectedColumn, IntrospectedSchema, CMSField, JunctionTable } from '@drizzle-cms/core';
-import { mapColumnToField, mapColumnToFieldType } from '@drizzle-cms/core';
+import { mapColumnToField, mapColumnToFieldType, createInsertSchema, createUpdateSchema } from '@drizzle-cms/core';
+import { ZodError } from 'zod';
 import type { RelationOption, ManyToManyData } from '@drizzle-cms/ui';
 import type { ManyToManyDisplayData } from '@drizzle-cms/ui';
-import type { ResolvedCmsOptions } from './types.ts';
+import type { ResolvedCmsOptions, ParserFn } from './types.ts';
 import { cmsUrl, formatTableName, formatColumnName } from './router.ts';
 import type { NavItem, ListColumn } from '@drizzle-cms/ui';
 
@@ -532,5 +533,172 @@ export function getSafeErrorMessage(error: unknown, action: 'create' | 'update' 
       return 'Failed to update the record. Please check your input and try again.';
     case 'delete':
       return 'Failed to delete the record. Please try again.';
+  }
+}
+
+// ============================================================================
+// Form validation
+// ============================================================================
+
+/**
+ * Result of validating form data against a Zod schema
+ */
+export interface ValidationResult<T = Record<string, unknown>> {
+  success: boolean;
+  data?: T;
+  errors?: Record<string, string>;
+  formError?: string;
+}
+
+/**
+ * Format Zod errors into a field-keyed error object
+ * Returns errors keyed by propertyName for display in forms
+ */
+export function formatZodErrors(zodError: ZodError): Record<string, string> {
+  const errors: Record<string, string> = {};
+  
+  for (const issue of zodError.issues) {
+    // Use the first path segment as the field name
+    const fieldName = issue.path[0];
+    if (typeof fieldName === 'string' && !errors[fieldName]) {
+      errors[fieldName] = issue.message;
+    }
+  }
+  
+  return errors;
+}
+
+/**
+ * Validate form data against the Drizzle table's schema
+ * Uses drizzle-zod's createInsertSchema or createUpdateSchema based on mode
+ * 
+ * @param drizzleTable - The Drizzle table definition
+ * @param values - Coerced form values to validate
+ * @param mode - 'insert' for new records (required fields enforced), 'update' for edits (all fields optional)
+ * @returns Validation result with field-specific errors
+ */
+export function validateFormData(
+  drizzleTable: unknown,
+  values: Record<string, unknown>,
+  mode: 'insert' | 'update' = 'insert',
+): ValidationResult {
+  try {
+    // Generate appropriate Zod schema from Drizzle table
+    // - createInsertSchema: required fields must be present (for new records)
+    // - createUpdateSchema: all fields optional (for partial updates)
+    const tableArg = drizzleTable as Parameters<typeof createInsertSchema>[0];
+    const schema = mode === 'insert'
+      ? createInsertSchema(tableArg)
+      : createUpdateSchema(tableArg);
+    
+    // Validate the values
+    const result = schema.safeParse(values);
+    
+    if (result.success) {
+      return {
+        success: true,
+        data: result.data as Record<string, unknown>,
+      };
+    }
+    
+    // Format errors for form display
+    const errors = formatZodErrors(result.error);
+    
+    return {
+      success: false,
+      errors,
+      formError: Object.keys(errors).length > 0 
+        ? 'Please fix the errors below.' 
+        : 'Validation failed. Please check your input.',
+    };
+  } catch (err) {
+    // Schema generation failed - throw so caller can handle appropriately.
+    // This can happen with complex table types not fully supported by drizzle-zod
+    // (e.g., custom types, certain array configurations, or dialect-specific features).
+    const message = err instanceof Error ? err.message : String(err);
+    throw new Error(`Zod schema generation failed: ${message}`);
+  }
+}
+
+/**
+ * Validate form data using custom parser if provided, otherwise use drizzle-zod
+ * 
+ * @param options - Resolved CMS options containing custom parsers
+ * @param tableName - Name of the table being validated
+ * @param drizzleTable - The Drizzle table definition (for fallback)
+ * @param values - Coerced form values to validate
+ * @param mode - 'insert' or 'update'
+ * @returns Validation result with field-specific errors
+ */
+export function validateWithParsers(
+  options: ResolvedCmsOptions,
+  tableName: string,
+  drizzleTable: unknown,
+  values: Record<string, unknown>,
+  mode: 'insert' | 'update',
+): ValidationResult {
+  const customParser: ParserFn | undefined = options.parsers[tableName]?.[mode];
+  
+  if (customParser) {
+    try {
+      const data = customParser(values) as Record<string, unknown>;
+      return { success: true, data };
+    } catch (error) {
+      // Extract field errors from the error
+      const errors: Record<string, string> = {};
+      
+      if (error instanceof ZodError) {
+        // ZodError has type-safe access to issues
+        for (const issue of error.issues) {
+          const fieldName = issue.path[0];
+          if (typeof fieldName === 'string' && !errors[fieldName]) {
+            errors[fieldName] = issue.message;
+          }
+        }
+      } else {
+        // Try Valibot-style errors as fallback
+        const err = error as { errors?: Array<{ path?: string; message?: string }> };
+        if (err.errors) {
+          for (const e of err.errors) {
+            if (e.path && !errors[e.path]) {
+              errors[e.path] = e.message ?? 'Invalid value';
+            }
+          }
+        }
+      }
+      
+      const hasFieldErrors = Object.keys(errors).length > 0;
+      return {
+        success: false,
+        errors: hasFieldErrors ? errors : undefined,
+        formError: hasFieldErrors 
+          ? 'Please fix the errors below.'
+          : (error instanceof Error ? error.message : 'Validation failed'),
+      };
+    }
+  }
+  
+  // Fall back to drizzle-zod
+  try {
+    return validateFormData(drizzleTable, values, mode);
+  } catch (error) {
+    // Schema generation failed - log via onError and block the operation
+    if (options.onError) {
+      options.onError(
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          request: new Request('http://localhost/validation'),
+          url: new URL('http://localhost/validation'),
+          route: null,
+          action: mode === 'insert' ? 'create' : 'update',
+        }
+      );
+    }
+    
+    // Return explicit failure - don't silently pass unvalidated data
+    return {
+      success: false,
+      formError: 'Validation unavailable for this table. Please provide a custom parser or contact the administrator.',
+    };
   }
 }

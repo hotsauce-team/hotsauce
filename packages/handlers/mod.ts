@@ -29,12 +29,21 @@ export type {
   FlashMessage,
   ParsedRoute,
   RouteContext,
+  ParserFn,
+  TableParsers,
+  Parsers,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Validation - Configuration validation (throws on invalid)
 // ─────────────────────────────────────────────────────────────
 export { validateCmsOptions, CmsConfigError, CmsOptionsSchema } from './validation.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Form Validation - Zod-based form data validation
+// ─────────────────────────────────────────────────────────────
+export type { ValidationResult } from './crud-helpers.ts';
+export { validateFormData, validateWithParsers, formatZodErrors } from './crud-helpers.ts';
 
 // ─────────────────────────────────────────────────────────────
 // CSRF - Token generation and validation
@@ -133,6 +142,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     isAuthenticated: options.isAuthenticated ?? (() => true),
     canAccess: options.canAccess ?? (() => true),
     onError: options.onError,
+    parsers: options.parsers ?? {},
   };
   
   return async (request: Request): Promise<Response> => {

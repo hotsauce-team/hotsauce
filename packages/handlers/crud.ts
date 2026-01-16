@@ -27,6 +27,7 @@ import {
   saveManyToManyData,
   getSafeErrorMessage,
   isForeignKeyViolation,
+  validateWithParsers,
 } from './crud-helpers.ts';
 
 /**
@@ -249,10 +250,21 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     const editableColumns = getEditableColumns(table);
     const values = coerceFormValues(formData, editableColumns);
     
+    // Validate form data (uses custom parser if provided, else drizzle-zod)
+    const validation = validateWithParsers(options, table.name, drizzleTable, values, 'insert');
+    if (!validation.success) {
+      return await renderCreateForm(
+        ctx,
+        values,
+        validation.formError,
+        validation.errors,
+      );
+    }
+    
     try {
       const result = await options.db
         .insert(drizzleTable)
-        .values(values)
+        .values(validation.data ?? values)
         .returning();
       
       const newRecord = result[0] as Record<string, unknown>;
@@ -265,7 +277,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     } catch (error) {
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'create');
-      return await renderCreateForm(ctx, recordToValues(formData), safeMessage);
+      return await renderCreateForm(ctx, values, safeMessage);
     }
   }
   
@@ -301,13 +313,24 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     const editableColumns = getEditableColumns(table);
     const values = coerceFormValues(formData, editableColumns);
     
+    // Validate form data (uses custom parser if provided, else drizzle-zod)
+    const validation = validateWithParsers(options, table.name, drizzleTable, values, 'update');
+    if (!validation.success) {
+      return await renderEditForm(
+        ctx,
+        values,
+        validation.formError,
+        validation.errors,
+      );
+    }
+    
     try {
       const pkColumn = getPrimaryKeyColumn(table);
       const pkField = (drizzleTable as Record<string, unknown>)[pkColumn.name];
       
       await options.db
         .update(drizzleTable)
-        .set(values)
+        .set(validation.data ?? values)
         .where(eq(pkField as never, recordId as never));
       
       // Save many-to-many relations
@@ -317,7 +340,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     } catch (error) {
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'update');
-      return await renderEditForm(ctx, recordToValues(formData), safeMessage);
+      return await renderEditForm(ctx, values, safeMessage);
     }
   }
   
@@ -370,7 +393,8 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
 async function renderCreateForm(
   ctx: RouteContext,
   values: Record<string, unknown> = {},
-  error?: string,
+  formError?: string,
+  fieldErrors: Record<string, string> = {},
 ): Promise<Response> {
   const { options, route } = ctx;
   const table = route.table!;
@@ -390,11 +414,15 @@ async function renderCreateForm(
     csrfToken,
   };
   
-  const errors: Record<string, string> = error ? { _form: error } : {};
+  // Merge form-level and field-level errors
+  const errors: Record<string, string> = { ...fieldErrors };
+  if (formError) {
+    errors._form = formError;
+  }
   
   let content = '';
-  if (error) {
-    content += alert(error, 'error');
+  if (formError) {
+    content += alert(formError, 'error');
   }
   content += createView(
     `Create ${formatTableName(table.name)}`,
@@ -419,7 +447,8 @@ async function renderCreateForm(
 async function renderEditForm(
   ctx: RouteContext,
   values: Record<string, unknown>,
-  error?: string,
+  formError?: string,
+  fieldErrors: Record<string, string> = {},
 ): Promise<Response> {
   const { options, route } = ctx;
   const table = route.table!;
@@ -440,11 +469,15 @@ async function renderEditForm(
     csrfToken,
   };
   
-  const errors: Record<string, string> = error ? { _form: error } : {};
+  // Merge form-level and field-level errors
+  const errors: Record<string, string> = { ...fieldErrors };
+  if (formError) {
+    errors._form = formError;
+  }
   
   let content = '';
-  if (error) {
-    content += alert(error, 'error');
+  if (formError) {
+    content += alert(formError, 'error');
   }
   content += editView(
     `Edit ${formatTableName(table.name)}`,

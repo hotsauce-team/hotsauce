@@ -48,6 +48,8 @@ const handler = createCmsHandler({
   schema,
   basePath: '/admin',
   title: 'My CMS',
+  // Optional: custom validation (see Form Validation section)
+  // parsers: { users: { insert: (d) => usersSchema.parse(d) } },
 });
 
 // Deno
@@ -198,16 +200,19 @@ const isValid = await validateCsrfToken(token, secret);
 // → true (if signature matches and not expired)
 ```
 
-### `crud-helpers.ts` - Internal Helpers
+### `crud-helpers.ts` - CRUD Helpers
 
-Internal utilities used by crud.ts (not exported from mod.ts).
+Utilities for CRUD operations. Some are exported from mod.ts for custom validation.
 
-| Function | Purpose |
-|----------|---------|  
-| `buildNavItems()` | Build sidebar navigation |
-| `findRecord()` | Fetch single record by ID |
-| `getSafeErrorMessage()` | Sanitize error messages for users |
-| `isForeignKeyViolation()` | Detect FK constraint errors |
+| Function | Exported | Purpose |
+|----------|----------|---------|  
+| `validateFormData()` | ✅ | Validate form data with drizzle-zod |
+| `validateWithParsers()` | ✅ | Validate with custom parser support |
+| `formatZodErrors()` | ✅ | Convert ZodError to field errors |
+| `buildNavItems()` | ❌ | Build sidebar navigation |
+| `findRecord()` | ❌ | Fetch single record by ID |
+| `getSafeErrorMessage()` | ❌ | Sanitize error messages for users |
+| `isForeignKeyViolation()` | ❌ | Detect FK constraint errors |
 
 ### `styles.ts` - External Stylesheet
 
@@ -243,6 +248,73 @@ This policy:
 ### CSRF Protection
 
 Forms include CSRF tokens validated on POST. See `csrf.ts` exports.
+
+### Form Validation
+
+By default, form data is validated using auto-generated Zod schemas from `drizzle-zod`. For custom validation (e.g., email format, min/max length), provide custom parsers:
+
+```ts
+import { createCmsHandler, type Parsers } from '@drizzle-cms/handlers';
+import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
+import { z } from 'zod';
+import { users } from './schema';
+
+// Create schemas with custom refinements
+const usersInsertSchema = createInsertSchema(users, { 
+  email: z.string().email('Invalid email format'),
+});
+const usersUpdateSchema = createUpdateSchema(users, { 
+  email: z.string().email('Invalid email format').optional(),
+});
+
+// Provide parsers for tables needing custom validation
+const parsers: Parsers = {
+  users: {
+    insert: (data) => usersInsertSchema.parse(data),
+    update: (data) => usersUpdateSchema.parse(data),
+  },
+};
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  parsers,
+});
+```
+
+Tables without custom parsers use auto-generated `drizzle-zod` schemas. If schema generation fails for a table (e.g., unsupported column type), the operation is blocked and an error is logged via `onError`.
+
+**Validation Types:**
+
+```ts
+// Parser function signature (works with Zod, Valibot, or any throwing validator)
+type ParserFn = (data: unknown) => unknown;
+
+// Parsers for a single table
+interface TableParsers {
+  insert?: ParserFn;  // For create operations
+  update?: ParserFn;  // For update operations
+}
+
+// All custom parsers keyed by table name
+type Parsers = Record<string, TableParsers>;
+
+// Validation result returned by validateFormData()
+interface ValidationResult {
+  success: boolean;
+  data?: Record<string, unknown>;   // Validated data (on success)
+  errors?: Record<string, string>;  // Field-level errors
+  formError?: string;               // Form-level error message
+}
+```
+
+**Exported Validation Utilities:**
+
+| Export | Purpose |
+|--------|---------|  
+| `validateFormData(table, values, mode)` | Validate using drizzle-zod schema |
+| `validateWithParsers(opts, name, table, values, mode)` | Validate with custom parser fallback |
+| `formatZodErrors(zodError)` | Convert ZodError to field-keyed errors |
 
 ## Error Handling
 
@@ -375,6 +447,8 @@ interface CmsOptions {
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table/action */
   canAccess?: (request: Request, table: IntrospectedTable, action: CrudAction) => Promise<boolean> | boolean;
+  /** Custom parsers for form validation (optional) */
+  parsers?: Parsers;
 }
 ```
 

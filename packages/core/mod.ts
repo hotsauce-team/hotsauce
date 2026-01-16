@@ -45,4 +45,4 @@ export {
 // Validation - Zod schema generation (re-exported from drizzle-zod)
 // Use for form validation in handlers
 // ─────────────────────────────────────────────────────────────
-export { createInsertSchema, createSelectSchema } from './validation/zod.ts';
+export { createInsertSchema, createUpdateSchema, createSelectSchema } from './validation/zod.ts';

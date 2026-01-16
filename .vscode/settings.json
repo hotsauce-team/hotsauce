@@ -5,5 +5,11 @@
         "nosniff",
         "pglite",
         "vars"
-    ]
+    ],
+    "chat.tools.terminal.autoApprove": {
+        "/^deno test -P$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
 }
