@@ -2,6 +2,7 @@
 import { drizzle } from "drizzle-orm/pglite";
 import { PGlite } from "@electric-sql/pglite";
 import { categories, postCategories, posts, users } from "./schema.ts";
+import { hashPassword } from "../../packages/handlers/mod.ts";
 
 // Database connection (persisted to ./data)
 const client = new PGlite("./data");
@@ -14,9 +15,10 @@ await client.exec(`
   CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
-    email VARCHAR(255) NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash TEXT,
+    role VARCHAR(50),
     bio TEXT,
-    is_admin BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMP DEFAULT NOW()
   );
 
@@ -45,12 +47,15 @@ await client.exec(`
   );
 `);
 
-// Seed users
+// Seed users (admin user has passwordHash for CMS login)
+const adminPasswordHash = await hashPassword("admin123");
 await db.insert(users).values([
-  { name: "Alice Johnson", email: "alice@example.com", bio: "Writer and editor", isAdmin: true },
+  { name: "Admin User", email: "admin@example.com", passwordHash: adminPasswordHash, role: "admin", bio: "Site administrator" },
+  { name: "Alice Johnson", email: "alice@example.com", role: "editor", bio: "Writer and editor" },
   { name: "Bob Smith", email: "bob@example.com", bio: "Developer" },
   { name: "Carol White", email: "carol@example.com" },
 ]).onConflictDoNothing();
+console.log('👤 Admin user created: admin@example.com / admin123');
 
 // Seed categories
 await db.insert(categories).values([

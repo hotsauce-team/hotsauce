@@ -72,7 +72,7 @@ async function verifyPayload(payload: string, signature: string, secret: string)
  */
 export async function generateCsrfToken(secret: string): Promise<string> {
   if (!secret || secret.length < 32) {
-    throw new Error('CSRF secret must be at least 32 characters (use generateCsrfSecret())');
+    throw new Error('CSRF secret must be at least 32 characters');
   }
   
   const timestamp = Date.now().toString(36);
@@ -154,27 +154,4 @@ export function getCsrfTokenFromFormData(formData: Record<string, string | strin
  */
 export function getCsrfFieldName(): string {
   return CSRF_TOKEN_NAME;
-}
-
-/**
- * Generate a cryptographically secure random secret for CSRF signing
- * Call this once at application startup and store the result
- * 
- * @returns A 32-byte random secret encoded as base64
- * 
- * @example
- * ```ts
- * // At startup, generate or load from environment
- * const csrfSecret = Deno.env.get('CSRF_SECRET') ?? generateCsrfSecret();
- * 
- * const handler = createCmsHandler({
- *   db,
- *   schema,
- *   csrfSecret,
- * });
- * ```
- */
-export function generateCsrfSecret(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes));
 }

@@ -6,7 +6,6 @@ import {
   validateCsrfToken,
   getCsrfTokenFromFormData,
   getCsrfFieldName,
-  generateCsrfSecret,
 } from '../csrf.ts';
 
 // Test secret (32+ chars for security requirement)
@@ -14,21 +13,6 @@ const TEST_SECRET = 'test-secret-key-for-csrf-tokens-minimum-32-chars';
 
 Deno.test('getCsrfFieldName: returns _csrf', () => {
   assertEquals(getCsrfFieldName(), '_csrf');
-});
-
-Deno.test('generateCsrfSecret: returns base64 string', () => {
-  const secret = generateCsrfSecret();
-  assertEquals(typeof secret, 'string');
-  // 32 bytes → ~44 chars in base64
-  assertEquals(secret.length >= 40, true, 'Secret should be at least 40 chars');
-});
-
-Deno.test('generateCsrfSecret: returns unique secrets', () => {
-  const secrets = new Set<string>();
-  for (let i = 0; i < 10; i++) {
-    secrets.add(generateCsrfSecret());
-  }
-  assertEquals(secrets.size, 10, 'Expected 10 unique secrets');
 });
 
 Deno.test('generateCsrfToken: returns non-empty string', async () => {

@@ -2,15 +2,10 @@
   "name": "@drizzle-cms/example-deno-server",
 
   "tasks": {
-    "dev": "deno run --permission-set=example-deno-server main.ts",
-    "dev:watch": "deno run --watch --permission-set=example-deno-server main.ts",
+    "dev": "deno run --env-file=.env.example --permission-set=example-deno-server main.ts",
+    "dev:watch": "deno run --env-file=.env.example --watch --permission-set=example-deno-server main.ts",
     "seed": "deno run --permission-set=example-deno-server seed.ts"
   },
-
-  // "imports": {
-  //   "drizzle-orm": "npm:drizzle-orm@0.38.3",
-  //   "@electric-sql/pglite": "npm:@electric-sql/pglite@0.3.14"
-  // },
 
   "exports": "./main.ts",
 
@@ -26,6 +21,10 @@
       ],
       "net": [
         "127.0.0.1:3000"
+      ],
+      "env": [
+        "CMS_CSRF_SECRET",
+        "CMS_JWT_SECRET"
       ]
     }
   }

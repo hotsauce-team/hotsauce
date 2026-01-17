@@ -1,6 +1,8 @@
 // Handler types and options
 
 import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
+import type { AuthProvider } from './auth/provider.ts';
+import type { JwtPayload } from './auth/jwt.ts';
 
 /**
  * A Web Standard handler function: Request → Response
@@ -73,10 +75,21 @@ export interface CmsOptions {
   title?: string;
   /**
    * Secret for CSRF token signing (HMAC-SHA256).
-   * Should be at least 32 bytes of entropy.
+   * Must be at least 32 characters of entropy.
    * 
-   * Generate with `generateCsrfSecret()` or use a secure environment variable.
-   * If not provided, a random secret is generated (tokens won't survive restarts).
+   * If not provided, falls back to CMS_CSRF_SECRET environment variable.
+   * If neither is set, createCmsHandler() throws an error.
+   * 
+   * Generate with `openssl rand -base64 32` and store in an environment variable.
+   * 
+   * @example
+   * ```ts
+   * // Option 1: Pass directly
+   * csrfSecret: process.env.CMS_CSRF_SECRET!,
+   * 
+   * // Option 2: Set CMS_CSRF_SECRET env var, omit from options
+   * // createCmsHandler({ db, schema }) // uses CMS_CSRF_SECRET
+   * ```
    */
   csrfSecret?: string;
   /** Custom authentication check */
@@ -121,6 +134,60 @@ export interface CmsOptions {
    * ```
    */
   parsers?: Parsers;
+  /**
+   * JWT authentication configuration (optional).
+   * 
+   * When provided, the CMS requires login to access.
+   * Includes automatic /login and /logout routes.
+   * 
+   * @example
+   * ```ts
+   * auth: {
+   *   secret: process.env.JWT_SECRET!,
+   *   provider: new PasswordProvider({
+   *     db,
+   *     usersTable: schema.adminUsers,
+   *     identityField: 'email',
+   *     passwordField: 'passwordHash',
+   *   }),
+   * }
+   * ```
+   */
+  auth?: CmsAuthOptions;
+}
+
+/**
+ * JWT authentication options for CMS
+ */
+export interface CmsAuthOptions {
+  /** 
+   * Secret for signing JWTs (32+ characters).
+   * 
+   * If not provided, falls back to CMS_JWT_SECRET environment variable.
+   * If neither is set, createCmsHandler() throws an error.
+   */
+  secret?: string;
+  
+  /** Auth provider for login (e.g., PasswordProvider) */
+  provider: AuthProvider;
+  
+  /** Token lifetime in seconds (default: 8 hours) */
+  maxAge?: number;
+  
+  /** Cookie name for JWT (default: 'cms_token') */
+  cookieName?: string;
+  
+  /** Title shown on login page (default: 'Admin Login') */
+  loginTitle?: string;
+  
+  /** Label for identity field (default: 'Email') */
+  identityLabel?: string;
+  
+  /** 
+   * Optional: Check if a token has been revoked.
+   * Called on each request - implement blocklist here if needed.
+   */
+  isRevoked?: (payload: JwtPayload) => Promise<boolean> | boolean;
 }
 
 /**
@@ -146,6 +213,21 @@ export interface ResolvedCmsOptions {
   onError?: (error: Error, context: ErrorContext) => void;
   /** Custom parsers for validation */
   parsers: Parsers;
+  /** JWT auth config (resolved) - undefined if auth disabled */
+  auth?: ResolvedAuthOptions;
+}
+
+/**
+ * Resolved auth options with defaults applied
+ */
+export interface ResolvedAuthOptions {
+  secret: string;
+  provider: AuthProvider;
+  maxAge: number;
+  cookieName: string;
+  loginTitle: string;
+  identityLabel: string;
+  isRevoked?: (payload: JwtPayload) => Promise<boolean> | boolean;
 }
 
 /**
@@ -177,4 +259,6 @@ export interface RouteContext {
   route: ParsedRoute;
   url: URL;
   flash?: FlashMessage;
+  /** Authenticated user info (when auth is enabled) */
+  authUser?: { id: string; role?: string };
 }

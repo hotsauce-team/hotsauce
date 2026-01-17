@@ -43,13 +43,24 @@ import * as schema from './schema.ts';
 const client = postgres(process.env.DATABASE_URL);
 const db = drizzle(client, { schema });
 
+// Option 1: Use environment variables (recommended)
+// Set CMS_CSRF_SECRET and CMS_JWT_SECRET in your environment
 const handler = createCmsHandler({
   db,
   schema,
   basePath: '/admin',
-  title: 'My CMS',
-  // Optional: custom validation (see Form Validation section)
-  // parsers: { users: { insert: (d) => usersSchema.parse(d) } },
+});
+
+// Option 2: Pass secrets directly
+const handler2 = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  csrfSecret: process.env.CSRF_SECRET!,
+  auth: {
+    secret: process.env.JWT_SECRET!,
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+  },
 });
 
 // Deno
@@ -60,6 +71,54 @@ Deno.serve(handler);
 // Express: app.use('/admin', expressAdapter(handler));
 ```
 
+## Environment Variables
+
+| Variable | Purpose | Required |
+|----------|---------|----------|
+| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars) | Yes, if not passed in options |
+| `CMS_JWT_SECRET` | JWT signing for auth (32+ chars) | Yes, if auth enabled and not passed in options |
+
+Generate secrets with:
+```bash
+openssl rand -base64 32
+```
+
+## Migration Notes
+
+### Breaking Changes in v0.1.0
+
+**CSRF secret is now required:**
+
+Previously, `csrfSecret` was optional and a random secret was generated at startup (tokens wouldn't survive restarts). Now you must provide a secret via:
+
+1. Environment variable `CMS_CSRF_SECRET`, or
+2. Pass `csrfSecret` directly in options
+
+```ts
+// Before (no longer works)
+const handler = createCmsHandler({ db, schema });
+
+// After - Option 1: Environment variable
+// Set CMS_CSRF_SECRET in your environment
+const handler = createCmsHandler({ db, schema });
+
+// After - Option 2: Pass directly  
+const handler = createCmsHandler({
+  db,
+  schema,
+  csrfSecret: process.env.MY_CSRF_SECRET!,
+});
+```
+
+**`generateCsrfSecret()` removed:**
+
+This function is no longer exported. Generate secrets using `openssl rand -base64 32` or your platform's secure random generator.
+
+Generate secrets with:
+```bash
+openssl rand -base64 32
+```
+
 ## Modules
 
 ### `mod.ts` - Main Entry Point
@@ -68,9 +127,17 @@ Deno.serve(handler);
 |--------|---------|
 | `createCmsHandler(options)` | Create the main CMS handler |
 | `CmsOptions` | Configuration options type |
+| `CmsAuthOptions` | Auth configuration type |
 | `Handler` | `(Request) => Response` type |
-| `CrudAction` | `'list' \| 'read' \| 'create' \| 'update' \| 'delete'` || `generateCsrfToken()` | Generate signed CSRF token |
+| `CrudAction` | `'list' \| 'read' \| 'create' \| 'update' \| 'delete'` |
+| `generateCsrfToken()` | Generate signed CSRF token |
 | `validateCsrfToken(token)` | Validate CSRF token (signature + expiry) |
+| `getEnv(key)` | Get environment variable (cross-runtime) |
+| `requireEnv(key, desc)` | Get required env var or throw |
+| `PasswordProvider` | Password-based auth provider class |
+| `hashPassword(password)` | Hash password with PBKDF2-SHA256 |
+| `verifyPassword(password, hash)` | Verify password against hash |
+
 **Example:**
 
 ```ts
@@ -87,6 +154,25 @@ const handler = createCmsHandler({
     return table.name !== 'settings' || action === 'read';
   },
 });
+```
+
+### `runtime-compat.ts` - Cross-Runtime Utilities
+
+| Export | Purpose |
+|--------|---------|
+| `getEnv(key)` | Get env var (works in Deno, Node, Bun, Workers) |
+| `requireEnv(key, description)` | Get required env var or throw with helpful error |
+
+**Example:**
+
+```ts
+import { getEnv, requireEnv } from '@drizzle-cms/handlers';
+
+// Optional: returns undefined if not set
+const debugMode = getEnv('DEBUG');
+
+// Required: throws if not set
+const secret = requireEnv('JWT_SECRET', 'JWT signing secret');
 ```
 
 ### `router.ts` - URL Routing
@@ -177,7 +263,6 @@ const values = coerceFormValues(formData, table.columns);
 | `generateCsrfToken(secret)` | Generate HMAC-SHA256 signed token (4-hour expiry) |
 | `validateCsrfToken(token, secret)` | Validate signature and check expiry |
 | `getCsrfTokenFromFormData(data)` | Extract `_csrf` field from form |
-| `generateCsrfSecret()` | Generate a secure random secret (32 bytes) |
 
 **Token Format:** `timestamp.random.signature`
 
@@ -186,10 +271,10 @@ Tokens are signed with HMAC-SHA256 using `crypto.subtle` (Web Crypto API). They 
 **Example:**
 
 ```ts
-import { generateCsrfToken, validateCsrfToken, generateCsrfSecret } from '@drizzle-cms/handlers';
+import { generateCsrfToken, validateCsrfToken } from '@drizzle-cms/handlers';
 
-// Generate a secret once at startup (or load from env)
-const secret = Deno.env.get('CSRF_SECRET') ?? generateCsrfSecret();
+// Load secret from environment
+const secret = Deno.env.get('CSRF_SECRET')!;
 
 // Generate token for forms (async)
 const token = await generateCsrfToken(secret);
@@ -439,7 +524,7 @@ interface CmsOptions {
   title?: string;
   /** 
    * Secret for CSRF token signing (HMAC-SHA256).
-   * Must be at least 32 characters. Use generateCsrfSecret() to create one.
+   * Must be at least 32 characters. Generate with: openssl rand -base64 32
    * If not provided, a random secret is generated (tokens won't survive restarts).
    */
   csrfSecret?: string;
@@ -505,6 +590,223 @@ const handler = createCmsHandler({
     
     return true;
   },
+});
+```
+
+## Authentication
+
+The handlers package includes JWT-based authentication that can be configured directly in `createCmsHandler`.
+
+### Quick Setup
+
+```ts
+import { createCmsHandler, PasswordProvider } from '@drizzle-cms/handlers';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  auth: {
+    secret: process.env.JWT_SECRET!, // Must be 32+ characters
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+  },
+});
+
+Deno.serve(handler);
+```
+
+That's it! The handler now includes `/admin/login` and `/admin/logout` routes automatically.
+
+### PasswordProvider Defaults
+
+`PasswordProvider` uses sensible defaults that work with common schema patterns:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `identityField` | `'email'` | Column for login identity (email/username) |
+| `passwordField` | `'passwordHash'` | Column for hashed password |
+| `idField` | `'id'` | Column for primary key |
+| `roleField` | `'role'` (auto-detected) | Column for user role (if exists) |
+
+Override these only if your schema uses different column names:
+
+```ts
+new PasswordProvider({
+  db,
+  usersTable: schema.users,
+  identityField: 'username',     // custom identity column
+  passwordField: 'password_hash', // custom password column
+})
+```
+
+### Which Users Table?
+
+`PasswordProvider` works with any table that has the required columns. Two common approaches:
+
+**Dedicated admin table** (simpler):
+```ts
+// Separate table just for CMS admins
+const adminUsers = pgTable('admin_users', {
+  id: serial('id').primaryKey(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: varchar('role', { length: 50 }),
+});
+
+new PasswordProvider({ db, usersTable: adminUsers })
+```
+
+**General-purpose users table** (shared):
+```ts
+// Your existing users table with a role/isAdmin column
+const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  email: varchar('email', { length: 255 }).notNull(),
+  passwordHash: text('password_hash').notNull(),
+  role: varchar('role', { length: 50 }), // 'admin', 'editor', 'user'
+});
+
+new PasswordProvider({ db, usersTable: users })
+```
+
+Choose based on your needs:
+- **Dedicated table**: Clear separation, everyone in the table can access CMS
+- **Shared table**: Single source of truth, use `canAccess` for role-based authorization
+
+### Auth Options
+
+```ts
+auth: {
+  // Required
+  secret: 'your-32-character-minimum-secret',
+  provider: authProvider,
+  
+  // Optional
+  cookieName: 'cms_token',        // Default: 'cms_token'
+  maxAge: 60 * 60 * 8,            // Default: 8 hours (in seconds)
+  loginTitle: 'Admin Login',      // Default: 'Admin Login'
+  identityLabel: 'Email',         // Default: 'Email'
+  isRevoked: async (payload) => { // Optional blocklist check
+    return await isTokenBlocked(payload.sub);
+  },
+}
+```
+
+### Auth Exports
+
+| Export | Purpose |
+|--------|---------|
+| `PasswordProvider` | Password-based auth provider class |
+| `hashPassword(password)` | Hash password with PBKDF2-SHA256 |
+| `verifyPassword(password, hash)` | Verify password against hash |
+| `signJwt(payload, secret)` | Sign a JWT token |
+| `verifyJwt(token, secret)` | Verify and decode JWT |
+| `createJwtPayload(id, role?, maxAge?)` | Create JWT payload with expiry |
+| `AuthProvider` | Interface for custom auth providers |
+| `getTokenFromCookies(req, name)` | Parse JWT from cookie header |
+| `createAuthCookie(...)` | Create Set-Cookie header for JWT |
+| `createClearCookie(name, path)` | Create Set-Cookie to clear JWT |
+
+### Auth Routes
+
+When `auth` is configured, these routes are automatically added:
+
+| URL | Method | Description |
+|-----|--------|-------------|
+| `/admin/login` | GET | Login form |
+| `/admin/login` | POST | Submit credentials |
+| `/admin/logout` | POST | Clear auth cookie |
+
+### Password Hashing
+
+Store passwords securely using PBKDF2-SHA256:
+
+```ts
+import { hashPassword, verifyPassword } from '@drizzle-cms/handlers';
+
+// When creating a user
+const passwordHash = await hashPassword('user-password');
+await db.insert(adminUsers).values({ 
+  email: 'admin@example.com', 
+  passwordHash 
+});
+
+// Verification happens automatically in PasswordProvider
+```
+
+Hash format: `$pbkdf2-sha256$iterations$base64salt$base64hash`
+
+### Custom Auth Provider
+
+Implement `AuthProvider` for custom authentication (OAuth, LDAP, etc.):
+
+```ts
+import type { AuthProvider, AuthUser } from '@drizzle-cms/handlers';
+
+class MyCustomProvider implements AuthProvider {
+  async authenticate(credentials: unknown): Promise<AuthUser | null> {
+    const { token } = credentials as { token: string };
+    // Your custom auth logic here
+    const user = await verifyOAuthToken(token);
+    if (!user) return null;
+    return { id: user.id, role: user.role };
+  }
+}
+```
+
+### Security Features
+
+- **HttpOnly cookies** - Tokens not accessible via JavaScript (XSS protection)
+- **SameSite=Lax** - CSRF protection for cross-site requests
+- **Secure flag** - Cookie only sent over HTTPS (in production)
+- **PBKDF2-SHA256** - 600,000 iterations, 16-byte salt, 32-byte key
+- **Constant-time comparison** - Timing attack resistance
+- **Token expiration** - Default 8-hour expiry
+- **POST-only logout** - Prevents CSRF logout attacks
+
+### Authorization (Permissions)
+
+> **Important:** The `auth` option provides **authentication only** (verifying identity). It does not include role-based permissions — any authenticated user can access all tables and perform all actions.
+
+To restrict access based on roles, use the `canAccess` callback:
+
+```ts
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  auth: {
+    secret: process.env.JWT_SECRET!,
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+  },
+  // Add authorization rules
+  canAccess: async (request, table, action) => {
+    // The JWT payload is available on the request (if using auth)
+    // For now, implement your own role check logic here
+    
+    // Example: read-only for certain tables
+    if (table.name === 'audit_logs' && action !== 'list' && action !== 'read') {
+      return false;
+    }
+    
+    return true;
+  },
+});
+
+### Rate Limiting
+
+The login endpoint does **not** include built-in rate limiting. To protect against brute-force attacks, implement rate limiting at the infrastructure level:
+
+- **Reverse proxy**: nginx `limit_req`, Caddy rate limiting
+- **Cloud providers**: Cloudflare Rate Limiting, AWS WAF
+- **Application middleware**: Add your own rate limiter before the CMS handler
+
+```ts
+// Example: wrap handler with rate limiting middleware
+const handler = withRateLimiter(cmsHandler, {
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // 5 login attempts per window
+  keyGenerator: (req) => req.headers.get('x-forwarded-for') ?? 'unknown',
 });
 ```
 

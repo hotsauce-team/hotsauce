@@ -10,7 +10,7 @@ import { html, raw } from '@drizzle-cms/ui';
 import type { RouteContext } from './types.ts';
 import { htmlResponse, redirect, redirectWithFlash, parseFlashFromUrl, notFound, parseFormData, coerceFormValues, getPagination, getSort } from './http.ts';
 import { cmsUrl, formatTableName } from './router.ts';
-import type { NavItem, ListViewOptions, DetailViewOptions, EditViewOptions } from '@drizzle-cms/ui';
+import type { NavItem, ListViewOptions, DetailViewOptions, EditViewOptions, LayoutOptions } from '@drizzle-cms/ui';
 import { generateCsrfToken, validateCsrfToken, getCsrfTokenFromFormData } from './csrf.ts';
 import {
   buildNavItems,
@@ -29,6 +29,22 @@ import {
   isForeignKeyViolation,
   validateWithParsers,
 } from './crud-helpers.ts';
+
+/**
+ * Build common layout options for a page
+ */
+function buildLayoutOptions(ctx: RouteContext, title: string, navItems: NavItem[]): LayoutOptions {
+  const { options, authUser } = ctx;
+  const basePath = options.basePath;
+  
+  return {
+    title,
+    siteName: options.title,
+    nav: navItems,
+    stylesheetUrl: `${basePath}/styles.css`,
+    user: authUser ? { name: `User ${authUser.id}`, logoutUrl: `${basePath}/logout` } : undefined,
+  };
+}
 
 /**
  * Render the dashboard page
@@ -64,12 +80,7 @@ export function handleDashboard(ctx: RouteContext): Response {
     </div>
   `;
   
-  const page = layout(content, {
-    title: 'Dashboard',
-    siteName: options.title,
-    nav: navItems,
-    stylesheetUrl: `${basePath}/styles.css`,
-  });
+  const page = layout(content, buildLayoutOptions(ctx, 'Dashboard', navItems));
   
   return htmlResponse(page);
 }
@@ -162,12 +173,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     });
   }
   
-  const pageHtml = layout(content, {
-    title: formatTableName(table.name),
-    siteName: options.title,
-    nav: navItems,
-    stylesheetUrl: `${basePath}/styles.css`,
-  });
+  const pageHtml = layout(content, buildLayoutOptions(ctx, formatTableName(table.name), navItems));
   
   return htmlResponse(pageHtml);
 }
@@ -218,12 +224,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     m2mDisplayData,
   );
   
-  const page = layout(content, {
-    title: `View ${formatTableName(table.name)}`,
-    siteName: options.title,
-    nav: navItems,
-    stylesheetUrl: `${basePath}/styles.css`,
-  });
+  const page = layout(content, buildLayoutOptions(ctx, `View ${formatTableName(table.name)}`, navItems));
   
   return htmlResponse(page);
 }
@@ -434,12 +435,7 @@ async function renderCreateForm(
     manyToManyData,
   );
   
-  const page = layout(content, {
-    title: `Create ${formatTableName(table.name)}`,
-    siteName: options.title,
-    nav: navItems,
-    stylesheetUrl: `${basePath}/styles.css`,
-  });
+  const page = layout(content, buildLayoutOptions(ctx, `Create ${formatTableName(table.name)}`, navItems));
   
   return htmlResponse(page);
 }
@@ -489,12 +485,7 @@ async function renderEditForm(
     manyToManyData,
   );
   
-  const page = layout(content, {
-    title: `Edit ${formatTableName(table.name)}`,
-    siteName: options.title,
-    nav: navItems,
-    stylesheetUrl: `${basePath}/styles.css`,
-  });
+  const page = layout(content, buildLayoutOptions(ctx, `Edit ${formatTableName(table.name)}`, navItems));
   
   return htmlResponse(page);
 }

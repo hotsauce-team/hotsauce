@@ -147,8 +147,19 @@ packages/handlers/
 ├── csrf.ts             # CSRF token generation and validation
 ├── styles.ts           # Stylesheet route handler
 ├── validation.ts       # Zod config validation
-└── types.ts            # Handler types (CmsOptions, ErrorContext, etc.)
+├── runtime-compat.ts   # Cross-runtime env var utilities (getEnv)
+├── types.ts            # Handler types (CmsOptions, ErrorContext, etc.)
+└── auth/               # JWT authentication module
 ```
+
+## Environment Variables
+
+The CMS uses these environment variables for secrets (can also be passed directly):
+
+| Variable | Purpose |
+|----------|---------|
+| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars) |
+| `CMS_JWT_SECRET` | JWT signing for auth (32+ chars) |
 
 ## Development Environment
 

@@ -4,6 +4,9 @@ import { assertEquals } from 'jsr:@std/assert';
 import { createCmsHandler } from '../mod.ts';
 import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
 
+// Test CSRF secret
+const TEST_CSRF_SECRET = 'test-csrf-secret-for-handler-tests-min-32-chars';
+
 // Mock schema for testing
 const mockTable: IntrospectedTable = {
   name: 'users',
@@ -35,6 +38,7 @@ const mockDb = {
 
 Deno.test('createCmsHandler: returns a function', () => {
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: mockDb,
   });
@@ -44,6 +48,7 @@ Deno.test('createCmsHandler: returns a function', () => {
 
 Deno.test('createCmsHandler: 404 for unknown routes', async () => {
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -57,6 +62,7 @@ Deno.test('createCmsHandler: 404 for unknown routes', async () => {
 
 Deno.test('createCmsHandler: 403 when not authenticated', async () => {
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -71,6 +77,7 @@ Deno.test('createCmsHandler: 403 when not authenticated', async () => {
 
 Deno.test('createCmsHandler: renders dashboard on GET /admin', async () => {
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -88,6 +95,7 @@ Deno.test('createCmsHandler: renders dashboard on GET /admin', async () => {
 
 Deno.test('createCmsHandler: 405 for POST on dashboard', async () => {
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -101,6 +109,7 @@ Deno.test('createCmsHandler: 405 for POST on dashboard', async () => {
 
 Deno.test('createCmsHandler: custom title appears in dashboard', async () => {
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -116,6 +125,7 @@ Deno.test('createCmsHandler: custom title appears in dashboard', async () => {
 
 Deno.test('createCmsHandler: async authentication check', async () => {
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -133,6 +143,7 @@ Deno.test('createCmsHandler: async authentication check', async () => {
 
 Deno.test('createCmsHandler: canAccess authorization check', async () => {
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -161,6 +172,7 @@ Deno.test('createCmsHandler: onError callback is called on database error', asyn
   };
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: throwingDb,
     basePath: '/admin',
@@ -197,6 +209,7 @@ Deno.test('createCmsHandler: onError handles non-Error throws', async () => {
   };
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     schema: mockSchema,
     db: throwingDb,
     basePath: '/admin',

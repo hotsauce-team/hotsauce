@@ -96,7 +96,9 @@ export function layout(content: string, options: LayoutOptions): string {
         <h2>${html`${options.title}`}</h2>
         ${options.user ? html`<div class="cms-user">
           ${options.user.name}
-          <a href="${options.user.logoutUrl}" class="cms-btn cms-btn-secondary">Logout</a>
+          <form method="POST" action="${options.user.logoutUrl}" style="display:inline">
+            <button type="submit" class="cms-btn cms-btn-secondary">Logout</button>
+          </form>
         </div>` : ''}
       </header>
       <div class="cms-content">

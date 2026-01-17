@@ -1,15 +1,35 @@
 {
-    "cSpell.words": [
-        "BYOS",
-        "Introspected",
-        "nosniff",
-        "pglite",
-        "vars"
-    ],
-    "chat.tools.terminal.autoApprove": {
-        "/^deno test -P$/": {
-            "approve": true,
-            "matchCommandLine": true
-        }
+  "cSpell.words": [
+    "BYOS",
+    "Introspected",
+    "nosniff",
+    "pglite",
+    "vars"
+  ],
+  "chat.tools.terminal.autoApprove": {
+    "/^deno test -P$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^deno test -P [\\w.\\/*-]+ 2>&1 \\| tail -\\d+$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^deno test -P 2>&1 \\| tail -\\d+$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^deno check [\\w.\\/*-\\s]+ 2>&1 \\| tail -\\d+$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^deno check [\\w.\\/*-\\s]+ 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
+    "/^deno check 2>&1 \\| tail -\\d+$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
+  }
 }

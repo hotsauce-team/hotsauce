@@ -96,6 +96,7 @@ Deno.test('integration: dashboard renders table list', async () => {
   const { client, db } = await createTestDb();
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -117,6 +118,7 @@ Deno.test('integration: list view shows empty table', async () => {
   const { client, db } = await createTestDb();
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -137,6 +139,7 @@ Deno.test('integration: create form renders with CSRF token', async () => {
   const { client, db } = await createTestDb();
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -159,10 +162,10 @@ Deno.test('integration: create record via POST', async () => {
   const { client, db } = await createTestDb();
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
-    csrfSecret: TEST_CSRF_SECRET,
   });
   
   // Create a user
@@ -198,6 +201,7 @@ Deno.test('integration: create fails without CSRF token', async () => {
   const { client, db } = await createTestDb();
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -238,6 +242,7 @@ Deno.test('integration: read view shows record', async () => {
   });
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -267,6 +272,7 @@ Deno.test('integration: edit form shows current values', async () => {
   });
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -295,10 +301,10 @@ Deno.test('integration: update record via POST', async () => {
   });
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
-    csrfSecret: TEST_CSRF_SECRET,
   });
   
   // Update the user
@@ -344,10 +350,10 @@ Deno.test('integration: delete record via POST', async () => {
   assertEquals(users_result.length, 1);
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
-    csrfSecret: TEST_CSRF_SECRET,
   });
   
   // Delete the user
@@ -384,6 +390,7 @@ Deno.test('integration: delete fails without CSRF token', async () => {
   });
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -421,6 +428,7 @@ Deno.test('integration: list view shows records', async () => {
   ]);
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -449,6 +457,7 @@ Deno.test('integration: foreign key relation in create form', async () => {
   ]);
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -478,10 +487,10 @@ Deno.test('integration: create post with foreign key', async () => {
   });
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
-    csrfSecret: TEST_CSRF_SECRET,
   });
   
   // Create a post
@@ -516,6 +525,7 @@ Deno.test('integration: 404 for non-existent record', async () => {
   const { client, db } = await createTestDb();
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -533,6 +543,7 @@ Deno.test('integration: 404 for non-existent table', async () => {
   const { client, db } = await createTestDb();
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -550,6 +561,7 @@ Deno.test('integration: authentication check', async () => {
   const { client, db } = await createTestDb();
   
   const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
     db,
     schema,
     basePath: '/admin',
@@ -560,6 +572,300 @@ Deno.test('integration: authentication check', async () => {
   const response = await handler(request);
   
   assertEquals(response.status, 403);
+  
+  await client.close();
+});
+
+// ============================================================================
+// JWT Auth Integration Tests (with PasswordProvider)
+// ============================================================================
+
+import { hashPassword, PasswordProvider } from '../auth/mod.ts';
+
+// Admin users table for auth testing
+const adminUsers = pgTable('admin_users', {
+  id: serial('id').primaryKey(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  role: varchar('role', { length: 50 }),
+});
+
+async function createTestDbWithAuth() {
+  const client = new PGlite();
+  const dbSchema = { ...schema, adminUsers };
+  const db = drizzle(client, { schema: dbSchema });
+  
+  // Create tables
+  await db.execute(sql`
+    CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      name VARCHAR(100) NOT NULL,
+      bio TEXT,
+      is_admin BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  
+  await db.execute(sql`
+    CREATE TABLE posts (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      body TEXT,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  
+  await db.execute(sql`
+    CREATE TABLE admin_users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role VARCHAR(50)
+    )
+  `);
+  
+  return { client, db, schema: dbSchema };
+}
+
+const AUTH_SECRET = 'test-auth-secret-must-be-at-least-32-characters-long';
+
+Deno.test('integration: JWT auth redirects unauthenticated to login', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({
+        db,
+        usersTable: adminUsers,
+        identityField: 'email',
+        passwordField: 'passwordHash',
+        roleField: 'role',
+      }),
+    },
+  });
+  
+  const request = new Request('http://localhost/admin');
+  const response = await handler(request);
+  
+  assertEquals(response.status, 302);
+  assertEquals(response.headers.get('Location'), '/admin/login');
+  
+  await client.close();
+});
+
+Deno.test('integration: JWT auth login page renders', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({
+        db,
+        usersTable: adminUsers,
+      }),
+    },
+  });
+  
+  const request = new Request('http://localhost/admin/login');
+  const response = await handler(request);
+  
+  assertEquals(response.status, 200);
+  assertEquals(response.headers.get('Content-Type'), 'text/html; charset=utf-8');
+  
+  const html = await response.text();
+  assertStringIncludes(html, 'form');
+  assertStringIncludes(html, 'identity');
+  assertStringIncludes(html, 'password');
+  assertStringIncludes(html, '_csrf');
+  
+  await client.close();
+});
+
+Deno.test('integration: JWT auth successful login with correct credentials', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  // Create an admin user with hashed password
+  const passwordHash = await hashPassword('admin123');
+  await db.insert(adminUsers).values({
+    email: 'admin@example.com',
+    passwordHash,
+    role: 'admin',
+  });
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({
+        db,
+        usersTable: adminUsers,
+        identityField: 'email',
+        passwordField: 'passwordHash',
+        roleField: 'role',
+      }),
+    },
+  });
+  
+  // Get CSRF token from login page
+  const loginPageReq = new Request('http://localhost/admin/login');
+  const loginPageRes = await handler(loginPageReq);
+  const loginHtml = await loginPageRes.text();
+  
+  // Extract CSRF token
+  const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
+  assertExists(csrfMatch, 'CSRF token should be in login page');
+  const csrfToken = csrfMatch[1]!;
+  
+  // Submit login with correct credentials
+  const formData = createFormData({
+    identity: 'admin@example.com',
+    password: 'admin123',
+    _csrf: csrfToken,
+  });
+  
+  const loginReq = new Request('http://localhost/admin/login', {
+    method: 'POST',
+    body: formData,
+  });
+  const loginRes = await handler(loginReq);
+  
+  // Should redirect to admin dashboard
+  assertEquals(loginRes.status, 302);
+  assertEquals(loginRes.headers.get('Location'), '/admin');
+  
+  // Should set auth cookie
+  const setCookie = loginRes.headers.get('Set-Cookie');
+  assertExists(setCookie, 'Set-Cookie header should be present');
+  assertStringIncludes(setCookie, 'cms_token=');
+  assertStringIncludes(setCookie, 'HttpOnly');
+  
+  await client.close();
+});
+
+Deno.test('integration: JWT auth rejects invalid password', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  // Create an admin user
+  const passwordHash = await hashPassword('correct-password');
+  await db.insert(adminUsers).values({
+    email: 'admin@example.com',
+    passwordHash,
+    role: 'admin',
+  });
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({
+        db,
+        usersTable: adminUsers,
+      }),
+    },
+  });
+  
+  // Get CSRF token
+  const loginPageRes = await handler(new Request('http://localhost/admin/login'));
+  const loginHtml = await loginPageRes.text();
+  const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
+  const csrfToken = csrfMatch![1]!;
+  
+  // Submit with wrong password
+  const formData = createFormData({
+    identity: 'admin@example.com',
+    password: 'wrong-password',
+    _csrf: csrfToken,
+  });
+  
+  const loginReq = new Request('http://localhost/admin/login', {
+    method: 'POST',
+    body: formData,
+  });
+  const loginRes = await handler(loginReq);
+  
+  // Should show error, not redirect (401 for invalid credentials)
+  assertEquals(loginRes.status, 401);
+  const html = await loginRes.text();
+  assertStringIncludes(html, 'Invalid email or password');
+  
+  await client.close();
+});
+
+Deno.test('integration: JWT auth allows access with valid token', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  // Create an admin user
+  const passwordHash = await hashPassword('admin123');
+  await db.insert(adminUsers).values({
+    email: 'admin@example.com',
+    passwordHash,
+    role: 'admin',
+  });
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({
+        db,
+        usersTable: adminUsers,
+      }),
+    },
+  });
+  
+  // Login to get token
+  const loginPageRes = await handler(new Request('http://localhost/admin/login'));
+  const loginHtml = await loginPageRes.text();
+  const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
+  const csrfToken = csrfMatch![1]!;
+  
+  const formData = createFormData({
+    identity: 'admin@example.com',
+    password: 'admin123',
+    _csrf: csrfToken,
+  });
+  
+  const loginRes = await handler(new Request('http://localhost/admin/login', {
+    method: 'POST',
+    body: formData,
+  }));
+  
+  // Extract token from Set-Cookie
+  const setCookie = loginRes.headers.get('Set-Cookie')!;
+  const tokenMatch = setCookie.match(/cms_token=([^;]+)/);
+  assertExists(tokenMatch, 'Token should be in Set-Cookie');
+  const token = tokenMatch[1];
+  
+  // Access dashboard with token
+  const dashboardReq = new Request('http://localhost/admin', {
+    headers: { 'Cookie': `cms_token=${token}` },
+  });
+  const dashboardRes = await handler(dashboardReq);
+  
+  // Should allow access (not redirect to login)
+  assertEquals(dashboardRes.status, 200);
+  const html = await dashboardRes.text();
+  assertStringIncludes(html, 'users'); // Should show table list
   
   await client.close();
 });

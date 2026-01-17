@@ -15,13 +15,18 @@ import type { Parsers } from '../../packages/handlers/mod.ts';
 
 /**
  * Users table
+ * 
+ * Used for both app users and CMS authentication.
+ * Users with a passwordHash can log in to the CMS.
+ * The role field controls CMS permissions.
  */
 const users = pgTable('users', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }).notNull(),
-  email: varchar('email', { length: 255 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: text('password_hash'),  // required for cms password login only
+  role: varchar('role', { length: 50 }), // 'admin', 'editor', etc.
   bio: text('bio'),
-  isAdmin: boolean('is_admin').default(false),
   createdAt: timestamp('created_at').defaultNow(),
 });
 
@@ -73,6 +78,11 @@ export const schema = {
   categories,
   postCategories,
 };
+
+/**
+ * Export tables for direct use in queries
+ */
+export { users, posts, categories, postCategories };
 
 /**
  * Custom parsers (optional)
