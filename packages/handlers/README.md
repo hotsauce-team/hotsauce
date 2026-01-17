@@ -83,42 +83,6 @@ Generate secrets with:
 openssl rand -base64 32
 ```
 
-## Migration Notes
-
-### Breaking Changes in v0.1.0
-
-**CSRF secret is now required:**
-
-Previously, `csrfSecret` was optional and a random secret was generated at startup (tokens wouldn't survive restarts). Now you must provide a secret via:
-
-1. Environment variable `CMS_CSRF_SECRET`, or
-2. Pass `csrfSecret` directly in options
-
-```ts
-// Before (no longer works)
-const handler = createCmsHandler({ db, schema });
-
-// After - Option 1: Environment variable
-// Set CMS_CSRF_SECRET in your environment
-const handler = createCmsHandler({ db, schema });
-
-// After - Option 2: Pass directly  
-const handler = createCmsHandler({
-  db,
-  schema,
-  csrfSecret: process.env.MY_CSRF_SECRET!,
-});
-```
-
-**`generateCsrfSecret()` removed:**
-
-This function is no longer exported. Generate secrets using `openssl rand -base64 32` or your platform's secure random generator.
-
-Generate secrets with:
-```bash
-openssl rand -base64 32
-```
-
 ## Modules
 
 ### `mod.ts` - Main Entry Point
