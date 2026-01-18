@@ -230,6 +230,7 @@ Deno.serve(handler);
 - [x] Many-to-many relationships (junction table detection, checkbox UI)
 - [x] JWT authentication (cookie-based tokens)
 - [x] Row-level security policies (atomic authorization)
+- [x] Multi-tenant compatibility (shared database with tenant column)
 - [ ] File uploads (local + S3)
 - [ ] Audit logging
 - [ ] Customizable UI components
