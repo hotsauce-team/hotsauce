@@ -3,6 +3,7 @@
 // Works with Deno, Node 20+, Bun, Cloudflare Workers
 
 import type { CmsOptions, ResolvedCmsOptions, ResolvedAuthOptions, RouteContext, Handler } from './types.ts';
+import type { Policies } from './policies/types.ts';
 import { introspectFullSchema } from '@drizzle-cms/core';
 import { parseRoute, resolveAction } from './router.ts';
 import { notFound, forbidden, methodNotAllowed, SECURITY_HEADERS } from './http.ts';
@@ -29,6 +30,9 @@ import type { JwtPayload } from './auth/jwt.ts';
 export type {
   Handler,
   CmsOptions,
+  CmsOptionsBase,
+  CmsOptionsWithAuth,
+  CmsOptionsWithoutAuth,
   CmsAuthOptions,
   CrudAction,
   ErrorContext,
@@ -104,6 +108,42 @@ export { getEnv, requireEnv } from './runtime-compat.ts';
 // Styles - CSS stylesheet served as external file
 // ─────────────────────────────────────────────────────────────
 export { cmsStylesheet, handleStylesheet, cssResponse } from './styles.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Policies - Row-level security for fine-grained authorization
+// ─────────────────────────────────────────────────────────────
+export type {
+  PolicyContext,
+  PolicyResult,
+  PolicyFn,
+  ActionPolicies,
+  Policy,
+  Policies,
+  PolicyApplicationResult,
+} from './policies/mod.ts';
+
+export {
+  // Core helpers
+  always,
+  never,
+  authenticated,
+  // Role-based
+  roleIs,
+  roleIn,
+  // Ownership
+  ownedBy,
+  ownedByOrContributor,
+  // Combining
+  anyOf,
+  allOf,
+  // Action-specific
+  forActions,
+  readOnly,
+  adminOr,
+  // Application utilities
+  applyPolicy,
+  createPolicyContext,
+} from './policies/mod.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Auth - JWT authentication (optional)
@@ -225,6 +265,17 @@ export function createCmsHandler(options: CmsOptions): Handler {
     isRevoked: options.auth.isRevoked,
   } : undefined;
   
+  // Require policies when auth is enabled (runtime check for JS users)
+  if (options.auth && options.policies === undefined) {
+    throw new Error(
+      "'policies' is required when 'auth' is enabled. " +
+      "Use `policies: {}` to explicitly grant full access to all authenticated users."
+    );
+  }
+  
+  // Resolve policies (empty object = no policies = full access)
+  const resolvedPolicies: Policies = options.policies ?? {};
+  
   // Apply defaults
   const opts: ResolvedCmsOptions = {
     introspected,
@@ -236,6 +287,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     canAccess: options.canAccess ?? (() => true),
     onError: options.onError,
     parsers: options.parsers ?? {},
+    policies: resolvedPolicies,
     auth: resolvedAuth,
   };
   

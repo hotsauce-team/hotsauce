@@ -649,6 +649,7 @@ Deno.test('integration: JWT auth redirects unauthenticated to login', async () =
         roleField: 'role',
       }),
     },
+    policies: {},
   });
   
   const request = new Request('http://localhost/admin');
@@ -675,6 +676,7 @@ Deno.test('integration: JWT auth login page renders', async () => {
         usersTable: adminUsers,
       }),
     },
+    policies: {},
   });
   
   const request = new Request('http://localhost/admin/login');
@@ -718,6 +720,7 @@ Deno.test('integration: JWT auth successful login with correct credentials', asy
         roleField: 'role',
       }),
     },
+    policies: {},
   });
   
   // Get CSRF token from login page
@@ -779,6 +782,7 @@ Deno.test('integration: JWT auth rejects invalid password', async () => {
         usersTable: adminUsers,
       }),
     },
+    policies: {},
   });
   
   // Get CSRF token
@@ -831,6 +835,7 @@ Deno.test('integration: JWT auth allows access with valid token', async () => {
         usersTable: adminUsers,
       }),
     },
+    policies: {},
   });
   
   // Login to get token
@@ -866,6 +871,297 @@ Deno.test('integration: JWT auth allows access with valid token', async () => {
   assertEquals(dashboardRes.status, 200);
   const html = await dashboardRes.text();
   assertStringIncludes(html, 'users'); // Should show table list
+  
+  await client.close();
+});
+
+// ============================================================================
+// Flash message display tests
+// ============================================================================
+
+Deno.test('integration: list view displays flash message from URL', async () => {
+  const { client, db } = await createTestDb();
+  
+  await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema,
+    basePath: '/admin',
+  });
+  
+  // Request list with flash param
+  const request = new Request('http://localhost/admin/users?_flash=delete_success');
+  const response = await handler(request);
+  
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  assertStringIncludes(html, 'Record deleted successfully');
+  
+  await client.close();
+});
+
+Deno.test('integration: detail view displays flash message from URL', async () => {
+  const { client, db } = await createTestDb();
+  
+  await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema,
+    basePath: '/admin',
+  });
+  
+  // Request detail with flash param (simulating redirect from edit forbidden)
+  const request = new Request('http://localhost/admin/users/1?_flash=update_forbidden');
+  const response = await handler(request);
+  
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  assertStringIncludes(html, 'You do not have permission to update this record');
+  
+  await client.close();
+});
+
+// ============================================================================
+// Policy filtering integration tests
+// ============================================================================
+
+Deno.test('integration: policy filters list to only owned records', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  // Create two users
+  await db.insert(users).values([
+    { email: 'alice@example.com', name: 'Alice' },
+    { email: 'bob@example.com', name: 'Bob' },
+  ]);
+  
+  // Create posts: 2 by Alice (id=1), 1 by Bob (id=2)
+  await db.insert(posts).values([
+    { title: 'Alice Post 1', body: 'Content 1', authorId: 1 },
+    { title: 'Alice Post 2', body: 'Content 2', authorId: 1 },
+    { title: 'Bob Post 1', body: 'Content 3', authorId: 2 },
+  ]);
+  
+  // Create admin user for auth (just for login mechanism)
+  const passwordHash = await hashPassword('password');
+  await db.insert(adminUsers).values({ email: 'admin@example.com', passwordHash });
+  
+  // Import policy helpers
+  const { ownedBy, signJwt, createJwtPayload } = await import('../mod.ts');
+  
+  // Create handler with ownership policy
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({ db, usersTable: adminUsers }),
+    },
+    policies: {
+      // Users can only see their own posts (using their JWT sub as authorId)
+      posts: ownedBy(posts, 'authorId'),
+    },
+  });
+  
+  // Create JWT for "user 1" (Alice's posts have authorId=1)
+  const alicePayload = createJwtPayload('1');
+  const aliceToken = await signJwt(alicePayload, AUTH_SECRET);
+  
+  // Request posts list as Alice
+  const request = new Request('http://localhost/admin/posts', {
+    headers: { Cookie: `cms_token=${aliceToken}` },
+  });
+  const response = await handler(request);
+  
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  
+  // Alice should see her 2 posts
+  assertStringIncludes(html, 'Alice Post 1');
+  assertStringIncludes(html, 'Alice Post 2');
+  
+  // Alice should NOT see Bob's post
+  assertEquals(html.includes('Bob Post 1'), false, 'Should not see Bob\'s post');
+  
+  await client.close();
+});
+
+Deno.test('integration: admin bypasses ownership policy', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  // Create users for posts
+  await db.insert(users).values([
+    { email: 'user1@example.com', name: 'User1' },
+    { email: 'user2@example.com', name: 'User2' },
+  ]);
+  
+  // Create posts by user 2
+  await db.insert(posts).values([
+    { title: 'User Post 1', body: 'Content', authorId: 2 },
+    { title: 'User Post 2', body: 'Content', authorId: 2 },
+  ]);
+  
+  // Create admin user for auth
+  const passwordHash = await hashPassword('password');
+  await db.insert(adminUsers).values({ email: 'admin@example.com', passwordHash, role: 'admin' });
+  
+  const { adminOr, ownedBy, signJwt, createJwtPayload } = await import('../mod.ts');
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({ db, usersTable: adminUsers }),
+    },
+    policies: {
+      // Admins see all, others see own
+      posts: adminOr(ownedBy(posts, 'authorId')),
+    },
+  });
+  
+  // Create JWT for admin with admin role
+  const adminPayload = createJwtPayload('1', 'admin');
+  const adminToken = await signJwt(adminPayload, AUTH_SECRET);
+  
+  // Request posts list as admin
+  const request = new Request('http://localhost/admin/posts', {
+    headers: { Cookie: `cms_token=${adminToken}` },
+  });
+  const response = await handler(request);
+  
+  assertEquals(response.status, 200);
+  const html = await response.text();
+  
+  // Admin should see ALL posts (no filter applied)
+  assertStringIncludes(html, 'User Post 1');
+  assertStringIncludes(html, 'User Post 2');
+  
+  await client.close();
+});
+
+Deno.test('integration: policy returns 403 for unauthorized record access', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  // Create two users
+  await db.insert(users).values([
+    { email: 'alice@example.com', name: 'Alice' },
+    { email: 'bob@example.com', name: 'Bob' },
+  ]);
+  
+  // Create post by Bob (authorId=2)
+  await db.insert(posts).values([
+    { title: 'Bob Secret Post', body: 'Private', authorId: 2 },
+  ]);
+  
+  // Create admin user for auth
+  const passwordHash = await hashPassword('password');
+  await db.insert(adminUsers).values({ email: 'admin@example.com', passwordHash });
+  
+  const { ownedBy, signJwt, createJwtPayload } = await import('../mod.ts');
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({ db, usersTable: adminUsers }),
+    },
+    policies: {
+      posts: ownedBy(posts, 'authorId'),
+    },
+  });
+  
+  // Create JWT for "user 1" (Alice - her posts would have authorId=1)
+  const alicePayload = createJwtPayload('1');
+  const aliceToken = await signJwt(alicePayload, AUTH_SECRET);
+  
+  // Alice tries to view Bob's post (post id=1 has authorId=2)
+  const request = new Request('http://localhost/admin/posts/1', {
+    headers: { Cookie: `cms_token=${aliceToken}` },
+  });
+  const response = await handler(request);
+  
+  // Should redirect with forbidden flash (record exists but Alice can't access)
+  assertEquals(response.status, 303);
+  const location = response.headers.get('Location');
+  assertStringIncludes(location ?? '', '_flash=read_forbidden');
+  
+  await client.close();
+});
+
+Deno.test('integration: policy atomic update prevents race conditions', async () => {
+  const { client, db, schema: dbSchema } = await createTestDbWithAuth();
+  
+  // Create two users
+  await db.insert(users).values([
+    { email: 'alice@example.com', name: 'Alice' },
+    { email: 'bob@example.com', name: 'Bob' },
+  ]);
+  
+  // Create Alice's post (authorId=1)
+  await db.insert(posts).values([
+    { title: 'Alice Post', body: 'Original', authorId: 1 },
+  ]);
+  
+  // Create admin user for auth
+  const passwordHash = await hashPassword('password');
+  await db.insert(adminUsers).values({ email: 'admin@example.com', passwordHash });
+  
+  const { ownedBy, signJwt, createJwtPayload } = await import('../mod.ts');
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    db,
+    schema: dbSchema,
+    basePath: '/admin',
+    auth: {
+      secret: AUTH_SECRET,
+      provider: new PasswordProvider({ db, usersTable: adminUsers }),
+    },
+    policies: {
+      posts: ownedBy(posts, 'authorId'),
+    },
+  });
+  
+  // Create JWT for "user 2" (Bob) - he should NOT be able to update Alice's post
+  const bobPayload = createJwtPayload('2');
+  const bobToken = await signJwt(bobPayload, AUTH_SECRET);
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+  
+  // Bob tries to update Alice's post (post id=1 has authorId=1)
+  const formData = createFormData({
+    title: 'Hacked by Bob',
+    body: 'Malicious content',
+    authorId: '1',
+    _csrf: csrfToken,
+  });
+  
+  const request = new Request('http://localhost/admin/posts/1/edit', {
+    method: 'POST',
+    headers: { Cookie: `cms_token=${bobToken}` },
+    body: formData,
+  });
+  const response = await handler(request);
+  
+  // Should redirect with forbidden flash
+  assertEquals(response.status, 303);
+  const location = response.headers.get('Location');
+  assertStringIncludes(location ?? '', '_flash=update_forbidden');
+  
+  // Verify post was NOT modified
+  const [post] = await db.select().from(posts).where(sql`id = 1`);
+  assertEquals(post?.title, 'Alice Post'); // Original title preserved
+  assertEquals(post?.body, 'Original');    // Original body preserved
   
   await client.close();
 });

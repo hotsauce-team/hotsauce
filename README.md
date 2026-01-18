@@ -228,9 +228,9 @@ Deno.serve(handler);
 - [x] Web Standard Request/Response handlers
 - [x] Relation field pickers (FK → select dropdown with display labels)
 - [x] Many-to-many relationships (junction table detection, checkbox UI)
+- [x] JWT authentication (cookie-based tokens)
+- [x] Row-level security policies (atomic authorization)
 - [ ] File uploads (local + S3)
-- [ ] Session auth (cookie-based)
-- [ ] RLS policy integration (Postgres)
 - [ ] Audit logging
 - [ ] Customizable UI components
 

@@ -47,22 +47,36 @@ export function redirect(url: string, status = 303): Response {
  * Predefined flash message codes (secure - no user input echoed)
  */
 export type FlashCode = 
+  | 'list_forbidden'
+  | 'read_forbidden'
   | 'delete_success'
   | 'delete_fk_error'
   | 'delete_error'
+  | 'delete_forbidden'
+  | 'delete_not_found'
   | 'create_success'
   | 'create_error'
+  | 'create_forbidden'
   | 'update_success'
-  | 'update_error';
+  | 'update_error'
+  | 'update_forbidden'
+  | 'update_not_found';
 
 const FLASH_MESSAGES: Record<FlashCode, { type: 'success' | 'error' | 'info' | 'warning'; message: string }> = {
+  list_forbidden: { type: 'error', message: 'You do not have permission to view this table.' },
+  read_forbidden: { type: 'error', message: 'You do not have permission to view this record.' },
   delete_success: { type: 'success', message: 'Record deleted successfully.' },
   delete_fk_error: { type: 'error', message: 'Cannot delete this record because it is referenced by other records. Remove those references first.' },
   delete_error: { type: 'error', message: 'Failed to delete record. Please try again.' },
+  delete_forbidden: { type: 'error', message: 'You do not have permission to delete this record.' },
+  delete_not_found: { type: 'error', message: 'Record not found. It may have already been deleted.' },
   create_success: { type: 'success', message: 'Record created successfully.' },
   create_error: { type: 'error', message: 'Failed to create record. Please try again.' },
+  create_forbidden: { type: 'error', message: 'You do not have permission to create records in this table.' },
   update_success: { type: 'success', message: 'Record updated successfully.' },
   update_error: { type: 'error', message: 'Failed to update record. Please try again.' },
+  update_forbidden: { type: 'error', message: 'You do not have permission to update this record.' },
+  update_not_found: { type: 'error', message: 'Record not found. It may have been deleted.' },
 };
 
 /**

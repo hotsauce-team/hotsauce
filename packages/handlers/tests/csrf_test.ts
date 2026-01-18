@@ -124,9 +124,6 @@ Deno.test('validateCsrfToken: rejects future-dated tokens', async () => {
   // Craft a token with a timestamp 2 minutes in the future (beyond 1 min tolerance)
   const futureTime = Date.now() + 2 * 60 * 1000;
   const futureTimestamp = futureTime.toString(36);
-  const random = Array.from(crypto.getRandomValues(new Uint8Array(16)))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
   
   // We can't sign it properly without access to internal functions,
   // but we can test that even a validly-structured token with future timestamp fails

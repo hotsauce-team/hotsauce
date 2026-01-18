@@ -64,7 +64,8 @@
   // Compiler options
   "compilerOptions": {
     "strict": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true
   },
 
   // Formatting

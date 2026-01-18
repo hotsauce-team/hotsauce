@@ -30,6 +30,7 @@
     "/^deno check 2>&1 \\| tail -\\d+$/": {
       "approve": true,
       "matchCommandLine": true
-    }
+    },
+    "deno": true
   }
 }

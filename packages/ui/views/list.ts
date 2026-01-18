@@ -1,7 +1,7 @@
 // List view - table of records
 
 import { html, attrs, raw, escapeHtml } from '../html.ts';
-import type { CMSField, IntrospectedTable } from '@drizzle-cms/core';
+import type { CMSField } from '@drizzle-cms/core';
 import type { RelationOption } from '../forms/inputs.ts';
 
 /**

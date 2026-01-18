@@ -1,7 +1,8 @@
 // CRUD route handlers
 
-import { eq, asc, desc, sql } from 'drizzle-orm';
-import type { CMSField } from '@drizzle-cms/core';
+import { asc, desc, sql } from 'drizzle-orm';
+import type { Table } from 'drizzle-orm';
+
 import { layout, alert, pagination } from '@drizzle-cms/ui';
 import { listView } from '@drizzle-cms/ui';
 import { detailView } from '@drizzle-cms/ui';
@@ -14,7 +15,6 @@ import type { NavItem, ListViewOptions, DetailViewOptions, EditViewOptions, Layo
 import { generateCsrfToken, validateCsrfToken, getCsrfTokenFromFormData } from './csrf.ts';
 import {
   buildNavItems,
-  findRecord,
   getPrimaryKeyColumn,
   getPrimaryKeyValue,
   getEditableColumns,
@@ -29,6 +29,14 @@ import {
   isForeignKeyViolation,
   validateWithParsers,
 } from './crud-helpers.ts';
+import {
+  applyPolicy,
+  createPolicyContext,
+  findRecordWithPolicy,
+  recordExists,
+  updateWithPolicy,
+  deleteWithPolicy,
+} from './policies/mod.ts';
 
 /**
  * Build common layout options for a page
@@ -89,25 +97,45 @@ export function handleDashboard(ctx: RouteContext): Response {
  * Render the list view for a table
  */
 export async function handleList(ctx: RouteContext): Promise<Response> {
-  const { options, route, url } = ctx;
+  const { request, options, route, url, authUser } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  
+  // Apply policy for list action
+  const policy = options.policies[table.name];
+  const policyCtx = createPolicyContext(request, authUser);
+  const policyResult = await applyPolicy(policy, policyCtx, 'list');
+  
+  if (!policyResult.allowed) {
+    return redirectWithFlash(cmsUrl(basePath), 'list_forbidden');
+  }
   
   // Get pagination and sort
   const { page, limit, offset } = getPagination(url);
   const columnNames = table.columns.map(c => c.name);
   const sortInfo = getSort(url, columnNames);
   
-  // Count total records
-  const countResult = await options.db
+  // Count total records (with policy filter)
+  let countQuery = options.db
     .select({ count: sql<number>`count(*)` })
     .from(drizzleTable);
+  
+  if (policyResult.condition) {
+    countQuery = countQuery.where(policyResult.condition);
+  }
+  
+  const countResult = await countQuery;
   const totalRecords = Number(countResult[0]?.count ?? 0);
   const totalPages = Math.ceil(totalRecords / limit);
   
-  // Fetch records
+  // Fetch records (with policy filter)
   let query = options.db.select().from(drizzleTable);
+  
+  // Apply policy condition
+  if (policyResult.condition) {
+    query = query.where(policyResult.condition);
+  }
   
   // Apply sorting
   if (sortInfo) {
@@ -182,14 +210,36 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
  * Render the detail view for a single record
  */
 export async function handleRead(ctx: RouteContext): Promise<Response> {
-  const { options, route } = ctx;
+  const { request, options, route, url, authUser } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
   
-  const record = await findRecord(options.db, drizzleTable, table, recordId);
+  // Apply policy for read action
+  const policy = options.policies[table.name];
+  const policyCtx = createPolicyContext(request, authUser);
+  const policyResult = await applyPolicy(policy, policyCtx, 'read');
+  
+  if (!policyResult.allowed) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'read_forbidden');
+  }
+  
+  // Fetch record with policy condition
+  const record = await findRecordWithPolicy(
+    options.db,
+    drizzleTable as Table,
+    table,
+    recordId,
+    policyResult.condition
+  );
+  
   if (!record) {
+    // Check if record exists at all (to distinguish 404 vs 403)
+    const exists = await recordExists(options.db, drizzleTable as Table, table, recordId);
+    if (exists) {
+      return redirectWithFlash(cmsUrl(basePath, table.name), 'read_forbidden');
+    }
     return notFound(`Record not found`);
   }
   
@@ -215,7 +265,16 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     csrfToken,
   };
   
-  const content = detailView(
+  // Build content with optional flash message
+  let content = '';
+  
+  // Add flash message if present (from URL params or context)
+  const flash = ctx.flash ?? parseFlashFromUrl(url);
+  if (flash) {
+    content += alert(flash.message, flash.type);
+  }
+  
+  content += detailView(
     formatTableName(table.name),
     cmsFields,
     record,
@@ -233,10 +292,20 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
  * Render the create form or handle form submission
  */
 export async function handleCreate(ctx: RouteContext): Promise<Response> {
-  const { request, options, route } = ctx;
+  const { request, options, route, authUser } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  
+  // Apply policy for create action
+  const policy = options.policies[table.name];
+  const policyCtx = createPolicyContext(request, authUser);
+  const policyResult = await applyPolicy(policy, policyCtx, 'create');
+  
+  // For create, policy can only allow or deny (no filtering)
+  if (!policyResult.allowed) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
+  }
   
   // Handle POST - create record
   if (request.method === 'POST') {
@@ -290,14 +359,36 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
  * Render the edit form or handle form submission
  */
 export async function handleUpdate(ctx: RouteContext): Promise<Response> {
-  const { request, options, route } = ctx;
+  const { request, options, route, authUser } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
   
-  const record = await findRecord(options.db, drizzleTable, table, recordId);
+  // Apply policy for update action
+  const policy = options.policies[table.name];
+  const policyCtx = createPolicyContext(request, authUser);
+  const policyResult = await applyPolicy(policy, policyCtx, 'update');
+  
+  if (!policyResult.allowed) {
+    return redirectWithFlash(cmsUrl(basePath, table.name, recordId), 'update_forbidden');
+  }
+  
+  // Fetch record with policy condition (for GET form display)
+  const record = await findRecordWithPolicy(
+    options.db,
+    drizzleTable as Table,
+    table,
+    recordId,
+    policyResult.condition
+  );
+  
   if (!record) {
+    // Check if record exists at all (to distinguish 404 vs 403)
+    const exists = await recordExists(options.db, drizzleTable as Table, table, recordId);
+    if (exists) {
+      return redirectWithFlash(cmsUrl(basePath, table.name), 'update_forbidden');
+    }
     return notFound(`Record not found`);
   }
   
@@ -326,13 +417,24 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     }
     
     try {
-      const pkColumn = getPrimaryKeyColumn(table);
-      const pkField = (drizzleTable as Record<string, unknown>)[pkColumn.name];
+      // Update with policy condition (atomic check + update)
+      const updateResult = await updateWithPolicy(
+        options.db,
+        drizzleTable as Table,
+        table,
+        recordId,
+        validation.data ?? values,
+        policyResult.condition
+      );
       
-      await options.db
-        .update(drizzleTable)
-        .set(validation.data ?? values)
-        .where(eq(pkField as never, recordId as never));
+      // If 0 rows affected, policy filtered it out (race condition protection)
+      if (updateResult.rowsAffected === 0) {
+        const exists = await recordExists(options.db, drizzleTable as Table, table, recordId);
+        if (exists) {
+          return redirectWithFlash(cmsUrl(basePath, table.name), 'update_forbidden');
+        }
+        return redirectWithFlash(cmsUrl(basePath, table.name), 'update_not_found');
+      }
       
       // Save many-to-many relations
       await saveManyToManyData(options, table, recordId, formData);
@@ -353,11 +455,20 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
  * Handle record deletion
  */
 export async function handleDelete(ctx: RouteContext): Promise<Response> {
-  const { request, options, route } = ctx;
+  const { request, options, route, authUser } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  
+  // Apply policy for delete action
+  const policy = options.policies[table.name];
+  const policyCtx = createPolicyContext(request, authUser);
+  const policyResult = await applyPolicy(policy, policyCtx, 'delete');
+  
+  if (!policyResult.allowed) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
+  }
   
   // For delete, also validate CSRF from form data
   if (request.method === 'POST') {
@@ -369,12 +480,25 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   }
   
   try {
-    const pkColumn = getPrimaryKeyColumn(table);
-    const pkField = (drizzleTable as Record<string, unknown>)[pkColumn.name];
+    // Delete with policy condition (atomic check + delete)
+    const deleteResult = await deleteWithPolicy(
+      options.db,
+      drizzleTable as Table,
+      table,
+      recordId,
+      policyResult.condition
+    );
     
-    await options.db
-      .delete(drizzleTable)
-      .where(eq(pkField as never, recordId as never));
+    // If 0 rows affected, either doesn't exist or policy filtered it out
+    if (deleteResult.rowsAffected === 0) {
+      const exists = await recordExists(options.db, drizzleTable as Table, table, recordId);
+      if (exists) {
+        // Record exists but policy denied access
+        return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
+      }
+      // Record doesn't exist
+      return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_not_found');
+    }
     
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');
   } catch (error) {

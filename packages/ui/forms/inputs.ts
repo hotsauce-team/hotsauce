@@ -1,6 +1,6 @@
 // Form field input renderers by field type
 
-import { html, attrs, raw, type SafeHtml } from '../html.ts';
+import { html, attrs, raw } from '../html.ts';
 import type { CMSField } from '@drizzle-cms/core';
 
 /**

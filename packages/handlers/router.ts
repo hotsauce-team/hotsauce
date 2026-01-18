@@ -1,6 +1,6 @@
 // URL routing and handler dispatch
 
-import type { CmsOptions, ParsedRoute, CrudAction } from './types.ts';
+import type { ParsedRoute, CrudAction } from './types.ts';
 import type { IntrospectedTable } from '@drizzle-cms/core';
 
 /**

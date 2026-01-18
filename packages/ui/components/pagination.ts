@@ -1,6 +1,6 @@
 // Pagination component
 
-import { html, attrs, raw } from '../html.ts';
+import { html } from '../html.ts';
 
 /**
  * Pagination options

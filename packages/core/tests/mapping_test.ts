@@ -6,7 +6,6 @@ import {
   mapColumnToField,
   mapColumnsToFields,
   propertyNameToLabel,
-  type CMSField,
 } from '../fields/mapping.ts';
 import type { IntrospectedColumn } from '../schema/types.ts';
 

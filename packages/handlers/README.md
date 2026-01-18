@@ -730,11 +730,18 @@ class MyCustomProvider implements AuthProvider {
 
 ### Authorization (Permissions)
 
-> **Important:** The `auth` option provides **authentication only** (verifying identity). It does not include role-based permissions — any authenticated user can access all tables and perform all actions.
+> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use **policies** (recommended) or the `canAccess` callback.
 
-To restrict access based on roles, use the `canAccess` callback:
+## Row-Level Security (Policies)
+
+Policies provide atomic, race-condition-free authorization by injecting WHERE clauses directly into queries. This is the recommended approach for "users edit their own content" scenarios.
+
+### Quick Start
 
 ```ts
+import { createCmsHandler, PasswordProvider, ownedBy, adminOr } from '@drizzle-cms/handlers';
+import * as schema from './schema';
+
 const handler = createCmsHandler({
   db,
   schema,
@@ -743,19 +750,178 @@ const handler = createCmsHandler({
     secret: process.env.JWT_SECRET!,
     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
   },
-  // Add authorization rules
-  canAccess: async (request, table, action) => {
-    // The JWT payload is available on the request (if using auth)
-    // For now, implement your own role check logic here
+  policies: {
+    // Users can only see/edit their own posts
+    posts: ownedBy(schema.posts, 'authorId'),
     
-    // Example: read-only for certain tables
-    if (table.name === 'audit_logs' && action !== 'list' && action !== 'read') {
-      return false;
-    }
-    
-    return true;
+    // Admins have full access, others only see their own
+    comments: adminOr(ownedBy(schema.comments, 'userId')),
   },
 });
+```
+
+### How Policies Work
+
+Policies return SQL conditions that are applied to ALL queries for a table:
+
+```ts
+// Without policy:
+SELECT * FROM posts WHERE id = 123
+
+// With ownedBy(posts, 'authorId') policy:
+SELECT * FROM posts WHERE id = 123 AND author_id = 'current-user-id'
+```
+
+This is **atomic** — there's no window between checking permission and executing the query where data could change (no TOCTOU race conditions).
+
+### Policy Helpers
+
+| Helper | Description |
+|--------|-------------|
+| `always()` | Allow all access (no filter) |
+| `never()` | Deny all access (returns 403) |
+| `authenticated()` | Require login (any authenticated user) |
+| `roleIs(role)` | Require specific role |
+| `roleIn(roles)` | Require any of specified roles |
+| `ownedBy(table, column)` | Filter to records where column = user ID |
+| `ownedByOrContributor(table, owner, contributors)` | Owner OR in contributors array |
+| `adminOr(policy)` | Admins bypass, others use the policy |
+| `anyOf(policies)` | Allow if ANY policy allows |
+| `allOf(policies)` | Require ALL policies to allow |
+| `forActions(actionMap)` | Different policies per action |
+| `readOnly()` | Allow list/read, deny create/update/delete |
+
+### Action-Specific Policies
+
+Apply different rules for different CRUD operations:
+
+```ts
+import { forActions, always, authenticated, ownedBy, roleIs } from '@drizzle-cms/handlers';
+
+policies: {
+  posts: forActions({
+    list: always(),                        // Anyone can see list
+    read: always(),                        // Anyone can view
+    create: authenticated(),               // Must be logged in to create
+    update: ownedBy(schema.posts, 'authorId'),  // Only edit own posts
+    delete: roleIs('admin'),               // Only admins can delete
+  }),
+}
+```
+
+Use `'*'` as a fallback for actions not explicitly defined:
+
+```ts
+policies: {
+  // "Deny by default" - only allow what's explicitly permitted
+  posts: forActions({
+    list: always(),
+    read: always(),
+    '*': never(),  // create, update, delete → 403
+  }),
+  
+  // "Admin-only writes" - anyone can read, admins can modify
+  settings: forActions({
+    list: always(),
+    read: always(),
+    '*': roleIs('admin'),  // create, update, delete require admin
+  }),
+}
+```
+
+> **Note:** Without `'*'`, undefined actions get **full access** (no policy = no filter).
+
+### Array Column Support (Postgres)
+
+Check if user is in a contributors array:
+
+```ts
+import { ownedByOrContributor } from '@drizzle-cms/handlers';
+
+// Schema: posts.contributors is text[] containing user IDs
+policies: {
+  posts: ownedByOrContributor(schema.posts, 'authorId', 'contributors'),
+}
+```
+
+Generated SQL:
+```sql
+WHERE author_id = 'user-123' OR contributors @> ARRAY['user-123']::text[]
+```
+
+### Custom Policies
+
+Write custom policy functions for complex logic:
+
+```ts
+import { eq, and, or, sql } from 'drizzle-orm';
+import type { PolicyFn } from '@drizzle-cms/handlers';
+
+const postsPolicy: PolicyFn = (ctx, action) => {
+  // Admins bypass all checks
+  if (ctx.user?.role === 'admin') {
+    return undefined; // No filter
+  }
+  
+  // Not logged in = deny
+  if (!ctx.user) {
+    return false; // 403 Forbidden
+  }
+  
+  // Return SQL condition for filtering
+  return or(
+    eq(schema.posts.authorId, ctx.user.sub),
+    eq(schema.posts.status, 'published')
+  );
+};
+```
+
+### Policy Context
+
+Policy functions receive context with the authenticated user:
+
+```ts
+interface PolicyContext {
+  user?: {
+    sub: string;    // User ID from JWT
+    role?: string;  // User role from JWT
+  };
+  request: Request; // Original request (for advanced use)
+}
+```
+
+### 404 vs 403 Handling
+
+The CMS automatically distinguishes between "record doesn't exist" (404) and "record exists but you can't access it" (403):
+
+1. Query with policy returns no results
+2. CMS queries again without policy
+3. If record exists → 403 Forbidden
+4. If record doesn't exist → 404 Not Found
+
+### Combining with `canAccess`
+
+Policies and `canAccess` can be used together:
+- `canAccess` runs first (table-level permission check)
+- Policies run second (row-level filtering)
+
+```ts
+const handler = createCmsHandler({
+  db,
+  schema,
+  
+  // Table-level: block entire tables
+  canAccess: (req, table, action) => {
+    if (table.name === 'secrets') return false;
+    return true;
+  },
+  
+  // Row-level: filter within allowed tables
+  policies: {
+    posts: ownedBy(schema.posts, 'authorId'),
+  },
+});
+```
 
 ### Rate Limiting
 

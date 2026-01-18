@@ -1,6 +1,6 @@
 // Form field wrapper component
 
-import { html, attrs, raw, when } from '../html.ts';
+import { html, attrs, raw } from '../html.ts';
 import { renderFieldInput, type FieldInputOptions, type RelationOption } from './inputs.ts';
 import type { CMSField } from '@drizzle-cms/core';
 

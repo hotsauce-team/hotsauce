@@ -1,8 +1,14 @@
 // deno-lint-ignore-file no-console
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
-import { createCmsHandler, PasswordProvider } from '../../packages/handlers/mod.ts';
-import { schema, users } from './schema.ts';
+import {
+  adminOr,
+  createCmsHandler,
+  ownedBy,
+  PasswordProvider,
+  readOnly,
+} from '../../packages/handlers/mod.ts';
+import { posts, schema, users } from './schema.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
@@ -20,6 +26,11 @@ const cmsHandler = createCmsHandler({
   auth: {
     // PasswordProvider defaults: id, email, passwordHash, role columns
     provider: new PasswordProvider({ db, usersTable: users }),
+  },
+  // Row-level security policies (atomic authorization in WHERE clauses)
+  policies: {
+    posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
+    categories: (readOnly()), // Admins: full access, others: read-only
   },
   // Log errors to console (in production, use a proper logging service)
   onError: (error, context) => console.error('CMS Error:', { error, context }),

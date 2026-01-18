@@ -3,6 +3,7 @@
 import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
 import type { AuthProvider } from './auth/provider.ts';
 import type { JwtPayload } from './auth/jwt.ts';
+import type { Policies } from './policies/types.ts';
 
 /**
  * A Web Standard handler function: Request → Response
@@ -54,9 +55,9 @@ export interface ErrorContext {
 }
 
 /**
- * Options for creating the CMS handler
+ * Base options shared by all CMS configurations
  */
-export interface CmsOptions {
+export interface CmsOptionsBase {
   /**
    * Drizzle database instance.
    * 
@@ -134,27 +135,96 @@ export interface CmsOptions {
    * ```
    */
   parsers?: Parsers;
+}
+
+/**
+ * CMS options with authentication enabled.
+ * Policies are REQUIRED when using auth to ensure explicit authorization decisions.
+ * 
+ * @example
+ * ```ts
+ * createCmsHandler({
+ *   db,
+ *   schema,
+ *   auth: {
+ *     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+ *   },
+ *   // Required! Use {} for full access to all authenticated users
+ *   policies: {
+ *     posts: ownedBy(schema.posts, 'authorId'),
+ *   },
+ * });
+ * ```
+ */
+export interface CmsOptionsWithAuth extends CmsOptionsBase {
   /**
-   * JWT authentication configuration (optional).
+   * JWT authentication configuration.
    * 
    * When provided, the CMS requires login to access.
    * Includes automatic /login and /logout routes.
+   */
+  auth: CmsAuthOptions;
+  
+  /**
+   * Row-level security policies (REQUIRED when auth is enabled).
+   * 
+   * Policies return SQL conditions that filter queries atomically.
+   * This prevents TOCTOU race conditions - the permission check IS the query.
+   * 
+   * Use `{}` to grant full access to all authenticated users.
    * 
    * @example
    * ```ts
-   * auth: {
-   *   secret: process.env.JWT_SECRET!,
-   *   provider: new PasswordProvider({
-   *     db,
-   *     usersTable: schema.adminUsers,
-   *     identityField: 'email',
-   *     passwordField: 'passwordHash',
-   *   }),
+   * import { ownedBy, adminOr, readOnly } from '@drizzle-cms/handlers';
+   * 
+   * policies: {
+   *   // Users can only edit their own posts
+   *   posts: ownedBy(schema.posts, 'authorId'),
+   *   
+   *   // Admins have full access, others only see their own
+   *   comments: adminOr(ownedBy(schema.comments, 'userId')),
+   *   
+   *   // Everyone can read, no one can modify
+   *   audit_logs: readOnly(),
    * }
    * ```
    */
-  auth?: CmsAuthOptions;
+  policies: Policies;
 }
+
+/**
+ * CMS options without authentication.
+ * Policies are optional when auth is not used.
+ */
+export interface CmsOptionsWithoutAuth extends CmsOptionsBase {
+  /** Auth not configured */
+  auth?: undefined;
+  
+  /**
+   * Row-level security policies (optional without auth).
+   * 
+   * Policies return SQL conditions that filter queries atomically.
+   * This prevents TOCTOU race conditions - the permission check IS the query.
+   * 
+   * @example
+   * ```ts
+   * import { ownedBy, adminOr, readOnly } from '@drizzle-cms/handlers';
+   * 
+   * policies: {
+   *   posts: ownedBy(schema.posts, 'authorId'),
+   * }
+   * ```
+   */
+  policies?: Policies;
+}
+
+/**
+ * Options for creating the CMS handler.
+ * 
+ * When `auth` is provided, `policies` is required to ensure explicit authorization.
+ * Use `policies: {}` to grant full access to all authenticated users.
+ */
+export type CmsOptions = CmsOptionsWithAuth | CmsOptionsWithoutAuth;
 
 /**
  * JWT authentication options for CMS
@@ -213,6 +283,8 @@ export interface ResolvedCmsOptions {
   onError?: (error: Error, context: ErrorContext) => void;
   /** Custom parsers for validation */
   parsers: Parsers;
+  /** Row-level security policies */
+  policies: Policies;
   /** JWT auth config (resolved) - undefined if auth disabled */
   auth?: ResolvedAuthOptions;
 }

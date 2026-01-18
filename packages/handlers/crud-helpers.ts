@@ -37,25 +37,6 @@ export function buildNavItems(
 // Record helpers
 // ============================================================================
 
-// deno-lint-ignore no-explicit-any
-export async function findRecord(
-  db: any,
-  drizzleTable: unknown,
-  tableInfo: IntrospectedTable,
-  recordId: string,
-): Promise<Record<string, unknown> | null> {
-  const pkColumn = getPrimaryKeyColumn(tableInfo);
-  const pkField = (drizzleTable as Record<string, unknown>)[pkColumn.name];
-  
-  const results = await db
-    .select()
-    .from(drizzleTable)
-    .where(eq(pkField as never, recordId as never))
-    .limit(1);
-  
-  return (results as Record<string, unknown>[])[0] ?? null;
-}
-
 export function getPrimaryKeyColumn(table: IntrospectedTable): IntrospectedColumn {
   const pk = table.columns.find(c => c.isPrimaryKey);
   if (!pk) {

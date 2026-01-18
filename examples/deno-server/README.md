@@ -43,6 +43,16 @@ This example demonstrates JWT-based authentication using the `auth` option:
 - `main.ts` - Configures `auth` option with `PasswordProvider`
 - `seed.ts` - Creates admin user with hashed password
 
+## Row-Level Security (Policies)
+
+The example includes commented-out policy configuration showing how to:
+
+- **Restrict by ownership:** Users can only see/edit their own posts
+- **Read-only tables:** Anyone can view but no one can modify
+- **Admin bypass:** Admins can access everything
+
+Uncomment the `policies` section in `main.ts` to enable. See [handlers README](../../packages/handlers/README.md#row-level-security-policies) for full documentation.
+
 ## Notes
 
 - Uses PGlite for zero-dependency local Postgres

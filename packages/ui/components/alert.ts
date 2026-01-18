@@ -1,6 +1,6 @@
 // Alert/message component
 
-import { html, attrs, raw } from '../html.ts';
+import { html, attrs } from '../html.ts';
 
 /**
  * Alert type
