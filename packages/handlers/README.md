@@ -940,12 +940,61 @@ const handler = withRateLimiter(cmsHandler, {
 });
 ```
 
+### Multi-Tenancy (Shared Database)
+
+For multi-tenant applications using a shared database with a `tenant_id` column, create a custom policy helper:
+
+```ts
+import { eq } from 'drizzle-orm';
+import type { Table, Column } from 'drizzle-orm';
+import type { PolicyFn } from '@drizzle-cms/handlers';
+
+// Filter all queries by tenant
+function tenantScoped<T extends Table>(
+  table: T,
+  tenantColumn: keyof T & string,
+): PolicyFn {
+  return (ctx) => {
+    // Tenant ID must be in JWT payload (see note below)
+    const tenantId = (ctx.user as any)?.tenantId;
+    if (!tenantId) return false;
+    const col = table[tenantColumn] as Column;
+    return eq(col, tenantId);
+  };
+}
+
+// Usage
+policies: {
+  posts: tenantScoped(schema.posts, 'tenantId'),
+  comments: tenantScoped(schema.comments, 'tenantId'),
+}
+```
+
+**Current limitation:** The JWT payload only includes `sub` (user ID) and `role` by default. To add `tenantId`:
+
+1. **Workaround:** Encode tenant in the subject: `createJwtPayload('tenant-123:user-456')`
+2. **Custom provider:** Implement `AuthProvider` to include `tenantId` in the returned user
+
+```ts
+// Workaround: parse composite subject
+function tenantScoped<T extends Table>(table: T, col: keyof T & string): PolicyFn {
+  return (ctx) => {
+    const [tenantId] = ctx.user?.sub.split(':') ?? [];
+    if (!tenantId) return false;
+    return eq(table[col] as Column, tenantId);
+  };
+}
+```
+
+> **Future:** Native `tenantId` support in `PolicyContext` is planned. This would allow `ctx.user.tenantId` directly.
+
 ## Server Integration Examples
 
 ### Deno
 
 ```ts
 Deno.serve(handler);
+```
 ```
 
 ### Hono
