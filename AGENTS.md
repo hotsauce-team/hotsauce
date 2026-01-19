@@ -170,7 +170,8 @@ The CMS uses these environment variables for secrets (can also be passed directl
 
 ### Deno Permissions
 
-- **ALWAYS use `deno test -P`** or `deno task test` — never pass `--allow-*` flags manually
+- **ALWAYS use `deno task test`** or `deno test -P --parallel` — never pass `--allow-*` flags manually
+- **For debugging**, use `deno task test:debug` or `deno test -P` (sequential execution)
 - **Never use broad permission flags** like `--allow-env`, `--allow-read`, `--allow-net`, `--allow-ffi`
 - **Never set `"read": true`** or any permission to `true` in config
 - All test permissions are pre-configured in `deno.jsonc` under `test.permissions`
@@ -187,7 +188,8 @@ The CMS uses these environment variables for secrets (can also be passed directl
 
 ## Testing
 
-- Run tests with `deno test -P` (uses permissions from config)
+- Run tests with `deno task test` or `deno test -P --parallel` (fast, parallel execution)
+- For debugging test failures, use `deno task test:debug` or `deno test -P` (sequential)
 - Tests should run on both Deno and Node where applicable (CI will test Node)
 - Use `Deno.test()` for all test files
 - Core/UI tests should be runtime-agnostic (test the logic, not the runtime)

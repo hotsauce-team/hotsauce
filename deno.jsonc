@@ -32,7 +32,8 @@
 
   // Tasks
   "tasks": {
-    "test": "deno test -P",
+    "test": "deno test -P --parallel",
+    "test:debug": "deno test -P",  // sequential for debugging
     "test:watch": "deno test -P --watch",
     "check": "deno check packages/*/mod.ts",
     "lint": "deno lint",
