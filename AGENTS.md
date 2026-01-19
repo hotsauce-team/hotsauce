@@ -220,3 +220,27 @@ packages/core/tests/
 4. **Mixing concerns** — keep schema logic, UI, and HTTP handling separate
 5. **Forgetting feature detection** — not all DBs support arrays, enums, JSON, etc.
 6. **Silent failures** — errors should either be logged via `onError` and/or block the operation with a user-facing message; never silently pass through
+
+## Internal Design Notes (Reference)
+
+### Uploads: What belongs in core vs plugin
+
+**First-class (core)** (so the CMS feels complete even without storage):
+
+- A `file` field type in the field mapping + UI rendering contract
+- A standard file reference shape stored in tables (e.g. `{ key/id, filename, contentType, size, url? }` or an `uploadId` FK)
+- Basic display conventions (filename/size; link when `url` exists)
+- Core can render + validate a file reference; core does not move bytes
+
+**Official plugin** (environment + storage concerns):
+
+- Multipart parsing + upload endpoints
+- Storage adapter calls (`put/get/delete`)
+- Optional direct-to-bucket / presigned URL flow (S3/R2-style)
+- Virus scanning / transformations (if ever)
+- Cleanup policies (orphan GC, retention)
+
+### Potential plugin architecture ordering (to enable uploads)
+
+- Build a tiny plugin MVP first: **routes + nav items + hooks**
+- Implement uploads as the first official plugin to validate the architecture
