@@ -152,35 +152,46 @@ The CMS will:
 - Show checkbox list on the edit form for related records
 - Display comma-separated values in list and detail views (e.g., "Technology, Design")
 
-## CMS Hints (TODO)
+## Custom Validation Parsers
 
-> **Note:** This feature is not yet implemented. The API below shows the planned design.
-
-Extend columns with CMS-specific metadata:
+By default, the CMS auto-generates validation schemas from your Drizzle tables using `drizzle-zod`. For custom validation (email formats, password strength, etc.), pass your own parsers:
 
 ```typescript
-import { pgTable, varchar, text } from 'drizzle-orm/pg-core';
-import { cmsField } from '@drizzle-cms/core';
+import { z } from 'zod';
+import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
+import type { Parsers } from '@drizzle-cms/handlers';
 
-export const posts = pgTable('posts', {
-  title: varchar('title', { length: 200 })
-    .notNull()
-    .$withMeta(cmsField({
-      label: 'Post Title',
-      placeholder: 'Enter a compelling title...',
-    })),
-  
-  body: text('body')
-    .$withMeta(cmsField({
-      widget: 'richtext',  // Override default textarea
-      help: 'Supports Markdown',
-    })),
-  
-  slug: varchar('slug', { length: 100 })
-    .$withMeta(cmsField({
-      hidden: true,  // Auto-generated, hide from form
-    })),
+// Extend drizzle-zod schemas with custom rules
+const usersInsertSchema = createInsertSchema(users, {
+  email: z.string().email(),  // Add email format validation
 });
+const usersUpdateSchema = createUpdateSchema(users, {
+  email: z.string().email().optional(),
+});
+
+// Parsers are validation-library agnostic
+// Any function that takes unknown data and returns parsed data (or throws) works
+const parsers: Parsers = {
+  users: {
+    insert: (data) => usersInsertSchema.parse(data),
+    update: (data) => usersUpdateSchema.parse(data),
+  },
+};
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  parsers,  // Tables without custom parsers use auto-generated schemas
+});
+```
+
+The parser interface is simple — any validation library works:
+
+```typescript
+interface TableParsers {
+  insert?: (data: unknown) => unknown;  // For create operations
+  update?: (data: unknown) => unknown;  // For edit operations
+}
 ```
 
 ## Installation
@@ -219,7 +230,8 @@ Deno.serve(handler);
 
 - [x] Schema introspection
 - [x] Field type mapping (column → CMS field)
-- [x] Zod validation via drizzle-zod
+- [x] Zod validation via drizzle-zod (auto-generated)
+- [x] Custom validation parsers (library-agnostic)
 - [x] Server-rendered HTML forms (zero JS dependencies)
 - [x] XSS-safe template literals with auto-escaping
 - [x] List, detail, and edit views
@@ -239,11 +251,11 @@ Deno.serve(handler);
 
 | Database | Status | Notes |
 |----------|--------|-------|
-| PostgreSQL | ✅ Primary | Full feature support including RLS, arrays, enums |
-| MySQL | 🔮 Planned | Core features, no RLS |
-| SQLite | 🔮 Planned | Lightweight/edge deployments |
+| PostgreSQL | ✅ Primary | Full feature support including arrays, enums |
+| SQLite | ✅ Tested | Lightweight/edge deployments, text enums |
+| MySQL | 🔮 Planned | Core features work, needs integration tests |
 
-The core schema introspection is database-agnostic via Drizzle's abstractions. Postgres-specific features (RLS, arrays, enums) degrade gracefully on other databases.
+The core schema introspection is database-agnostic via Drizzle's abstractions. Database-specific features (arrays, native enums) degrade gracefully on other databases.
 
 ## Development
 
@@ -274,15 +286,14 @@ Node.js compatibility is tested in CI and achieved via JSR + `dnt` for npm publi
 
 ## Stack
 
-| Layer | Package | Deps |
+| Layer | Package | Transitive Deps |
 |-------|---------|------|
-| Schema | `drizzle-orm` | 0 |
-| Database | `postgres` (postgres.js) | 0 |
+| ORM | `drizzle-orm` | 0 |
 | Validation | `zod` | 0 |
 | Schema→Zod | `drizzle-zod` | 0 |
-| **Total** | | **0 transitive** |
+| Database Driver | User's choice | Varies |
 
-> **Why Postgres?** Full-featured (RLS, arrays, JSONB, enums), excellent Drizzle support, and the `postgres` driver is zero-dependency. The architecture allows adding MySQL/SQLite adapters later without breaking changes.
+The CMS packages have **zero transitive dependencies**. You bring your own database driver (`postgres`, `better-sqlite3`, `mysql2`, etc.).
 
 ## License
 

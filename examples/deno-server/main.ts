@@ -8,7 +8,7 @@ import {
   PasswordProvider,
   readOnly,
 } from '../../packages/handlers/mod.ts';
-import { posts, schema, users } from './schema.ts';
+import { schema, posts, users, parsers } from './schema.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
@@ -32,6 +32,8 @@ const cmsHandler = createCmsHandler({
     posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
     categories: (readOnly()), // Admins: full access, others: read-only
   },
+  // User input parsers for validation (validation library agnostic)
+  parsers,
   // Log errors to console (in production, use a proper logging service)
   onError: (error, context) => console.error('CMS Error:', { error, context }),
 });
