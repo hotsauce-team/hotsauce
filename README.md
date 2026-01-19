@@ -256,6 +256,7 @@ Deno.serve(handler);
 - [x] JWT authentication (cookie-based tokens)
 - [x] Row-level security policies (atomic authorization)
 - [x] Multi-tenant compatibility (shared database with tenant column)
+- [ ] Column-level access control (with policies or canAccessColumn)
 - [ ] File uploads (local + S3)
 - [ ] Audit logging
 - [ ] Customizable UI components
