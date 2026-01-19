@@ -158,6 +158,112 @@ Deno.test('createCmsHandler: canAccess authorization check', async () => {
   assertEquals(response.status, 403);
 });
 
+Deno.test('createCmsHandler: canAccess allows access when returning true', async () => {
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    canAccess: () => true,
+  });
+  
+  const request = new Request('http://localhost/admin/users');
+  const response = await handler(request);
+  
+  assertEquals(response.status, 200);
+});
+
+Deno.test('createCmsHandler: canAccess receives correct table and action', async () => {
+  let capturedTable: string | undefined;
+  let capturedAction: string | undefined;
+  
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    canAccess: (_req, table, action) => {
+      capturedTable = table.name;
+      capturedAction = action;
+      return true;
+    },
+  });
+  
+  // Test list action
+  await handler(new Request('http://localhost/admin/users'));
+  assertEquals(capturedTable, 'users');
+  assertEquals(capturedAction, 'list');
+  
+  // Test read action
+  await handler(new Request('http://localhost/admin/users/1'));
+  assertEquals(capturedAction, 'read');
+  
+  // Test create action (GET new form)
+  await handler(new Request('http://localhost/admin/users/new'));
+  assertEquals(capturedAction, 'create');
+});
+
+Deno.test('createCmsHandler: canAccess with async function', async () => {
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    canAccess: async (_req, table) => {
+      await new Promise(resolve => setTimeout(resolve, 1));
+      return table.name === 'users';
+    },
+  });
+  
+  const request = new Request('http://localhost/admin/users');
+  const response = await handler(request);
+  
+  assertEquals(response.status, 200);
+});
+
+Deno.test('createCmsHandler: canAccess can check request headers', async () => {
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    canAccess: (req) => {
+      return req.headers.get('X-Admin-Role') === 'super';
+    },
+  });
+  
+  // Without header - denied
+  const deniedResponse = await handler(new Request('http://localhost/admin/users'));
+  assertEquals(deniedResponse.status, 403);
+  
+  // With header - allowed
+  const allowedResponse = await handler(new Request('http://localhost/admin/users', {
+    headers: { 'X-Admin-Role': 'super' },
+  }));
+  assertEquals(allowedResponse.status, 200);
+});
+
+Deno.test('createCmsHandler: canAccess action-based permissions', async () => {
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    canAccess: (_req, _table, action) => {
+      // Allow read-only actions
+      return action === 'list' || action === 'read';
+    },
+  });
+  
+  // List allowed
+  const listResponse = await handler(new Request('http://localhost/admin/users'));
+  assertEquals(listResponse.status, 200);
+  
+  // Create denied (canAccess blocks before DB check)
+  const createResponse = await handler(new Request('http://localhost/admin/users/new'));
+  assertEquals(createResponse.status, 403);
+});
+
 Deno.test('createCmsHandler: onError callback is called on database error', async () => {
   let capturedError: Error | undefined;
   let capturedContext: unknown;

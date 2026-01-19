@@ -5,9 +5,22 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 ## Philosophy
 
 - **Single source of truth**: Your Drizzle schema defines database tables, TypeScript types, validation rules, AND CMS fields
-- **Minimal dependencies**: Core stack is drizzle-orm + zod + postgres (all zero-dep packages)
-- **Cross-runtime**: Works in Deno and Node.js
+- **Minimal dependencies**: Core stack is `drizzle-orm` + `zod` + `drizzle-zod` (all zero transitive deps)
+- **Secure by default**: CSRF protection, JWT auth, row-level policies, XSS-safe templates
+- **Flexible & extensible**: Pluggable auth, custom validation, row-level policies, error hooks
+- **Cross-runtime**: Works in Deno and Node.js — Web Standard `Request`/`Response` everywhere
 - **Database-agnostic**: Works with any Drizzle-supported database (Postgres, MySQL, SQLite)
+
+## Extension Points
+
+| Hook | Purpose |
+|------|---------|
+| `isAuthenticated` | Custom auth check (session, OAuth, API keys) |
+| `canAccess` | Table/action-level authorization |
+| `policies` | Row-level security with SQL conditions |
+| `parsers` | Custom validation (Zod, Valibot, Arktype, or any library) |
+| `onError` | Error logging integration (Sentry, Datadog, etc.) |
+| `auth.provider` | Pluggable user lookup/verification |
 
 ## Packages
 
@@ -293,7 +306,7 @@ Node.js compatibility is tested in CI and achieved via JSR + `dnt` for npm publi
 | Schema→Zod | `drizzle-zod` | 0 |
 | Database Driver | User's choice | Varies |
 
-The CMS packages have **zero transitive dependencies**. You bring your own database driver (`postgres`, `better-sqlite3`, `mysql2`, etc.).
+All direct dependencies have **zero transitive dependencies**. You bring your own database driver (`postgres`, `better-sqlite3`, `mysql2`, etc.).
 
 ## License
 
