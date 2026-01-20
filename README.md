@@ -11,17 +11,6 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 - **Cross-runtime**: Works in Deno and Node.js — Web Standard `Request`/`Response` everywhere
 - **Database-agnostic**: Works with any Drizzle-supported database (Postgres, MySQL, SQLite)
 
-## Extension Points
-
-| Hook | Purpose |
-|------|---------|
-| `isAuthenticated` | Custom auth check (session, OAuth, API keys) |
-| `canAccess` | Table/action-level authorization |
-| `policies` | Row-level security with SQL conditions |
-| `parsers` | Custom validation (Zod, Valibot, Arktype, or any library) |
-| `onError` | Error logging integration (Sentry, Datadog, etc.) |
-| `auth.provider` | Pluggable user lookup/verification |
-
 ## Packages
 
 Each package has its own README with detailed API documentation:
@@ -206,6 +195,17 @@ interface TableParsers {
   update?: (data: unknown) => unknown;  // For edit operations
 }
 ```
+
+## Extension Points
+
+| Hook | Purpose |
+|------|---------|
+| `isAuthenticated` | Custom auth check (session, OAuth, API keys) |
+| `canAccess` | Table/action-level authorization |
+| `policies` | Row-level security with SQL conditions |
+| `parsers` | Custom validation (Zod, Valibot, Arktype, or any library) |
+| `onError` | Error logging integration (Sentry, Datadog, etc.) |
+| `auth.provider` | Pluggable user lookup/verification |
 
 ## Installation
 
