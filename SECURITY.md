@@ -242,7 +242,13 @@ Before deploying to production:
 
 ## Vulnerability Reporting
 
-If you discover a security vulnerability, please report it by opening a [GitHub Security Advisory](https://github.com/earthlingdavey/drizzle-cms/security/advisories/new) with:
+If you discover a security vulnerability, please report it through one of these methods:
+
+**Preferred:** Open a [GitHub Security Advisory](https://github.com/earthlingdavey/drizzle-cms/security/advisories) (requires repository access)
+
+**Alternative:** Open a private security report by going to the [Security tab](https://github.com/earthlingdavey/drizzle-cms/security) and clicking "Report a vulnerability"
+
+Include in your report:
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -261,18 +267,22 @@ Stay informed about security updates:
 
 ### OWASP Top 10 Coverage
 
-| Risk | Mitigation |
-|------|------------|
-| A01: Broken Access Control | Row-level policies, JWT auth |
-| A02: Cryptographic Failures | PBKDF2, HMAC-SHA256, HTTPS |
-| A03: Injection | Drizzle ORM parameterized queries |
-| A04: Insecure Design | Security-first architecture |
-| A05: Security Misconfiguration | Secure defaults, security headers |
-| A06: Vulnerable Components | Zero dependencies, regular updates |
-| A07: Authentication Failures | JWT, rate limiting (recommended) |
-| A08: Data Integrity Failures | CSRF tokens, input validation |
-| A09: Logging Failures | Error hooks for audit logging |
-| A10: SSRF | No external requests in core |
+This table shows how Drizzle CMS addresses the OWASP Top 10 security risks:
+
+| Risk | Mitigation in Drizzle CMS |
+|------|---------------------------|
+| A01: Broken Access Control | Row-level policies, JWT authentication |
+| A02: Cryptographic Failures | PBKDF2 password hashing, HMAC-SHA256 tokens, HTTPS support |
+| A03: Injection | Drizzle ORM with parameterized queries (SQL injection prevention) |
+| A04: Insecure Design | Security-first architecture with defense in depth |
+| A05: Security Misconfiguration | Secure defaults, comprehensive security headers |
+| A06: Vulnerable Components | Zero transitive dependencies, minimal attack surface |
+| A07: Authentication Failures | JWT with expiry, HttpOnly cookies, rate limiting (recommended) |
+| A08: Data Integrity Failures | CSRF tokens, input validation with Zod schemas |
+| A09: Logging Failures | Error hooks for custom audit logging |
+| A10: SSRF | No external requests in core CMS code |
+
+**Note:** While the CMS provides these security features, proper configuration and deployment practices (HTTPS, rate limiting, monitoring) are required for production use. See the [Security Checklist](#security-checklist) above.
 
 ### Data Protection (GDPR, etc.)
 
