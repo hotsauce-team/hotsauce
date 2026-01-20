@@ -59,10 +59,30 @@ Deno.test('notFound: creates 404 response', () => {
   assertEquals(response.status, 404);
 });
 
+Deno.test('notFound: escapes HTML in message to prevent XSS', async () => {
+  const response = notFound('<script>alert("xss")</script>');
+  const body = await response.text();
+  
+  assertEquals(response.status, 404);
+  // Should escape HTML special characters
+  assertEquals(body.includes('&lt;script&gt;'), true);
+  assertEquals(body.includes('<script>'), false);
+});
+
 Deno.test('forbidden: creates 403 response', () => {
   const response = forbidden('Access denied');
   
   assertEquals(response.status, 403);
+});
+
+Deno.test('forbidden: escapes HTML in message to prevent XSS', async () => {
+  const response = forbidden('<img src=x onerror=alert(1)>');
+  const body = await response.text();
+  
+  assertEquals(response.status, 403);
+  // Should escape HTML special characters
+  assertEquals(body.includes('&lt;img'), true);
+  assertEquals(body.includes('<img'), false);
 });
 
 Deno.test('methodNotAllowed: creates 405 response', () => {

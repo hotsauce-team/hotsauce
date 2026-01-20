@@ -1,6 +1,7 @@
 // Response helpers and form parsing utilities
 
 import type { IntrospectedColumn } from '@drizzle-cms/core';
+import { escapeHtml } from '@drizzle-cms/ui';
 
 /**
  * Security headers for HTML responses
@@ -127,7 +128,7 @@ export function notFound(message = 'Not Found'): Response {
     <head><title>404 Not Found</title></head>
     <body>
       <h1>404 Not Found</h1>
-      <p>${message}</p>
+      <p>${escapeHtml(message)}</p>
     </body>
     </html>
   `, 404);
@@ -143,7 +144,7 @@ export function forbidden(message = 'Forbidden'): Response {
     <head><title>403 Forbidden</title></head>
     <body>
       <h1>403 Forbidden</h1>
-      <p>${message}</p>
+      <p>${escapeHtml(message)}</p>
     </body>
     </html>
   `, 403);
