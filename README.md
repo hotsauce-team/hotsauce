@@ -51,13 +51,13 @@ The handlers package exports a single function that returns a Web Standard `Requ
 
 ```typescript
 import { createCmsHandler } from '@drizzle-cms/handlers';
-import { introspect } from '@drizzle-cms/core';
 import * as schema from './schema.ts';
 
 const handler = createCmsHandler({
-  schema: introspect(schema),
+  schema,
   db,
   basePath: '/admin',
+  auth: 'open-to-anyone',  // Or { provider: ... } or { external: ... }
 });
 
 // Deno
@@ -183,6 +183,7 @@ const parsers: Parsers = {
 const handler = createCmsHandler({
   db,
   schema,
+  auth: 'open-to-anyone',
   parsers,  // Tables without custom parsers use auto-generated schemas
 });
 ```
@@ -198,14 +199,12 @@ interface TableParsers {
 
 ## Extension Points
 
-| Hook | Purpose |
-|------|---------|
-| `isAuthenticated` | Custom auth check (session, OAuth, API keys) |
-| `canAccess` | Table/action-level authorization |
-| `policies` | Row-level security with SQL conditions |
+| Option | Purpose |
+|--------|---------||
+| `auth` | Authentication: `'open-to-anyone'`, `{ provider }` (JWT), or `{ external }` (reverse proxy) |
+| `policies` | Row-level security with SQL conditions (atomic authorization) |
 | `parsers` | Custom validation (Zod, Valibot, Arktype, or any library) |
 | `onError` | Error logging integration (Sentry, Datadog, etc.) |
-| `auth.provider` | Pluggable user lookup/verification |
 
 ## Installation
 
@@ -221,7 +220,6 @@ npx jsr add @drizzle-cms/core @drizzle-cms/ui @drizzle-cms/handlers
 
 ```typescript
 import { createCmsHandler } from '@drizzle-cms/handlers';
-import { introspect } from '@drizzle-cms/core';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.ts';
@@ -230,9 +228,10 @@ const client = postgres(Deno.env.get('DATABASE_URL')!);
 const db = drizzle(client, { schema });
 
 const handler = createCmsHandler({
-  schema: introspect(schema),
+  schema,
   db,
   basePath: '/admin',
+  auth: 'open-to-anyone',  // No authentication (dev mode)
 });
 
 // Use with any server
@@ -254,9 +253,10 @@ Deno.serve(handler);
 - [x] Relation field pickers (FK → select dropdown with display labels)
 - [x] Many-to-many relationships (junction table detection, checkbox UI)
 - [x] JWT authentication (cookie-based tokens)
+- [x] External authentication (reverse proxy / OAuth integration)
 - [x] Row-level security policies (atomic authorization)
 - [x] Multi-tenant compatibility (shared database with tenant column)
-- [ ] Column-level access control (with policies or canAccessColumn)
+- [ ] Column-level access control
 - [ ] File uploads (local + S3)
 - [ ] Audit logging
 - [ ] Customizable UI components
