@@ -1,7 +1,8 @@
 // Audit log plugin for tracking database changes
 
-import type { Plugin, AfterContext, BeforeContext } from './types.ts';
+import type { Plugin, AfterContext } from './types.ts';
 import type { Table } from 'drizzle-orm';
+import type { IntrospectedTable } from '@drizzle-cms/core';
 
 /**
  * Options for creating an audit log plugin
@@ -92,6 +93,23 @@ export function createAuditLogPlugin(options: AuditLogPluginOptions): Plugin {
     return true;
   };
   
+  // Helper to get primary key value from a record
+  const getPrimaryKeyValue = (table: IntrospectedTable, record: Record<string, unknown>): string => {
+    // Find the primary key column
+    const pkColumn = table.columns.find((col) => col.isPrimaryKey);
+    if (!pkColumn) {
+      throw new Error(`No primary key found for table ${table.name}`);
+    }
+    
+    // Use column name (not propertyName) as it matches the record keys
+    const pkValue = record[pkColumn.name];
+    if (pkValue === undefined || pkValue === null) {
+      throw new Error(`Primary key value not found in record`);
+    }
+    
+    return String(pkValue);
+  };
+  
   // Helper to create audit log entry
   const logAudit = async (
     tableName: string,
@@ -156,22 +174,4 @@ export function createAuditLogPlugin(options: AuditLogPluginOptions): Plugin {
       },
     },
   };
-}
-
-/**
- * Helper to get primary key value from a record
- */
-function getPrimaryKeyValue(table: any, record: Record<string, unknown>): string {
-  // Find the primary key column
-  const pkColumn = table.columns.find((col: any) => col.primary);
-  if (!pkColumn) {
-    throw new Error(`No primary key found for table ${table.name}`);
-  }
-  
-  const pkValue = record[pkColumn.propertyName];
-  if (pkValue === undefined || pkValue === null) {
-    throw new Error(`Primary key value not found in record`);
-  }
-  
-  return String(pkValue);
 }
