@@ -133,7 +133,7 @@ export async function executeBeforeList(
  */
 export async function executeAfterList(
   plugins: Plugin[],
-  ctx: PluginContext & { records: any[] }
+  ctx: PluginContext & { records: Record<string, unknown>[] }
 ): Promise<void> {
   for (const plugin of plugins) {
     if (plugin.hooks.afterList) {

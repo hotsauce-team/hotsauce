@@ -67,7 +67,7 @@ export interface PluginHooks {
   /** Called before listing records */
   beforeList?: (ctx: PluginContext) => Promise<void> | void;
   /** Called after listing records */
-  afterList?: (ctx: PluginContext & { records: any[] }) => Promise<void> | void;
+  afterList?: (ctx: PluginContext & { records: Record<string, unknown>[] }) => Promise<void> | void;
 }
 
 /**
