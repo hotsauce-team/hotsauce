@@ -988,6 +988,187 @@ function tenantScoped<T extends Table>(table: T, col: keyof T & string): PolicyF
 
 > **Future:** Native `tenantId` support in `PolicyContext` is planned. This would allow `ctx.user.tenantId` directly.
 
+## Plugins
+
+Extend CMS functionality with custom behavior via plugins. Plugins can hook into CRUD operations to add features like audit logging, webhooks, validation, and more.
+
+### Plugin System Overview
+
+Plugins provide hooks that execute before and after CRUD operations:
+
+- **Before hooks**: `beforeCreate`, `beforeUpdate`, `beforeDelete`, `beforeRead`, `beforeList`
+- **After hooks**: `afterCreate`, `afterUpdate`, `afterDelete`, `afterRead`, `afterList`
+
+### Creating a Plugin
+
+Use the `createPlugin` helper:
+
+```ts
+import { createPlugin } from '@drizzle-cms/handlers';
+import type { AfterContext } from '@drizzle-cms/handlers';
+
+const notificationPlugin = createPlugin('notifications', {
+  afterCreate: async (ctx: AfterContext) => {
+    console.log(`Created ${ctx.table.name} record:`, ctx.record);
+    // Send webhook, email notification, etc.
+  },
+  
+  afterUpdate: async (ctx: AfterContext) => {
+    console.log(`Updated ${ctx.table.name} record ${ctx.recordId}`);
+  },
+  
+  afterDelete: async (ctx: AfterContext) => {
+    console.log(`Deleted ${ctx.table.name} record ${ctx.recordId}`);
+  },
+});
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  plugins: [notificationPlugin],
+});
+```
+
+### Plugin Context
+
+Hooks receive a context object with:
+
+```ts
+interface PluginContext {
+  table: IntrospectedTable;  // Table being operated on
+  action: CrudAction;        // 'create' | 'update' | 'delete' | 'read' | 'list'
+  authUser?: {              // Authenticated user (when auth enabled)
+    id: string;
+    role?: string;
+  };
+  request: Request;         // Original HTTP request
+  db: any;                  // Drizzle database instance
+}
+
+// Before hooks also include:
+interface BeforeContext extends PluginContext {
+  data: Record<string, any>;  // Data being inserted/updated
+}
+
+// After hooks also include:
+interface AfterContext extends PluginContext {
+  record: Record<string, any>;  // Created/updated/deleted record
+  recordId?: string;            // Record ID (for update/delete)
+}
+```
+
+### Audit Log Plugin
+
+The CMS includes a built-in audit log plugin for tracking all database changes:
+
+```ts
+import { pgTable, serial, text, timestamp, jsonb } from 'drizzle-orm/pg-core';
+import { createCmsHandler, createAuditLogPlugin } from '@drizzle-cms/handlers';
+
+// Create audit log table
+const auditLogs = pgTable('audit_logs', {
+  id: serial('id').primaryKey(),
+  tableName: text('table_name').notNull(),
+  action: text('action').notNull(),  // 'create' | 'update' | 'delete'
+  recordId: text('record_id').notNull(),
+  userId: text('user_id'),
+  changes: jsonb('changes'),  // Full record data (optional)
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+const handler = createCmsHandler({
+  db,
+  schema: { ...yourSchema, auditLogs },
+  plugins: [
+    createAuditLogPlugin({
+      db,
+      auditTable: auditLogs,
+      logFullRecord: true,  // Include full record data in logs
+      excludeTables: ['audit_logs'],  // Don't audit the audit table
+    }),
+  ],
+});
+```
+
+#### Audit Plugin Options
+
+```ts
+interface AuditLogPluginOptions {
+  db: any;                      // Drizzle database instance
+  auditTable: Table;            // Audit log table
+  includeTables?: string[];     // Only audit these tables
+  excludeTables?: string[];     // Skip these tables
+  logFullRecord?: boolean;      // Log full record data (default: false)
+}
+```
+
+### Example: Webhook Plugin
+
+Send webhooks on record changes:
+
+```ts
+const webhookPlugin = createPlugin('webhooks', {
+  afterCreate: async (ctx) => {
+    await fetch('https://api.example.com/webhooks', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        event: 'record.created',
+        table: ctx.table.name,
+        record: ctx.record,
+        userId: ctx.authUser?.id,
+      }),
+    });
+  },
+});
+```
+
+### Example: Validation Plugin
+
+Add custom validation before saves:
+
+```ts
+const validationPlugin = createPlugin('validation', {
+  beforeCreate: async (ctx) => {
+    if (ctx.table.name === 'posts' && ctx.data.title?.length < 10) {
+      throw new Error('Title must be at least 10 characters');
+    }
+  },
+  
+  beforeUpdate: async (ctx) => {
+    if (ctx.table.name === 'users' && ctx.data.email) {
+      // Check if email is already taken by another user
+      const existing = await ctx.db.select()
+        .from(ctx.table.table)
+        .where(eq(ctx.table.table.email, ctx.data.email))
+        .limit(1);
+      
+      if (existing.length > 0) {
+        throw new Error('Email already in use');
+      }
+    }
+  },
+});
+```
+
+### Multiple Plugins
+
+Plugins execute in order:
+
+```ts
+const handler = createCmsHandler({
+  db,
+  schema,
+  plugins: [
+    validationPlugin,    // Runs first (can throw to prevent save)
+    auditLogPlugin,      // Runs second
+    webhookPlugin,       // Runs third
+  ],
+});
+```
+
+> **Note:** Plugins run sequentially. If a before-hook throws an error, the operation is aborted and subsequent plugins won't run.
+
 ## Server Integration Examples
 
 ### Deno
