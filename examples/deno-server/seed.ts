@@ -45,6 +45,16 @@ await client.exec(`
     category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
     PRIMARY KEY (post_id, category_id)
   );
+
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id SERIAL PRIMARY KEY,
+    table_name TEXT NOT NULL,
+    action TEXT NOT NULL,
+    record_id TEXT NOT NULL,
+    user_id TEXT,
+    changes JSONB,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+  );
 `);
 
 // Seed users (admin user has passwordHash for CMS login)

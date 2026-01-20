@@ -3,18 +3,19 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import {
   adminOr,
+  createAuditLogPlugin,
   createCmsHandler,
   ownedBy,
   PasswordProvider,
   readOnly,
 } from '../../packages/handlers/mod.ts';
-import { schema, posts, users, parsers } from './schema.ts';
+import { schema, posts, users, auditLogs, parsers } from './schema.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
 const db = drizzle(client, { schema });
 
-// Create CMS handler with authentication
+// Create CMS handler with authentication and plugins
 // Secrets can be passed directly or via environment variables:
 //   CMS_CSRF_SECRET - for CSRF token signing
 //   CMS_JWT_SECRET - for JWT signing (when auth enabled)
@@ -31,9 +32,20 @@ const cmsHandler = createCmsHandler({
   policies: {
     posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
     categories: (readOnly()), // Admins: full access, others: read-only
+    auditLogs: readOnly(), // Audit logs are read-only for everyone
   },
   // User input parsers for validation (validation library agnostic)
   parsers,
+  // Plugins for extending CMS functionality
+  plugins: [
+    // Audit log plugin - tracks all database changes
+    createAuditLogPlugin({
+      db,
+      auditTable: auditLogs,
+      logFullRecord: true, // Include full record data in logs
+      excludeTables: ['audit_logs'], // Don't audit the audit table itself
+    }),
+  ],
   // Log errors to console (in production, use a proper logging service)
   onError: (error, context) => console.error('CMS Error:', { error, context }),
 });
@@ -43,6 +55,7 @@ const PORT = 3000;
 
 console.log(`🚀 CMS running at http://localhost:${PORT}/admin`);
 console.log(`   Login with the admin account created by seed.ts`);
+console.log(`   All changes are logged to the audit_logs table`);
 
 Deno.serve({ port: PORT, hostname: '127.0.0.1' }, async (request: Request) => {
   const url = new URL(request.url);

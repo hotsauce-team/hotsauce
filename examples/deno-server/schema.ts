@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   serial,
@@ -70,6 +71,19 @@ const postCategories = pgTable('post_categories', {
 }, (table) => [primaryKey({ columns: [table.postId, table.categoryId] })]);
 
 /**
+ * Audit logs table (for tracking all changes)
+ */
+const auditLogs = pgTable('audit_logs', {
+  id: serial('id').primaryKey(),
+  tableName: text('table_name').notNull(),
+  action: text('action').notNull(),  // 'create', 'update', 'delete'
+  recordId: text('record_id').notNull(),
+  userId: text('user_id'),
+  changes: jsonb('changes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/**
  * Drizzle schema export
  */
 export const schema = {
@@ -77,12 +91,13 @@ export const schema = {
   posts,
   categories,
   postCategories,
+  auditLogs,
 };
 
 /**
  * Export tables for direct use in queries
  */
-export { users, posts, categories, postCategories };
+export { users, posts, categories, postCategories, auditLogs };
 
 /**
  * Custom parsers (optional)
