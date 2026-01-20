@@ -37,6 +37,18 @@ import {
   updateWithPolicy,
   deleteWithPolicy,
 } from './policies/mod.ts';
+import {
+  executeBeforeCreate,
+  executeAfterCreate,
+  executeBeforeUpdate,
+  executeAfterUpdate,
+  executeBeforeDelete,
+  executeAfterDelete,
+  executeBeforeRead,
+  executeAfterRead,
+  executeBeforeList,
+  executeAfterList,
+} from './plugins/mod.ts';
 
 /**
  * Build common layout options for a page
@@ -150,6 +162,18 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   
   const records = await query as Record<string, unknown>[];
   
+  // Execute afterList plugins
+  if (options.plugins.length > 0) {
+    await executeAfterList(options.plugins, {
+      table,
+      action: 'list',
+      authUser,
+      request,
+      db: options.db,
+      records,
+    });
+  }
+  
   // Generate navigation
   const navItems = buildNavItems(options.introspected, basePath, table.name);
   
@@ -216,6 +240,18 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const basePath = options.basePath;
   const drizzleTable = table.table;
   
+  // Execute beforeRead plugins
+  if (options.plugins.length > 0) {
+    await executeBeforeRead(options.plugins, {
+      table,
+      action: 'read',
+      authUser,
+      request,
+      db: options.db,
+      recordId,
+    });
+  }
+  
   // Apply policy for read action
   const policy = options.policies[table.name];
   const policyCtx = createPolicyContext(request, authUser);
@@ -252,6 +288,19 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const actualRecordId = record[pkCol.propertyName] as string | number;
   const m2mMap = await fetchManyToManyDisplayData(options, table, [actualRecordId]);
   const m2mDisplayData = m2mMap.get(actualRecordId) ?? [];
+  
+  // Execute afterRead plugins
+  if (options.plugins.length > 0) {
+    await executeAfterRead(options.plugins, {
+      table,
+      action: 'read',
+      authUser,
+      request,
+      db: options.db,
+      record,
+      recordId,
+    });
+  }
   
   // Generate CSRF token for delete form
   const csrfToken = await generateCsrfToken(options.csrfSecret);
@@ -320,6 +369,18 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     const editableColumns = getEditableColumns(table);
     const values = coerceFormValues(formData, editableColumns);
     
+    // Execute beforeCreate plugins
+    if (options.plugins.length > 0) {
+      await executeBeforeCreate(options.plugins, {
+        table,
+        action: 'create',
+        authUser,
+        request,
+        db: options.db,
+        data: values,
+      });
+    }
+    
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(options, table.name, drizzleTable, values, 'insert');
     if (!validation.success) {
@@ -342,6 +403,18 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       
       // Save many-to-many relations
       await saveManyToManyData(options, table, newId, formData);
+      
+      // Execute afterCreate plugins
+      if (options.plugins.length > 0) {
+        await executeAfterCreate(options.plugins, {
+          table,
+          action: 'create',
+          authUser,
+          request,
+          db: options.db,
+          record: newRecord,
+        });
+      }
       
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
@@ -405,6 +478,18 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     const editableColumns = getEditableColumns(table);
     const values = coerceFormValues(formData, editableColumns);
     
+    // Execute beforeUpdate plugins
+    if (options.plugins.length > 0) {
+      await executeBeforeUpdate(options.plugins, {
+        table,
+        action: 'update',
+        authUser,
+        request,
+        db: options.db,
+        data: values,
+      });
+    }
+    
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(options, table.name, drizzleTable, values, 'update');
     if (!validation.success) {
@@ -438,6 +523,28 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       
       // Save many-to-many relations
       await saveManyToManyData(options, table, recordId, formData);
+      
+      // Fetch the updated record for plugin hooks
+      const updatedRecord = await findRecordWithPolicy(
+        options.db,
+        drizzleTable as Table,
+        table,
+        recordId,
+        policyResult.condition
+      );
+      
+      // Execute afterUpdate plugins
+      if (options.plugins.length > 0 && updatedRecord) {
+        await executeAfterUpdate(options.plugins, {
+          table,
+          action: 'update',
+          authUser,
+          request,
+          db: options.db,
+          record: updatedRecord,
+          recordId,
+        });
+      }
       
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
@@ -479,6 +586,30 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
     }
   }
   
+  // Fetch record for plugin hooks (before deletion)
+  const record = await findRecordWithPolicy(
+    options.db,
+    drizzleTable as Table,
+    table,
+    recordId,
+    policyResult.condition
+  );
+  
+  if (record) {
+    // Execute beforeDelete plugins
+    if (options.plugins.length > 0) {
+      await executeBeforeDelete(options.plugins, {
+        table,
+        action: 'delete',
+        authUser,
+        request,
+        db: options.db,
+        record,
+        recordId,
+      });
+    }
+  }
+  
   try {
     // Delete with policy condition (atomic check + delete)
     const deleteResult = await deleteWithPolicy(
@@ -498,6 +629,19 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       }
       // Record doesn't exist
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_not_found');
+    }
+    
+    // Execute afterDelete plugins (only if record was deleted)
+    if (record && options.plugins.length > 0) {
+      await executeAfterDelete(options.plugins, {
+        table,
+        action: 'delete',
+        authUser,
+        request,
+        db: options.db,
+        record,
+        recordId,
+      });
     }
     
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');

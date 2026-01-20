@@ -4,6 +4,7 @@
 
 import type { CmsOptions, ResolvedCmsOptions, ResolvedAuthOptions, RouteContext, Handler } from './types.ts';
 import type { Policies } from './policies/types.ts';
+import type { Plugin } from './plugins/types.ts';
 import { introspectFullSchema } from '@drizzle-cms/core';
 import { parseRoute, resolveAction } from './router.ts';
 import { notFound, forbidden, methodNotAllowed, SECURITY_HEADERS } from './http.ts';
@@ -173,6 +174,21 @@ export {
   isSecureRequest,
 } from './auth/mod.ts';
 
+// ─────────────────────────────────────────────────────────────
+// Plugins - Extension system for custom functionality
+// ─────────────────────────────────────────────────────────────
+export type {
+  Plugin,
+  PluginHooks,
+  PluginContext,
+  BeforeContext,
+  AfterContext,
+  AuditLogPluginOptions,
+} from './plugins/mod.ts';
+
+export { createPlugin, createAuditLogPlugin } from './plugins/mod.ts';
+
+
 
 /**
  * Create a CMS handler function
@@ -276,6 +292,9 @@ export function createCmsHandler(options: CmsOptions): Handler {
   // Resolve policies (empty object = no policies = full access)
   const resolvedPolicies: Policies = options.policies ?? {};
   
+  // Resolve plugins (empty array if not provided)
+  const resolvedPlugins: Plugin[] = options.plugins ?? [];
+  
   // Apply defaults
   const opts: ResolvedCmsOptions = {
     introspected,
@@ -289,6 +308,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     parsers: options.parsers ?? {},
     policies: resolvedPolicies,
     auth: resolvedAuth,
+    plugins: resolvedPlugins,
   };
   
   // Helper to check if request accepts JSON

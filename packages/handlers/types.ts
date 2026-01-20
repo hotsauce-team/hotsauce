@@ -4,6 +4,7 @@ import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
 import type { AuthProvider } from './auth/provider.ts';
 import type { JwtPayload } from './auth/jwt.ts';
 import type { Policies } from './policies/types.ts';
+import type { Plugin } from './plugins/types.ts';
 
 /**
  * A Web Standard handler function: Request → Response
@@ -135,6 +136,22 @@ export interface CmsOptionsBase {
    * ```
    */
   parsers?: Parsers;
+  /**
+   * Plugins to extend CMS functionality.
+   * 
+   * Plugins can hook into CRUD operations to add custom behavior like
+   * audit logging, validation, webhooks, etc.
+   * 
+   * @example
+   * ```ts
+   * import { createAuditLogPlugin } from '@drizzle-cms/handlers';
+   * 
+   * plugins: [
+   *   createAuditLogPlugin({ db, auditTable: schema.auditLogs }),
+   * ]
+   * ```
+   */
+  plugins?: Plugin[];
 }
 
 /**
@@ -287,6 +304,8 @@ export interface ResolvedCmsOptions {
   policies: Policies;
   /** JWT auth config (resolved) - undefined if auth disabled */
   auth?: ResolvedAuthOptions;
+  /** Plugins to extend CMS functionality */
+  plugins: Plugin[];
 }
 
 /**
