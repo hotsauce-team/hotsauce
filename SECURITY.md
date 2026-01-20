@@ -242,7 +242,7 @@ Before deploying to production:
 
 ## Vulnerability Reporting
 
-If you discover a security vulnerability, please email [security contact] with:
+If you discover a security vulnerability, please report it by opening a [GitHub Security Advisory](https://github.com/earthlingdavey/drizzle-cms/security/advisories/new) with:
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
