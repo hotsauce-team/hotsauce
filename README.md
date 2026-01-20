@@ -11,6 +11,38 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 - **Cross-runtime**: Works in Deno and Node.js — Web Standard `Request`/`Response` everywhere
 - **Database-agnostic**: Works with any Drizzle-supported database (Postgres, MySQL, SQLite)
 
+## Installation
+
+```bash
+# Deno
+deno add jsr:@drizzle-cms/core jsr:@drizzle-cms/ui jsr:@drizzle-cms/handlers
+
+# Node
+npx jsr add @drizzle-cms/core @drizzle-cms/ui @drizzle-cms/handlers
+```
+
+## Quick Start
+
+```typescript
+import { createCmsHandler } from '@drizzle-cms/handlers';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import * as schema from './schema.ts';
+
+const client = postgres(Deno.env.get('DATABASE_URL')!);
+const db = drizzle(client, { schema });
+
+const handler = createCmsHandler({
+  schema,
+  db,
+  basePath: '/admin',
+  auth: 'open-to-anyone',  // No authentication (dev mode)
+});
+
+// Use with any server
+Deno.serve(handler);
+```
+
 ## Packages
 
 Each package has its own README with detailed API documentation:
@@ -200,43 +232,11 @@ interface TableParsers {
 ## Extension Points
 
 | Option | Purpose |
-|--------|---------||
+|--------|---------|
 | `auth` | Authentication: `'open-to-anyone'`, `{ provider }` (JWT), or `{ external }` (reverse proxy) |
 | `policies` | Row-level security with SQL conditions (atomic authorization) |
 | `parsers` | Custom validation (Zod, Valibot, Arktype, or any library) |
 | `onError` | Error logging integration (Sentry, Datadog, etc.) |
-
-## Installation
-
-```bash
-# Deno
-deno add jsr:@drizzle-cms/core jsr:@drizzle-cms/ui jsr:@drizzle-cms/handlers
-
-# Node
-npx jsr add @drizzle-cms/core @drizzle-cms/ui @drizzle-cms/handlers
-```
-
-## Quick Start
-
-```typescript
-import { createCmsHandler } from '@drizzle-cms/handlers';
-import { drizzle } from 'drizzle-orm/postgres-js';
-import postgres from 'postgres';
-import * as schema from './schema.ts';
-
-const client = postgres(Deno.env.get('DATABASE_URL')!);
-const db = drizzle(client, { schema });
-
-const handler = createCmsHandler({
-  schema,
-  db,
-  basePath: '/admin',
-  auth: 'open-to-anyone',  // No authentication (dev mode)
-});
-
-// Use with any server
-Deno.serve(handler);
-```
 
 ## Features
 
