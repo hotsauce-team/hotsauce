@@ -1,7 +1,7 @@
 // Test: Schema introspection
 // Verifies we can extract metadata from Drizzle schemas
 
-import { assertEquals, assertExists } from 'jsr:@std/assert';
+import { assertEquals, assertExists } from '@std/assert';
 import * as pgSchema from './fixtures/schema-pg.ts';
 import * as sqliteSchema from './fixtures/schema-sqlite.ts';
 

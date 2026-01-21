@@ -1,7 +1,7 @@
 // Integration tests for audit log plugin
 // Tests the audit log plugin with a real database
 
-import { assertEquals, assertExists } from 'jsr:@std/assert';
+import { assertEquals, assertExists } from '@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
@@ -110,8 +110,8 @@ Deno.test('audit log plugin: logs create actions', async () => {
   
   const response = await handler(createRequest);
   
-  // Should redirect on success
-  assertEquals(response.status, 302);
+  // Should redirect on success (303 See Other for POST redirects)
+  assertEquals(response.status, 303);
   
   // Check that audit log was created
   const logs = await db.select().from(auditLogs);
@@ -188,8 +188,8 @@ Deno.test('audit log plugin: logs update actions', async () => {
   
   const response = await handler(updateRequest);
   
-  // Should redirect on success
-  assertEquals(response.status, 302);
+  // Should redirect on success (303 See Other for POST redirects)
+  assertEquals(response.status, 303);
   
   // Check that audit log was created
   const logs = await db.select().from(auditLogs);
@@ -264,8 +264,8 @@ Deno.test('audit log plugin: logs delete actions', async () => {
   
   const response = await handler(deleteRequest);
   
-  // Should redirect on success
-  assertEquals(response.status, 302);
+  // Should redirect on success (303 See Other for POST redirects)
+  assertEquals(response.status, 303);
   
   // Check that audit log was created
   const logs = await db.select().from(auditLogs);

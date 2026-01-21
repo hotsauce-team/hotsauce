@@ -1,6 +1,6 @@
 // Tests for plugin system
 
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals } from '@std/assert';
 import { createPlugin } from '../plugins/mod.ts';
 import type { AfterContext, BeforeContext } from '../plugins/types.ts';
 import type { IntrospectedTable } from '@drizzle-cms/core';

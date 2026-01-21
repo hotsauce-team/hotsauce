@@ -2,7 +2,7 @@
 // Tests the full handler → DB flow using PGlite
 // Uses shared database instances with TRUNCATE for speed
 
-import { assertEquals, assertExists, assertStringIncludes } from 'jsr:@std/assert';
+import { assertEquals, assertExists, assertStringIncludes } from '@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';

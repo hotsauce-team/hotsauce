@@ -1,6 +1,6 @@
 // Tests for schema introspection
 
-import { assertEquals, assertExists, assertThrows } from 'jsr:@std/assert';
+import { assertEquals, assertExists, assertThrows } from '@std/assert';
 import {
   introspectTable,
   introspectSchema,

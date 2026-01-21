@@ -46,7 +46,6 @@ import {
   executeAfterDelete,
   executeBeforeRead,
   executeAfterRead,
-  executeBeforeList,
   executeAfterList,
 } from './plugins/mod.ts';
 

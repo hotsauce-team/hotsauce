@@ -1,6 +1,6 @@
 // Tests for field mapping module
 
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals } from '@std/assert';
 import {
   mapColumnToFieldType,
   mapColumnToField,

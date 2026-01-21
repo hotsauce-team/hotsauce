@@ -1,6 +1,6 @@
 // Tests for router utilities
 
-import { assertEquals, assertExists } from 'jsr:@std/assert';
+import { assertEquals, assertExists } from '@std/assert';
 import { parseRoute, resolveAction, cmsUrl, formatTableName, formatColumnName } from '../router.ts';
 import type { IntrospectedTable } from '@drizzle-cms/core';
 

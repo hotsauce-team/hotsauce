@@ -2,7 +2,7 @@
 
 import type { Plugin, PluginHooks, BeforeContext, AfterContext, PluginContext } from '@drizzle-cms/handlers';
 import type { WorkerPluginOptions, WorkerMessage, WorkerResponse, Runtime } from './types.ts';
-import { detectRuntime, getRuntimeName } from './runtime.ts';
+import { detectRuntime } from './runtime.ts';
 
 /**
  * Create a worker-isolated plugin wrapper
@@ -82,8 +82,8 @@ export function createWorkerPlugin(options: WorkerPluginOptions): Plugin {
     // Send without waiting for response
     worker.postMessage(message);
     
-    // Log errors if they occur
-    const pending = new Promise<void>((resolve, reject) => {
+    // Log errors if they occur (but don't await - fire and forget)
+    new Promise<void>((resolve, reject) => {
       const timeout = setTimeout(() => {
         pendingMessages.delete(id);
         resolve(); // Don't fail on timeout for async hooks

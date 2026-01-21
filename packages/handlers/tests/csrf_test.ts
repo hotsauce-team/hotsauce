@@ -1,6 +1,6 @@
 // CSRF utilities tests
 
-import { assertEquals, assertNotEquals, assertRejects } from 'jsr:@std/assert';
+import { assertEquals, assertNotEquals, assertRejects } from '@std/assert';
 import {
   generateCsrfToken,
   validateCsrfToken,

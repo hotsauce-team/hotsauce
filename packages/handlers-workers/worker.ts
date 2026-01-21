@@ -1,6 +1,6 @@
 // Worker setup - worker process side
 
-import type { Plugin, PluginHooks } from '@drizzle-cms/handlers';
+import type { Plugin } from '@drizzle-cms/handlers';
 import type { WorkerMessage, WorkerResponse } from './types.ts';
 
 /**
@@ -44,9 +44,11 @@ export function setupWorkerPlugin(plugin: Plugin): void {
  * Set up Deno Worker message handling
  */
 function setupDenoWorker(plugin: Plugin): void {
+  // @ts-ignore: Worker context has onmessage
   self.onmessage = async (event: MessageEvent) => {
     const message = event.data as WorkerMessage;
     const response = await executePluginHook(plugin, message);
+    // @ts-ignore: Worker context has postMessage
     self.postMessage(response);
   };
 }

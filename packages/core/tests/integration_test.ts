@@ -1,7 +1,7 @@
 // Test: Database integration
 // Verifies test fixtures work with PGlite (Postgres) and sql.js (SQLite)
 
-import { assertEquals, assertExists } from 'jsr:@std/assert@1.0.16';
+import { assertEquals, assertExists } from '@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { drizzle as drizzleSqlJs } from 'drizzle-orm/sql-js';
