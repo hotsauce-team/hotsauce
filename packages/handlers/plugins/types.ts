@@ -47,16 +47,12 @@ export interface PluginContext {
     /** User role (if provided in JWT) */
     role?: string;
   };
-  /** Allow additional serializable properties */
-  [key: string]: Serializable;
 }
 
 /**
  * Extended context for action hooks (after operation completes)
  */
-export interface ActionContext extends Omit<PluginContext, 'action'> {
-  /** CRUD action being performed */
-  action: CrudAction;
+export interface ActionContext extends PluginContext {
   /** Primary key of the affected record */
   recordId?: string | number;
   /** Previous record state (for update/delete) */
@@ -219,8 +215,6 @@ export interface PluginRequest {
   body?: Serializable;
   /** Request headers (selected safe headers only) */
   headers: Record<string, string>;
-  /** Allow additional serializable properties */
-  [key: string]: Serializable;
 }
 
 /**
@@ -233,8 +227,6 @@ export interface PluginResponse {
   headers?: Record<string, string>;
   /** Response body (will be JSON serialized) */
   body?: Serializable;
-  /** Allow additional serializable properties */
-  [key: string]: Serializable;
 }
 
 /**

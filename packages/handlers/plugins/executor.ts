@@ -95,7 +95,7 @@ export class WorkerExecutor {
     // Initialize the plugin in the Worker
     await this.sendToWorker(plugin.name, 'init', {
       plugin: this.serializePlugin(plugin),
-      config,
+      config: config as Serializable,
     });
 
     registered.initialized = true;
@@ -114,10 +114,11 @@ export class WorkerExecutor {
     for (const { plugin } of plugins) {
       if (!plugin.hooks?.transform?.beforeSave) continue;
 
+      // Cast to Serializable for Worker messaging (context types are serializable)
       const response = await this.sendToWorker(plugin.name, 'transform:beforeSave', {
         ctx,
         data: result,
-      });
+      } as unknown as Serializable);
 
       if (response && typeof response === 'object' && !Array.isArray(response)) {
         result = response as Record<string, Serializable>;
@@ -140,10 +141,11 @@ export class WorkerExecutor {
     for (const { plugin } of plugins) {
       if (!plugin.hooks?.transform?.afterRead) continue;
 
+      // Cast to Serializable for Worker messaging (context types are serializable)
       const response = await this.sendToWorker(plugin.name, 'transform:afterRead', {
         ctx,
         data: result,
-      });
+      } as unknown as Serializable);
 
       if (response && typeof response === 'object' && !Array.isArray(response)) {
         result = response as Record<string, Serializable>;
@@ -214,7 +216,8 @@ export class WorkerExecutor {
     action: CrudAction,
     ctx: ActionContext
   ): Promise<void> {
-    await this.sendToWorker(pluginName, 'action', { action, ctx });
+    // Cast to Serializable for Worker messaging (context types are serializable)
+    await this.sendToWorker(pluginName, 'action', { action, ctx } as unknown as Serializable);
   }
 
   /**
@@ -225,13 +228,14 @@ export class WorkerExecutor {
     routePath: string,
     request: PluginRequest
   ): Promise<PluginResponse> {
+    // Cast to Serializable for Worker messaging (request type is serializable)
     const response = await this.sendToWorker(pluginName, 'route', {
       path: routePath,
       request,
-    });
+    } as unknown as Serializable);
 
     if (response && typeof response === 'object' && 'status' in response) {
-      return response as PluginResponse;
+      return response as unknown as PluginResponse;
     }
 
     return { status: 500, body: { error: 'Invalid route response' } };
