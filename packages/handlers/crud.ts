@@ -39,6 +39,13 @@ import {
 } from './policies/mod.ts';
 
 /**
+ * Get plugin user context from RouteContext
+ */
+function getPluginUser(ctx: RouteContext): { sub: string; role?: string } | undefined {
+  return ctx.authUser ? { sub: ctx.authUser.id, role: ctx.authUser.role } : undefined;
+}
+
+/**
  * Build common layout options for a page
  */
 function buildLayoutOptions(ctx: RouteContext, title: string, navItems: NavItem[]): LayoutOptions {
@@ -148,7 +155,17 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Apply pagination
   query = query.limit(limit).offset(offset);
   
-  const records = await query as Record<string, unknown>[];
+  let records = await query as Record<string, unknown>[];
+  
+  // Execute afterRead transform for each record
+  if (ctx.pluginService) {
+    records = await ctx.pluginService.afterReadMany(table.name, records, getPluginUser(ctx));
+  }
+  
+  // Execute list action hooks (fire-and-forget for audit logging etc.)
+  if (ctx.pluginService) {
+    ctx.pluginService.onAction(table.name, 'list', undefined, getPluginUser(ctx));
+  }
   
   // Generate navigation
   const navItems = buildNavItems(options.introspected, basePath, table.name);
@@ -243,13 +260,24 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     return notFound(`Record not found`);
   }
   
+  // Execute afterRead transform
+  let transformedRecord = record;
+  if (ctx.pluginService) {
+    transformedRecord = await ctx.pluginService.afterRead(table.name, 'read', record, getPluginUser(ctx));
+  }
+  
+  // Execute read action hooks
+  const pkCol = getPrimaryKeyColumn(table);
+  const actualRecordId = transformedRecord[pkCol.propertyName] as string | number;
+  if (ctx.pluginService) {
+    ctx.pluginService.onAction(table.name, 'read', actualRecordId, getPluginUser(ctx), undefined, transformedRecord);
+  }
+  
   const navItems = buildNavItems(options.introspected, basePath, table.name);
   const cmsFields = tableToCmsFields(table);
   const relationData = await fetchAllRelationOptions(options, table);
   
   // Fetch M2M display data for this record - use actual ID from record, not URL string
-  const pkCol = getPrimaryKeyColumn(table);
-  const actualRecordId = record[pkCol.propertyName] as string | number;
   const m2mMap = await fetchManyToManyDisplayData(options, table, [actualRecordId]);
   const m2mDisplayData = m2mMap.get(actualRecordId) ?? [];
   
@@ -277,7 +305,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   content += detailView(
     formatTableName(table.name),
     cmsFields,
-    record,
+    transformedRecord,
     detailOptions,
     relationData,
     m2mDisplayData,
@@ -332,9 +360,21 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     }
     
     try {
+      // Apply beforeSave transform if plugin service available
+      let dataToInsert = validation.data ?? values;
+      if (ctx.pluginService) {
+        const pluginUser = getPluginUser(ctx);
+        dataToInsert = await ctx.pluginService.beforeSave(
+          table.name,
+          'create',
+          dataToInsert,
+          pluginUser,
+        );
+      }
+
       const result = await options.db
         .insert(drizzleTable)
-        .values(validation.data ?? values)
+        .values(dataToInsert)
         .returning();
       
       const newRecord = result[0] as Record<string, unknown>;
@@ -342,6 +382,20 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       
       // Save many-to-many relations
       await saveManyToManyData(options, table, newId, formData);
+
+      // Fire create action hook (may be fire-and-forget)
+      if (ctx.pluginService) {
+        const pluginUser = getPluginUser(ctx);
+        // Don't await - allow fire-and-forget plugins
+        ctx.pluginService.onAction(
+          table.name,
+          'create',
+          newId,
+          pluginUser,
+          undefined,
+          newRecord,
+        );
+      }
       
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
@@ -417,13 +471,25 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     }
     
     try {
+      // Apply beforeSave transform if plugin service available
+      let dataToUpdate = validation.data ?? values;
+      if (ctx.pluginService) {
+        const pluginUser = getPluginUser(ctx);
+        dataToUpdate = await ctx.pluginService.beforeSave(
+          table.name,
+          'update',
+          dataToUpdate,
+          pluginUser,
+        );
+      }
+
       // Update with policy condition (atomic check + update)
       const updateResult = await updateWithPolicy(
         options.db,
         drizzleTable as Table,
         table,
         recordId,
-        validation.data ?? values,
+        dataToUpdate,
         policyResult.condition
       );
       
@@ -438,6 +504,19 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       
       // Save many-to-many relations
       await saveManyToManyData(options, table, recordId, formData);
+
+      // Fire update action hook (may be fire-and-forget)
+      if (ctx.pluginService) {
+        const pluginUser = getPluginUser(ctx);
+        ctx.pluginService.onAction(
+          table.name,
+          'update',
+          recordId,
+          pluginUser,
+          record,
+          { ...record, ...dataToUpdate },
+        );
+      }
       
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
@@ -480,6 +559,17 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   }
   
   try {
+    // Fetch record before deletion for audit purposes
+    const recordToDelete = ctx.pluginService
+      ? await findRecordWithPolicy(
+          options.db,
+          drizzleTable as Table,
+          table,
+          recordId,
+          policyResult.condition
+        )
+      : null;
+
     // Delete with policy condition (atomic check + delete)
     const deleteResult = await deleteWithPolicy(
       options.db,
@@ -498,6 +588,19 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       }
       // Record doesn't exist
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_not_found');
+    }
+
+    // Fire delete action hook (may be fire-and-forget)
+    if (ctx.pluginService && recordToDelete) {
+      const pluginUser = getPluginUser(ctx);
+      ctx.pluginService.onAction(
+        table.name,
+        'delete',
+        recordId,
+        pluginUser,
+        recordToDelete,
+        undefined,
+      );
     }
     
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');

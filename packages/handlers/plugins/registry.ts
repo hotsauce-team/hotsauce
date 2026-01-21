@@ -5,6 +5,7 @@ import type {
   PluginConfig,
   PluginRoute,
   SandboxMode,
+  Serializable,
   TransformHooks,
   ActionHooks,
 } from './types.ts';
@@ -29,7 +30,7 @@ export interface RegisteredPlugin {
   /** Plugin definition */
   plugin: Plugin;
   /** Plugin configuration (serializable) */
-  config?: unknown;
+  config?: Serializable;
   /** Whether the plugin has been initialized */
   initialized: boolean;
 }

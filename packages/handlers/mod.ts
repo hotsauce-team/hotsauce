@@ -10,6 +10,8 @@ import { notFound, forbidden, methodNotAllowed, SECURITY_HEADERS } from './http.
 import { generateCsrfToken, validateCsrfToken } from './csrf.ts';
 import { validateCmsOptions } from './validation.ts';
 import { getEnv } from './runtime-compat.ts';
+import { createPluginRegistry } from './plugins/registry.ts';
+import { createPluginService } from './plugins/service.ts';
 import {
   handleDashboard,
   handleList,
@@ -276,6 +278,14 @@ export function createCmsHandler(options: CmsOptions): Handler {
   // Resolve policies (empty object = no policies = full access)
   const resolvedPolicies: Policies = options.policies ?? {};
   
+  // Initialize plugin registry if plugins are configured
+  const pluginRegistry = options.plugins && options.plugins.length > 0
+    ? createPluginRegistry(options.plugins, options.pluginSandbox ?? 'worker')
+    : undefined;
+  
+  // Create plugin service (lazy initialization - Workers start on first use)
+  const pluginService = createPluginService(pluginRegistry);
+  
   // Apply defaults
   const opts: ResolvedCmsOptions = {
     introspected,
@@ -289,6 +299,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     parsers: options.parsers ?? {},
     policies: resolvedPolicies,
     auth: resolvedAuth,
+    plugins: pluginRegistry,
   };
   
   // Helper to check if request accepts JSON
@@ -543,6 +554,8 @@ export function createCmsHandler(options: CmsOptions): Handler {
       url,
       // Include auth user if authenticated via JWT
       authUser: jwtPayload ? { id: jwtPayload.sub, role: jwtPayload.role } : undefined,
+      // Plugin service for executing hooks
+      pluginService: pluginService ?? undefined,
     };
     
     // Dispatch to handler

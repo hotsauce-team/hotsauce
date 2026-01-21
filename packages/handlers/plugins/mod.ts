@@ -36,3 +36,8 @@ export {
   WorkerExecutor,
   createWorkerExecutor,
 } from './executor.ts';
+
+export {
+  PluginService,
+  createPluginService,
+} from './service.ts';

@@ -4,6 +4,9 @@ import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
 import type { AuthProvider } from './auth/provider.ts';
 import type { JwtPayload } from './auth/jwt.ts';
 import type { Policies } from './policies/types.ts';
+import type { PluginConfig, SandboxMode } from './plugins/types.ts';
+import type { PluginRegistry } from './plugins/registry.ts';
+import type { PluginService } from './plugins/service.ts';
 
 /**
  * A Web Standard handler function: Request → Response
@@ -135,6 +138,32 @@ export interface CmsOptionsBase {
    * ```
    */
   parsers?: Parsers;
+
+  /**
+   * Plugins to extend CMS functionality.
+   * 
+   * Plugins run in isolated Worker threads for security.
+   * They can transform data, respond to CRUD actions, and add routes.
+   * 
+   * @example
+   * ```ts
+   * plugins: [
+   *   { plugin: auditLogPlugin },
+   *   { plugin: s3UploadPlugin, config: { bucket: 'my-bucket' } },
+   * ]
+   * ```
+   */
+  plugins?: PluginConfig[];
+
+  /**
+   * Sandbox mode for plugin execution.
+   * 
+   * - 'worker': Standard Worker isolation (all runtimes)
+   * - 'deno-sandbox': Deno Worker with restricted permissions (Deno only)
+   * 
+   * @default 'worker'
+   */
+  pluginSandbox?: SandboxMode;
 }
 
 /**
@@ -287,6 +316,8 @@ export interface ResolvedCmsOptions {
   policies: Policies;
   /** JWT auth config (resolved) - undefined if auth disabled */
   auth?: ResolvedAuthOptions;
+  /** Plugin registry (undefined if no plugins configured) */
+  plugins?: PluginRegistry;
 }
 
 /**
@@ -333,4 +364,6 @@ export interface RouteContext {
   flash?: FlashMessage;
   /** Authenticated user info (when auth is enabled) */
   authUser?: { id: string; role?: string };
+  /** Plugin service for executing hooks (when plugins configured) */
+  pluginService?: PluginService;
 }

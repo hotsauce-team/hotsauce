@@ -386,10 +386,20 @@ export class WorkerExecutor {
    * (strips non-serializable parts)
    */
   private serializePlugin(plugin: Plugin): Serializable {
+    // Explicitly serialize capabilities to ensure Serializable compatibility
+    const capabilities: Serializable | undefined = plugin.capabilities
+      ? {
+          network: plugin.capabilities.network,
+          transforms: plugin.capabilities.transforms,
+          actions: plugin.capabilities.actions,
+          routes: plugin.capabilities.routes,
+        }
+      : undefined;
+
     return {
       name: plugin.name,
       description: plugin.description,
-      capabilities: plugin.capabilities,
+      capabilities,
       // Note: hooks and routes are function references,
       // the Worker has its own copy from the plugin source
     };
