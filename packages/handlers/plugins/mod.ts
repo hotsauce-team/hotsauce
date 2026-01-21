@@ -22,6 +22,3 @@ export {
   executeBeforeList,
   executeAfterList,
 } from './executor.ts';
-
-export type { AuditLogPluginOptions } from './audit-log.ts';
-export { createAuditLogPlugin } from './audit-log.ts';

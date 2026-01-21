@@ -6,9 +6,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import { pgTable, serial, varchar, text, timestamp, jsonb } from 'drizzle-orm/pg-core';
-import { createCmsHandler } from '../mod.ts';
-import { createAuditLogPlugin } from '../plugins/audit-log.ts';
-import { generateCsrfToken } from '../csrf.ts';
+import { createCmsHandler, generateCsrfToken } from '@drizzle-cms/handlers';
+import { createAuditLogPlugin } from '../audit-log.ts';
 
 // Test CSRF secret
 const TEST_CSRF_SECRET = 'test-csrf-secret-for-audit-plugin-tests-min-32-chars';

@@ -144,7 +144,7 @@ export interface CmsOptionsBase {
    * 
    * @example
    * ```ts
-   * import { createAuditLogPlugin } from '@drizzle-cms/handlers';
+   * import { createAuditLogPlugin } from '@drizzle-cms/plugins';
    * 
    * plugins: [
    *   createAuditLogPlugin({ db, auditTable: schema.auditLogs }),

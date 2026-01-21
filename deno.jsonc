@@ -13,6 +13,7 @@
     "./packages/ui",
     "./packages/handlers",
     "./packages/handlers-workers",
+    "./packages/plugins",
 
     // Examples
     "./examples/deno-server"

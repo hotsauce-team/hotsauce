@@ -11,7 +11,7 @@ import type { WorkerMessage, WorkerResponse } from './types.ts';
  * @example
  * ```typescript
  * // audit-worker.ts
- * import { createAuditLogPlugin } from '@drizzle-cms/handlers';
+ * import { createAuditLogPlugin } from '@drizzle-cms/plugins';
  * import { setupWorkerPlugin } from '@drizzle-cms/handlers-workers/worker';
  * 
  * const plugin = createAuditLogPlugin({

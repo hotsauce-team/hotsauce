@@ -1,6 +1,6 @@
 // Audit log plugin for tracking database changes
 
-import type { Plugin, AfterContext } from './types.ts';
+import type { Plugin, AfterContext } from '@drizzle-cms/handlers';
 import type { Table } from 'drizzle-orm';
 import type { IntrospectedTable } from '@drizzle-cms/core';
 

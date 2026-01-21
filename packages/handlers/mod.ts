@@ -183,10 +183,9 @@ export type {
   PluginContext,
   BeforeContext,
   AfterContext,
-  AuditLogPluginOptions,
 } from './plugins/mod.ts';
 
-export { createPlugin, createAuditLogPlugin } from './plugins/mod.ts';
+export { createPlugin } from './plugins/mod.ts';
 
 
 

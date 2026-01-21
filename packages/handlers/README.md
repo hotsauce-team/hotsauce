@@ -1057,13 +1057,13 @@ interface AfterContext extends PluginContext {
 }
 ```
 
-### Audit Log Plugin
+### Official Plugins
 
-The CMS includes a built-in audit log plugin for tracking all database changes:
+The CMS provides official plugins in the `@drizzle-cms/plugins` package:
 
 ```ts
+import { createAuditLogPlugin } from '@drizzle-cms/plugins';
 import { pgTable, serial, text, timestamp, jsonb } from 'drizzle-orm/pg-core';
-import { createCmsHandler, createAuditLogPlugin } from '@drizzle-cms/handlers';
 
 // Create audit log table
 const auditLogs = pgTable('audit_logs', {
@@ -1089,6 +1089,8 @@ const handler = createCmsHandler({
   ],
 });
 ```
+
+See the [`@drizzle-cms/plugins` documentation](../plugins/README.md) for more details on available plugins.
 
 #### Audit Plugin Options
 
@@ -1175,7 +1177,7 @@ For enhanced security, you can run plugins in isolated worker processes using th
 
 ```ts
 import { createWorkerPlugin } from '@drizzle-cms/handlers-workers';
-import { createAuditLogPlugin } from '@drizzle-cms/handlers';
+import { createAuditLogPlugin } from '@drizzle-cms/plugins';
 
 // Wrap plugin to run in isolated worker
 const isolatedAuditPlugin = createWorkerPlugin({

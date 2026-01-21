@@ -3,12 +3,12 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import {
   adminOr,
-  createAuditLogPlugin,
   createCmsHandler,
   ownedBy,
   PasswordProvider,
   readOnly,
 } from '../../packages/handlers/mod.ts';
+import { createAuditLogPlugin } from '../../packages/plugins/mod.ts';
 import { schema, posts, users, auditLogs, parsers } from './schema.ts';
 
 // Database connection (persisted to ./data)
