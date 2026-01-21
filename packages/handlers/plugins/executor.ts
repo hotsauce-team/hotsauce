@@ -96,6 +96,7 @@ export class WorkerExecutor {
     await this.sendToWorker(plugin.name, 'init', {
       plugin: this.serializePlugin(plugin),
       config: config as Serializable,
+      moduleUrl: plugin.moduleUrl,
     });
 
     registered.initialized = true;

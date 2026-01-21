@@ -154,6 +154,13 @@ export function createAuditLogPlugin(config: AuditLogConfig = {}): Plugin {
     name: 'audit-log',
     description: 'Logs all CRUD operations for auditing purposes',
     
+    // Worker module URL - the Worker will import this and run hooks in isolation
+    // This ensures the plugin code runs sandboxed from the main thread
+    moduleUrl: new URL('./audit-log.worker.ts', import.meta.url).href,
+    
+    // Hooks are also defined here for:
+    // 1. Type checking and validation at registration time
+    // 2. In-process fallback if Worker isolation is disabled
     hooks: {
       // Action hooks - fire and forget so they don't slow down requests
       on: {

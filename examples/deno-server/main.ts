@@ -8,11 +8,19 @@ import {
   PasswordProvider,
   readOnly,
 } from '../../packages/handlers/mod.ts';
+import { createAuditLogPlugin } from '../../packages/handlers/plugins/examples/audit-log.ts';
 import { schema, posts, users, parsers } from './schema.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
 const db = drizzle(client, { schema });
+
+// Audit log plugin - logs all CMS operations
+const auditPlugin = createAuditLogPlugin({
+  logReads: false, // Skip read operations (can be noisy)
+  logLists: false, // Skip list operations
+  // webhookUrl: 'https://audit.example.com/events', // Optional: send to external service
+});
 
 // Create CMS handler with authentication
 // Secrets can be passed directly or via environment variables:
@@ -32,6 +40,8 @@ const cmsHandler = createCmsHandler({
     posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
     categories: (readOnly()), // Admins: full access, others: read-only
   },
+  // Plugins for extending CMS functionality
+  plugins: [{ plugin: auditPlugin }],
   // User input parsers for validation (validation library agnostic)
   parsers,
   // Log errors to console (in production, use a proper logging service)

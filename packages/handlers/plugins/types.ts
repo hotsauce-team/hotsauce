@@ -325,6 +325,23 @@ export interface Plugin {
   /** Human-readable description */
   description?: string;
 
+  /**
+   * URL of the plugin module for Worker isolation.
+   * The Worker will dynamically import this module.
+   * 
+   * The module must export:
+   * - `default`: Plugin definition (hooks, routes, etc.)
+   * - Or call registerHooks()/registerActions() from worker-script.ts
+   * 
+   * If not provided, hooks run in-process (not isolated).
+   * 
+   * @example
+   * ```ts
+   * moduleUrl: new URL('./plugins/audit-log.worker.ts', import.meta.url).href,
+   * ```
+   */
+  moduleUrl?: string;
+
   /** Declared capabilities (for security/documentation) */
   capabilities?: PluginCapabilities;
 

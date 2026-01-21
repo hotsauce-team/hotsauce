@@ -104,14 +104,60 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 async function handleInit(payload: {
   plugin: Serializable;
   config: Serializable;
+  moduleUrl?: string;
 }): Promise<Serializable> {
   // Store plugin config for use by hooks
   pluginConfig = payload.config;
 
-  // Plugin is initialized - hooks and routes should be set by
-  // the actual plugin module that imports this worker script
+  // If moduleUrl provided, dynamically import the plugin module
+  if (payload.moduleUrl) {
+    try {
+      const pluginModule = await import(payload.moduleUrl);
+      
+      // The module can either:
+      // 1. Export a createPlugin(config) function that returns hooks
+      // 2. Export a default Plugin object with hooks (static config)
+      // 3. Call registerHooks() directly during import
+      
+      if (typeof pluginModule.createPlugin === 'function') {
+        // Preferred: factory function that receives config
+        const pluginDef = pluginModule.createPlugin(payload.config);
+        registerPluginDefinition(pluginDef);
+      } else if (pluginModule.default) {
+        // Fallback: static default export
+        registerPluginDefinition(pluginModule.default);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Failed to load plugin module: ${payload.moduleUrl}`, message);
+      return { initialized: false, error: message };
+    }
+  }
   
   return { initialized: true };
+}
+
+/**
+ * Register hooks and routes from a plugin definition
+ */
+function registerPluginDefinition(pluginDef: {
+  hooks?: PluginHooks;
+  routes?: PluginRoute[];
+}): void {
+  if (pluginDef.hooks) {
+    if (pluginDef.hooks.transform) {
+      transformHooks = pluginDef.hooks.transform;
+    }
+    if (pluginDef.hooks.on) {
+      actionHooks = pluginDef.hooks.on;
+    }
+  }
+  
+  if (pluginDef.routes) {
+    for (const route of pluginDef.routes) {
+      pluginRoutes.set(route.path, route);
+    }
+  }
 }
 
 /**
