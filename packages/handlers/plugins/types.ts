@@ -50,7 +50,7 @@ export interface PluginContext {
 }
 
 /**
- * Extended context for onAction hook (after operation completes)
+ * Extended context for action hooks (after operation completes)
  */
 export interface ActionContext extends PluginContext {
   /** Primary key of the affected record */
@@ -64,14 +64,23 @@ export interface ActionContext extends PluginContext {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Plugin hooks - data transformation and side effects
+// Transform hooks - modify data in the pipeline (always block)
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Hooks that plugins can implement.
- * All hooks are async and work with serializable data only.
+ * Transform function signature.
+ * Receives data, returns modified data. Always blocks.
  */
-export interface PluginHooks {
+export type TransformFn = (
+  ctx: PluginContext,
+  data: Record<string, Serializable>
+) => Promise<Record<string, Serializable>>;
+
+/**
+ * Transform hooks modify data as it flows through the pipeline.
+ * These always block because they return transformed data.
+ */
+export interface TransformHooks {
   /**
    * Transform data before database write (create/update).
    * Return modified data or throw to abort the operation.
@@ -86,10 +95,7 @@ export interface PluginHooks {
    * }
    * ```
    */
-  beforeSave?: (
-    ctx: PluginContext,
-    data: Record<string, Serializable>
-  ) => Promise<Record<string, Serializable>>;
+  beforeSave?: TransformFn;
 
   /**
    * Transform data after database read (list/read).
@@ -105,32 +111,92 @@ export interface PluginHooks {
    * }
    * ```
    */
-  afterRead?: (
-    ctx: PluginContext,
-    data: Record<string, Serializable>
-  ) => Promise<Record<string, Serializable>>;
+  afterRead?: TransformFn;
+}
 
+// ─────────────────────────────────────────────────────────────
+// Action hooks - side effects (optionally fire-and-forget)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Action handler function signature
+ */
+export type ActionHandlerFn = (ctx: ActionContext) => Promise<void>;
+
+/**
+ * Action hook with configuration options
+ */
+export interface ActionHookConfig {
+  /** The action handler function */
+  handler: ActionHandlerFn;
   /**
-   * Called after a successful CRUD operation.
-   * Use for audit logging, webhooks, cache invalidation, etc.
+   * If true, don't block the HTTP response waiting for this hook.
+   * Errors are logged but won't affect the user.
    * 
-   * This hook cannot modify data or abort the operation.
-   * Errors are logged but don't affect the response.
-   * 
-   * @example
-   * ```ts
-   * onAction: async (ctx) => {
-   *   await sendToAuditLog({
-   *     table: ctx.table,
-   *     action: ctx.action,
-   *     recordId: ctx.recordId,
-   *     userId: ctx.user?.sub,
-   *     timestamp: ctx.timestamp,
-   *   });
-   * }
-   * ```
+   * @default false
    */
-  onAction?: (ctx: ActionContext) => Promise<void>;
+  fireAndForget?: boolean;
+}
+
+/**
+ * Action hook - either a simple function (blocking) or config object
+ */
+export type ActionHook = ActionHandlerFn | ActionHookConfig;
+
+/**
+ * Action hooks for CRUD operations.
+ * Called after the operation completes successfully.
+ * Use for audit logging, webhooks, notifications, cache invalidation, etc.
+ * 
+ * @example
+ * ```ts
+ * on: {
+ *   // Simple form - blocks response
+ *   create: async (ctx) => { await sendWebhook(ctx); },
+ *   
+ *   // Config form - fire and forget
+ *   update: {
+ *     handler: async (ctx) => { await auditLog(ctx); },
+ *     fireAndForget: true,
+ *   },
+ * }
+ * ```
+ */
+export interface ActionHooks {
+  /** Called after a record is created */
+  create?: ActionHook;
+  /** Called after a record is read/viewed */
+  read?: ActionHook;
+  /** Called after a record is updated */
+  update?: ActionHook;
+  /** Called after a record is deleted */
+  delete?: ActionHook;
+  /** Called after a list query */
+  list?: ActionHook;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Combined plugin hooks
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * All hooks a plugin can implement.
+ * 
+ * - `transform`: Modify data in the pipeline (always blocks)
+ * - `on`: Side effects after operations (optionally fire-and-forget)
+ */
+export interface PluginHooks {
+  /**
+   * Transform hooks modify data as it flows through.
+   * Always block because they return transformed data.
+   */
+  transform?: TransformHooks;
+  
+  /**
+   * Action hooks for side effects after CRUD operations.
+   * Can be configured to fire-and-forget (non-blocking).
+   */
+  on?: ActionHooks;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -196,9 +262,14 @@ export interface PluginCapabilities {
   network?: string[];
 
   /**
-   * Hook types the plugin uses
+   * Transform hooks the plugin uses
    */
-  hooks?: (keyof PluginHooks)[];
+  transforms?: (keyof TransformHooks)[];
+
+  /**
+   * Action hooks the plugin uses
+   */
+  actions?: (keyof ActionHooks)[];
 
   /**
    * Route paths the plugin registers
@@ -226,15 +297,22 @@ export interface PluginCapabilities {
  * const auditPlugin: Plugin = {
  *   name: 'audit-log',
  *   capabilities: {
- *     hooks: ['onAction'],
+ *     actions: ['create', 'update', 'delete'],
  *     network: ['audit-api.example.com'],
  *   },
  *   hooks: {
- *     onAction: async (ctx) => {
- *       await fetch('https://audit-api.example.com/log', {
- *         method: 'POST',
- *         body: JSON.stringify(ctx),
- *       });
+ *     on: {
+ *       create: {
+ *         handler: async (ctx) => {
+ *           await fetch('https://audit-api.example.com/log', {
+ *             method: 'POST',
+ *             body: JSON.stringify(ctx),
+ *           });
+ *         },
+ *         fireAndForget: true,
+ *       },
+ *       update: { handler: auditLog, fireAndForget: true },
+ *       delete: { handler: auditLog, fireAndForget: true },
  *     },
  *   },
  * };

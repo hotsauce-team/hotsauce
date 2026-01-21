@@ -10,6 +10,14 @@ export type {
   PluginCapabilities,
   PluginsOptions,
   SandboxMode,
+  // Transform types
+  TransformFn,
+  TransformHooks,
+  // Action types
+  ActionHandlerFn,
+  ActionHook,
+  ActionHookConfig,
+  ActionHooks,
   // Context types
   PluginContext,
   ActionContext,

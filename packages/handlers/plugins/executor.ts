@@ -9,8 +9,11 @@ import type {
   PluginResponse,
   Serializable,
   SandboxMode,
+  ActionHook,
+  ActionHookConfig,
 } from './types.ts';
 import type { RegisteredPlugin } from './registry.ts';
+import type { CrudAction } from '../types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Worker message protocol
@@ -21,9 +24,9 @@ import type { RegisteredPlugin } from './registry.ts';
  */
 type WorkerMessageType =
   | 'init'
-  | 'hook:beforeSave'
-  | 'hook:afterRead'
-  | 'hook:onAction'
+  | 'transform:beforeSave'
+  | 'transform:afterRead'
+  | 'action'
   | 'route';
 
 /**
@@ -99,7 +102,7 @@ export class WorkerExecutor {
   }
 
   /**
-   * Execute beforeSave hook for all plugins
+   * Execute beforeSave transform for all plugins
    */
   async executeBeforeSave(
     plugins: RegisteredPlugin[],
@@ -109,9 +112,9 @@ export class WorkerExecutor {
     let result = data;
 
     for (const { plugin } of plugins) {
-      if (!plugin.hooks?.beforeSave) continue;
+      if (!plugin.hooks?.transform?.beforeSave) continue;
 
-      const response = await this.sendToWorker(plugin.name, 'hook:beforeSave', {
+      const response = await this.sendToWorker(plugin.name, 'transform:beforeSave', {
         ctx,
         data: result,
       });
@@ -125,7 +128,7 @@ export class WorkerExecutor {
   }
 
   /**
-   * Execute afterRead hook for all plugins
+   * Execute afterRead transform for all plugins
    */
   async executeAfterRead(
     plugins: RegisteredPlugin[],
@@ -135,9 +138,9 @@ export class WorkerExecutor {
     let result = data;
 
     for (const { plugin } of plugins) {
-      if (!plugin.hooks?.afterRead) continue;
+      if (!plugin.hooks?.transform?.afterRead) continue;
 
-      const response = await this.sendToWorker(plugin.name, 'hook:afterRead', {
+      const response = await this.sendToWorker(plugin.name, 'transform:afterRead', {
         ctx,
         data: result,
       });
@@ -151,27 +154,67 @@ export class WorkerExecutor {
   }
 
   /**
-   * Execute onAction hook for all plugins (fire and forget, errors logged)
+   * Execute action hooks for a specific CRUD action.
+   * Respects fireAndForget configuration per hook.
    */
-  async executeOnAction(
+  async executeAction(
     plugins: RegisteredPlugin[],
+    action: CrudAction,
     ctx: ActionContext
   ): Promise<void> {
-    const promises = plugins
-      .filter(({ plugin }) => plugin.hooks?.onAction)
-      .map(async ({ plugin }) => {
-        try {
-          await this.sendToWorker(plugin.name, 'hook:onAction', { ctx });
-        } catch (error) {
-          console.error(
-            `Plugin ${plugin.name} onAction hook failed:`,
-            error instanceof Error ? error.message : error
-          );
-        }
-      });
+    const blockingPromises: Promise<void>[] = [];
+    const fireAndForgetPromises: Promise<void>[] = [];
 
-    // Wait for all but don't fail if some error
-    await Promise.allSettled(promises);
+    for (const { plugin } of plugins) {
+      const hook = plugin.hooks?.on?.[action];
+      if (!hook) continue;
+
+      // Determine if this hook is fire-and-forget
+      const isFireAndForget = this.isFireAndForget(hook);
+
+      const promise = this.executeActionHook(plugin.name, action, ctx);
+
+      if (isFireAndForget) {
+        // Don't await, just log errors
+        fireAndForgetPromises.push(
+          promise.catch((error) => {
+            console.error(
+              `Plugin ${plugin.name} action hook (${action}) failed:`,
+              error instanceof Error ? error.message : error
+            );
+          })
+        );
+      } else {
+        blockingPromises.push(promise);
+      }
+    }
+
+    // Wait for blocking hooks
+    await Promise.allSettled(blockingPromises);
+
+    // Fire-and-forget hooks run in background (not awaited)
+    // They're already started, just not blocking
+  }
+
+  /**
+   * Check if an action hook is configured as fire-and-forget
+   */
+  private isFireAndForget(hook: ActionHook): boolean {
+    if (typeof hook === 'function') {
+      return false; // Simple function form defaults to blocking
+    }
+    return (hook as ActionHookConfig).fireAndForget === true;
+  }
+
+  /**
+   * Execute a single action hook
+   */
+  private async executeActionHook(
+    pluginName: string,
+    action: CrudAction,
+    ctx: ActionContext
+  ): Promise<void> {
+    await this.sendToWorker(pluginName, 'action', { action, ctx });
   }
 
   /**

@@ -3,9 +3,10 @@
 import type {
   Plugin,
   PluginConfig,
-  PluginHooks,
   PluginRoute,
   SandboxMode,
+  TransformHooks,
+  ActionHooks,
 } from './types.ts';
 
 /**
@@ -92,10 +93,17 @@ export class PluginRegistry {
   }
 
   /**
-   * Get all plugins that implement a specific hook
+   * Get all plugins that have transform hooks
    */
-  getPluginsWithHook<K extends keyof PluginHooks>(hook: K): RegisteredPlugin[] {
-    return this.getAll().filter((p) => p.plugin.hooks?.[hook] !== undefined);
+  getPluginsWithTransform(hook: keyof TransformHooks): RegisteredPlugin[] {
+    return this.getAll().filter((p) => p.plugin.hooks?.transform?.[hook] !== undefined);
+  }
+
+  /**
+   * Get all plugins that have action hooks for a specific action
+   */
+  getPluginsWithAction(action: keyof ActionHooks): RegisteredPlugin[] {
+    return this.getAll().filter((p) => p.plugin.hooks?.on?.[action] !== undefined);
   }
 
   /**
@@ -171,15 +179,45 @@ export class PluginRegistry {
     }
 
     // Validate capabilities match actual hooks
-    if (plugin.capabilities?.hooks) {
-      const declaredHooks = new Set(plugin.capabilities.hooks);
-      const actualHooks = plugin.hooks ? Object.keys(plugin.hooks) : [];
+    this.validateCapabilities(plugin);
+  }
 
-      for (const hook of actualHooks) {
-        if (!declaredHooks.has(hook as keyof PluginHooks)) {
+  /**
+   * Validate that declared capabilities match actual hooks
+   */
+  private validateCapabilities(plugin: Plugin): void {
+    const capabilities = plugin.capabilities;
+    if (!capabilities) return;
+
+    // Validate transforms
+    if (capabilities.transforms) {
+      const declaredTransforms = new Set(capabilities.transforms);
+      const actualTransforms = plugin.hooks?.transform 
+        ? Object.keys(plugin.hooks.transform) as (keyof TransformHooks)[]
+        : [];
+
+      for (const transform of actualTransforms) {
+        if (!declaredTransforms.has(transform)) {
           throw new PluginValidationError(
             plugin.name,
-            `Plugin uses hook "${hook}" but does not declare it in capabilities`
+            `Plugin uses transform "${transform}" but does not declare it in capabilities.transforms`
+          );
+        }
+      }
+    }
+
+    // Validate actions
+    if (capabilities.actions) {
+      const declaredActions = new Set(capabilities.actions);
+      const actualActions = plugin.hooks?.on
+        ? Object.keys(plugin.hooks.on) as (keyof ActionHooks)[]
+        : [];
+
+      for (const action of actualActions) {
+        if (!declaredActions.has(action)) {
+          throw new PluginValidationError(
+            plugin.name,
+            `Plugin uses action "${action}" but does not declare it in capabilities.actions`
           );
         }
       }
