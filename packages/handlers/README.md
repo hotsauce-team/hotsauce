@@ -1169,6 +1169,49 @@ const handler = createCmsHandler({
 
 > **Note:** Plugins run sequentially. If a before-hook throws an error, the operation is aborted and subsequent plugins won't run.
 
+### Process Isolation (Advanced)
+
+For enhanced security, you can run plugins in isolated worker processes using the `@drizzle-cms/handlers-workers` package:
+
+```ts
+import { createWorkerPlugin } from '@drizzle-cms/handlers-workers';
+import { createAuditLogPlugin } from '@drizzle-cms/handlers';
+
+// Wrap plugin to run in isolated worker
+const isolatedAuditPlugin = createWorkerPlugin({
+  plugin: createAuditLogPlugin({
+    db,
+    auditTable: schema.auditLogs,
+    logFullRecord: true,
+  }),
+  workerUrl: new URL('./audit-worker.ts', import.meta.url),
+  permissions: {  // Deno-only: restrict worker permissions
+    read: false,
+    write: ['./audit-logs'],
+    net: false,
+  },
+});
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  plugins: [isolatedAuditPlugin],
+});
+```
+
+**Benefits:**
+- **Security**: Plugins run in separate process with limited permissions
+- **Isolation**: Plugin crashes don't affect main CMS process
+- **Performance**: After-hooks are fire-and-forget (non-blocking)
+
+**Runtime Support:**
+- ✅ Deno (with permission sandboxing)
+- ✅ Node.js 20+ (via worker_threads)
+
+See `@drizzle-cms/handlers-workers` package documentation for details.
+
+> **Note:** The core `@drizzle-cms/handlers` package is runtime-agnostic. Worker isolation is opt-in via a separate package.
+
 ## Server Integration Examples
 
 ### Deno
