@@ -24,8 +24,8 @@ export interface FilterContext extends PluginContext {
 export interface WorkerPluginOptions<TConfig = unknown> {
   /** Plugin configuration to pass to worker */
   config?: TConfig;
-  /** Allow function to selectively execute hooks (default: deny all) */
-  allow?: (ctx: FilterContext) => boolean;
+  /** Allow function to selectively execute hooks (REQUIRED for security) */
+  allow: (ctx: FilterContext) => boolean;
   /** Timeout for hook execution in milliseconds (default: 30000) */
   timeout?: number;
 }

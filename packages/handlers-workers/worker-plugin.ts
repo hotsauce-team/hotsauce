@@ -28,6 +28,14 @@ export function createWorkerPlugin<TConfig = unknown>(
   worker: Worker,
   options: WorkerPluginOptions<TConfig> = {}
 ): Plugin {
+  // Require allow function for security
+  if (!options.allow) {
+    throw new Error(
+      'Worker plugin requires an "allow" function. ' +
+      'You must explicitly specify which hooks to allow for security. ' +
+      'Example: allow: (ctx) => ["afterCreate", "afterUpdate"].includes(ctx.hook)'
+    );
+  }
   
   // Generate unique IDs for messages
   let messageId = 0;
@@ -56,7 +64,6 @@ export function createWorkerPlugin<TConfig = unknown>(
 
   // Check if hook should be executed based on allow function
   function shouldExecute(hook: keyof PluginHooks, context: FilterContext): boolean {
-    if (!options.allow) return false; // Deny by default (secure)
     return options.allow({ ...context, hook });
   }
 

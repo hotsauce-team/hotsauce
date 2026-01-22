@@ -53,8 +53,8 @@ const plugin = createWorkerPlugin(auditWorker, {
     auditTable: 'audit_logs',
     logFullRecord: true 
   },
-  // Optional: Allow function to control which hooks execute
-  // Note: Defaults to deny all - must explicitly allow hooks
+  // REQUIRED: Allow function to control which hooks execute
+  // Must explicitly specify which hooks to allow for security
   allow: (ctx) => {
     // Only audit these hooks
     const allowedHooks = ['afterCreate', 'afterUpdate', 'afterDelete'];
