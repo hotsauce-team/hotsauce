@@ -18,7 +18,8 @@ export const CmsOptionsSchema = z.object({
   // Use z.any() for schema since Drizzle schemas have Symbol keys (e.g., Symbol.toStringTag)
   // that z.record(z.string(), z.any()) rejects
   schema: z.any().refine(
-    (val) => val != null && typeof val === 'object' && Object.keys(val).length > 0,
+    (val) =>
+      val != null && typeof val === 'object' && Object.keys(val).length > 0,
     { message: 'schema must be an object with at least one table' },
   ),
 
@@ -66,7 +67,9 @@ export function validateCmsOptions(options: unknown): void {
       .map((issue) => {
         // Zod paths can contain Symbols (from object keys), which throw on join()
         const path = issue.path
-          .map((p) => typeof p === 'symbol' ? (p.description ?? 'symbol') : String(p))
+          .map((p) =>
+            typeof p === 'symbol' ? (p.description ?? 'symbol') : String(p)
+          )
           .join('.');
         return `  - ${path}: ${issue.message}`;
       })

@@ -1,18 +1,17 @@
-// Worker sandbox executor
-// Runs plugin code in isolated Worker threads
+// Worker executor
+// Manages Worker instances for plugin isolation
 // Compatible with Deno and Node.js 20+
 
 import type {
-  PluginContext,
   ActionContext,
+  ActionHook,
+  ActionHookConfig,
+  CrudAction,
+  PluginContext,
+  PluginHooks,
   PluginRequest,
   PluginResponse,
   Serializable,
-  SandboxMode,
-  ActionHook,
-  ActionHookConfig,
-  PluginHooks,
-  CrudAction,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -63,32 +62,27 @@ export interface PluginCapabilities {
 }
 
 /**
- * Minimal plugin definition needed by executor
+ * Plugin configuration (flat structure).
+ * Note: The full PluginConfig in handlers/plugins/types.ts also has `filter`.
+ * This simplified version is used by the executor which doesn't need filter.
  */
-export interface WorkerPlugin {
+export interface PluginConfig {
   name: string;
   description?: string;
-  moduleUrl?: string;
-  capabilities?: PluginCapabilities;
+  worker?: Worker;
   hooks?: PluginHooks;
+  capabilities?: PluginCapabilities;
+  config?: object;
 }
 
 /**
- * A registered plugin with its configuration
+ * A registered plugin with its initialization state
  */
 export interface RegisteredPlugin {
-  plugin: WorkerPlugin;
-  config?: object;
+  plugin: PluginConfig;
   initialized: boolean;
-  /** Whether this is a remote-only plugin (no main thread code) */
-  isRemote?: boolean;
-}
-
-/**
- * Options for creating a Worker executor
- */
-export interface WorkerPluginOptions {
-  sandboxMode?: SandboxMode;
+  /** Whether this plugin runs in a Worker */
+  isWorker: boolean;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -96,7 +90,8 @@ export interface WorkerPluginOptions {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Manages Worker instances for plugins
+ * Manages Worker instances for plugins.
+ * Users provide their own Worker instances for full control over permissions.
  */
 export class WorkerExecutor {
   private workers: Map<string, Worker> = new Map();
@@ -105,24 +100,32 @@ export class WorkerExecutor {
     reject: (error: Error) => void;
   }> = new Map();
   private messageIdCounter = 0;
-  private sandboxMode: SandboxMode;
-
-  constructor(sandboxMode: SandboxMode = 'worker') {
-    this.sandboxMode = sandboxMode;
-  }
 
   /**
-   * Initialize a Worker for a plugin
+   * Initialize a Worker for a plugin.
+   * Plugin must have a Worker instance provided.
    */
   async initPlugin(registered: RegisteredPlugin): Promise<void> {
-    const { plugin, config } = registered;
+    const { plugin, isWorker } = registered;
+
+    // In-process plugins don't need Worker initialization
+    if (!isWorker) {
+      registered.initialized = true;
+      return;
+    }
+
+    const { worker, config } = plugin;
+
+    if (!worker) {
+      throw new Error(
+        `Plugin "${plugin.name}" marked as Worker plugin but has no Worker instance. ` +
+          `Create one with: new Worker(import.meta.resolve('...'), { type: 'module' })`,
+      );
+    }
 
     if (this.workers.has(plugin.name)) {
       throw new Error(`Worker already initialized for plugin: ${plugin.name}`);
     }
-
-    // Create worker with appropriate sandbox level
-    const worker = await this.createWorker(plugin);
 
     // Set up message handling
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
@@ -139,7 +142,6 @@ export class WorkerExecutor {
     await this.sendToWorker(plugin.name, 'init', {
       plugin: this.serializePlugin(plugin),
       config: config as Serializable,
-      moduleUrl: plugin.moduleUrl,
     });
 
     registered.initialized = true;
@@ -151,20 +153,33 @@ export class WorkerExecutor {
   async executeBeforeSave(
     plugins: RegisteredPlugin[],
     ctx: PluginContext,
-    data: Record<string, Serializable>
+    data: Record<string, Serializable>,
   ): Promise<Record<string, Serializable>> {
     let result = data;
 
-    for (const { plugin } of plugins) {
-      if (!plugin.hooks?.transform?.beforeSave) continue;
+    for (const registered of plugins) {
+      const { plugin, isWorker } = registered;
+      const hook = plugin.hooks?.transform?.beforeSave;
 
-      const response = await this.sendToWorker(plugin.name, 'transform:beforeSave', {
-        ctx,
-        data: result,
-      } as unknown as Serializable);
+      if (isWorker) {
+        // Send to Worker
+        const response = await this.sendToWorker(
+          plugin.name,
+          'transform:beforeSave',
+          {
+            ctx,
+            data: result,
+          } as unknown as Serializable,
+        );
 
-      if (response && typeof response === 'object' && !Array.isArray(response)) {
-        result = response as Record<string, Serializable>;
+        if (
+          response && typeof response === 'object' && !Array.isArray(response)
+        ) {
+          result = response as Record<string, Serializable>;
+        }
+      } else if (hook) {
+        // Execute in-process
+        result = await hook(ctx, result);
       }
     }
 
@@ -177,20 +192,33 @@ export class WorkerExecutor {
   async executeAfterRead(
     plugins: RegisteredPlugin[],
     ctx: PluginContext,
-    data: Record<string, Serializable>
+    data: Record<string, Serializable>,
   ): Promise<Record<string, Serializable>> {
     let result = data;
 
-    for (const { plugin } of plugins) {
-      if (!plugin.hooks?.transform?.afterRead) continue;
+    for (const registered of plugins) {
+      const { plugin, isWorker } = registered;
+      const hook = plugin.hooks?.transform?.afterRead;
 
-      const response = await this.sendToWorker(plugin.name, 'transform:afterRead', {
-        ctx,
-        data: result,
-      } as unknown as Serializable);
+      if (isWorker) {
+        // Send to Worker
+        const response = await this.sendToWorker(
+          plugin.name,
+          'transform:afterRead',
+          {
+            ctx,
+            data: result,
+          } as unknown as Serializable,
+        );
 
-      if (response && typeof response === 'object' && !Array.isArray(response)) {
-        result = response as Record<string, Serializable>;
+        if (
+          response && typeof response === 'object' && !Array.isArray(response)
+        ) {
+          result = response as Record<string, Serializable>;
+        }
+      } else if (hook) {
+        // Execute in-process
+        result = await hook(ctx, result);
       }
     }
 
@@ -204,32 +232,52 @@ export class WorkerExecutor {
   async executeAction(
     plugins: RegisteredPlugin[],
     action: CrudAction,
-    ctx: ActionContext
+    ctx: ActionContext,
   ): Promise<void> {
     const blockingPromises: Promise<void>[] = [];
     const fireAndForgetPromises: Promise<void>[] = [];
 
-    for (const { plugin } of plugins) {
+    for (const registered of plugins) {
+      const { plugin, isWorker } = registered;
       const hook = plugin.hooks?.on?.[action];
-      if (!hook) continue;
 
-      // Determine if this hook is fire-and-forget
-      const isFireAndForget = this.isFireAndForget(hook);
+      if (isWorker) {
+        // Worker plugins: send message, assume fire-and-forget unless hooks say otherwise
+        const isFireAndForget = hook ? this.isFireAndForget(hook) : true;
 
-      const promise = this.executeActionHook(plugin.name, action, ctx);
+        const promise = this.executeActionHook(plugin.name, action, ctx);
 
-      if (isFireAndForget) {
-        // Don't await, just log errors
-        fireAndForgetPromises.push(
-          promise.catch((error) => {
-            console.error(
-              `Plugin ${plugin.name} action hook (${action}) failed:`,
-              error instanceof Error ? error.message : error
-            );
-          })
-        );
-      } else {
-        blockingPromises.push(promise);
+        if (isFireAndForget) {
+          fireAndForgetPromises.push(
+            promise.catch((error) => {
+              console.error(
+                `Plugin ${plugin.name} action hook (${action}) failed:`,
+                error instanceof Error ? error.message : error,
+              );
+            }),
+          );
+        } else {
+          blockingPromises.push(promise);
+        }
+      } else if (hook) {
+        // In-process: execute directly
+        const isFireAndForget = this.isFireAndForget(hook);
+        const handler = typeof hook === 'function' ? hook : hook.handler;
+
+        const promise = Promise.resolve(handler(ctx)).then(() => {});
+
+        if (isFireAndForget) {
+          fireAndForgetPromises.push(
+            promise.catch((error) => {
+              console.error(
+                `Plugin ${plugin.name} action hook (${action}) failed:`,
+                error instanceof Error ? error.message : error,
+              );
+            }),
+          );
+        } else {
+          blockingPromises.push(promise);
+        }
       }
     }
 
@@ -255,9 +303,13 @@ export class WorkerExecutor {
   private async executeActionHook(
     pluginName: string,
     action: CrudAction,
-    ctx: ActionContext
+    ctx: ActionContext,
   ): Promise<void> {
-    await this.sendToWorker(pluginName, 'action', { action, ctx } as unknown as Serializable);
+    await this.sendToWorker(
+      pluginName,
+      'action',
+      { action, ctx } as unknown as Serializable,
+    );
   }
 
   /**
@@ -266,7 +318,7 @@ export class WorkerExecutor {
   async executeRoute(
     pluginName: string,
     routePath: string,
-    request: PluginRequest
+    request: PluginRequest,
   ): Promise<PluginResponse> {
     const response = await this.sendToWorker(pluginName, 'route', {
       path: routePath,
@@ -306,68 +358,12 @@ export class WorkerExecutor {
   // ─────────────────────────────────────────────────────────────
 
   /**
-   * Create a Worker with appropriate sandbox settings
-   */
-  private async createWorker(plugin: WorkerPlugin): Promise<Worker> {
-    // Get the worker script URL
-    const workerUrl = new URL('./sandbox/worker-script.ts', import.meta.url);
-
-    // Check if we're on Deno and should use enhanced permissions
-    const isDeno = typeof globalThis.Deno !== 'undefined';
-
-    if (isDeno && this.sandboxMode === 'deno-sandbox') {
-      // Deno Worker with restricted permissions
-      return this.createDenoSandboxedWorker(workerUrl, plugin);
-    }
-
-    // Standard Worker (works on all runtimes)
-    return new Worker(workerUrl, { type: 'module' });
-  }
-
-  /**
-   * Create a Deno Worker with restricted permissions based on plugin capabilities
-   */
-  private createDenoSandboxedWorker(workerUrl: URL, plugin: WorkerPlugin): Worker {
-    // Build permission object from plugin capabilities
-    const capabilities = plugin.capabilities ?? {};
-
-    // deno-lint-ignore no-explicit-any
-    const denoOptions: any = {
-      type: 'module',
-      deno: {
-        permissions: {
-          // No filesystem access
-          read: false,
-          write: false,
-
-          // No subprocess spawning
-          run: false,
-
-          // No FFI
-          ffi: false,
-
-          // No high-resolution time (timing attacks)
-          hrtime: false,
-
-          // Network: only allowed hosts
-          net: capabilities.network ?? false,
-
-          // No environment variables
-          env: false,
-        },
-      },
-    };
-
-    return new Worker(workerUrl, denoOptions);
-  }
-
-  /**
    * Send a message to a plugin's Worker and wait for response
    */
   private sendToWorker(
     pluginName: string,
     type: WorkerMessageType,
-    payload: Serializable
+    payload: Serializable,
   ): Promise<Serializable> {
     const worker = this.workers.get(pluginName);
     if (!worker) {
@@ -427,14 +423,14 @@ export class WorkerExecutor {
   /**
    * Serialize a plugin definition for sending to Worker
    */
-  private serializePlugin(plugin: WorkerPlugin): Serializable {
+  private serializePlugin(plugin: PluginConfig): Serializable {
     const capabilities: Serializable | undefined = plugin.capabilities
       ? {
-          network: plugin.capabilities.network,
-          transforms: plugin.capabilities.transforms,
-          actions: plugin.capabilities.actions,
-          routes: plugin.capabilities.routes,
-        }
+        network: plugin.capabilities.network,
+        transforms: plugin.capabilities.transforms,
+        actions: plugin.capabilities.actions,
+        routes: plugin.capabilities.routes,
+      }
       : undefined;
 
     return {
@@ -448,6 +444,6 @@ export class WorkerExecutor {
 /**
  * Create a Worker executor instance
  */
-export function createWorkerExecutor(sandboxMode: SandboxMode = 'worker'): WorkerExecutor {
-  return new WorkerExecutor(sandboxMode);
+export function createWorkerExecutor(): WorkerExecutor {
+  return new WorkerExecutor();
 }

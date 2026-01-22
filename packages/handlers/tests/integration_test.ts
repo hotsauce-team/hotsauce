@@ -2,13 +2,31 @@
 // Tests the full handler → DB flow using PGlite
 // Uses shared database instances with TRUNCATE for speed
 
-import { assertEquals, assertExists, assertStringIncludes } from 'jsr:@std/assert';
+import {
+  assertEquals,
+  assertExists,
+  assertStringIncludes,
+} from 'jsr:@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
-import { pgTable, serial, varchar, text, boolean, timestamp, integer } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  integer,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
-import { createCmsHandler, ownedBy, adminOr, signJwt, createJwtPayload } from '../mod.ts';
+import {
+  adminOr,
+  createCmsHandler,
+  createJwtPayload,
+  ownedBy,
+  signJwt,
+} from '../mod.ts';
 import { generateCsrfToken } from '../csrf.ts';
 import { hashPassword, PasswordProvider } from '../auth/mod.ts';
 
@@ -79,7 +97,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
   // Create single PGlite instance for all basic tests
   const client = new PGlite();
   const db = drizzle(client, { schema });
-  
+
   // Create tables once
   await db.execute(sql`
     CREATE TABLE users (
@@ -91,7 +109,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
-  
+
   await db.execute(sql`
     CREATE TABLE posts (
       id SERIAL PRIMARY KEY,
@@ -101,12 +119,12 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
-  
+
   // Helper to reset tables between tests
   async function resetDb() {
     await db.execute(sql`TRUNCATE TABLE posts, users RESTART IDENTITY CASCADE`);
   }
-  
+
   // Helper to create handler
   function createHandler() {
     return createCmsHandler({
@@ -121,7 +139,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createHandler();
     const request = new Request('http://localhost/admin');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'Dashboard');
@@ -134,7 +152,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createHandler();
     const request = new Request('http://localhost/admin/users');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'Users');
@@ -145,7 +163,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createHandler();
     const request = new Request('http://localhost/admin/users/new');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'Create Users');
@@ -157,7 +175,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
   await t.step('create record via POST', async () => {
     await resetDb();
     const handler = createHandler();
-    
+
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
     const formData = createFormData({
       _csrf: csrfToken,
@@ -165,17 +183,20 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       name: 'Test User',
       bio: 'A test user',
     });
-    
+
     const request = new Request('http://localhost/admin/users/new', {
       method: 'POST',
       body: formData,
     });
-    
+
     const response = await handler(request);
-    
+
     assertEquals(response.status, 303);
-    assertStringIncludes(response.headers.get('Location') ?? '', '/admin/users/');
-    
+    assertStringIncludes(
+      response.headers.get('Location') ?? '',
+      '/admin/users/',
+    );
+
     const users_result = await db.select().from(users);
     assertEquals(users_result.length, 1);
     assertEquals(users_result[0]?.email, 'test@example.com');
@@ -185,23 +206,23 @@ Deno.test('integration: basic CRUD tests', async (t) => {
   await t.step('create fails without CSRF token', async () => {
     await resetDb();
     const handler = createHandler();
-    
+
     const formData = createFormData({
       email: 'test@example.com',
       name: 'Test User',
     });
-    
+
     const request = new Request('http://localhost/admin/users/new', {
       method: 'POST',
       body: formData,
     });
-    
+
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'Invalid or expired form');
-    
+
     const users_result = await db.select().from(users);
     assertEquals(users_result.length, 0);
   });
@@ -212,11 +233,11 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       email: 'view@example.com',
       name: 'View Test',
     });
-    
+
     const handler = createHandler();
     const request = new Request('http://localhost/admin/users/1');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'view@example.com');
@@ -232,11 +253,11 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       name: 'Edit Test',
       bio: 'Original bio',
     });
-    
+
     const handler = createHandler();
     const request = new Request('http://localhost/admin/users/1/edit');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'edit@example.com');
@@ -251,9 +272,9 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       email: 'update@example.com',
       name: 'Before Update',
     });
-    
+
     const handler = createHandler();
-    
+
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
     const formData = createFormData({
       _csrf: csrfToken,
@@ -261,16 +282,16 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       name: 'After Update',
       bio: 'New bio',
     });
-    
+
     const request = new Request('http://localhost/admin/users/1', {
       method: 'POST',
       body: formData,
     });
-    
+
     const response = await handler(request);
-    
+
     assertEquals(response.status, 303);
-    
+
     const users_result = await db.select().from(users);
     assertEquals(users_result.length, 1);
     assertEquals(users_result[0]?.email, 'updated@example.com');
@@ -284,27 +305,30 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       email: 'delete@example.com',
       name: 'To Delete',
     });
-    
+
     let users_result = await db.select().from(users);
     assertEquals(users_result.length, 1);
-    
+
     const handler = createHandler();
-    
+
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
     const formData = createFormData({
       _csrf: csrfToken,
     });
-    
+
     const request = new Request('http://localhost/admin/users/1/delete', {
       method: 'POST',
       body: formData,
     });
-    
+
     const response = await handler(request);
-    
+
     assertEquals(response.status, 303);
-    assertStringIncludes(response.headers.get('Location') ?? '', '_flash=delete_success');
-    
+    assertStringIncludes(
+      response.headers.get('Location') ?? '',
+      '_flash=delete_success',
+    );
+
     users_result = await db.select().from(users);
     assertEquals(users_result.length, 0);
   });
@@ -315,21 +339,24 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       email: 'nodelete@example.com',
       name: 'Should Not Delete',
     });
-    
+
     const handler = createHandler();
-    
+
     const formData = createFormData({});
-    
+
     const request = new Request('http://localhost/admin/users/1/delete', {
       method: 'POST',
       body: formData,
     });
-    
+
     const response = await handler(request);
-    
+
     assertEquals(response.status, 303);
-    assertStringIncludes(response.headers.get('Location') ?? '', '_flash=delete_error');
-    
+    assertStringIncludes(
+      response.headers.get('Location') ?? '',
+      '_flash=delete_error',
+    );
+
     const users_result = await db.select().from(users);
     assertEquals(users_result.length, 1);
   });
@@ -341,11 +368,11 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       { email: 'user2@example.com', name: 'User Two' },
       { email: 'user3@example.com', name: 'User Three' },
     ]);
-    
+
     const handler = createHandler();
     const request = new Request('http://localhost/admin/users');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'user1@example.com');
@@ -360,11 +387,11 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       { email: 'author1@example.com', name: 'Author One' },
       { email: 'author2@example.com', name: 'Author Two' },
     ]);
-    
+
     const handler = createHandler();
     const request = new Request('http://localhost/admin/posts/new');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'Author One');
@@ -378,9 +405,9 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       email: 'author@example.com',
       name: 'Post Author',
     });
-    
+
     const handler = createHandler();
-    
+
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
     const formData = createFormData({
       _csrf: csrfToken,
@@ -388,16 +415,16 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       body: 'Post content',
       authorId: '1',
     });
-    
+
     const request = new Request('http://localhost/admin/posts/new', {
       method: 'POST',
       body: formData,
     });
-    
+
     const response = await handler(request);
-    
+
     assertEquals(response.status, 303);
-    
+
     const posts_result = await db.select().from(posts);
     assertEquals(posts_result.length, 1);
     assertEquals(posts_result[0]?.title, 'Test Post');
@@ -409,7 +436,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createHandler();
     const request = new Request('http://localhost/admin/users/999');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 404);
   });
 
@@ -417,7 +444,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createHandler();
     const request = new Request('http://localhost/admin/nonexistent');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 404);
   });
 
@@ -429,21 +456,23 @@ Deno.test('integration: basic CRUD tests', async (t) => {
       basePath: '/admin',
       isAuthenticated: () => false,
     });
-    
+
     const request = new Request('http://localhost/admin');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 403);
   });
 
   await t.step('list view displays flash message from URL', async () => {
     await resetDb();
     await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
-    
+
     const handler = createHandler();
-    const request = new Request('http://localhost/admin/users?_flash=delete_success');
+    const request = new Request(
+      'http://localhost/admin/users?_flash=delete_success',
+    );
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'Record deleted successfully');
@@ -452,14 +481,19 @@ Deno.test('integration: basic CRUD tests', async (t) => {
   await t.step('detail view displays flash message from URL', async () => {
     await resetDb();
     await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
-    
+
     const handler = createHandler();
-    const request = new Request('http://localhost/admin/users/1?_flash=update_forbidden');
+    const request = new Request(
+      'http://localhost/admin/users/1?_flash=update_forbidden',
+    );
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
-    assertStringIncludes(html, 'You do not have permission to update this record');
+    assertStringIncludes(
+      html,
+      'You do not have permission to update this record',
+    );
   });
 
   // Cleanup
@@ -474,7 +508,7 @@ Deno.test('integration: JWT auth tests', async (t) => {
   // Create single PGlite instance for all auth tests
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWithAuth });
-  
+
   // Create tables once
   await db.execute(sql`
     CREATE TABLE users (
@@ -486,7 +520,7 @@ Deno.test('integration: JWT auth tests', async (t) => {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
-  
+
   await db.execute(sql`
     CREATE TABLE posts (
       id SERIAL PRIMARY KEY,
@@ -496,7 +530,7 @@ Deno.test('integration: JWT auth tests', async (t) => {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
-  
+
   await db.execute(sql`
     CREATE TABLE admin_users (
       id SERIAL PRIMARY KEY,
@@ -505,12 +539,14 @@ Deno.test('integration: JWT auth tests', async (t) => {
       role VARCHAR(50)
     )
   `);
-  
+
   // Helper to reset tables between tests
   async function resetDb() {
-    await db.execute(sql`TRUNCATE TABLE posts, users, admin_users RESTART IDENTITY CASCADE`);
+    await db.execute(
+      sql`TRUNCATE TABLE posts, users, admin_users RESTART IDENTITY CASCADE`,
+    );
   }
-  
+
   // Helper to create handler with auth
   function createAuthHandler(extraOptions = {}) {
     return createCmsHandler({
@@ -536,23 +572,26 @@ Deno.test('integration: JWT auth tests', async (t) => {
   await t.step('redirects unauthenticated to login', async () => {
     await resetDb();
     const handler = createAuthHandler();
-    
+
     const request = new Request('http://localhost/admin');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 302);
     assertEquals(response.headers.get('Location'), '/admin/login');
   });
 
   await t.step('login page renders', async () => {
     const handler = createAuthHandler();
-    
+
     const request = new Request('http://localhost/admin/login');
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
-    assertEquals(response.headers.get('Content-Type'), 'text/html; charset=utf-8');
-    
+    assertEquals(
+      response.headers.get('Content-Type'),
+      'text/html; charset=utf-8',
+    );
+
     const html = await response.text();
     assertStringIncludes(html, 'form');
     assertStringIncludes(html, 'identity');
@@ -562,41 +601,41 @@ Deno.test('integration: JWT auth tests', async (t) => {
 
   await t.step('successful login with correct credentials', async () => {
     await resetDb();
-    
+
     const passwordHash = await hashPassword('admin123');
     await db.insert(adminUsers).values({
       email: 'admin@example.com',
       passwordHash,
       role: 'admin',
     });
-    
+
     const handler = createAuthHandler();
-    
+
     // Get CSRF token from login page
     const loginPageReq = new Request('http://localhost/admin/login');
     const loginPageRes = await handler(loginPageReq);
     const loginHtml = await loginPageRes.text();
-    
+
     const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
     assertExists(csrfMatch, 'CSRF token should be in login page');
     const csrfToken = csrfMatch[1]!;
-    
+
     // Submit login
     const formData = createFormData({
       identity: 'admin@example.com',
       password: 'admin123',
       _csrf: csrfToken,
     });
-    
+
     const loginReq = new Request('http://localhost/admin/login', {
       method: 'POST',
       body: formData,
     });
     const loginRes = await handler(loginReq);
-    
+
     assertEquals(loginRes.status, 302);
     assertEquals(loginRes.headers.get('Location'), '/admin');
-    
+
     const setCookie = loginRes.headers.get('Set-Cookie');
     assertExists(setCookie, 'Set-Cookie header should be present');
     assertStringIncludes(setCookie, 'cms_token=');
@@ -605,35 +644,37 @@ Deno.test('integration: JWT auth tests', async (t) => {
 
   await t.step('rejects invalid password', async () => {
     await resetDb();
-    
+
     const passwordHash = await hashPassword('correct-password');
     await db.insert(adminUsers).values({
       email: 'admin@example.com',
       passwordHash,
       role: 'admin',
     });
-    
+
     const handler = createAuthHandler();
-    
+
     // Get CSRF token
-    const loginPageRes = await handler(new Request('http://localhost/admin/login'));
+    const loginPageRes = await handler(
+      new Request('http://localhost/admin/login'),
+    );
     const loginHtml = await loginPageRes.text();
     const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
     const csrfToken = csrfMatch![1]!;
-    
+
     // Submit with wrong password
     const formData = createFormData({
       identity: 'admin@example.com',
       password: 'wrong-password',
       _csrf: csrfToken,
     });
-    
+
     const loginReq = new Request('http://localhost/admin/login', {
       method: 'POST',
       body: formData,
     });
     const loginRes = await handler(loginReq);
-    
+
     assertEquals(loginRes.status, 401);
     const html = await loginRes.text();
     assertStringIncludes(html, 'Invalid email or password');
@@ -641,45 +682,49 @@ Deno.test('integration: JWT auth tests', async (t) => {
 
   await t.step('allows access with valid token', async () => {
     await resetDb();
-    
+
     const passwordHash = await hashPassword('admin123');
     await db.insert(adminUsers).values({
       email: 'admin@example.com',
       passwordHash,
       role: 'admin',
     });
-    
+
     const handler = createAuthHandler();
-    
+
     // Login to get token
-    const loginPageRes = await handler(new Request('http://localhost/admin/login'));
+    const loginPageRes = await handler(
+      new Request('http://localhost/admin/login'),
+    );
     const loginHtml = await loginPageRes.text();
     const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
     const csrfToken = csrfMatch![1]!;
-    
+
     const formData = createFormData({
       identity: 'admin@example.com',
       password: 'admin123',
       _csrf: csrfToken,
     });
-    
-    const loginRes = await handler(new Request('http://localhost/admin/login', {
-      method: 'POST',
-      body: formData,
-    }));
-    
+
+    const loginRes = await handler(
+      new Request('http://localhost/admin/login', {
+        method: 'POST',
+        body: formData,
+      }),
+    );
+
     // Extract token from Set-Cookie
     const setCookie = loginRes.headers.get('Set-Cookie')!;
     const tokenMatch = setCookie.match(/cms_token=([^;]+)/);
     assertExists(tokenMatch, 'Token should be in Set-Cookie');
     const token = tokenMatch[1];
-    
+
     // Access dashboard with token
     const dashboardReq = new Request('http://localhost/admin', {
       headers: { 'Cookie': `cms_token=${token}` },
     });
     const dashboardRes = await handler(dashboardReq);
-    
+
     assertEquals(dashboardRes.status, 200);
     const html = await dashboardRes.text();
     assertStringIncludes(html, 'users');
@@ -697,7 +742,7 @@ Deno.test('integration: policy tests', async (t) => {
   // Create single PGlite instance for all policy tests
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWithAuth });
-  
+
   // Create tables once
   await db.execute(sql`
     CREATE TABLE users (
@@ -709,7 +754,7 @@ Deno.test('integration: policy tests', async (t) => {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
-  
+
   await db.execute(sql`
     CREATE TABLE posts (
       id SERIAL PRIMARY KEY,
@@ -719,7 +764,7 @@ Deno.test('integration: policy tests', async (t) => {
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);
-  
+
   await db.execute(sql`
     CREATE TABLE admin_users (
       id SERIAL PRIMARY KEY,
@@ -728,32 +773,37 @@ Deno.test('integration: policy tests', async (t) => {
       role VARCHAR(50)
     )
   `);
-  
+
   // Helper to reset tables between tests
   async function resetDb() {
-    await db.execute(sql`TRUNCATE TABLE posts, users, admin_users RESTART IDENTITY CASCADE`);
+    await db.execute(
+      sql`TRUNCATE TABLE posts, users, admin_users RESTART IDENTITY CASCADE`,
+    );
   }
 
   await t.step('filters list to only owned records', async () => {
     await resetDb();
-    
+
     // Create two users
     await db.insert(users).values([
       { email: 'alice@example.com', name: 'Alice' },
       { email: 'bob@example.com', name: 'Bob' },
     ]);
-    
+
     // Create posts: 2 by Alice (id=1), 1 by Bob (id=2)
     await db.insert(posts).values([
       { title: 'Alice Post 1', body: 'Content 1', authorId: 1 },
       { title: 'Alice Post 2', body: 'Content 2', authorId: 1 },
       { title: 'Bob Post 1', body: 'Content 3', authorId: 2 },
     ]);
-    
+
     // Create admin user for auth
     const passwordHash = await hashPassword('password');
-    await db.insert(adminUsers).values({ email: 'admin@example.com', passwordHash });
-    
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       db,
@@ -767,43 +817,51 @@ Deno.test('integration: policy tests', async (t) => {
         posts: ownedBy(posts, 'authorId'),
       },
     });
-    
+
     // Create JWT for "user 1" (Alice's posts have authorId=1)
     const alicePayload = createJwtPayload('1');
     const aliceToken = await signJwt(alicePayload, AUTH_SECRET);
-    
+
     const request = new Request('http://localhost/admin/posts', {
       headers: { Cookie: `cms_token=${aliceToken}` },
     });
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
-    
+
     assertStringIncludes(html, 'Alice Post 1');
     assertStringIncludes(html, 'Alice Post 2');
-    assertEquals(html.includes('Bob Post 1'), false, 'Should not see Bob\'s post');
+    assertEquals(
+      html.includes('Bob Post 1'),
+      false,
+      "Should not see Bob's post",
+    );
   });
 
   await t.step('admin bypasses ownership policy', async () => {
     await resetDb();
-    
+
     // Create users for posts
     await db.insert(users).values([
       { email: 'user1@example.com', name: 'User1' },
       { email: 'user2@example.com', name: 'User2' },
     ]);
-    
+
     // Create posts by user 2
     await db.insert(posts).values([
       { title: 'User Post 1', body: 'Content', authorId: 2 },
       { title: 'User Post 2', body: 'Content', authorId: 2 },
     ]);
-    
+
     // Create admin user for auth
     const passwordHash = await hashPassword('password');
-    await db.insert(adminUsers).values({ email: 'admin@example.com', passwordHash, role: 'admin' });
-    
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+      role: 'admin',
+    });
+
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       db,
@@ -817,41 +875,44 @@ Deno.test('integration: policy tests', async (t) => {
         posts: adminOr(ownedBy(posts, 'authorId')),
       },
     });
-    
+
     // Create JWT for admin with admin role
     const adminPayload = createJwtPayload('1', 'admin');
     const adminToken = await signJwt(adminPayload, AUTH_SECRET);
-    
+
     const request = new Request('http://localhost/admin/posts', {
       headers: { Cookie: `cms_token=${adminToken}` },
     });
     const response = await handler(request);
-    
+
     assertEquals(response.status, 200);
     const html = await response.text();
-    
+
     assertStringIncludes(html, 'User Post 1');
     assertStringIncludes(html, 'User Post 2');
   });
 
   await t.step('returns 403 for unauthorized record access', async () => {
     await resetDb();
-    
+
     // Create two users
     await db.insert(users).values([
       { email: 'alice@example.com', name: 'Alice' },
       { email: 'bob@example.com', name: 'Bob' },
     ]);
-    
+
     // Create post by Bob (authorId=2)
     await db.insert(posts).values([
       { title: 'Bob Secret Post', body: 'Private', authorId: 2 },
     ]);
-    
+
     // Create admin user for auth
     const passwordHash = await hashPassword('password');
-    await db.insert(adminUsers).values({ email: 'admin@example.com', passwordHash });
-    
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       db,
@@ -865,17 +926,17 @@ Deno.test('integration: policy tests', async (t) => {
         posts: ownedBy(posts, 'authorId'),
       },
     });
-    
+
     // Create JWT for "user 1" (Alice)
     const alicePayload = createJwtPayload('1');
     const aliceToken = await signJwt(alicePayload, AUTH_SECRET);
-    
+
     // Alice tries to view Bob's post
     const request = new Request('http://localhost/admin/posts/1', {
       headers: { Cookie: `cms_token=${aliceToken}` },
     });
     const response = await handler(request);
-    
+
     assertEquals(response.status, 303);
     const location = response.headers.get('Location');
     assertStringIncludes(location ?? '', '_flash=read_forbidden');
@@ -883,22 +944,25 @@ Deno.test('integration: policy tests', async (t) => {
 
   await t.step('atomic update prevents race conditions', async () => {
     await resetDb();
-    
+
     // Create two users
     await db.insert(users).values([
       { email: 'alice@example.com', name: 'Alice' },
       { email: 'bob@example.com', name: 'Bob' },
     ]);
-    
+
     // Create Alice's post (authorId=1)
     await db.insert(posts).values([
       { title: 'Alice Post', body: 'Original', authorId: 1 },
     ]);
-    
+
     // Create admin user for auth
     const passwordHash = await hashPassword('password');
-    await db.insert(adminUsers).values({ email: 'admin@example.com', passwordHash });
-    
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       db,
@@ -912,12 +976,12 @@ Deno.test('integration: policy tests', async (t) => {
         posts: ownedBy(posts, 'authorId'),
       },
     });
-    
+
     // Create JWT for "user 2" (Bob)
     const bobPayload = createJwtPayload('2');
     const bobToken = await signJwt(bobPayload, AUTH_SECRET);
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
-    
+
     // Bob tries to update Alice's post
     const formData = createFormData({
       title: 'Hacked by Bob',
@@ -925,18 +989,18 @@ Deno.test('integration: policy tests', async (t) => {
       authorId: '1',
       _csrf: csrfToken,
     });
-    
+
     const request = new Request('http://localhost/admin/posts/1/edit', {
       method: 'POST',
       headers: { Cookie: `cms_token=${bobToken}` },
       body: formData,
     });
     const response = await handler(request);
-    
+
     assertEquals(response.status, 303);
     const location = response.headers.get('Location');
     assertStringIncludes(location ?? '', '_flash=update_forbidden');
-    
+
     // Verify post was NOT modified
     const [post] = await db.select().from(posts).where(sql`id = 1`);
     assertEquals(post?.title, 'Alice Post');

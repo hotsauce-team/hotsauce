@@ -1,7 +1,29 @@
 // Audit log plugin - Worker module version
-// This file is imported by the Worker and runs in isolation
+// This file is loaded directly by a Worker and handles all messages
 
-import type { ActionContext, PluginHooks, Serializable } from '@drizzle-cms/handlers-workers';
+import type {
+  ActionContext,
+  CrudAction,
+  PluginHooks,
+  Serializable,
+} from '@drizzle-cms/handlers-workers';
+
+// ─────────────────────────────────────────────────────────────
+// Worker message types
+// ─────────────────────────────────────────────────────────────
+
+interface WorkerRequest {
+  id: string;
+  type: string;
+  payload: Serializable;
+}
+
+interface WorkerResponse {
+  id: string;
+  success: boolean;
+  result?: Serializable;
+  error?: string;
+}
 
 /**
  * Configuration for the audit log plugin
@@ -32,6 +54,12 @@ export interface AuditEntry {
   newData?: unknown;
 }
 
+// ─────────────────────────────────────────────────────────────
+// Plugin state
+// ─────────────────────────────────────────────────────────────
+
+let pluginConfig: AuditLogConfig = {};
+
 /**
  * Check if a table should be audited based on config
  */
@@ -48,7 +76,10 @@ function shouldAuditTable(table: string, config: AuditLogConfig): boolean {
 /**
  * Log an audit entry
  */
-async function logEntry(entry: AuditEntry, config: AuditLogConfig): Promise<void> {
+async function logEntry(
+  entry: AuditEntry,
+  config: AuditLogConfig,
+): Promise<void> {
   // Log to console for debugging
   console.log('[audit]', JSON.stringify(entry));
 
@@ -68,55 +99,121 @@ async function logEntry(entry: AuditEntry, config: AuditLogConfig): Promise<void
 }
 
 /**
- * Create the audit handler for an action
+ * Handle an audit action
  */
-function createAuditHandler(config: AuditLogConfig) {
-  return async (ctx: ActionContext): Promise<void> => {
-    if (!shouldAuditTable(ctx.table, config)) {
-      return;
-    }
+async function handleAuditAction(ctx: ActionContext): Promise<void> {
+  if (!shouldAuditTable(ctx.table, pluginConfig)) {
+    return;
+  }
 
-    // Skip reads/lists if not configured
-    if (ctx.action === 'read' && !config.logReads) {
-      return;
-    }
-    if (ctx.action === 'list' && !config.logLists) {
-      return;
-    }
+  // Skip reads/lists if not configured
+  if (ctx.action === 'read' && !pluginConfig.logReads) {
+    return;
+  }
+  if (ctx.action === 'list' && !pluginConfig.logLists) {
+    return;
+  }
 
-    const entry: AuditEntry = {
-      timestamp: ctx.timestamp,
-      action: ctx.action,
-      table: ctx.table,
-      recordId: ctx.recordId,
-      user: ctx.user,
-      oldData: ctx.oldData,
-      newData: ctx.newData,
-    };
-
-    await logEntry(entry, config);
+  const entry: AuditEntry = {
+    timestamp: ctx.timestamp,
+    action: ctx.action,
+    table: ctx.table,
+    recordId: ctx.recordId,
+    user: ctx.user,
+    oldData: ctx.oldData,
+    newData: ctx.newData,
   };
+
+  await logEntry(entry, pluginConfig);
 }
 
+// ─────────────────────────────────────────────────────────────
+// Worker message handler
+// ─────────────────────────────────────────────────────────────
+
+self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
+  const { id, type, payload } = event.data;
+
+  try {
+    let result: Serializable = null;
+
+    switch (type) {
+      case 'init': {
+        // Store config for later use
+        const initPayload = payload as { config?: Serializable };
+        pluginConfig = (initPayload.config ?? {}) as AuditLogConfig;
+        console.log('[audit] Plugin initialized with config:', pluginConfig);
+        result = { success: true };
+        break;
+      }
+
+      case 'action': {
+        const actionPayload = payload as {
+          action: CrudAction;
+          ctx: ActionContext;
+        };
+        await handleAuditAction(actionPayload.ctx);
+        result = null;
+        break;
+      }
+
+      case 'transform:beforeSave':
+      case 'transform:afterRead': {
+        // Audit log doesn't transform data, just pass through
+        const transformPayload = payload as {
+          data: Record<string, Serializable>;
+        };
+        result = transformPayload.data as Serializable;
+        break;
+      }
+
+      default:
+        // Unknown message type - ignore
+        result = null;
+    }
+
+    const response: WorkerResponse = { id, success: true, result };
+    self.postMessage(response);
+  } catch (error) {
+    const response: WorkerResponse = {
+      id,
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+    self.postMessage(response);
+  }
+};
+
+// Log that the worker has loaded
+console.log('[audit] Worker loaded');
+
+// ─────────────────────────────────────────────────────────────
+// Exports for type-only usage (not used at runtime in Worker)
+// ─────────────────────────────────────────────────────────────
+
 /**
- * Factory function called by the Worker with config.
- * This is the preferred pattern for Worker plugins.
- * 
- * @param config - Plugin configuration (passed from CMS options)
- * @returns Plugin definition with hooks
+ * Factory function (for non-Worker usage or sandbox loader)
  */
 export function createPlugin(config: Serializable): { hooks: PluginHooks } {
   const auditConfig = (config ?? {}) as AuditLogConfig;
-  const handler = createAuditHandler(auditConfig);
-  
+
+  const handler = async (ctx: ActionContext): Promise<void> => {
+    pluginConfig = auditConfig;
+    await handleAuditAction(ctx);
+  };
+
   return {
     hooks: {
       on: {
         create: { handler, fireAndForget: true },
         update: { handler, fireAndForget: true },
         delete: { handler, fireAndForget: true },
-        read: auditConfig.logReads ? { handler, fireAndForget: true } : undefined,
-        list: auditConfig.logLists ? { handler, fireAndForget: true } : undefined,
+        read: auditConfig.logReads
+          ? { handler, fireAndForget: true }
+          : undefined,
+        list: auditConfig.logLists
+          ? { handler, fireAndForget: true }
+          : undefined,
       },
     },
   };

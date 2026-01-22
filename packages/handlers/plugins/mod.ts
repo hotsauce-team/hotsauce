@@ -1,46 +1,41 @@
 // Plugin system main entry point
 
 export type {
-  // Core types
-  Serializable,
-  Plugin,
-  PluginConfig,
-  RemotePluginConfig,
-  PluginHooks,
-  PluginRoute,
-  PluginCapabilities,
-  PluginsOptions,
-  SandboxMode,
-  // Transform types
-  TransformFn,
-  TransformHooks,
+  ActionContext,
   // Action types
   ActionHandlerFn,
   ActionHook,
   ActionHookConfig,
   ActionHooks,
+  FilterContext,
+  // Filter types
+  HookType,
+  PluginCapabilities,
+  PluginConfig,
   // Context types
   PluginContext,
-  ActionContext,
+  PluginFilter,
+  PluginHooks,
   PluginRequest,
   PluginResponse,
+  PluginRoute,
+  PluginsOptions,
+  // Core types
+  Serializable,
+  // Transform types
+  TransformFn,
+  TransformHooks,
 } from './types.ts';
 
-export { isRemotePlugin } from './types.ts';
+export { isWorkerPlugin } from './types.ts';
 
 export {
+  createPluginRegistry,
   PluginRegistry,
   PluginValidationError,
-  createPluginRegistry,
   type RegisteredPlugin,
 } from './registry.ts';
 
-export {
-  WorkerExecutor,
-  createWorkerExecutor,
-} from './executor.ts';
+export { createWorkerExecutor, WorkerExecutor } from './executor.ts';
 
-export {
-  PluginService,
-  createPluginService,
-} from './service.ts';
+export { createPluginService, PluginService } from './service.ts';

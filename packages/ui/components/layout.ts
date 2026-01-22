@@ -38,13 +38,13 @@ export interface LayoutOptions {
 
 /**
  * Default CSS styles for the CMS
- * 
+ *
  * Returns a <link> tag pointing to the external stylesheet.
  * The stylesheet is served at `{basePath}/styles.css` by the handlers package.
- * 
+ *
  * This approach enables strict Content Security Policy (style-src 'self')
  * without requiring nonces.
- * 
+ *
  * @param stylesheetUrl - URL to the stylesheet (default: 'styles.css')
  */
 export function defaultStyles(stylesheetUrl = 'styles.css'): string {
@@ -55,10 +55,12 @@ export function defaultStyles(stylesheetUrl = 'styles.css'): string {
  * Render navigation list
  */
 export function nav(items: NavItem[]): string {
-  const itemsHtml = items.map(item => 
-    html`<li class="cms-nav-item${raw(item.active ? ' active' : '')}">
-      <a href="${item.href}">${raw(item.icon ?? '')}${item.label}</a>
-    </li>`
+  const itemsHtml = items.map((item) =>
+    html`
+      <li class="cms-nav-item${raw(item.active ? ' active' : '')}">
+        <a href="${item.href}">${raw(item.icon ?? '')}${item.label}</a>
+      </li>
+    `
   ).join('\n    ');
 
   return `<ul class="cms-nav">
@@ -79,7 +81,11 @@ export function layout(content: string, options: LayoutOptions): string {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${html`${options.title}`} | ${html`${siteName}`}</title>
+  <title>${html`
+    ${options.title}
+  `} | ${html`
+    ${siteName}
+  `}</title>
   ${defaultStyles(stylesheetUrl)}
   ${options.head ?? ''}
 </head>
@@ -87,19 +93,30 @@ export function layout(content: string, options: LayoutOptions): string {
   <div class="cms-layout">
     <aside class="cms-sidebar">
       <div class="cms-sidebar-header">
-        <h1 class="cms-sidebar-title">${html`${siteName}`}</h1>
+        <h1 class="cms-sidebar-title">${html`
+    ${siteName}
+  `}</h1>
       </div>
       ${navHtml}
     </aside>
     <main class="cms-main">
       <header class="cms-header">
-        <h2>${html`${options.title}`}</h2>
-        ${options.user ? html`<div class="cms-user">
+        <h2>${html`
+    ${options.title}
+  `}</h2>
+        ${
+    options.user
+      ? html`
+        <div class="cms-user">
           ${options.user.name}
-          <form method="POST" action="${options.user.logoutUrl}" style="display:inline">
+          <form method="POST" action="${options.user
+            .logoutUrl}" style="display:inline">
             <button type="submit" class="cms-btn cms-btn-secondary">Logout</button>
           </form>
-        </div>` : ''}
+        </div>
+      `
+      : ''
+  }
       </header>
       <div class="cms-content">
         ${content}

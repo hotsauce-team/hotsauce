@@ -1,13 +1,13 @@
 // Tests for HTML utilities
 
 import { assertEquals } from 'jsr:@std/assert';
-import { html, raw, escapeHtml, attrs, when, join, SafeHtml } from '../html.ts';
+import { attrs, escapeHtml, html, join, raw, SafeHtml, when } from '../html.ts';
 
 // escapeHtml tests
 Deno.test('escapeHtml: escapes HTML special characters', () => {
   assertEquals(escapeHtml('<script>'), '&lt;script&gt;');
   assertEquals(escapeHtml('"quoted"'), '&quot;quoted&quot;');
-  assertEquals(escapeHtml("it's"), "it&#039;s");
+  assertEquals(escapeHtml("it's"), 'it&#039;s');
   assertEquals(escapeHtml('a & b'), 'a &amp; b');
 });
 
@@ -25,7 +25,10 @@ Deno.test('escapeHtml: converts non-strings to string', () => {
 Deno.test('html: escapes interpolated values', () => {
   const userInput = '<script>alert("xss")</script>';
   const result = html`<p>${userInput}</p>`;
-  assertEquals(result, '<p>&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;</p>');
+  assertEquals(
+    result,
+    '<p>&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;</p>',
+  );
 });
 
 Deno.test('html: preserves raw() content', () => {

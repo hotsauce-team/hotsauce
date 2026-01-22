@@ -4,7 +4,7 @@ import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
 import type { AuthProvider } from './auth/provider.ts';
 import type { JwtPayload } from './auth/jwt.ts';
 import type { Policies } from './policies/types.ts';
-import type { PluginConfig, SandboxMode } from './plugins/types.ts';
+import type { PluginConfig } from './plugins/types.ts';
 import type { PluginRegistry } from './plugins/registry.ts';
 import type { PluginService } from './plugins/service.ts';
 
@@ -63,7 +63,7 @@ export interface ErrorContext {
 export interface CmsOptionsBase {
   /**
    * Drizzle database instance.
-   * 
+   *
    * Uses `any` intentionally for cross-dialect compatibility (Postgres, MySQL, SQLite).
    * There's no common base type across Drizzle dialects, and importing all dialect types
    * would add dependencies.
@@ -80,17 +80,17 @@ export interface CmsOptionsBase {
   /**
    * Secret for CSRF token signing (HMAC-SHA256).
    * Must be at least 32 characters of entropy.
-   * 
+   *
    * If not provided, falls back to CMS_CSRF_SECRET environment variable.
    * If neither is set, createCmsHandler() throws an error.
-   * 
+   *
    * Generate with `openssl rand -base64 32` and store in an environment variable.
-   * 
+   *
    * @example
    * ```ts
    * // Option 1: Pass directly
    * csrfSecret: process.env.CMS_CSRF_SECRET!,
-   * 
+   *
    * // Option 2: Set CMS_CSRF_SECRET env var, omit from options
    * // createCmsHandler({ db, schema }) // uses CMS_CSRF_SECRET
    * ```
@@ -99,14 +99,18 @@ export interface CmsOptionsBase {
   /** Custom authentication check */
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table */
-  canAccess?: (request: Request, table: IntrospectedTable, action: CrudAction) => Promise<boolean> | boolean;
+  canAccess?: (
+    request: Request,
+    table: IntrospectedTable,
+    action: CrudAction,
+  ) => Promise<boolean> | boolean;
   /**
    * Error handler for unexpected errors.
-   * 
+   *
    * Called when an unexpected error occurs (database failures, etc.).
    * Use this to log errors to your monitoring service (Sentry, Datadog, etc.).
    * The user receives a generic 500 response regardless.
-   * 
+   *
    * @example
    * ```ts
    * onError: (error, context) => {
@@ -123,10 +127,10 @@ export interface CmsOptionsBase {
   onError?: (error: Error, context: ErrorContext) => void;
   /**
    * Custom parsers for validation (optional).
-   * 
+   *
    * If not provided, drizzle-zod schemas are generated automatically.
    * Use this to add custom validation rules (e.g., email format, min/max length).
-   * 
+   *
    * @example
    * ```ts
    * parsers: {
@@ -141,10 +145,10 @@ export interface CmsOptionsBase {
 
   /**
    * Plugins to extend CMS functionality.
-   * 
+   *
    * Plugins run in isolated Worker threads for security.
    * They can transform data, respond to CRUD actions, and add routes.
-   * 
+   *
    * @example
    * ```ts
    * plugins: [
@@ -154,22 +158,12 @@ export interface CmsOptionsBase {
    * ```
    */
   plugins?: PluginConfig[];
-
-  /**
-   * Sandbox mode for plugin execution.
-   * 
-   * - 'worker': Standard Worker isolation (all runtimes)
-   * - 'deno-sandbox': Deno Worker with restricted permissions (Deno only)
-   * 
-   * @default 'worker'
-   */
-  pluginSandbox?: SandboxMode;
 }
 
 /**
  * CMS options with authentication enabled.
  * Policies are REQUIRED when using auth to ensure explicit authorization decisions.
- * 
+ *
  * @example
  * ```ts
  * createCmsHandler({
@@ -188,31 +182,31 @@ export interface CmsOptionsBase {
 export interface CmsOptionsWithAuth extends CmsOptionsBase {
   /**
    * JWT authentication configuration.
-   * 
+   *
    * When provided, the CMS requires login to access.
    * Includes automatic /login and /logout routes.
    */
   auth: CmsAuthOptions;
-  
+
   /**
    * Row-level security policies (REQUIRED when auth is enabled).
-   * 
+   *
    * Policies return SQL conditions that filter queries atomically.
    * This prevents TOCTOU race conditions - the permission check IS the query.
-   * 
+   *
    * Use `{}` to grant full access to all authenticated users.
-   * 
+   *
    * @example
    * ```ts
    * import { ownedBy, adminOr, readOnly } from '@drizzle-cms/handlers';
-   * 
+   *
    * policies: {
    *   // Users can only edit their own posts
    *   posts: ownedBy(schema.posts, 'authorId'),
-   *   
+   *
    *   // Admins have full access, others only see their own
    *   comments: adminOr(ownedBy(schema.comments, 'userId')),
-   *   
+   *
    *   // Everyone can read, no one can modify
    *   audit_logs: readOnly(),
    * }
@@ -228,17 +222,17 @@ export interface CmsOptionsWithAuth extends CmsOptionsBase {
 export interface CmsOptionsWithoutAuth extends CmsOptionsBase {
   /** Auth not configured */
   auth?: undefined;
-  
+
   /**
    * Row-level security policies (optional without auth).
-   * 
+   *
    * Policies return SQL conditions that filter queries atomically.
    * This prevents TOCTOU race conditions - the permission check IS the query.
-   * 
+   *
    * @example
    * ```ts
    * import { ownedBy, adminOr, readOnly } from '@drizzle-cms/handlers';
-   * 
+   *
    * policies: {
    *   posts: ownedBy(schema.posts, 'authorId'),
    * }
@@ -249,7 +243,7 @@ export interface CmsOptionsWithoutAuth extends CmsOptionsBase {
 
 /**
  * Options for creating the CMS handler.
- * 
+ *
  * When `auth` is provided, `policies` is required to ensure explicit authorization.
  * Use `policies: {}` to grant full access to all authenticated users.
  */
@@ -259,30 +253,30 @@ export type CmsOptions = CmsOptionsWithAuth | CmsOptionsWithoutAuth;
  * JWT authentication options for CMS
  */
 export interface CmsAuthOptions {
-  /** 
+  /**
    * Secret for signing JWTs (32+ characters).
-   * 
+   *
    * If not provided, falls back to CMS_JWT_SECRET environment variable.
    * If neither is set, createCmsHandler() throws an error.
    */
   secret?: string;
-  
+
   /** Auth provider for login (e.g., PasswordProvider) */
   provider: AuthProvider;
-  
+
   /** Token lifetime in seconds (default: 8 hours) */
   maxAge?: number;
-  
+
   /** Cookie name for JWT (default: 'cms_token') */
   cookieName?: string;
-  
+
   /** Title shown on login page (default: 'Admin Login') */
   loginTitle?: string;
-  
+
   /** Label for identity field (default: 'Email') */
   identityLabel?: string;
-  
-  /** 
+
+  /**
    * Optional: Check if a token has been revoked.
    * Called on each request - implement blocklist here if needed.
    */
@@ -307,7 +301,11 @@ export interface ResolvedCmsOptions {
   /** Custom authentication check */
   isAuthenticated: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table */
-  canAccess: (request: Request, table: IntrospectedTable, action: CrudAction) => Promise<boolean> | boolean;
+  canAccess: (
+    request: Request,
+    table: IntrospectedTable,
+    action: CrudAction,
+  ) => Promise<boolean> | boolean;
   /** Error handler for unexpected errors */
   onError?: (error: Error, context: ErrorContext) => void;
   /** Custom parsers for validation */

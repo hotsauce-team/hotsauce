@@ -2,8 +2,9 @@
   "name": "@drizzle-cms/example-deno-server",
 
   "tasks": {
-    "dev": "deno run --env-file=.env.example --permission-set=example-deno-server main.ts",
-    "dev:watch": "deno run --env-file=.env.example --watch --permission-set=example-deno-server main.ts",
+    "dev": "deno run --env-file=.env.example --permission-set=example-deno-server --unstable-worker-options main.ts",
+    "dev:debug": "RUST_BACKTRACE=1 deno run --env-file=.env.example --permission-set=example-deno-server --unstable-worker-options main.ts",
+    "dev:watch": "deno run --env-file=.env.example --watch --permission-set=example-deno-server --unstable-worker-options main.ts",
     "seed": "deno run --permission-set=example-deno-server seed.ts"
   },
 
@@ -13,6 +14,7 @@
     "example-deno-server": {
       "read": [
         "./data",
+        "../../packages/plugins/audit-log/worker.ts",
         "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
         "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm"
       ],

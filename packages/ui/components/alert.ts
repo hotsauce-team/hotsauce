@@ -1,6 +1,6 @@
 // Alert/message component
 
-import { html, attrs } from '../html.ts';
+import { attrs, html } from '../html.ts';
 
 /**
  * Alert type
@@ -11,12 +11,14 @@ export type AlertType = 'success' | 'error' | 'warning' | 'info';
  * Render an alert message
  */
 export function alert(message: string, type: AlertType = 'info'): string {
-  return html`<div ${attrs({
-    class: `cms-alert cms-alert-${type}`,
-    role: 'alert',
-  })}>
-  ${message}
-</div>`;
+  return html`
+    <div ${attrs({
+      class: `cms-alert cms-alert-${type}`,
+      role: 'alert',
+    })}>
+      ${message}
+    </div>
+  `;
 }
 
 /**

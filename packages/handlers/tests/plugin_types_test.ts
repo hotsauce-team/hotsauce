@@ -2,14 +2,17 @@
 
 import { assertEquals } from 'jsr:@std/assert';
 import type {
-  Plugin,
-  PluginContext,
   ActionContext,
-  Serializable,
   ActionHook,
   ActionHookConfig,
-  TransformHooks,
   ActionHooks,
+  FilterContext,
+  HookType,
+  PluginConfig,
+  PluginContext,
+  PluginFilter,
+  Serializable,
+  TransformHooks,
 } from '../plugins/types.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -132,8 +135,14 @@ function isFireAndForget(hook: ActionHook): boolean {
 
 Deno.test('ActionHook: isFireAndForget helper', () => {
   const blockingFn: ActionHook = async () => {};
-  const blockingConfig: ActionHook = { handler: async () => {}, fireAndForget: false };
-  const fireAndForget: ActionHook = { handler: async () => {}, fireAndForget: true };
+  const blockingConfig: ActionHook = {
+    handler: async () => {},
+    fireAndForget: false,
+  };
+  const fireAndForget: ActionHook = {
+    handler: async () => {},
+    fireAndForget: true,
+  };
 
   assertEquals(isFireAndForget(blockingFn), false);
   assertEquals(isFireAndForget(blockingConfig), false);
@@ -145,18 +154,21 @@ Deno.test('ActionHook: isFireAndForget helper', () => {
 // ─────────────────────────────────────────────────────────────
 
 Deno.test('Plugin: minimal definition', () => {
-  const plugin: Plugin = {
+  const plugin: PluginConfig = {
     name: 'minimal',
   };
   assertEquals(plugin.name, 'minimal');
 });
 
 Deno.test('Plugin: with transforms only', () => {
-  const plugin: Plugin = {
+  const plugin: PluginConfig = {
     name: 'transform-only',
     hooks: {
       transform: {
-        beforeSave: async (_ctx, data) => ({ ...data, modified: true }),
+        beforeSave: async (
+          _ctx: PluginContext,
+          data: Record<string, Serializable>,
+        ) => ({ ...data, modified: true }),
       },
     },
   };
@@ -165,7 +177,7 @@ Deno.test('Plugin: with transforms only', () => {
 });
 
 Deno.test('Plugin: with actions only', () => {
-  const plugin: Plugin = {
+  const plugin: PluginConfig = {
     name: 'action-only',
     hooks: {
       on: {
@@ -180,13 +192,13 @@ Deno.test('Plugin: with actions only', () => {
 });
 
 Deno.test('Plugin: with routes', () => {
-  const plugin: Plugin = {
+  const plugin: PluginConfig = {
     name: 'with-routes',
     routes: [
       {
         path: '/api/custom',
         method: 'POST',
-        handler: async (req) => ({
+        handler: async (req: { body?: Serializable }) => ({
           status: 200,
           body: { received: req.body },
         }),
@@ -198,7 +210,7 @@ Deno.test('Plugin: with routes', () => {
 });
 
 Deno.test('Plugin: with capabilities', () => {
-  const plugin: Plugin = {
+  const plugin: PluginConfig = {
     name: 'with-caps',
     capabilities: {
       network: ['api.example.com', '*.s3.amazonaws.com'],
@@ -213,7 +225,7 @@ Deno.test('Plugin: with capabilities', () => {
 });
 
 Deno.test('Plugin: full example', () => {
-  const plugin: Plugin = {
+  const plugin: PluginConfig = {
     name: 'audit-logger',
     description: 'Logs all CRUD operations to external service',
     capabilities: {
@@ -223,20 +235,20 @@ Deno.test('Plugin: full example', () => {
     hooks: {
       on: {
         create: {
-          handler: async (ctx) => {
+          handler: async (ctx: ActionContext) => {
             // Would send to audit service
             console.log('Created:', ctx.recordId);
           },
           fireAndForget: true,
         },
         update: {
-          handler: async (ctx) => {
+          handler: async (ctx: ActionContext) => {
             console.log('Updated:', ctx.recordId);
           },
           fireAndForget: true,
         },
         delete: {
-          handler: async (ctx) => {
+          handler: async (ctx: ActionContext) => {
             console.log('Deleted:', ctx.recordId);
           },
           fireAndForget: true,
@@ -269,7 +281,10 @@ Deno.test('TransformHooks: beforeSave modifies data', async () => {
 
   assertEquals((result as Record<string, unknown>).slug, 'hello-world');
   assertEquals((result as Record<string, unknown>).title, 'Hello World');
-  assertEquals((result as Record<string, unknown>).updatedAt !== undefined, true);
+  assertEquals(
+    (result as Record<string, unknown>).updatedAt !== undefined,
+    true,
+  );
 });
 
 Deno.test('TransformHooks: afterRead adds computed fields', async () => {
@@ -281,7 +296,11 @@ Deno.test('TransformHooks: afterRead adds computed fields', async () => {
   };
 
   const ctx: PluginContext = { table: 'users', action: 'read' };
-  const input = { firstName: 'John', lastName: 'Doe', email: 'john@example.com' };
+  const input = {
+    firstName: 'John',
+    lastName: 'Doe',
+    email: 'john@example.com',
+  };
   const result = await transforms.afterRead!(ctx, input);
 
   assertEquals((result as Record<string, unknown>).fullName, 'John Doe');
@@ -298,8 +317,14 @@ Deno.test('TransformHooks: chain multiple transforms', async () => {
   const ctx: PluginContext = { table: 'test', action: 'create' };
   let data: Record<string, Serializable> = { original: true };
 
-  data = await transform1.beforeSave!(ctx, data) as Record<string, Serializable>;
-  data = await transform2.beforeSave!(ctx, data) as Record<string, Serializable>;
+  data = await transform1.beforeSave!(ctx, data) as Record<
+    string,
+    Serializable
+  >;
+  data = await transform2.beforeSave!(ctx, data) as Record<
+    string,
+    Serializable
+  >;
 
   assertEquals(data.original, true);
   assertEquals(data.step1, true);
@@ -385,4 +410,238 @@ Deno.test('ActionHooks: mixed blocking and fire-and-forget', async () => {
   await new Promise((r) => setTimeout(r, 10));
   assertEquals(results.includes('blocking-create'), true);
   assertEquals(results.includes('fire-and-forget-update'), true);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Filter function tests
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('FilterContext: contains hookType, table, action', () => {
+  const ctx: FilterContext = {
+    hookType: 'action',
+    table: 'posts',
+    action: 'create',
+  };
+  assertEquals(ctx.hookType, 'action');
+  assertEquals(ctx.table, 'posts');
+  assertEquals(ctx.action, 'create');
+  assertEquals(ctx.user, undefined);
+});
+
+Deno.test('FilterContext: with user info', () => {
+  const ctx: FilterContext = {
+    hookType: 'transform:beforeSave',
+    table: 'users',
+    action: 'update',
+    user: { sub: 'user-123', role: 'admin' },
+  };
+  assertEquals(ctx.user?.sub, 'user-123');
+  assertEquals(ctx.user?.role, 'admin');
+});
+
+Deno.test('HookType: all valid values', () => {
+  const hookTypes: HookType[] = [
+    'transform:beforeSave',
+    'transform:afterRead',
+    'action',
+  ];
+  assertEquals(hookTypes.length, 3);
+});
+
+Deno.test('PluginFilter: filter by hookType', () => {
+  const filter: PluginFilter = (ctx) => ctx.hookType === 'action';
+
+  assertEquals(
+    filter({ hookType: 'action', table: 'posts', action: 'create' }),
+    true,
+  );
+  assertEquals(
+    filter({
+      hookType: 'transform:beforeSave',
+      table: 'posts',
+      action: 'create',
+    }),
+    false,
+  );
+  assertEquals(
+    filter({ hookType: 'transform:afterRead', table: 'posts', action: 'read' }),
+    false,
+  );
+});
+
+Deno.test('PluginFilter: filter by table', () => {
+  const filter: PluginFilter = (ctx) => ctx.table !== 'sessions';
+
+  assertEquals(
+    filter({ hookType: 'action', table: 'posts', action: 'create' }),
+    true,
+  );
+  assertEquals(
+    filter({ hookType: 'action', table: 'sessions', action: 'create' }),
+    false,
+  );
+});
+
+Deno.test('PluginFilter: filter by action', () => {
+  const filter: PluginFilter = (ctx) =>
+    ['create', 'update', 'delete'].includes(ctx.action);
+
+  assertEquals(
+    filter({ hookType: 'action', table: 'posts', action: 'create' }),
+    true,
+  );
+  assertEquals(
+    filter({ hookType: 'action', table: 'posts', action: 'update' }),
+    true,
+  );
+  assertEquals(
+    filter({ hookType: 'action', table: 'posts', action: 'delete' }),
+    true,
+  );
+  assertEquals(
+    filter({ hookType: 'action', table: 'posts', action: 'read' }),
+    false,
+  );
+  assertEquals(
+    filter({ hookType: 'action', table: 'posts', action: 'list' }),
+    false,
+  );
+});
+
+Deno.test('PluginFilter: filter by user role', () => {
+  const filter: PluginFilter = (ctx) => ctx.user?.role !== 'admin';
+
+  assertEquals(
+    filter({
+      hookType: 'action',
+      table: 'posts',
+      action: 'create',
+      user: { sub: '1', role: 'user' },
+    }),
+    true,
+  );
+  assertEquals(
+    filter({
+      hookType: 'action',
+      table: 'posts',
+      action: 'create',
+      user: { sub: '2', role: 'admin' },
+    }),
+    false,
+  );
+  assertEquals(
+    filter({ hookType: 'action', table: 'posts', action: 'create' }),
+    true,
+  ); // no user = include
+});
+
+Deno.test('PluginFilter: combined conditions', () => {
+  // Only audit create/update/delete actions, skip admin users, skip sessions table
+  const filter: PluginFilter = (ctx) =>
+    ctx.hookType === 'action' &&
+    ['create', 'update', 'delete'].includes(ctx.action) &&
+    ctx.table !== 'sessions' &&
+    ctx.user?.role !== 'admin';
+
+  assertEquals(
+    filter({
+      hookType: 'action',
+      table: 'posts',
+      action: 'create',
+      user: { sub: '1', role: 'user' },
+    }),
+    true,
+  );
+  assertEquals(
+    filter({
+      hookType: 'action',
+      table: 'posts',
+      action: 'read',
+      user: { sub: '1', role: 'user' },
+    }),
+    false,
+  );
+  assertEquals(
+    filter({
+      hookType: 'action',
+      table: 'sessions',
+      action: 'create',
+      user: { sub: '1', role: 'user' },
+    }),
+    false,
+  );
+  assertEquals(
+    filter({
+      hookType: 'action',
+      table: 'posts',
+      action: 'create',
+      user: { sub: '1', role: 'admin' },
+    }),
+    false,
+  );
+  assertEquals(
+    filter({
+      hookType: 'transform:beforeSave',
+      table: 'posts',
+      action: 'create',
+      user: { sub: '1', role: 'user' },
+    }),
+    false,
+  );
+});
+
+Deno.test('Plugin: with filter function', () => {
+  const plugin: PluginConfig = {
+    name: 'audit-log',
+    filter: (ctx) =>
+      ctx.hookType === 'action' &&
+      ['create', 'update', 'delete'].includes(ctx.action),
+    config: { webhookUrl: 'https://example.com' },
+  };
+
+  assertEquals(plugin.name, 'audit-log');
+  assertEquals(typeof plugin.filter, 'function');
+  assertEquals(
+    plugin.filter!({ hookType: 'action', table: 'posts', action: 'create' }),
+    true,
+  );
+  assertEquals(
+    plugin.filter!({ hookType: 'action', table: 'posts', action: 'read' }),
+    false,
+  );
+});
+
+Deno.test('Plugin: filter replaces stub hooks for Worker filtering', () => {
+  // Old pattern (stub hooks for filtering):
+  // const oldPlugin: PluginConfig = {
+  //   name: 'audit',
+  //   worker: someWorker,
+  //   hooks: { on: { create: async () => {}, update: async () => {}, delete: async () => {} } },
+  // };
+
+  // New pattern (filter function):
+  const newPlugin: PluginConfig = {
+    name: 'audit',
+    // worker: someWorker,
+    filter: (ctx) =>
+      ctx.hookType === 'action' &&
+      ['create', 'update', 'delete'].includes(ctx.action),
+  };
+
+  assertEquals(
+    newPlugin.filter!({ hookType: 'action', table: 'posts', action: 'create' }),
+    true,
+  );
+  assertEquals(
+    newPlugin.filter!({ hookType: 'action', table: 'posts', action: 'list' }),
+    false,
+  );
+  assertEquals(
+    newPlugin.filter!({
+      hookType: 'transform:beforeSave',
+      table: 'posts',
+      action: 'create',
+    }),
+    false,
+  );
 });

@@ -5,6 +5,7 @@ Guidelines for AI coding assistants working on this project.
 ## Core Constraints
 
 ### Dependencies
+
 - **ONLY** these production dependencies are allowed:
   - `drizzle-orm`
   - `postgres` (postgres.js driver)
@@ -14,12 +15,14 @@ Guidelines for AI coding assistants working on this project.
 - All four packages have zero transitive dependencies — keep it that way
 
 ### Dev Dependencies (testing only)
+
 - `@electric-sql/pglite` — in-memory Postgres for tests
 - `sql.js` — in-memory SQLite for tests
 - `@std/assert` — Deno standard library assertions
 - Dev dependencies are OK since they don't ship to users
 
 ### Runtime Compatibility
+
 - All packages must be **runtime-agnostic**
 - No `Deno.*` or Node-specific APIs — use Web Standard APIs only
 - Handlers use Web Standard `Request`/`Response` (works in Deno, Node 20+, Bun, Workers)
@@ -27,15 +30,16 @@ Guidelines for AI coding assistants working on this project.
 
 ## Package Boundaries
 
-| Package | Purpose | Runtime APIs | DB-Specific Code | DB-Specific Tests |
-|---------|---------|--------------|------------------|-------------------|
-| `core` | Schema introspection, field mapping, validation | ❌ None | ❌ Generic only | ✅ PGlite + sql.js |
-| `ui` | HTML generation, form rendering | ❌ None | ❌ Generic only | ❌ None |
-| `handlers` | CRUD route handlers (Request → Response) | ❌ Web Standard only | ❌ Generic only | ✅ PGlite + sql.js |
+| Package    | Purpose                                         | Runtime APIs         | DB-Specific Code | DB-Specific Tests  |
+| ---------- | ----------------------------------------------- | -------------------- | ---------------- | ------------------ |
+| `core`     | Schema introspection, field mapping, validation | ❌ None              | ❌ Generic only  | ✅ PGlite + sql.js |
+| `ui`       | HTML generation, form rendering                 | ❌ None              | ❌ Generic only  | ❌ None            |
+| `handlers` | CRUD route handlers (Request → Response)        | ❌ Web Standard only | ❌ Generic only  | ✅ PGlite + sql.js |
 
 ## Database Guidelines
 
 ### Database-Agnostic Design
+
 - Core schema introspection must work with **any** Drizzle schema (pg, mysql, sqlite)
 - Use Drizzle's generic types in core, not `drizzle-orm/pg-core` directly
 - Database-specific features (arrays, enums, JSON) should:
@@ -43,26 +47,28 @@ Guidelines for AI coding assistants working on this project.
   - Degrade gracefully when not available
 
 ### Drizzle ORM Helper Functions
+
 - **Use exported helper functions** instead of direct symbol/property access
 - Drizzle exports utilities like `getTableName`, `getTableColumns`, `isTable`
 - These provide type-safe access without needing `as unknown as` casts
 
 ```typescript
 // Good: use Drizzle's helpers
-import { getTableName, getTableColumns, Table } from 'drizzle-orm';
+import { getTableColumns, getTableName, Table } from 'drizzle-orm';
 
-const name = getTableName(table);           // type-safe
-const cols = getTableColumns(table);        // returns typed columns object
+const name = getTableName(table); // type-safe
+const cols = getTableColumns(table); // returns typed columns object
 
 // Bad: direct symbol access
 const TABLE_NAME = Symbol.for('drizzle:Name');
-const name = (table as any)[TABLE_NAME];    // loses type safety
+const name = (table as any)[TABLE_NAME]; // loses type safety
 ```
 
 - For properties without helpers (e.g., foreign keys), use symbol access with appropriate casts
 - Check drizzle-orm's exports before adding custom symbol lookups
 
 ### Feature Detection Pattern
+
 ```typescript
 // Good: detect capabilities
 const capabilities = detectCapabilities(schema);
@@ -82,6 +88,7 @@ import { pgTable } from 'drizzle-orm/pg-core';
 - Keep functions **pure** where possible — side effects in server packages
 
 ### UI Package Guidelines
+
 - Use the `html` tagged template from `packages/ui/html.ts` for XSS-safe HTML
 - Interpolated values are auto-escaped; use `raw()` for trusted HTML
 - Use `attrs()` helper to build attribute strings safely
@@ -91,18 +98,23 @@ import { pgTable } from 'drizzle-orm/pg-core';
 
 ```typescript
 // Good: auto-escaped template
-import { html, raw, attrs } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@drizzle-cms/ui';
 
-html`<input ${attrs({ name, value: userInput })} />`;  // userInput is escaped
-html`<div>${raw(trustedHtml)}</div>`;                  // explicitly trusted
+html`
+  <input ${attrs({ name, value: userInput })} />
+`; // userInput is escaped
+html`
+  <div>${raw(trustedHtml)}</div>
+`; // explicitly trusted
 
 // Bad: string concatenation
-`<input value="${userInput}" />`;  // XSS vulnerability
+`<input value="${userInput}" />`; // XSS vulnerability
 ```
 
 ## File Organization
 
 Each package has a README with detailed API documentation:
+
 - [`packages/core/README.md`](packages/core/README.md) — Schema introspection, field mapping
 - [`packages/ui/README.md`](packages/ui/README.md) — HTML generation, forms, views
 - [`packages/handlers/README.md`](packages/handlers/README.md) — CRUD handlers, routing
@@ -159,26 +171,24 @@ packages/handlers-workers/
 ├── mod.ts              # Main entry, exports WorkerExecutor
 ├── README.md           # Package documentation
 ├── types.ts            # Serializable, PluginContext, ActionContext, etc.
-├── executor.ts         # Worker management and communication
-└── sandbox/
-    └── worker-script.ts  # Code that runs inside Workers
+└── executor.ts         # Worker management and communication
 
 packages/plugins/
 ├── mod.ts              # Main entry, re-exports plugins and types
 ├── README.md           # Package documentation
 └── audit-log/
-    ├── mod.ts          # createAuditLogPlugin factory
-    └── worker.ts       # Worker module for isolation
+    ├── mod.ts          # Type exports for DX (AuditLogConfig)
+    └── worker.ts       # Worker module (handles messages directly)
 ```
 
 ## Environment Variables
 
 The CMS uses these environment variables for secrets (can also be passed directly):
 
-| Variable | Purpose |
-|----------|---------|
-| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars) |
-| `CMS_JWT_SECRET` | JWT signing for auth (32+ chars) |
+| Variable          | Purpose                          |
+| ----------------- | -------------------------------- |
+| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)   |
+| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars) |
 
 ## Development Environment
 
@@ -234,7 +244,7 @@ packages/core/tests/
 ## Common Mistakes to Avoid
 
 1. **Adding dependencies** — find a zero-dep solution or use built-in APIs
-2. **Using Deno.* in core** — breaks Node compatibility
+2. __Using Deno._ in core_* — breaks Node compatibility
 3. **Hardcoding database-specific types in core** — breaks extensibility
 4. **Mixing concerns** — keep schema logic, UI, and HTTP handling separate
 5. **Forgetting feature detection** — not all DBs support arrays, enums, JSON, etc.
@@ -247,38 +257,56 @@ packages/core/tests/
 Plugins extend the CMS with custom hooks that run during CRUD operations. Key design decisions:
 
 **Worker Isolation (Security)**
+
 - Plugins run in Web Workers, isolated from the main thread
 - Plugins never receive database handles, server internals, or functions
 - All data crossing the Worker boundary must be JSON-serializable
 - This "secure by default" approach protects against malicious or buggy plugins
 
-**Module-Based Loading**
-- Plugins provide a `moduleUrl` pointing to a Worker-compatible module
-- The Worker imports this module and calls `createPlugin(config)` factory
-- Config is serialized and passed to the Worker at initialization
-- This allows plugins to have complex logic while keeping the main thread simple
+**User-Provided Workers**
+
+- Users create their own `Worker` instance with desired permissions
+- Gives full control over isolation (Deno permissions, Node policies, etc.)
+- The CMS sends messages to the Worker; plugin code runs entirely inside
 
 ```typescript
-// Main entry (audit-log.ts) - for type checking and registration
-export function createAuditLogPlugin(config: Config): Plugin {
-  return {
-    name: 'audit-log',
-    moduleUrl: new URL('./audit-log.worker.ts', import.meta.url).href,
-    hooks: { /* defined for type checking */ },
-  };
-}
+// User creates Worker with explicit permissions
+const auditWorker = new Worker(
+  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  {
+    type: 'module',
+    deno: { permissions: { net: ['audit.example.com'] } },
+  },
+);
 
-// Worker module (audit-log.worker.ts) - actually runs in isolation
-export function createPlugin(config: Serializable): { hooks: PluginHooks } {
-  return { hooks: { on: { create: handler } } };
-}
+// Plugin config references the Worker
+plugins: [
+  {
+    name: 'audit-log',
+    worker: auditWorker,
+    filter: (ctx) =>
+      ctx.hookType === 'action' &&
+      ['create', 'update', 'delete'].includes(ctx.action),
+    config: { webhookUrl: 'https://audit.example.com/events' },
+  },
+];
 ```
 
+**Filter Function (Hook Filtering)**
+
+- `filter?: (ctx: FilterContext) => boolean` controls which hooks are invoked
+- For Worker plugins: prevents unnecessary Worker messages
+- For in-process plugins: prevents unnecessary hook invocations
+- FilterContext: `{ hookType, table, action, user }`
+- HookType: `'transform:beforeSave' | 'transform:afterRead' | 'action'`
+
 **Hook Categories**
+
 - **Transform hooks** (`beforeSave`, `afterRead`): Modify data, always block
 - **Action hooks** (`on.create`, `on.update`, etc.): Side effects, optionally fire-and-forget
 
 **Serializable Constraint**
+
 - All data passed to plugins: `Serializable` type (primitives, arrays, plain objects, Date)
 - No functions, class instances, symbols, or circular references
 - Plugins receive snapshots of data, not live references
@@ -286,11 +314,23 @@ export function createPlugin(config: Serializable): { hooks: PluginHooks } {
 ### Plugin Development Guidelines
 
 When creating plugins:
+
 1. **Keep Worker module self-contained** — it cannot import from main thread modules
 2. **Use `createPlugin(config)` factory** — receives serialized config from CMS options
-3. **Declare capabilities** — network hosts, actions needed (for future permission enforcement)
+3. **Declare capabilities** — network hosts, actions needed (for documentation and validation)
 4. **Use `fireAndForget: true`** for logging/analytics that shouldn't block requests
-5. **Test without Worker first** — easier to debug, then verify Worker isolation works
+5. **Use `filter` function** — cleaner than stub hooks for controlling which hooks run
+6. **Test without Worker first** — easier to debug, then verify Worker isolation works
+
+**Filter vs Stub Hooks:**
+
+```typescript
+// Old pattern (stub hooks) - confusing, hooks don't actually run
+hooks: { on: { create: async () => {}, update: async () => {} } }
+
+// New pattern (filter function) - clear intent
+filter: (ctx) => ctx.hookType === 'action' && ['create', 'update'].includes(ctx.action)
+```
 
 ### Uploads: What belongs in core vs plugin
 

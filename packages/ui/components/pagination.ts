@@ -22,7 +22,7 @@ export interface PaginationOptions {
 export function pagination(options: PaginationOptions): string {
   const { page, totalPages, baseUrl } = options;
   const paramName = options.paramName ?? 'page';
-  
+
   if (totalPages <= 1) {
     return '';
   }
@@ -36,9 +36,13 @@ export function pagination(options: PaginationOptions): string {
 
   // Previous button
   if (page > 1) {
-    items.push(html`<a href="${pageUrl(page - 1)}" class="cms-page-link">← Previous</a>`);
+    items.push(html`
+      <a href="${pageUrl(page - 1)}" class="cms-page-link">← Previous</a>
+    `);
   } else {
-    items.push(`<span class="cms-page-link cms-page-disabled">← Previous</span>`);
+    items.push(
+      `<span class="cms-page-link cms-page-disabled">← Previous</span>`,
+    );
   }
 
   // Page numbers (simplified: show first, current-1, current, current+1, last)
@@ -59,14 +63,18 @@ export function pagination(options: PaginationOptions): string {
     if (p === page) {
       items.push(`<span class="cms-page-link cms-page-current">${p}</span>`);
     } else {
-      items.push(html`<a href="${pageUrl(p)}" class="cms-page-link">${String(p)}</a>`);
+      items.push(html`
+        <a href="${pageUrl(p)}" class="cms-page-link">${String(p)}</a>
+      `);
     }
     lastPage = p;
   }
 
   // Next button
   if (page < totalPages) {
-    items.push(html`<a href="${pageUrl(page + 1)}" class="cms-page-link">Next →</a>`);
+    items.push(html`
+      <a href="${pageUrl(page + 1)}" class="cms-page-link">Next →</a>
+    `);
   } else {
     items.push(`<span class="cms-page-link cms-page-disabled">Next →</span>`);
   }

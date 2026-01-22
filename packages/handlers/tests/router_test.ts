@@ -1,7 +1,13 @@
 // Tests for router utilities
 
 import { assertEquals, assertExists } from 'jsr:@std/assert';
-import { parseRoute, resolveAction, cmsUrl, formatTableName, formatColumnName } from '../router.ts';
+import {
+  cmsUrl,
+  formatColumnName,
+  formatTableName,
+  parseRoute,
+  resolveAction,
+} from '../router.ts';
 import type { IntrospectedTable } from '@drizzle-cms/core';
 
 // Mock tables for testing
@@ -9,8 +15,26 @@ const mockTables: IntrospectedTable[] = [
   {
     name: 'users',
     columns: [
-      { name: 'id', propertyName: 'id', columnType: 'PgSerial', dataType: 'number', notNull: true, hasDefault: true, isPrimaryKey: true, isUnique: false },
-      { name: 'email', propertyName: 'email', columnType: 'PgVarchar', dataType: 'string', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: true },
+      {
+        name: 'id',
+        propertyName: 'id',
+        columnType: 'PgSerial',
+        dataType: 'number',
+        notNull: true,
+        hasDefault: true,
+        isPrimaryKey: true,
+        isUnique: false,
+      },
+      {
+        name: 'email',
+        propertyName: 'email',
+        columnType: 'PgVarchar',
+        dataType: 'string',
+        notNull: true,
+        hasDefault: false,
+        isPrimaryKey: false,
+        isUnique: true,
+      },
     ],
     primaryKey: ['id'],
     table: {},
@@ -18,8 +42,26 @@ const mockTables: IntrospectedTable[] = [
   {
     name: 'posts',
     columns: [
-      { name: 'id', propertyName: 'id', columnType: 'PgSerial', dataType: 'number', notNull: true, hasDefault: true, isPrimaryKey: true, isUnique: false },
-      { name: 'title', propertyName: 'title', columnType: 'PgVarchar', dataType: 'string', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
+      {
+        name: 'id',
+        propertyName: 'id',
+        columnType: 'PgSerial',
+        dataType: 'number',
+        notNull: true,
+        hasDefault: true,
+        isPrimaryKey: true,
+        isUnique: false,
+      },
+      {
+        name: 'title',
+        propertyName: 'title',
+        columnType: 'PgVarchar',
+        dataType: 'string',
+        notNull: true,
+        hasDefault: false,
+        isPrimaryKey: false,
+        isUnique: false,
+      },
     ],
     primaryKey: ['id'],
     table: {},
@@ -33,7 +75,7 @@ const mockTables: IntrospectedTable[] = [
 Deno.test('parseRoute: dashboard route', () => {
   const url = new URL('http://localhost/admin');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertExists(route);
   assertEquals(route.table, null);
   assertEquals(route.action, 'dashboard');
@@ -42,7 +84,7 @@ Deno.test('parseRoute: dashboard route', () => {
 Deno.test('parseRoute: dashboard with trailing slash', () => {
   const url = new URL('http://localhost/admin/');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertExists(route);
   assertEquals(route.action, 'dashboard');
 });
@@ -50,7 +92,7 @@ Deno.test('parseRoute: dashboard with trailing slash', () => {
 Deno.test('parseRoute: list route', () => {
   const url = new URL('http://localhost/admin/users');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertExists(route);
   assertEquals(route.table?.name, 'users');
   assertEquals(route.action, 'list');
@@ -59,7 +101,7 @@ Deno.test('parseRoute: list route', () => {
 Deno.test('parseRoute: create route', () => {
   const url = new URL('http://localhost/admin/users/new');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertExists(route);
   assertEquals(route.table?.name, 'users');
   assertEquals(route.action, 'create');
@@ -68,7 +110,7 @@ Deno.test('parseRoute: create route', () => {
 Deno.test('parseRoute: read route', () => {
   const url = new URL('http://localhost/admin/users/123');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertExists(route);
   assertEquals(route.table?.name, 'users');
   assertEquals(route.action, 'read');
@@ -78,7 +120,7 @@ Deno.test('parseRoute: read route', () => {
 Deno.test('parseRoute: update route', () => {
   const url = new URL('http://localhost/admin/users/123/edit');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertExists(route);
   assertEquals(route.table?.name, 'users');
   assertEquals(route.action, 'update');
@@ -88,7 +130,7 @@ Deno.test('parseRoute: update route', () => {
 Deno.test('parseRoute: delete route', () => {
   const url = new URL('http://localhost/admin/users/123/delete');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertExists(route);
   assertEquals(route.table?.name, 'users');
   assertEquals(route.action, 'delete');
@@ -98,14 +140,14 @@ Deno.test('parseRoute: delete route', () => {
 Deno.test('parseRoute: returns null for unknown table', () => {
   const url = new URL('http://localhost/admin/unknown');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertEquals(route, null);
 });
 
 Deno.test('parseRoute: returns null for path not starting with basePath', () => {
   const url = new URL('http://localhost/other/users');
   const route = parseRoute(url, '/admin', mockTables);
-  
+
   assertEquals(route, null);
 });
 
@@ -139,17 +181,29 @@ Deno.test('resolveAction: POST create (submit)', () => {
 });
 
 Deno.test('resolveAction: GET read', () => {
-  const route = { table: mockTables[0] ?? null, action: 'read' as const, recordId: '1' };
+  const route = {
+    table: mockTables[0] ?? null,
+    action: 'read' as const,
+    recordId: '1',
+  };
   assertEquals(resolveAction(route, 'GET'), 'read');
 });
 
 Deno.test('resolveAction: POST update', () => {
-  const route = { table: mockTables[0] ?? null, action: 'update' as const, recordId: '1' };
+  const route = {
+    table: mockTables[0] ?? null,
+    action: 'update' as const,
+    recordId: '1',
+  };
   assertEquals(resolveAction(route, 'POST'), 'update');
 });
 
 Deno.test('resolveAction: POST delete', () => {
-  const route = { table: mockTables[0] ?? null, action: 'delete' as const, recordId: '1' };
+  const route = {
+    table: mockTables[0] ?? null,
+    action: 'delete' as const,
+    recordId: '1',
+  };
   assertEquals(resolveAction(route, 'POST'), 'delete');
 });
 
@@ -170,15 +224,24 @@ Deno.test('cmsUrl: read', () => {
 });
 
 Deno.test('cmsUrl: edit', () => {
-  assertEquals(cmsUrl('/admin', 'users', '123', 'edit'), '/admin/users/123/edit');
+  assertEquals(
+    cmsUrl('/admin', 'users', '123', 'edit'),
+    '/admin/users/123/edit',
+  );
 });
 
 Deno.test('cmsUrl: create (new)', () => {
-  assertEquals(cmsUrl('/admin', 'users', undefined, 'create'), '/admin/users/new');
+  assertEquals(
+    cmsUrl('/admin', 'users', undefined, 'create'),
+    '/admin/users/new',
+  );
 });
 
 Deno.test('cmsUrl: delete', () => {
-  assertEquals(cmsUrl('/admin', 'users', '123', 'delete'), '/admin/users/123/delete');
+  assertEquals(
+    cmsUrl('/admin', 'users', '123', 'delete'),
+    '/admin/users/123/delete',
+  );
 });
 
 Deno.test('cmsUrl: strips trailing slashes from basePath', () => {
@@ -198,7 +261,10 @@ Deno.test('formatTableName: handles single word', () => {
 });
 
 Deno.test('formatTableName: handles multiple underscores', () => {
-  assertEquals(formatTableName('user_account_settings'), 'User Account Settings');
+  assertEquals(
+    formatTableName('user_account_settings'),
+    'User Account Settings',
+  );
 });
 
 // =============================================================================

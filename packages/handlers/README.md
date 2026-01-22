@@ -73,12 +73,13 @@ Deno.serve(handler);
 
 ## Environment Variables
 
-| Variable | Purpose | Required |
-|----------|---------|----------|
-| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars) | Yes, if not passed in options |
-| `CMS_JWT_SECRET` | JWT signing for auth (32+ chars) | Yes, if auth enabled and not passed in options |
+| Variable          | Purpose                          | Required                                       |
+| ----------------- | -------------------------------- | ---------------------------------------------- |
+| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)   | Yes, if not passed in options                  |
+| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars) | Yes, if auth enabled and not passed in options |
 
 Generate secrets with:
+
 ```bash
 openssl rand -base64 32
 ```
@@ -87,20 +88,20 @@ openssl rand -base64 32
 
 ### `mod.ts` - Main Entry Point
 
-| Export | Purpose |
-|--------|---------|
-| `createCmsHandler(options)` | Create the main CMS handler |
-| `CmsOptions` | Configuration options type |
-| `CmsAuthOptions` | Auth configuration type |
-| `Handler` | `(Request) => Response` type |
-| `CrudAction` | `'list' \| 'read' \| 'create' \| 'update' \| 'delete'` |
-| `generateCsrfToken()` | Generate signed CSRF token |
-| `validateCsrfToken(token)` | Validate CSRF token (signature + expiry) |
-| `getEnv(key)` | Get environment variable (cross-runtime) |
-| `requireEnv(key, desc)` | Get required env var or throw |
-| `PasswordProvider` | Password-based auth provider class |
-| `hashPassword(password)` | Hash password with PBKDF2-SHA256 |
-| `verifyPassword(password, hash)` | Verify password against hash |
+| Export                           | Purpose                                                |
+| -------------------------------- | ------------------------------------------------------ |
+| `createCmsHandler(options)`      | Create the main CMS handler                            |
+| `CmsOptions`                     | Configuration options type                             |
+| `CmsAuthOptions`                 | Auth configuration type                                |
+| `Handler`                        | `(Request) => Response` type                           |
+| `CrudAction`                     | `'list' \| 'read' \| 'create' \| 'update' \| 'delete'` |
+| `generateCsrfToken()`            | Generate signed CSRF token                             |
+| `validateCsrfToken(token)`       | Validate CSRF token (signature + expiry)               |
+| `getEnv(key)`                    | Get environment variable (cross-runtime)               |
+| `requireEnv(key, desc)`          | Get required env var or throw                          |
+| `PasswordProvider`               | Password-based auth provider class                     |
+| `hashPassword(password)`         | Hash password with PBKDF2-SHA256                       |
+| `verifyPassword(password, hash)` | Verify password against hash                           |
 
 **Example:**
 
@@ -122,9 +123,9 @@ const handler = createCmsHandler({
 
 ### `runtime-compat.ts` - Cross-Runtime Utilities
 
-| Export | Purpose |
-|--------|---------|
-| `getEnv(key)` | Get env var (works in Deno, Node, Bun, Workers) |
+| Export                         | Purpose                                          |
+| ------------------------------ | ------------------------------------------------ |
+| `getEnv(key)`                  | Get env var (works in Deno, Node, Bun, Workers)  |
 | `requireEnv(key, description)` | Get required env var or throw with helpful error |
 
 **Example:**
@@ -141,78 +142,83 @@ const secret = requireEnv('JWT_SECRET', 'JWT signing secret');
 
 ### `router.ts` - URL Routing
 
-| Export | Purpose |
-|--------|---------|
-| `parseRoute(url, basePath, tables)` | Parse URL to route info |
-| `resolveAction(route, method)` | Determine CRUD action from HTTP method |
-| `cmsUrl(basePath, table?, action?, id?)` | Generate CMS URLs |
-| `formatTableName(name)` | `posts_to_categories` → `Posts To Categories` |
-| `formatColumnName(name)` | `author_id` → `Author Id` |
+| Export                                   | Purpose                                       |
+| ---------------------------------------- | --------------------------------------------- |
+| `parseRoute(url, basePath, tables)`      | Parse URL to route info                       |
+| `resolveAction(route, method)`           | Determine CRUD action from HTTP method        |
+| `cmsUrl(basePath, table?, action?, id?)` | Generate CMS URLs                             |
+| `formatTableName(name)`                  | `posts_to_categories` → `Posts To Categories` |
+| `formatColumnName(name)`                 | `author_id` → `Author Id`                     |
 
 **URL Patterns:**
 
-| URL | Method | Action |
-|-----|--------|--------|
-| `/admin` | GET | Dashboard |
-| `/admin/posts` | GET | List posts |
-| `/admin/posts/new` | GET | Create form |
-| `/admin/posts/new` | POST | Create record |
-| `/admin/posts/123` | GET | View post |
-| `/admin/posts/123/edit` | GET | Edit form |
-| `/admin/posts/123/edit` | POST | Update record |
-| `/admin/posts/123/delete` | POST | Delete record |
+| URL                       | Method | Action        |
+| ------------------------- | ------ | ------------- |
+| `/admin`                  | GET    | Dashboard     |
+| `/admin/posts`            | GET    | List posts    |
+| `/admin/posts/new`        | GET    | Create form   |
+| `/admin/posts/new`        | POST   | Create record |
+| `/admin/posts/123`        | GET    | View post     |
+| `/admin/posts/123/edit`   | GET    | Edit form     |
+| `/admin/posts/123/edit`   | POST   | Update record |
+| `/admin/posts/123/delete` | POST   | Delete record |
 
 **Example:**
 
 ```ts
 import { cmsUrl } from '@drizzle-cms/handlers';
 
-cmsUrl('/admin');                        // '/admin'
-cmsUrl('/admin', 'posts');               // '/admin/posts'
+cmsUrl('/admin'); // '/admin'
+cmsUrl('/admin', 'posts'); // '/admin/posts'
 cmsUrl('/admin', 'posts', 'read', '123'); // '/admin/posts/123'
 cmsUrl('/admin', 'posts', 'edit', '123'); // '/admin/posts/123/edit'
-cmsUrl('/admin', 'posts', 'new');        // '/admin/posts/new'
+cmsUrl('/admin', 'posts', 'new'); // '/admin/posts/new'
 ```
 
 ### `crud.ts` - CRUD Handlers
 
 Internal handlers for each CRUD operation. These are called by the main handler.
 
-| Handler | Action | Description |
-|---------|--------|-------------|
-| `handleDashboard` | GET `/admin` | Shows table list |
-| `handleList` | GET `/admin/:table` | Paginated table view |
-| `handleRead` | GET `/admin/:table/:id` | Single record view |
-| `handleCreate` | GET/POST `/admin/:table/new` | Create form/submit |
-| `handleUpdate` | POST `/admin/:table/:id/edit` | Update record |
-| `handleDelete` | POST `/admin/:table/:id/delete` | Delete record |
+| Handler           | Action                          | Description          |
+| ----------------- | ------------------------------- | -------------------- |
+| `handleDashboard` | GET `/admin`                    | Shows table list     |
+| `handleList`      | GET `/admin/:table`             | Paginated table view |
+| `handleRead`      | GET `/admin/:table/:id`         | Single record view   |
+| `handleCreate`    | GET/POST `/admin/:table/new`    | Create form/submit   |
+| `handleUpdate`    | POST `/admin/:table/:id/edit`   | Update record        |
+| `handleDelete`    | POST `/admin/:table/:id/delete` | Delete record        |
 
 ### `http.ts` - HTTP Response Helpers
 
-| Export | Purpose |
-|--------|---------|
-| `htmlResponse(html, status?)` | Create HTML response |
-| `jsonResponse(data, status?)` | Create JSON response |
-| `redirect(url, status?)` | Create redirect response |
-| `redirectWithFlash(url, flash)` | Redirect with flash message |
-| `parseFlashFromUrl(url)` | Extract flash from URL params |
-| `notFound(message?)` | 404 response |
-| `forbidden(message?)` | 403 response |
-| `methodNotAllowed(allowed)` | 405 response |
-| `parseFormData(request)` | Parse form submission |
+| Export                            | Purpose                       |
+| --------------------------------- | ----------------------------- |
+| `htmlResponse(html, status?)`     | Create HTML response          |
+| `jsonResponse(data, status?)`     | Create JSON response          |
+| `redirect(url, status?)`          | Create redirect response      |
+| `redirectWithFlash(url, flash)`   | Redirect with flash message   |
+| `parseFlashFromUrl(url)`          | Extract flash from URL params |
+| `notFound(message?)`              | 404 response                  |
+| `forbidden(message?)`             | 403 response                  |
+| `methodNotAllowed(allowed)`       | 405 response                  |
+| `parseFormData(request)`          | Parse form submission         |
 | `coerceFormValues(data, columns)` | Convert form strings to types |
-| `getPagination(url)` | Extract page/limit from URL |
-| `getSort(url, columns)` | Extract sort column/direction |
+| `getPagination(url)`              | Extract page/limit from URL   |
+| `getSort(url, columns)`           | Extract sort column/direction |
 
 **Example:**
 
 ```ts
-import { htmlResponse, redirect, parseFormData, coerceFormValues } from '@drizzle-cms/handlers';
+import {
+  coerceFormValues,
+  htmlResponse,
+  parseFormData,
+  redirect,
+} from '@drizzle-cms/handlers';
 
 // Create responses
-htmlResponse('<h1>Hello</h1>');           // 200 HTML
-htmlResponse('<h1>Error</h1>', 400);      // 400 HTML
-redirect('/admin/posts');                  // 302 redirect
+htmlResponse('<h1>Hello</h1>'); // 200 HTML
+htmlResponse('<h1>Error</h1>', 400); // 400 HTML
+redirect('/admin/posts'); // 302 redirect
 
 // Parse form data
 const formData = await parseFormData(request);
@@ -222,11 +228,11 @@ const values = coerceFormValues(formData, table.columns);
 
 ### `csrf.ts` - CSRF Protection
 
-| Export | Purpose |
-|--------|---------|  
-| `generateCsrfToken(secret)` | Generate HMAC-SHA256 signed token (4-hour expiry) |
-| `validateCsrfToken(token, secret)` | Validate signature and check expiry |
-| `getCsrfTokenFromFormData(data)` | Extract `_csrf` field from form |
+| Export                             | Purpose                                           |
+| ---------------------------------- | ------------------------------------------------- |
+| `generateCsrfToken(secret)`        | Generate HMAC-SHA256 signed token (4-hour expiry) |
+| `validateCsrfToken(token, secret)` | Validate signature and check expiry               |
+| `getCsrfTokenFromFormData(data)`   | Extract `_csrf` field from form                   |
 
 **Token Format:** `timestamp.random.signature`
 
@@ -253,25 +259,25 @@ const isValid = await validateCsrfToken(token, secret);
 
 Utilities for CRUD operations. Some are exported from mod.ts for custom validation.
 
-| Function | Exported | Purpose |
-|----------|----------|---------|  
-| `validateFormData()` | ✅ | Validate form data with drizzle-zod |
-| `validateWithParsers()` | ✅ | Validate with custom parser support |
-| `formatZodErrors()` | ✅ | Convert ZodError to field errors |
-| `buildNavItems()` | ❌ | Build sidebar navigation |
-| `findRecord()` | ❌ | Fetch single record by ID |
-| `getSafeErrorMessage()` | ❌ | Sanitize error messages for users |
-| `isForeignKeyViolation()` | ❌ | Detect FK constraint errors |
+| Function                  | Exported | Purpose                             |
+| ------------------------- | -------- | ----------------------------------- |
+| `validateFormData()`      | ✅       | Validate form data with drizzle-zod |
+| `validateWithParsers()`   | ✅       | Validate with custom parser support |
+| `formatZodErrors()`       | ✅       | Convert ZodError to field errors    |
+| `buildNavItems()`         | ❌       | Build sidebar navigation            |
+| `findRecord()`            | ❌       | Fetch single record by ID           |
+| `getSafeErrorMessage()`   | ❌       | Sanitize error messages for users   |
+| `isForeignKeyViolation()` | ❌       | Detect FK constraint errors         |
 
 ### `styles.ts` - External Stylesheet
 
 CSS served as an external file for strict CSP compliance.
 
-| Export | Purpose |
-|--------|---------|
-| `cmsStylesheet` | Raw CSS string for custom serving |
-| `handleStylesheet()` | Route handler returning CSS response |
-| `cssResponse(css)` | Create a CSS response with caching headers |
+| Export               | Purpose                                    |
+| -------------------- | ------------------------------------------ |
+| `cmsStylesheet`      | Raw CSS string for custom serving          |
+| `handleStylesheet()` | Route handler returning CSS response       |
+| `cssResponse(css)`   | Create a CSS response with caching headers |
 
 The stylesheet is automatically served at `{basePath}/styles.css`. This enables strict Content Security Policy (`style-src 'self'`) without requiring nonces.
 
@@ -289,6 +295,7 @@ Referrer-Policy: strict-origin-when-cross-origin
 ```
 
 This policy:
+
 - Restricts all resources to same-origin
 - Allows only external stylesheets (no inline `<style>` tags)
 - Blocks the CMS from being embedded in iframes (clickjacking protection)
@@ -309,10 +316,10 @@ import { z } from 'zod';
 import { users } from './schema';
 
 // Create schemas with custom refinements
-const usersInsertSchema = createInsertSchema(users, { 
+const usersInsertSchema = createInsertSchema(users, {
   email: z.string().email('Invalid email format'),
 });
-const usersUpdateSchema = createUpdateSchema(users, { 
+const usersUpdateSchema = createUpdateSchema(users, {
   email: z.string().email('Invalid email format').optional(),
 });
 
@@ -341,8 +348,8 @@ type ParserFn = (data: unknown) => unknown;
 
 // Parsers for a single table
 interface TableParsers {
-  insert?: ParserFn;  // For create operations
-  update?: ParserFn;  // For update operations
+  insert?: ParserFn; // For create operations
+  update?: ParserFn; // For update operations
 }
 
 // All custom parsers keyed by table name
@@ -351,19 +358,19 @@ type Parsers = Record<string, TableParsers>;
 // Validation result returned by validateFormData()
 interface ValidationResult {
   success: boolean;
-  data?: Record<string, unknown>;   // Validated data (on success)
-  errors?: Record<string, string>;  // Field-level errors
-  formError?: string;               // Form-level error message
+  data?: Record<string, unknown>; // Validated data (on success)
+  errors?: Record<string, string>; // Field-level errors
+  formError?: string; // Form-level error message
 }
 ```
 
 **Exported Validation Utilities:**
 
-| Export | Purpose |
-|--------|---------|  
-| `validateFormData(table, values, mode)` | Validate using drizzle-zod schema |
-| `validateWithParsers(opts, name, table, values, mode)` | Validate with custom parser fallback |
-| `formatZodErrors(zodError)` | Convert ZodError to field-keyed errors |
+| Export                                                 | Purpose                                |
+| ------------------------------------------------------ | -------------------------------------- |
+| `validateFormData(table, values, mode)`                | Validate using drizzle-zod schema      |
+| `validateWithParsers(opts, name, table, values, mode)` | Validate with custom parser fallback   |
+| `formatZodErrors(zodError)`                            | Convert ZodError to field-keyed errors |
 
 ## Error Handling
 
@@ -374,11 +381,11 @@ The library distinguishes between **configuration errors** (programming mistakes
 Invalid configuration throws `CmsConfigError` at startup:
 
 ```ts
-import { createCmsHandler, CmsConfigError } from '@drizzle-cms/handlers';
+import { CmsConfigError, createCmsHandler } from '@drizzle-cms/handlers';
 
 try {
   const handler = createCmsHandler({
-    db: null,  // ❌ Invalid - throws immediately
+    db: null, // ❌ Invalid - throws immediately
     schema: {},
   });
 } catch (error) {
@@ -391,28 +398,28 @@ try {
 }
 ```
 
-| Condition | Behavior |
-|-----------|----------|
-| `db` is null/undefined | Throws `CmsConfigError` |
-| `schema` is empty | Throws `CmsConfigError` |
-| `basePath` doesn't start with `/` | Throws `CmsConfigError` |
-| `csrfSecret` less than 32 chars | Throws `CmsConfigError` |
-| Schema introspection fails | Throws (table not found, etc.) |
+| Condition                         | Behavior                       |
+| --------------------------------- | ------------------------------ |
+| `db` is null/undefined            | Throws `CmsConfigError`        |
+| `schema` is empty                 | Throws `CmsConfigError`        |
+| `basePath` doesn't start with `/` | Throws `CmsConfigError`        |
+| `csrfSecret` less than 32 chars   | Throws `CmsConfigError`        |
+| Schema introspection fails        | Throws (table not found, etc.) |
 
 ### Runtime Errors (HTTP Responses)
 
 Expected failures return appropriate HTTP responses:
 
-| Condition | Response |
-|-----------|----------|
-| Route not found | 404 Not Found |
-| Authentication fails | 403 Forbidden |
-| Authorization denied | 403 Forbidden |
-| Record not found | 404 Not Found |
-| Validation errors | 400 with form errors |
-| CSRF token invalid | 403 with error message |
-| Foreign key violation on delete | Error flash message |
-| Unexpected database error | 500 Internal Server Error |
+| Condition                       | Response                  |
+| ------------------------------- | ------------------------- |
+| Route not found                 | 404 Not Found             |
+| Authentication fails            | 403 Forbidden             |
+| Authorization denied            | 403 Forbidden             |
+| Record not found                | 404 Not Found             |
+| Validation errors               | 400 with form errors      |
+| CSRF token invalid              | 403 with error message    |
+| Foreign key violation on delete | Error flash message       |
+| Unexpected database error       | 500 Internal Server Error |
 
 ### Error Logging with `onError`
 
@@ -424,7 +431,7 @@ import { createCmsHandler, ErrorContext } from '@drizzle-cms/handlers';
 const handler = createCmsHandler({
   db,
   schema,
-  
+
   onError: (error: Error, context: ErrorContext) => {
     // Log to your monitoring service
     logger.error('CMS error', {
@@ -434,7 +441,7 @@ const handler = createCmsHandler({
       table: context.table?.name,
       action: context.action,
     });
-    
+
     // Or send to Sentry, Datadog, etc.
     Sentry.captureException(error, {
       extra: {
@@ -450,11 +457,11 @@ The `ErrorContext` includes:
 
 ```ts
 interface ErrorContext {
-  request: Request;       // Original request
-  url: URL;               // Parsed URL
-  route: ParsedRoute | null;  // Route info (if parsed)
-  table?: IntrospectedTable;  // Table being accessed
-  action?: CrudAction | 'dashboard';  // Action attempted
+  request: Request; // Original request
+  url: URL; // Parsed URL
+  route: ParsedRoute | null; // Route info (if parsed)
+  table?: IntrospectedTable; // Table being accessed
+  action?: CrudAction | 'dashboard'; // Action attempted
 }
 ```
 
@@ -486,7 +493,7 @@ interface CmsOptions {
   basePath?: string;
   /** Site title for the admin UI */
   title?: string;
-  /** 
+  /**
    * Secret for CSRF token signing (HMAC-SHA256).
    * Must be at least 32 characters. Generate with: openssl rand -base64 32
    * If not provided, a random secret is generated (tokens won't survive restarts).
@@ -495,7 +502,11 @@ interface CmsOptions {
   /** Custom authentication check */
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
   /** Custom authorization check per table/action */
-  canAccess?: (request: Request, table: IntrospectedTable, action: CrudAction) => Promise<boolean> | boolean;
+  canAccess?: (
+    request: Request,
+    table: IntrospectedTable,
+    action: CrudAction,
+  ) => Promise<boolean> | boolean;
   /** Custom parsers for form validation (optional) */
   parsers?: Parsers;
 }
@@ -532,26 +543,26 @@ interface FlashMessage {
 const handler = createCmsHandler({
   db,
   schema,
-  
+
   // Called for every request - return false to show 403
   isAuthenticated: async (request) => {
     const session = await getSession(request);
     return session?.user != null;
   },
-  
+
   // Called for table operations - return false to deny
   canAccess: async (request, table, action) => {
     const session = await getSession(request);
-    
+
     // Admin can do anything
     if (session?.user?.role === 'admin') return true;
-    
+
     // Editors can't delete
     if (action === 'delete') return false;
-    
+
     // Nobody touches settings except admins
     if (table.name === 'settings') return false;
-    
+
     return true;
   },
 });
@@ -585,12 +596,12 @@ That's it! The handler now includes `/admin/login` and `/admin/logout` routes au
 
 `PasswordProvider` uses sensible defaults that work with common schema patterns:
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `identityField` | `'email'` | Column for login identity (email/username) |
-| `passwordField` | `'passwordHash'` | Column for hashed password |
-| `idField` | `'id'` | Column for primary key |
-| `roleField` | `'role'` (auto-detected) | Column for user role (if exists) |
+| Option          | Default                  | Description                                |
+| --------------- | ------------------------ | ------------------------------------------ |
+| `identityField` | `'email'`                | Column for login identity (email/username) |
+| `passwordField` | `'passwordHash'`         | Column for hashed password                 |
+| `idField`       | `'id'`                   | Column for primary key                     |
+| `roleField`     | `'role'` (auto-detected) | Column for user role (if exists)           |
 
 Override these only if your schema uses different column names:
 
@@ -598,9 +609,9 @@ Override these only if your schema uses different column names:
 new PasswordProvider({
   db,
   usersTable: schema.users,
-  identityField: 'username',     // custom identity column
+  identityField: 'username', // custom identity column
   passwordField: 'password_hash', // custom password column
-})
+});
 ```
 
 ### Which Users Table?
@@ -608,6 +619,7 @@ new PasswordProvider({
 `PasswordProvider` works with any table that has the required columns. Two common approaches:
 
 **Dedicated admin table** (simpler):
+
 ```ts
 // Separate table just for CMS admins
 const adminUsers = pgTable('admin_users', {
@@ -617,10 +629,11 @@ const adminUsers = pgTable('admin_users', {
   role: varchar('role', { length: 50 }),
 });
 
-new PasswordProvider({ db, usersTable: adminUsers })
+new PasswordProvider({ db, usersTable: adminUsers });
 ```
 
 **General-purpose users table** (shared):
+
 ```ts
 // Your existing users table with a role/isAdmin column
 const users = pgTable('users', {
@@ -630,10 +643,11 @@ const users = pgTable('users', {
   role: varchar('role', { length: 50 }), // 'admin', 'editor', 'user'
 });
 
-new PasswordProvider({ db, usersTable: users })
+new PasswordProvider({ db, usersTable: users });
 ```
 
 Choose based on your needs:
+
 - **Dedicated table**: Clear separation, everyone in the table can access CMS
 - **Shared table**: Single source of truth, use `canAccess` for role-based authorization
 
@@ -658,28 +672,28 @@ auth: {
 
 ### Auth Exports
 
-| Export | Purpose |
-|--------|---------|
-| `PasswordProvider` | Password-based auth provider class |
-| `hashPassword(password)` | Hash password with PBKDF2-SHA256 |
-| `verifyPassword(password, hash)` | Verify password against hash |
-| `signJwt(payload, secret)` | Sign a JWT token |
-| `verifyJwt(token, secret)` | Verify and decode JWT |
-| `createJwtPayload(id, role?, maxAge?)` | Create JWT payload with expiry |
-| `AuthProvider` | Interface for custom auth providers |
-| `getTokenFromCookies(req, name)` | Parse JWT from cookie header |
-| `createAuthCookie(...)` | Create Set-Cookie header for JWT |
-| `createClearCookie(name, path)` | Create Set-Cookie to clear JWT |
+| Export                                 | Purpose                             |
+| -------------------------------------- | ----------------------------------- |
+| `PasswordProvider`                     | Password-based auth provider class  |
+| `hashPassword(password)`               | Hash password with PBKDF2-SHA256    |
+| `verifyPassword(password, hash)`       | Verify password against hash        |
+| `signJwt(payload, secret)`             | Sign a JWT token                    |
+| `verifyJwt(token, secret)`             | Verify and decode JWT               |
+| `createJwtPayload(id, role?, maxAge?)` | Create JWT payload with expiry      |
+| `AuthProvider`                         | Interface for custom auth providers |
+| `getTokenFromCookies(req, name)`       | Parse JWT from cookie header        |
+| `createAuthCookie(...)`                | Create Set-Cookie header for JWT    |
+| `createClearCookie(name, path)`        | Create Set-Cookie to clear JWT      |
 
 ### Auth Routes
 
 When `auth` is configured, these routes are automatically added:
 
-| URL | Method | Description |
-|-----|--------|-------------|
-| `/admin/login` | GET | Login form |
-| `/admin/login` | POST | Submit credentials |
-| `/admin/logout` | POST | Clear auth cookie |
+| URL             | Method | Description        |
+| --------------- | ------ | ------------------ |
+| `/admin/login`  | GET    | Login form         |
+| `/admin/login`  | POST   | Submit credentials |
+| `/admin/logout` | POST   | Clear auth cookie  |
 
 ### Password Hashing
 
@@ -690,9 +704,9 @@ import { hashPassword, verifyPassword } from '@drizzle-cms/handlers';
 
 // When creating a user
 const passwordHash = await hashPassword('user-password');
-await db.insert(adminUsers).values({ 
-  email: 'admin@example.com', 
-  passwordHash 
+await db.insert(adminUsers).values({
+  email: 'admin@example.com',
+  passwordHash,
 });
 
 // Verification happens automatically in PasswordProvider
@@ -739,7 +753,12 @@ Policies provide atomic, race-condition-free authorization by injecting WHERE cl
 ### Quick Start
 
 ```ts
-import { createCmsHandler, PasswordProvider, ownedBy, adminOr } from '@drizzle-cms/handlers';
+import {
+  adminOr,
+  createCmsHandler,
+  ownedBy,
+  PasswordProvider,
+} from '@drizzle-cms/handlers';
 import * as schema from './schema';
 
 const handler = createCmsHandler({
@@ -753,7 +772,7 @@ const handler = createCmsHandler({
   policies: {
     // Users can only see/edit their own posts
     posts: ownedBy(schema.posts, 'authorId'),
-    
+
     // Admins have full access, others only see their own
     comments: adminOr(ownedBy(schema.comments, 'userId')),
   },
@@ -776,20 +795,20 @@ This is **atomic** — there's no window between checking permission and executi
 
 ### Policy Helpers
 
-| Helper | Description |
-|--------|-------------|
-| `always()` | Allow all access (no filter) |
-| `never()` | Deny all access (returns 403) |
-| `authenticated()` | Require login (any authenticated user) |
-| `roleIs(role)` | Require specific role |
-| `roleIn(roles)` | Require any of specified roles |
-| `ownedBy(table, column)` | Filter to records where column = user ID |
-| `ownedByOrContributor(table, owner, contributors)` | Owner OR in contributors array |
-| `adminOr(policy)` | Admins bypass, others use the policy |
-| `anyOf(policies)` | Allow if ANY policy allows |
-| `allOf(policies)` | Require ALL policies to allow |
-| `forActions(actionMap)` | Different policies per action |
-| `readOnly()` | Allow list/read, deny create/update/delete |
+| Helper                                             | Description                                |
+| -------------------------------------------------- | ------------------------------------------ |
+| `always()`                                         | Allow all access (no filter)               |
+| `never()`                                          | Deny all access (returns 403)              |
+| `authenticated()`                                  | Require login (any authenticated user)     |
+| `roleIs(role)`                                     | Require specific role                      |
+| `roleIn(roles)`                                    | Require any of specified roles             |
+| `ownedBy(table, column)`                           | Filter to records where column = user ID   |
+| `ownedByOrContributor(table, owner, contributors)` | Owner OR in contributors array             |
+| `adminOr(policy)`                                  | Admins bypass, others use the policy       |
+| `anyOf(policies)`                                  | Allow if ANY policy allows                 |
+| `allOf(policies)`                                  | Require ALL policies to allow              |
+| `forActions(actionMap)`                            | Different policies per action              |
+| `readOnly()`                                       | Allow list/read, deny create/update/delete |
 
 ### Action-Specific Policies
 
@@ -845,6 +864,7 @@ policies: {
 ```
 
 Generated SQL:
+
 ```sql
 WHERE author_id = 'user-123' OR contributors @> ARRAY['user-123']::text[]
 ```
@@ -854,7 +874,7 @@ WHERE author_id = 'user-123' OR contributors @> ARRAY['user-123']::text[]
 Write custom policy functions for complex logic:
 
 ```ts
-import { eq, and, or, sql } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import type { PolicyFn } from '@drizzle-cms/handlers';
 
 const postsPolicy: PolicyFn = (ctx, action) => {
@@ -862,16 +882,16 @@ const postsPolicy: PolicyFn = (ctx, action) => {
   if (ctx.user?.role === 'admin') {
     return undefined; // No filter
   }
-  
+
   // Not logged in = deny
   if (!ctx.user) {
     return false; // 403 Forbidden
   }
-  
+
   // Return SQL condition for filtering
   return or(
     eq(schema.posts.authorId, ctx.user.sub),
-    eq(schema.posts.status, 'published')
+    eq(schema.posts.status, 'published'),
   );
 };
 ```
@@ -883,8 +903,8 @@ Policy functions receive context with the authenticated user:
 ```ts
 interface PolicyContext {
   user?: {
-    sub: string;    // User ID from JWT
-    role?: string;  // User role from JWT
+    sub: string; // User ID from JWT
+    role?: string; // User role from JWT
   };
   request: Request; // Original request (for advanced use)
 }
@@ -902,6 +922,7 @@ The CMS automatically distinguishes between "record doesn't exist" (404) and "re
 ### Combining with `canAccess`
 
 Policies and `canAccess` can be used together:
+
 - `canAccess` runs first (table-level permission check)
 - Policies run second (row-level filtering)
 
@@ -909,13 +930,13 @@ Policies and `canAccess` can be used together:
 const handler = createCmsHandler({
   db,
   schema,
-  
+
   // Table-level: block entire tables
   canAccess: (req, table, action) => {
     if (table.name === 'secrets') return false;
     return true;
   },
-  
+
   // Row-level: filter within allowed tables
   policies: {
     posts: ownedBy(schema.posts, 'authorId'),
@@ -977,7 +998,10 @@ policies: {
 
 ```ts
 // Workaround: parse composite subject
-function tenantScoped<T extends Table>(table: T, col: keyof T & string): PolicyFn {
+function tenantScoped<T extends Table>(
+  table: T,
+  col: keyof T & string,
+): PolicyFn {
   return (ctx) => {
     const [tenantId] = ctx.user?.sub.split(':') ?? [];
     if (!tenantId) return false;
@@ -998,8 +1022,17 @@ Plugins extend CMS functionality with custom hooks that run during CRUD operatio
 
 ```ts
 import { createCmsHandler } from '@drizzle-cms/handlers';
-import { createAuditLogPlugin } from '@drizzle-cms/plugins/audit-log';
+import type { AuditLogConfig } from '@drizzle-cms/plugins/audit-log';
 import * as schema from './schema';
+
+// Create Worker for plugin isolation (you control permissions)
+const auditWorker = new Worker(
+  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  {
+    type: 'module',
+    deno: { permissions: { net: ['audit.example.com'] } }, // Deno-specific
+  },
+);
 
 const handler = createCmsHandler({
   db,
@@ -1007,10 +1040,16 @@ const handler = createCmsHandler({
   basePath: '/admin',
   plugins: [
     {
-      plugin: createAuditLogPlugin({
+      name: 'audit-log',
+      worker: auditWorker,
+      // Filter which hooks are sent to the Worker
+      filter: (ctx) =>
+        ctx.hookType === 'action' &&
+        ['create', 'update', 'delete'].includes(ctx.action),
+      config: {
         excludeTables: ['sessions'],
         logReads: false,
-      }),
+      } satisfies AuditLogConfig,
     },
   ],
 });
@@ -1020,10 +1059,10 @@ const handler = createCmsHandler({
 
 Plugins can define two categories of hooks:
 
-| Category | When | Blocking | Purpose |
-|----------|------|----------|---------|
-| **Transform** | During data flow | Always | Modify data before save or after read |
-| **Action** | After operation | Optional | Side effects (audit, webhooks, cache) |
+| Category      | When             | Blocking | Purpose                               |
+| ------------- | ---------------- | -------- | ------------------------------------- |
+| **Transform** | During data flow | Always   | Modify data before save or after read |
+| **Action**    | After operation  | Optional | Side effects (audit, webhooks, cache) |
 
 ### Transform Hooks
 
@@ -1040,7 +1079,7 @@ const slugPlugin: Plugin = {
       }
       return data;
     },
-    
+
     // Add computed fields after database read
     afterRead: async (ctx, data) => {
       if (data.avatarKey) {
@@ -1064,11 +1103,15 @@ const webhookPlugin: Plugin = {
       create: async (ctx) => {
         await fetch('https://api.example.com/webhook', {
           method: 'POST',
-          body: JSON.stringify({ action: 'create', table: ctx.table, data: ctx.newData }),
+          body: JSON.stringify({
+            action: 'create',
+            table: ctx.table,
+            data: ctx.newData,
+          }),
         });
       },
-      update: async (ctx) => { /* ... */ },
-      delete: async (ctx) => { /* ... */ },
+      update: async (ctx) => {/* ... */},
+      delete: async (ctx) => {/* ... */},
     },
   },
 };
@@ -1092,53 +1135,106 @@ const auditPlugin: Plugin = {
 };
 ```
 
+### Filter Function
+
+Use `filter` to control which hooks are invoked. This is cleaner than stub hooks and works for both Worker and in-process plugins:
+
+```ts
+plugins: [
+  {
+    name: 'audit-log',
+    worker: auditWorker,
+    // Only forward action hooks for create/update/delete
+    filter: (ctx) =>
+      ctx.hookType === 'action' &&
+      ['create', 'update', 'delete'].includes(ctx.action),
+    config: { webhookUrl: 'https://audit.example.com' },
+  },
+  {
+    name: 'custom-logger',
+    hooks: {
+      on: { create: async (ctx) => console.log('Created', ctx.recordId) },
+    },
+    // Skip logging for admin users or sessions table
+    filter: (ctx) => ctx.user?.role !== 'admin' && ctx.table !== 'sessions',
+  },
+];
+```
+
+**FilterContext:**
+
+```ts
+interface FilterContext {
+  hookType: 'transform:beforeSave' | 'transform:afterRead' | 'action';
+  table: string;
+  action: 'create' | 'read' | 'update' | 'delete' | 'list';
+  user?: { sub: string; role?: string };
+}
+```
+
+- Return `true` to invoke the hook, `false` to skip
+- If `filter` is omitted, all hooks are invoked
+- For Worker plugins: prevents unnecessary message serialization
+- For in-process plugins: prevents unnecessary function calls
+
 ### Plugin Context
 
 All hooks receive a `PluginContext` with:
 
 ```ts
 interface PluginContext {
-  table: string;           // Table being operated on
-  action: CrudAction;      // 'create' | 'read' | 'update' | 'delete' | 'list'
-  user?: {                 // Authenticated user (if available)
-    sub: string;           // User ID
-    role?: string;         // User role
+  table: string; // Table being operated on
+  action: CrudAction; // 'create' | 'read' | 'update' | 'delete' | 'list'
+  user?: { // Authenticated user (if available)
+    sub: string; // User ID
+    role?: string; // User role
   };
 }
 
 // Action hooks get additional data
 interface ActionContext extends PluginContext {
-  recordId?: string | number;  // Primary key
-  oldData?: Serializable;      // Previous state (update/delete)
-  newData?: Serializable;      // New state (create/update)
-  timestamp: string;           // ISO 8601 timestamp
+  recordId?: string | number; // Primary key
+  oldData?: Serializable; // Previous state (update/delete)
+  newData?: Serializable; // New state (create/update)
+  timestamp: string; // ISO 8601 timestamp
 }
 ```
 
 ### Worker Isolation
 
-Plugins run in isolated Web Workers by default. This provides:
+Plugins can run in isolated Web Workers for security. You provide the Worker instance, giving full control over permissions:
+
+```ts
+// Create Worker with your desired permissions
+const auditWorker = new Worker(
+  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  {
+    type: 'module',
+    // Deno: restrict permissions
+    deno: { permissions: { net: ['audit.example.com'] } },
+  },
+);
+
+// Use in plugin config
+plugins: [
+  {
+    name: 'audit-log',
+    worker: auditWorker, // Plugin runs in this Worker
+    filter: (ctx) => ctx.hookType === 'action',
+    config: { webhookUrl: 'https://audit.example.com' },
+  },
+];
+```
+
+Benefits:
 
 - **Security**: Plugins cannot access `db`, `schema`, or server internals
 - **Isolation**: A buggy plugin won't crash your server
-- **Capability-based**: Declare what permissions a plugin needs
+- **Control**: You decide what each plugin can access
 
-For Worker isolation to work, plugins must provide a `moduleUrl`:
+Worker plugins must export a `createPlugin(config)` factory:
 
 ```ts
-// audit-log.ts (main entry)
-export function createAuditLogPlugin(config: Config): Plugin {
-  return {
-    name: 'audit-log',
-    moduleUrl: new URL('./audit-log.worker.ts', import.meta.url).href,
-    hooks: { /* defined for type checking */ },
-    capabilities: {
-      actions: ['create', 'update', 'delete'],
-      network: config.webhookUrl ? [new URL(config.webhookUrl).host] : undefined,
-    },
-  };
-}
-
 // audit-log.worker.ts (runs in Worker)
 export function createPlugin(config: Serializable): { hooks: PluginHooks } {
   return {
@@ -1149,28 +1245,33 @@ export function createPlugin(config: Serializable): { hooks: PluginHooks } {
     },
   };
 }
+  }
 ```
 
-### Sandbox Modes
+### In-Process Plugins
 
-| Mode | Runtime | Features |
-|------|---------|----------|
-| `'worker'` | All | Standard Worker isolation |
-| `'deno-sandbox'` | Deno only | Restricted permissions via Deno.permissions |
+For trusted first-party code, you can skip Worker isolation:
 
 ```ts
-createCmsHandler({
-  // ...
-  plugins: [{ plugin: myPlugin }],
-  pluginSandbox: 'deno-sandbox', // Extra security on Deno
-});
+plugins: [
+  {
+    name: 'custom-transform',
+    // No worker = runs in main thread
+    hooks: {
+      transform: {
+        beforeSave: async (ctx, data) => ({ ...data, updatedAt: new Date() }),
+      },
+    },
+    filter: (ctx) => ctx.table !== 'sessions',
+  },
+];
 ```
 
 ### Serializable Data Constraint
 
 All data passed to/from plugins must be JSON-serializable:
 
-✅ **Allowed**: strings, numbers, booleans, null, arrays, plain objects, Date  
+✅ **Allowed**: strings, numbers, booleans, null, arrays, plain objects, Date\
 ❌ **Not allowed**: functions, class instances, symbols, circular references
 
 This constraint enables Worker isolation without API changes.
@@ -1184,15 +1285,27 @@ Official plugins are published in the [`@drizzle-cms/plugins`](../plugins/README
 Logs all CRUD operations for compliance and debugging:
 
 ```ts
-import { createAuditLogPlugin } from '@drizzle-cms/plugins/audit-log';
+import type { AuditLogConfig } from '@drizzle-cms/plugins/audit-log';
 
-createAuditLogPlugin({
-  webhookUrl: 'https://api.example.com/audit', // Optional: POST logs here
-  includeTables: ['posts', 'users'],           // Only log these tables
-  excludeTables: ['sessions'],                 // Skip these tables
-  logReads: false,                             // Don't log read operations
-  logLists: false,                             // Don't log list operations
-});
+// Create Worker with permissions
+const auditWorker = new Worker(
+  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  { type: 'module' }
+);
+
+// Plugin config
+{
+  name: 'audit-log',
+  worker: auditWorker,
+  filter: (ctx) => ctx.hookType === 'action' && !['read', 'list'].includes(ctx.action),
+  config: {
+    webhookUrl: 'https://api.example.com/audit', // Optional: POST logs here
+    includeTables: ['posts', 'users'],           // Only log these tables
+    excludeTables: ['sessions'],                 // Skip these tables
+    logReads: false,                             // Don't log read operations
+    logLists: false,                             // Don't log list operations
+  } satisfies AuditLogConfig,
+}
 ```
 
 ## Server Integration Examples

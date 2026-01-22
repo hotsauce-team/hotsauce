@@ -36,7 +36,7 @@ const handler = createCmsHandler({
   schema,
   db,
   basePath: '/admin',
-  auth: 'open-to-anyone',  // No authentication (dev mode)
+  auth: 'open-to-anyone', // No authentication (dev mode)
 });
 
 // Use with any server
@@ -47,13 +47,13 @@ Deno.serve(handler);
 
 Each package has its own README with detailed API documentation:
 
-| Package | Purpose | Docs |
-|---------|---------|------|
-| [`@drizzle-cms/core`](packages/core/) | Schema introspection, field mapping, validation | [README](packages/core/README.md) |
-| [`@drizzle-cms/ui`](packages/ui/) | HTML generation, form rendering, views | [README](packages/ui/README.md) |
-| [`@drizzle-cms/handlers`](packages/handlers/) | CRUD route handlers (Request → Response) | [README](packages/handlers/README.md) |
-| [`@drizzle-cms/handlers-workers`](packages/handlers-workers/) | Worker sandbox for plugin isolation | [README](packages/handlers-workers/README.md) |
-| [`@drizzle-cms/plugins`](packages/plugins/) | Official plugins (audit-log, etc.) | [README](packages/plugins/README.md) |
+| Package                                                       | Purpose                                         | Docs                                          |
+| ------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------- |
+| [`@drizzle-cms/core`](packages/core/)                         | Schema introspection, field mapping, validation | [README](packages/core/README.md)             |
+| [`@drizzle-cms/ui`](packages/ui/)                             | HTML generation, form rendering, views          | [README](packages/ui/README.md)               |
+| [`@drizzle-cms/handlers`](packages/handlers/)                 | CRUD route handlers (Request → Response)        | [README](packages/handlers/README.md)         |
+| [`@drizzle-cms/handlers-workers`](packages/handlers-workers/) | Worker sandbox for plugin isolation             | [README](packages/handlers-workers/README.md) |
+| [`@drizzle-cms/plugins`](packages/plugins/)                   | Official plugins (audit-log, etc.)              | [README](packages/plugins/README.md)          |
 
 ```
 packages/
@@ -98,7 +98,7 @@ const handler = createCmsHandler({
   schema,
   db,
   basePath: '/admin',
-  auth: 'open-to-anyone',  // Or { provider: ... } or { external: ... }
+  auth: 'open-to-anyone', // Or { provider: ... } or { external: ... }
 });
 
 // Deno
@@ -143,19 +143,19 @@ app.use('/admin', expressAdapter(handler));
 
 ## Column → Field Mapping
 
-| Drizzle Type | CMS Field | Notes |
-|--------------|-----------|-------|
-| `varchar` | `text` | With maxLength from column def |
-| `text` | `textarea` | Override to `richtext` via hint |
-| `boolean` | `checkbox` | |
-| `integer` / `real` | `number` | |
-| `timestamp` | `datetime` | |
-| `date` | `date` | |
-| `json` / `jsonb` | `object` | Requires sub-schema hint |
-| `text[]` / arrays | `list` | Postgres-only |
-| `pgEnum` | `select` | Postgres-only |
-| Foreign key | `relation` | Auto-detected from references |
-| `uuid` + upload ref | `file` | Convention-based |
+| Drizzle Type        | CMS Field  | Notes                           |
+| ------------------- | ---------- | ------------------------------- |
+| `varchar`           | `text`     | With maxLength from column def  |
+| `text`              | `textarea` | Override to `richtext` via hint |
+| `boolean`           | `checkbox` |                                 |
+| `integer` / `real`  | `number`   |                                 |
+| `timestamp`         | `datetime` |                                 |
+| `date`              | `date`     |                                 |
+| `json` / `jsonb`    | `object`   | Requires sub-schema hint        |
+| `text[]` / arrays   | `list`     | Postgres-only                   |
+| `pgEnum`            | `select`   | Postgres-only                   |
+| Foreign key         | `relation` | Auto-detected from references   |
+| `uuid` + upload ref | `file`     | Convention-based                |
 
 ## Relationships
 
@@ -167,11 +167,12 @@ Foreign key columns are automatically detected and rendered as select dropdowns:
 export const posts = pgTable('posts', {
   id: serial('id').primaryKey(),
   title: varchar('title', { length: 200 }).notNull(),
-  authorId: integer('author_id').references(() => users.id),  // → Select dropdown
+  authorId: integer('author_id').references(() => users.id), // → Select dropdown
 });
 ```
 
 The CMS will:
+
 - Show a dropdown with all users on the edit form
 - Display the related record's name (e.g., "Alice Johnson") in list and detail views
 - Format as "ID (Name)" for clarity (e.g., "1 (Alice Johnson)")
@@ -190,6 +191,7 @@ export const postCategories = pgTable('post_categories', {
 ```
 
 The CMS will:
+
 - Detect junction tables (2 FKs to different tables)
 - Hide junction tables from navigation
 - Show checkbox list on the edit form for related records
@@ -206,7 +208,7 @@ import type { Parsers } from '@drizzle-cms/handlers';
 
 // Extend drizzle-zod schemas with custom rules
 const usersInsertSchema = createInsertSchema(users, {
-  email: z.string().email(),  // Add email format validation
+  email: z.string().email(), // Add email format validation
 });
 const usersUpdateSchema = createUpdateSchema(users, {
   email: z.string().email().optional(),
@@ -225,7 +227,7 @@ const handler = createCmsHandler({
   db,
   schema,
   auth: 'open-to-anyone',
-  parsers,  // Tables without custom parsers use auto-generated schemas
+  parsers, // Tables without custom parsers use auto-generated schemas
 });
 ```
 
@@ -233,19 +235,19 @@ The parser interface is simple — any validation library works:
 
 ```typescript
 interface TableParsers {
-  insert?: (data: unknown) => unknown;  // For create operations
-  update?: (data: unknown) => unknown;  // For edit operations
+  insert?: (data: unknown) => unknown; // For create operations
+  update?: (data: unknown) => unknown; // For edit operations
 }
 ```
 
 ## Extension Points
 
-| Option | Purpose |
-|--------|---------|
-| `auth` | Authentication: `'open-to-anyone'`, `{ provider }` (JWT), or `{ external }` (reverse proxy) |
-| `policies` | Row-level security with SQL conditions (atomic authorization) |
-| `parsers` | Custom validation (Zod, Valibot, Arktype, or any library) |
-| `onError` | Error logging integration (Sentry, Datadog, etc.) |
+| Option     | Purpose                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------- |
+| `auth`     | Authentication: `'open-to-anyone'`, `{ provider }` (JWT), or `{ external }` (reverse proxy) |
+| `policies` | Row-level security with SQL conditions (atomic authorization)                               |
+| `parsers`  | Custom validation (Zod, Valibot, Arktype, or any library)                                   |
+| `onError`  | Error logging integration (Sentry, Datadog, etc.)                                           |
 
 ## Features
 
@@ -272,11 +274,11 @@ interface TableParsers {
 
 ## Database Support
 
-| Database | Status | Notes |
-|----------|--------|-------|
+| Database   | Status     | Notes                                        |
+| ---------- | ---------- | -------------------------------------------- |
 | PostgreSQL | ✅ Primary | Full feature support including arrays, enums |
-| SQLite | ✅ Tested | Lightweight/edge deployments, text enums |
-| MySQL | 🔮 Planned | Core features work, needs integration tests |
+| SQLite     | ✅ Tested  | Lightweight/edge deployments, text enums     |
+| MySQL      | 🔮 Planned | Core features work, needs integration tests  |
 
 The core schema introspection is database-agnostic via Drizzle's abstractions. Database-specific features (arrays, native enums) degrade gracefully on other databases.
 
@@ -309,12 +311,12 @@ Node.js compatibility is tested in CI and achieved via JSR + `dnt` for npm publi
 
 ## Stack
 
-| Layer | Package | Transitive Deps |
-|-------|---------|------|
-| ORM | `drizzle-orm` | 0 |
-| Validation | `zod` | 0 |
-| Schema→Zod | `drizzle-zod` | 0 |
-| Database Driver | User's choice | Varies |
+| Layer           | Package       | Transitive Deps |
+| --------------- | ------------- | --------------- |
+| ORM             | `drizzle-orm` | 0               |
+| Validation      | `zod`         | 0               |
+| Schema→Zod      | `drizzle-zod` | 0               |
+| Database Driver | User's choice | Varies          |
 
 All direct dependencies have **zero transitive dependencies**. You bring your own database driver (`postgres`, `better-sqlite3`, `mysql2`, etc.).
 

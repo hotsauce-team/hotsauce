@@ -85,7 +85,9 @@ Deno.test('pglite - can create tables from schema', async () => {
     WHERE table_schema = 'public'
   `);
 
-  const tableNames = tables.rows.map((r) => (r as { table_name: string }).table_name);
+  const tableNames = tables.rows.map((r) =>
+    (r as { table_name: string }).table_name
+  );
   assertEquals(tableNames.includes('users'), true);
   assertEquals(tableNames.includes('posts'), true);
 

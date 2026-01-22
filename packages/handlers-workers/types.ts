@@ -36,13 +36,13 @@ export type SerializableValue =
 /**
  * All data passed to/from plugins must be serializable.
  * This enables Worker isolation without API changes.
- * 
+ *
  * Plugins never receive:
  * - Functions (db handles, callbacks)
  * - Class instances
  * - Symbols
  * - Circular references
- * 
+ *
  * For plugin config, use a typed interface that extends SerializableObject,
  * or cast to Serializable when passing to the CMS.
  */
@@ -91,11 +91,12 @@ export interface ActionContext extends PluginContext {
 /**
  * Transform function signature.
  * Receives data, returns modified data. Always blocks.
+ * Can be sync or async - both work.
  */
 export type TransformFn = (
   ctx: PluginContext,
-  data: Record<string, Serializable>
-) => Promise<Record<string, Serializable>>;
+  data: Record<string, Serializable>,
+) => Promise<Record<string, Serializable>> | Record<string, Serializable>;
 
 /**
  * Transform hooks modify data as it flows through the pipeline.
@@ -120,9 +121,10 @@ export interface TransformHooks {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Action handler function signature
+ * Action handler function signature.
+ * Can be sync or async - both work.
  */
-export type ActionHandlerFn = (ctx: ActionContext) => Promise<void>;
+export type ActionHandlerFn = (ctx: ActionContext) => Promise<void> | void;
 
 /**
  * Action hook with configuration options
@@ -133,7 +135,7 @@ export interface ActionHookConfig {
   /**
    * If true, don't block the HTTP response waiting for this hook.
    * Errors are logged but won't affect the user.
-   * 
+   *
    * @default false
    */
   fireAndForget?: boolean;
@@ -216,16 +218,3 @@ export interface PluginRoute {
   /** Route handler - receives serializable request, returns serializable response */
   handler: (request: PluginRequest) => Promise<PluginResponse>;
 }
-
-// ─────────────────────────────────────────────────────────────
-// Sandbox mode
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Sandbox mode for plugin execution
- */
-export type SandboxMode =
-  /** Standard Worker isolation (works on all runtimes) */
-  | 'worker'
-  /** Deno Worker with restricted permissions (Deno only, strongest isolation) */
-  | 'deno-sandbox';

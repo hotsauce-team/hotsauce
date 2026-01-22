@@ -3,32 +3,31 @@
 
 // Re-export all types from handlers-workers
 export type {
-  Serializable,
-  SerializableValue,
-  SerializableObject,
-  PluginContext,
   ActionContext,
-  PluginHooks,
-  TransformHooks,
-  ActionHooks,
-  TransformFn,
+  ActionHandlerFn,
   ActionHook,
   ActionHookConfig,
-  ActionHandlerFn,
+  ActionHooks,
+  CrudAction,
+  PluginContext,
+  PluginHooks,
   PluginRequest,
   PluginResponse,
   PluginRoute,
-  SandboxMode,
-  CrudAction,
+  Serializable,
+  SerializableObject,
+  SerializableValue,
+  TransformFn,
+  TransformHooks,
 } from '@drizzle-cms/handlers-workers';
 
 // Import for use in local type definitions
 import type {
+  ActionHooks,
+  CrudAction,
   PluginHooks,
   PluginRoute,
-  SandboxMode,
   TransformHooks,
-  ActionHooks,
 } from '@drizzle-cms/handlers-workers';
 
 // ─────────────────────────────────────────────────────────────
@@ -43,7 +42,7 @@ export interface PluginCapabilities {
   /**
    * Network hosts the plugin needs to access.
    * Use '*' for any host (discouraged).
-   * 
+   *
    * @example ['api.example.com', '*.s3.amazonaws.com']
    */
   network?: string[];
@@ -65,45 +64,84 @@ export interface PluginCapabilities {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Plugin definition
+// Plugin filter context - for deciding whether to invoke hooks
 // ─────────────────────────────────────────────────────────────
 
 /**
- * A CMS plugin definition.
- * 
- * Plugins run in Worker isolation - they cannot access:
- * - The database directly
- * - Environment variables
- * - The filesystem
- * - Global state
- * 
- * All communication happens via serializable messages.
- * 
+ * Hook types that can be filtered
+ */
+export type HookType =
+  | 'transform:beforeSave'
+  | 'transform:afterRead'
+  | 'action';
+
+/**
+ * Context passed to the filter function.
+ * Used to decide whether a hook should be invoked.
+ */
+export interface FilterContext {
+  /** The type of hook being invoked */
+  hookType: HookType;
+  /** Table name being operated on */
+  table: string;
+  /** CRUD action being performed */
+  action: CrudAction;
+  /** Authenticated user info (if available) */
+  user?: {
+    sub: string;
+    role?: string;
+  };
+}
+
+/**
+ * Filter function type.
+ * Return true to invoke the hook, false to skip.
+ */
+export type PluginFilter = (ctx: FilterContext) => boolean;
+
+// ─────────────────────────────────────────────────────────────
+// Plugin configuration for CMS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Plugin configuration passed to createCmsHandler.
+ *
+ * Two execution modes based on presence of `worker`:
+ *
+ * 1. **Worker-isolated** (has `worker`): Plugin code runs entirely in the Worker.
+ *    Use `filter` to control which hooks are forwarded to the Worker.
+ *
+ * 2. **In-process** (no `worker`): Plugin hooks run directly in the main thread.
+ *    Use `filter` to skip hook invocation for certain contexts.
+ *
  * @example
  * ```ts
- * const auditPlugin: Plugin = {
- *   name: 'audit-log',
- *   capabilities: {
- *     actions: ['create', 'update', 'delete'],
- *     network: ['audit-api.example.com'],
+ * plugins: [
+ *   // Worker-isolated with filter (recommended for third-party)
+ *   {
+ *     name: 'audit-log',
+ *     worker: new Worker(import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'), {
+ *       type: 'module',
+ *       deno: { permissions: { net: ['audit.example.com'] } },
+ *     }),
+ *     // Only forward create/update/delete actions, skip reads and lists
+ *     filter: (ctx) => ctx.hookType === 'action' && !['read', 'list'].includes(ctx.action),
+ *     config: { webhookUrl: 'https://audit.example.com/events' },
  *   },
- *   hooks: {
- *     on: {
- *       create: {
- *         handler: async (ctx) => {
- *           await fetch('https://audit-api.example.com/log', {
- *             method: 'POST',
- *             body: JSON.stringify(ctx),
- *           });
- *         },
- *         fireAndForget: true,
- *       },
+ *
+ *   // In-process with filter
+ *   {
+ *     name: 'custom-logger',
+ *     hooks: {
+ *       on: { create: async (ctx) => console.log('Created', ctx.recordId) },
  *     },
+ *     // Skip logging for admin users
+ *     filter: (ctx) => ctx.user?.role !== 'admin',
  *   },
- * };
+ * ]
  * ```
  */
-export interface Plugin {
+export interface PluginConfig {
   /** Unique plugin identifier */
   name: string;
 
@@ -111,92 +149,55 @@ export interface Plugin {
   description?: string;
 
   /**
-   * URL of the plugin module for Worker isolation.
-   * The Worker will dynamically import this module.
-   * 
-   * The module must export a `createPlugin(config)` factory function.
-   * If not provided, hooks run in-process (not isolated).
-   * 
+   * Pre-created Worker instance for isolated execution.
+   * If provided, messages are sent to the Worker.
+   * If omitted, hooks run in-process (main thread).
+   */
+  worker?: Worker;
+
+  /**
+   * Filter function to control when hooks are invoked.
+   * Return true to invoke/forward the hook, false to skip.
+   * If omitted, all hooks are invoked.
+   *
    * @example
    * ```ts
-   * moduleUrl: new URL('./plugins/audit-log.worker.ts', import.meta.url).href,
+   * // Only handle action hooks (skip transforms)
+   * filter: (ctx) => ctx.hookType === 'action'
+   *
+   * // Skip certain tables
+   * filter: (ctx) => ctx.table !== 'sessions'
+   *
+   * // Multiple conditions
+   * filter: (ctx) => ctx.hookType === 'action' && ['create', 'update', 'delete'].includes(ctx.action)
    * ```
    */
-  moduleUrl?: string;
+  filter?: PluginFilter;
 
-  /** Declared capabilities (for security/documentation) */
-  capabilities?: PluginCapabilities;
-
-  /** Lifecycle hooks */
+  /**
+   * Lifecycle hooks (for in-process plugins).
+   * Worker plugins define hooks in the Worker module, not here.
+   */
   hooks?: PluginHooks;
 
-  /** Custom routes */
+  /** Declared capabilities (for documentation and validation) */
+  capabilities?: PluginCapabilities;
+
+  /** Custom routes (in-process only) */
   routes?: PluginRoute[];
 
   /**
-   * Custom field renderers (registered separately in UI package).
-   * Maps field type or column name pattern to renderer name.
-   */
-  fields?: Record<string, string>;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Plugin configuration for CMS
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Remote plugin reference - loads plugin code entirely in Worker isolation.
- * Use this when you don't want ANY plugin code to run in the main thread.
- * 
- * @example
- * ```ts
- * plugins: [
- *   {
- *     // Plugin loaded entirely in Worker - no code runs in main thread
- *     moduleUrl: 'https://example.com/plugins/audit-log.js',
- *     config: { webhookUrl: 'https://audit.example.com/events' },
- *   },
- * ]
- * ```
- */
-export interface RemotePluginConfig {
-  /**
-   * URL of the plugin module to load in the Worker.
-   * The module must export a `createPlugin(config)` factory function
-   * that returns { name, hooks, routes? }.
-   */
-  moduleUrl: string;
-
-  /**
-   * Configuration passed to the plugin's createPlugin() factory.
-   * Must be serializable (JSON-compatible). Use a typed interface
-   * with `import type` for better DX without running plugin code.
+   * Configuration passed to the Worker's createPlugin() factory.
+   * Must be serializable (JSON-compatible).
    */
   config?: object;
-
-  /**
-   * Optional name override (otherwise derived from module response).
-   * Useful for identifying the plugin in logs/errors before it's loaded.
-   */
-  name?: string;
 }
 
 /**
- * Plugin configuration passed to createCmsHandler.
- * 
- * Two forms are supported:
- * 1. `{ plugin: Plugin }` - Plugin object (may run code in main thread for validation)
- * 2. `{ moduleUrl: string }` - Remote plugin (all code runs in Worker)
+ * Type guard to check if plugin runs in a Worker
  */
-export type PluginConfig = 
-  | { plugin: Plugin; config?: object }
-  | RemotePluginConfig;
-
-/**
- * Type guard to check if config is a remote plugin reference
- */
-export function isRemotePlugin(config: PluginConfig): config is RemotePluginConfig {
-  return 'moduleUrl' in config && !('plugin' in config);
+export function isWorkerPlugin(config: PluginConfig): boolean {
+  return config.worker !== undefined;
 }
 
 /**
@@ -205,14 +206,4 @@ export function isRemotePlugin(config: PluginConfig): config is RemotePluginConf
 export interface PluginsOptions {
   /** Registered plugins */
   plugins?: PluginConfig[];
-
-  /**
-   * Sandbox mode for plugin execution.
-   * 
-   * - 'worker': Standard Worker isolation (all runtimes)
-   * - 'deno-sandbox': Deno Worker with permissions (Deno only)
-   * 
-   * Default: 'worker'
-   */
-  sandbox?: SandboxMode;
 }

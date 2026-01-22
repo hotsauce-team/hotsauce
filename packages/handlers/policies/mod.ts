@@ -5,36 +5,36 @@
 // Types - Policy definitions and results
 // ─────────────────────────────────────────────────────────────
 export type {
-  PolicyContext,
-  PolicyResult,
-  PolicyFn,
   ActionPolicies,
-  Policy,
   Policies,
+  Policy,
   PolicyApplicationResult,
+  PolicyContext,
+  PolicyFn,
+  PolicyResult,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Helpers - Factory functions for common policy patterns
 // ─────────────────────────────────────────────────────────────
 export {
+  adminOr,
+  allOf,
   // Core
   always,
-  never,
+  // Combining
+  anyOf,
   authenticated,
-  // Role-based
-  roleIs,
-  roleIn,
+  // Action-specific
+  forActions,
+  never,
   // Ownership
   ownedBy,
   ownedByOrContributor,
-  // Combining
-  anyOf,
-  allOf,
-  // Action-specific
-  forActions,
   readOnly,
-  adminOr,
+  roleIn,
+  // Role-based
+  roleIs,
 } from './helpers.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -43,9 +43,9 @@ export {
 export {
   applyPolicy,
   buildPolicyWhere,
-  recordExists,
-  findRecordWithPolicy,
-  updateWithPolicy,
-  deleteWithPolicy,
   createPolicyContext,
+  deleteWithPolicy,
+  findRecordWithPolicy,
+  recordExists,
+  updateWithPolicy,
 } from './apply.ts';

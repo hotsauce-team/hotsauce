@@ -1,7 +1,11 @@
 // Audit log plugin - main entry point
 // For type checking and registration
 
-import type { ActionContext, PluginHooks, CrudAction } from '@drizzle-cms/handlers-workers';
+import type {
+  ActionContext,
+  CrudAction,
+  PluginHooks,
+} from '@drizzle-cms/handlers-workers';
 
 /**
  * Configuration for the audit log plugin
@@ -67,22 +71,25 @@ function shouldAuditTable(table: string, config: AuditLogConfig): boolean {
   if (config.excludeTables?.includes(table)) {
     return false;
   }
-  
+
   // If includes specified, check membership
   if (config.includeTables && config.includeTables.length > 0) {
     return config.includeTables.includes(table);
   }
-  
+
   return true;
 }
 
 /**
  * Log an audit entry
  */
-async function logEntry(entry: AuditEntry, config: AuditLogConfig): Promise<void> {
+async function logEntry(
+  entry: AuditEntry,
+  config: AuditLogConfig,
+): Promise<void> {
   // Always store in memory for testing
   auditLog.push(entry);
-  
+
   // If webhook configured, send there too
   if (config.webhookUrl) {
     try {
@@ -106,7 +113,7 @@ function createAuditHandler(config: AuditLogConfig) {
     if (!shouldAuditTable(ctx.table, config)) {
       return;
     }
-    
+
     // Skip reads/lists if not configured
     if (ctx.action === 'read' && !config.logReads) {
       return;
@@ -114,7 +121,7 @@ function createAuditHandler(config: AuditLogConfig) {
     if (ctx.action === 'list' && !config.logLists) {
       return;
     }
-    
+
     const entry: AuditEntry = {
       timestamp: ctx.timestamp,
       action: ctx.action,
@@ -124,7 +131,7 @@ function createAuditHandler(config: AuditLogConfig) {
       oldData: ctx.oldData,
       newData: ctx.newData,
     };
-    
+
     await logEntry(entry, config);
   };
 }
@@ -145,11 +152,11 @@ export interface AuditLogPlugin {
 
 /**
  * Create the audit log plugin
- * 
+ *
  * @example
  * ```ts
  * import { createAuditLogPlugin } from '@drizzle-cms/plugins/audit-log';
- * 
+ *
  * const handler = createCmsHandler({
  *   // ... other options
  *   plugins: [
@@ -163,17 +170,19 @@ export interface AuditLogPlugin {
  * });
  * ```
  */
-export function createAuditLogPlugin(config: AuditLogConfig = {}): AuditLogPlugin {
+export function createAuditLogPlugin(
+  config: AuditLogConfig = {},
+): AuditLogPlugin {
   const handler = createAuditHandler(config);
-  
+
   return {
     name: 'audit-log',
     description: 'Logs all CRUD operations for auditing purposes',
-    
+
     // Worker module URL - the Worker will import this and run hooks in isolation
     // This ensures the plugin code runs sandboxed from the main thread
     moduleUrl: new URL('./worker.ts', import.meta.url).href,
-    
+
     // Hooks are also defined here for:
     // 1. Type checking and validation at registration time
     // 2. In-process fallback if Worker isolation is disabled
@@ -187,10 +196,18 @@ export function createAuditLogPlugin(config: AuditLogConfig = {}): AuditLogPlugi
         list: config.logLists ? { handler, fireAndForget: true } : undefined,
       },
     },
-    
+
     capabilities: {
-      actions: ['create', 'update', 'delete', ...(config.logReads ? ['read'] : []), ...(config.logLists ? ['list'] : [])] as CrudAction[],
-      network: config.webhookUrl ? [new URL(config.webhookUrl).host] : undefined,
+      actions: [
+        'create',
+        'update',
+        'delete',
+        ...(config.logReads ? ['read'] : []),
+        ...(config.logLists ? ['list'] : []),
+      ] as CrudAction[],
+      network: config.webhookUrl
+        ? [new URL(config.webhookUrl).host]
+        : undefined,
     },
   };
 }

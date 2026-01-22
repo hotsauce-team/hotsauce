@@ -6,27 +6,29 @@
 // Types - Re-export plugin types needed for Workers
 // ─────────────────────────────────────────────────────────────
 export type {
-  Serializable,
-  SerializableValue,
-  SerializableObject,
-  PluginContext,
   ActionContext,
-  PluginHooks,
-  TransformHooks,
-  ActionHooks,
-  TransformFn,
+  ActionHandlerFn,
   ActionHook,
   ActionHookConfig,
-  ActionHandlerFn,
+  ActionHooks,
+  CrudAction,
+  PluginContext,
+  PluginHooks,
   PluginRequest,
   PluginResponse,
   PluginRoute,
-  SandboxMode,
-  CrudAction,
+  Serializable,
+  SerializableObject,
+  SerializableValue,
+  TransformFn,
+  TransformHooks,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Worker Executor - Manages plugin Workers
 // ─────────────────────────────────────────────────────────────
-export { WorkerExecutor, createWorkerExecutor } from './executor.ts';
-export type { RegisteredPlugin, WorkerPluginOptions } from './executor.ts';
+export { createWorkerExecutor, WorkerExecutor } from './executor.ts';
+export type {
+  PluginConfig as WorkerPluginConfig,
+  RegisteredPlugin,
+} from './executor.ts';

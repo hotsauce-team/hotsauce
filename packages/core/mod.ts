@@ -6,9 +6,9 @@
 // ─────────────────────────────────────────────────────────────
 export type {
   IntrospectedColumn,
-  IntrospectedTable,
   IntrospectedRelation,
   IntrospectedSchema,
+  IntrospectedTable,
   JunctionTable,
   ManyToManyRelation,
   RelationType,
@@ -22,22 +22,22 @@ export { Table } from './schema/types.ts';
 // Works with any dialect: Postgres, MySQL, SQLite
 // ─────────────────────────────────────────────────────────────
 export {
-  introspectTable,
-  introspectSchema,
-  introspectRelations,
-  introspectFullSchema,
   detectJunctionTables,
+  introspectFullSchema,
+  introspectRelations,
+  introspectSchema,
+  introspectTable,
 } from './schema/introspect.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Field Mapping - Convert columns to UI field definitions
 // Maps database types to CMS field types (text, number, relation, etc.)
 // ─────────────────────────────────────────────────────────────
-export type { CMSFieldType, CMSField } from './fields/mapping.ts';
+export type { CMSField, CMSFieldType } from './fields/mapping.ts';
 export {
-  mapColumnToFieldType,
-  mapColumnToField,
   mapColumnsToFields,
+  mapColumnToField,
+  mapColumnToFieldType,
   propertyNameToLabel,
 } from './fields/mapping.ts';
 
@@ -45,4 +45,8 @@ export {
 // Validation - Zod schema generation (re-exported from drizzle-zod)
 // Use for form validation in handlers
 // ─────────────────────────────────────────────────────────────
-export { createInsertSchema, createUpdateSchema, createSelectSchema } from './validation/zod.ts';
+export {
+  createInsertSchema,
+  createSelectSchema,
+  createUpdateSchema,
+} from './validation/zod.ts';

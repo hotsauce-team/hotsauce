@@ -2,17 +2,17 @@
 // This represents a typical blog/content site
 
 import {
-  pgTable,
-  pgEnum,
-  serial,
-  varchar,
-  text,
   boolean,
   integer,
+  json,
+  pgEnum,
+  pgTable,
+  primaryKey,
+  serial,
+  text,
   timestamp,
   uuid,
-  json,
-  primaryKey,
+  varchar,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -73,7 +73,7 @@ export const postsToCategories = pgTable(
       .notNull()
       .references(() => categories.id),
   },
-  (table) => [primaryKey({ columns: [table.postId, table.categoryId] })]
+  (table) => [primaryKey({ columns: [table.postId, table.categoryId] })],
 );
 
 // Uploads table
@@ -127,5 +127,5 @@ export const postsToCategoriesRelations = relations(
       fields: [postsToCategories.categoryId],
       references: [categories.id],
     }),
-  })
+  }),
 );

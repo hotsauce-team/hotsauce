@@ -3,11 +3,13 @@
 
 import type { CrudAction } from '../types.ts';
 import type {
-  PluginContext,
   ActionContext,
+  FilterContext,
+  HookType,
+  PluginContext,
   Serializable,
 } from './types.ts';
-import type { PluginRegistry } from './registry.ts';
+import type { PluginRegistry, RegisteredPlugin } from './registry.ts';
 import { WorkerExecutor } from '@drizzle-cms/handlers-workers';
 
 /**
@@ -18,24 +20,45 @@ export class PluginService {
   private registry: PluginRegistry;
   private executor: WorkerExecutor;
   private initialized = false;
+  private initPromise: Promise<void> | null = null;
 
   constructor(registry: PluginRegistry) {
     this.registry = registry;
-    this.executor = new WorkerExecutor(registry.getSandboxMode());
+    this.executor = new WorkerExecutor();
   }
 
   /**
-   * Initialize all plugins (start Workers).
-   * Must be called before executing hooks.
+   * Ensure plugins are initialized (lazy, thread-safe).
+   * Called automatically by hook methods - no need to call manually.
    */
-  async initialize(): Promise<void> {
+  private async ensureInitialized(): Promise<void> {
     if (this.initialized) return;
 
+    // Use a shared promise to avoid multiple concurrent initializations
+    if (!this.initPromise) {
+      this.initPromise = this.doInitialize();
+    }
+    await this.initPromise;
+  }
+
+  /**
+   * Actually perform initialization
+   */
+  private async doInitialize(): Promise<void> {
     const plugins = this.registry.getAll();
     for (const plugin of plugins) {
       await this.executor.initPlugin(plugin);
     }
     this.initialized = true;
+  }
+
+  /**
+   * Initialize all plugins (start Workers).
+   * Called automatically when first hook is executed.
+   * Can be called explicitly for eager initialization.
+   */
+  async initialize(): Promise<void> {
+    await this.ensureInitialized();
   }
 
   /**
@@ -46,19 +69,53 @@ export class PluginService {
   }
 
   /**
+   * Apply filter function to registered plugins.
+   * Returns plugins that should receive the hook.
+   */
+  private applyFilter(
+    plugins: RegisteredPlugin[],
+    hookType: HookType,
+    table: string,
+    action: CrudAction,
+    user?: { sub: string; role?: string },
+  ): RegisteredPlugin[] {
+    const filterCtx: FilterContext = { hookType, table, action, user };
+
+    return plugins.filter((registered) => {
+      const filter = registered.plugin.filter;
+      // No filter = include all
+      if (!filter) return true;
+      // Apply filter function
+      return filter(filterCtx);
+    });
+  }
+
+  /**
    * Execute beforeSave transform for all plugins.
    * Called before insert/update operations.
-   * 
+   *
    * @returns Transformed data
    */
   async beforeSave(
     table: string,
     action: 'create' | 'update',
     data: Record<string, unknown>,
-    user?: { sub: string; role?: string }
+    user?: { sub: string; role?: string },
   ): Promise<Record<string, unknown>> {
-    const plugins = this.registry.getPluginsWithTransform('beforeSave');
+    const allPlugins = this.registry.getPluginsWithTransform('beforeSave');
+    if (allPlugins.length === 0) return data;
+
+    // Apply plugin filters
+    const plugins = this.applyFilter(
+      allPlugins,
+      'transform:beforeSave',
+      table,
+      action,
+      user,
+    );
     if (plugins.length === 0) return data;
+
+    await this.ensureInitialized();
 
     const ctx: PluginContext = {
       table,
@@ -69,24 +126,36 @@ export class PluginService {
     return await this.executor.executeBeforeSave(
       plugins,
       ctx,
-      data as Record<string, Serializable>
+      data as Record<string, Serializable>,
     );
   }
 
   /**
    * Execute afterRead transform for all plugins.
    * Called after fetching records from database.
-   * 
+   *
    * @returns Transformed data
    */
   async afterRead(
     table: string,
     action: 'read' | 'list',
     data: Record<string, unknown>,
-    user?: { sub: string; role?: string }
+    user?: { sub: string; role?: string },
   ): Promise<Record<string, unknown>> {
-    const plugins = this.registry.getPluginsWithTransform('afterRead');
+    const allPlugins = this.registry.getPluginsWithTransform('afterRead');
+    if (allPlugins.length === 0) return data;
+
+    // Apply plugin filters
+    const plugins = this.applyFilter(
+      allPlugins,
+      'transform:afterRead',
+      table,
+      action,
+      user,
+    );
     if (plugins.length === 0) return data;
+
+    await this.ensureInitialized();
 
     const ctx: PluginContext = {
       table,
@@ -97,20 +166,20 @@ export class PluginService {
     return await this.executor.executeAfterRead(
       plugins,
       ctx,
-      data as Record<string, Serializable>
+      data as Record<string, Serializable>,
     );
   }
 
   /**
    * Execute afterRead transform for multiple records.
    * Convenience method for list operations.
-   * 
+   *
    * @returns Array of transformed records
    */
   async afterReadMany(
     table: string,
     records: Record<string, unknown>[],
-    user?: { sub: string; role?: string }
+    user?: { sub: string; role?: string },
   ): Promise<Record<string, unknown>[]> {
     const plugins = this.registry.getPluginsWithTransform('afterRead');
     if (plugins.length === 0) return records;
@@ -134,10 +203,16 @@ export class PluginService {
     recordId: string | number | undefined,
     user?: { sub: string; role?: string },
     oldData?: Record<string, unknown>,
-    newData?: Record<string, unknown>
+    newData?: Record<string, unknown>,
   ): Promise<void> {
-    const plugins = this.registry.getPluginsWithAction(action);
+    const allPlugins = this.registry.getPluginsWithAction(action);
+    if (allPlugins.length === 0) return;
+
+    // Apply plugin filters
+    const plugins = this.applyFilter(allPlugins, 'action', table, action, user);
     if (plugins.length === 0) return;
+
+    await this.ensureInitialized();
 
     const ctx: ActionContext = {
       table,
@@ -167,7 +242,7 @@ export class PluginService {
  * Returns null if no plugins are configured.
  */
 export function createPluginService(
-  registry: PluginRegistry | undefined
+  registry: PluginRegistry | undefined,
 ): PluginService | null {
   if (!registry || registry.getAll().length === 0) {
     return null;

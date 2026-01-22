@@ -1,7 +1,11 @@
 // Tests for CMS configuration validation
 
 import { assertEquals, assertThrows } from '@std/assert';
-import { validateCmsOptions, CmsConfigError, CmsOptionsSchema } from '../validation.ts';
+import {
+  CmsConfigError,
+  CmsOptionsSchema,
+  validateCmsOptions,
+} from '../validation.ts';
 
 // Mock minimal valid options
 const validOptions = {
@@ -79,7 +83,10 @@ Deno.test('validateCmsOptions: handles Symbol keys in error paths', () => {
   } catch (error) {
     // Should be CmsConfigError, not TypeError
     assertEquals(error instanceof CmsConfigError, true);
-    assertEquals((error as CmsConfigError).message.includes('Invalid CMS configuration'), true);
+    assertEquals(
+      (error as CmsConfigError).message.includes('Invalid CMS configuration'),
+      true,
+    );
   }
 });
 

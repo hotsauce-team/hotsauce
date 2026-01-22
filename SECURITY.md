@@ -16,12 +16,13 @@ Drizzle CMS implements multiple layers of security:
 - **Clock skew tolerance** (60 seconds) for distributed systems
 
 **Best Practices:**
+
 ```typescript
 // ✅ Use strong secrets (32+ characters)
 const jwtSecret = crypto.randomUUID() + crypto.randomUUID();
 
 // ❌ Don't use weak secrets
-const jwtSecret = "secret123";
+const jwtSecret = 'secret123';
 ```
 
 ### 2. CSRF Protection
@@ -32,6 +33,7 @@ const jwtSecret = "secret123";
 - **Automatic token injection** in forms
 
 **Best Practices:**
+
 - CSRF tokens are automatically validated on state-changing operations (POST, PUT, DELETE)
 - Use different secrets for CSRF and JWT
 - Rotate secrets periodically (requires re-authentication)
@@ -44,6 +46,7 @@ const jwtSecret = "secret123";
 - **Constant-time comparison** to prevent timing attacks
 
 **Best Practices:**
+
 ```typescript
 // ✅ Let the CMS handle password hashing
 const hash = await hashPassword(userPassword);
@@ -60,6 +63,7 @@ const valid = await verifyPassword(password, user.passwordHash);
 - **X-Content-Type-Options: nosniff** to prevent MIME sniffing
 
 **Built-in CSP:**
+
 ```
 default-src 'self'; 
 style-src 'self'; 
@@ -70,13 +74,18 @@ frame-ancestors 'none'
 ```
 
 **Best Practices:**
+
 ```typescript
 // ✅ Use html`` template literal (auto-escapes)
 import { html } from '@drizzle-cms/ui';
-html`<p>User input: ${userInput}</p>`; // Safe
+html`
+  <p>User input: ${userInput}</p>
+`; // Safe
 
 // ✅ Only use raw() for trusted HTML
-html`<div>${raw(sanitizedHtml)}</div>`;
+html`
+  <div>${raw(sanitizedHtml)}</div>
+`;
 
 // ❌ Never concatenate user input
 `<p>${userInput}</p>`; // Vulnerable to XSS
@@ -85,11 +94,13 @@ html`<div>${raw(sanitizedHtml)}</div>`;
 ### 5. SQL Injection Prevention
 
 Drizzle CMS uses Drizzle ORM, which provides:
+
 - **Parameterized queries** by default
 - **Type-safe query building**
 - **No raw SQL concatenation**
 
 **Best Practices:**
+
 ```typescript
 // ✅ Use Drizzle query builder (always safe)
 await db.select().from(users).where(eq(users.email, userEmail));
@@ -109,18 +120,19 @@ Fine-grained authorization for CRUD operations:
 const policies = {
   posts: async (ctx, action) => {
     if (!ctx.user) return false; // Not authenticated
-    
+
     if (action === 'list' || action === 'read') {
       return undefined; // Allow all reads
     }
-    
+
     // Only allow editing own posts
     return eq(posts.authorId, ctx.user.sub);
-  }
+  },
 };
 ```
 
 **Best Practices:**
+
 - Always implement policies for multi-user systems
 - Return `false` to deny access completely
 - Return SQL condition to filter records
@@ -140,12 +152,13 @@ openssl rand -base64 32
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-| Variable | Purpose | Min Length |
-|----------|---------|------------|
-| `CMS_CSRF_SECRET` | CSRF token signing | 32 chars |
-| `CMS_JWT_SECRET` | JWT token signing | 32 chars |
+| Variable          | Purpose            | Min Length |
+| ----------------- | ------------------ | ---------- |
+| `CMS_CSRF_SECRET` | CSRF token signing | 32 chars   |
+| `CMS_JWT_SECRET`  | JWT token signing  | 32 chars   |
 
 **Best Practices:**
+
 - Use different secrets for CSRF and JWT
 - Store secrets in environment variables, not in code
 - Use secret management services in production (AWS Secrets Manager, etc.)
@@ -153,6 +166,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 - Never commit secrets to version control
 
 ### .env.example
+
 ```bash
 # CSRF Protection (required)
 CMS_CSRF_SECRET=your-random-32-character-secret-here
@@ -199,13 +213,17 @@ add_header Permissions-Policy "geolocation=(), microphone=(), camera=()" always;
 
 ```typescript
 // Example with a rate limiting middleware (not included)
-app.use('/admin/login', rateLimiter({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 attempts per window
-}));
+app.use(
+  '/admin/login',
+  rateLimiter({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 5, // 5 attempts per window
+  }),
+);
 ```
 
 **Recommended limits:**
+
 - Login attempts: 5 per 15 minutes per IP
 - API requests: 100 per minute per user
 - Admin panel: 1000 per hour per user
@@ -249,6 +267,7 @@ If you discover a security vulnerability, please report it through one of these 
 **Alternative:** Open a private security report by going to the [Security tab](https://github.com/earthlingdavey/drizzle-cms/security) and clicking "Report a vulnerability"
 
 Include in your report:
+
 - Description of the vulnerability
 - Steps to reproduce
 - Potential impact
@@ -259,6 +278,7 @@ Include in your report:
 ## Security Updates
 
 Stay informed about security updates:
+
 - Watch the GitHub repository for releases
 - Review CHANGELOG.md for security fixes
 - Subscribe to security advisories (GitHub Security Advisories)
@@ -269,24 +289,25 @@ Stay informed about security updates:
 
 This table shows how Drizzle CMS addresses the OWASP Top 10 security risks:
 
-| Risk | Mitigation in Drizzle CMS |
-|------|---------------------------|
-| A01: Broken Access Control | Row-level policies, JWT authentication |
-| A02: Cryptographic Failures | PBKDF2 password hashing, HMAC-SHA256 tokens, HTTPS support |
-| A03: Injection | Drizzle ORM with parameterized queries (SQL injection prevention) |
-| A04: Insecure Design | Security-first architecture with defense in depth |
-| A05: Security Misconfiguration | Secure defaults, comprehensive security headers |
-| A06: Vulnerable Components | Zero transitive dependencies, minimal attack surface |
-| A07: Authentication Failures | JWT with expiry, HttpOnly cookies, rate limiting (recommended) |
-| A08: Data Integrity Failures | CSRF tokens, input validation with Zod schemas |
-| A09: Logging Failures | Error hooks for custom audit logging |
-| A10: SSRF | No external requests in core CMS code |
+| Risk                           | Mitigation in Drizzle CMS                                         |
+| ------------------------------ | ----------------------------------------------------------------- |
+| A01: Broken Access Control     | Row-level policies, JWT authentication                            |
+| A02: Cryptographic Failures    | PBKDF2 password hashing, HMAC-SHA256 tokens, HTTPS support        |
+| A03: Injection                 | Drizzle ORM with parameterized queries (SQL injection prevention) |
+| A04: Insecure Design           | Security-first architecture with defense in depth                 |
+| A05: Security Misconfiguration | Secure defaults, comprehensive security headers                   |
+| A06: Vulnerable Components     | Zero transitive dependencies, minimal attack surface              |
+| A07: Authentication Failures   | JWT with expiry, HttpOnly cookies, rate limiting (recommended)    |
+| A08: Data Integrity Failures   | CSRF tokens, input validation with Zod schemas                    |
+| A09: Logging Failures          | Error hooks for custom audit logging                              |
+| A10: SSRF                      | No external requests in core CMS code                             |
 
 **Note:** While the CMS provides these security features, proper configuration and deployment practices (HTTPS, rate limiting, monitoring) are required for production use. See the [Security Checklist](#security-checklist) above.
 
 ### Data Protection (GDPR, etc.)
 
 If you're handling personal data:
+
 - Implement data retention policies
 - Provide user data export functionality
 - Implement secure deletion

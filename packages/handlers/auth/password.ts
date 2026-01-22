@@ -39,7 +39,7 @@ function toBase64(bytes: Uint8Array): string {
  */
 function fromBase64(str: string): Uint8Array {
   const binary = atob(str);
-  return Uint8Array.from(binary, c => c.charCodeAt(0));
+  return Uint8Array.from(binary, (c) => c.charCodeAt(0));
 }
 
 /**
@@ -48,19 +48,19 @@ function fromBase64(str: string): Uint8Array {
 async function pbkdf2(
   password: string,
   salt: Uint8Array,
-  iterations: number
+  iterations: number,
 ): Promise<Uint8Array> {
   const encoder = new TextEncoder();
-  
+
   // Import password as key material
   const keyMaterial = await crypto.subtle.importKey(
     'raw',
     encoder.encode(password),
     'PBKDF2',
     false,
-    ['deriveBits']
+    ['deriveBits'],
   );
-  
+
   // Derive bits
   const derivedBits = await crypto.subtle.deriveBits(
     {
@@ -70,18 +70,18 @@ async function pbkdf2(
       hash: 'SHA-256',
     },
     keyMaterial,
-    KEY_LENGTH * 8 // bits
+    KEY_LENGTH * 8, // bits
   );
-  
+
   return new Uint8Array(derivedBits);
 }
 
 /**
  * Hash a password using PBKDF2-SHA256
- * 
+ *
  * @param password - Plain text password to hash
  * @returns Hash string in format: $pbkdf2-sha256$iterations$salt$hash
- * 
+ *
  * @example
  * ```ts
  * const hash = await hashPassword('my-secure-password');
@@ -93,20 +93,22 @@ export async function hashPassword(password: string): Promise<string> {
   if (!password) {
     throw new Error('Password is required');
   }
-  
+
   const salt = randomBytes(SALT_LENGTH);
   const hash = await pbkdf2(password, salt, PBKDF2_ITERATIONS);
-  
-  return `${HASH_PREFIX}${PBKDF2_ITERATIONS}$${toBase64(salt)}$${toBase64(hash)}`;
+
+  return `${HASH_PREFIX}${PBKDF2_ITERATIONS}$${toBase64(salt)}$${
+    toBase64(hash)
+  }`;
 }
 
 /**
  * Verify a password against a hash
- * 
+ *
  * @param password - Plain text password to verify
  * @param storedHash - Hash string from database
  * @returns true if password matches, false otherwise
- * 
+ *
  * @example
  * ```ts
  * const user = await db.select().from(users).where(eq(users.email, email));
@@ -118,49 +120,49 @@ export async function hashPassword(password: string): Promise<string> {
  */
 export async function verifyPassword(
   password: string,
-  storedHash: string
+  storedHash: string,
 ): Promise<boolean> {
   if (!password || !storedHash) {
     return false;
   }
-  
+
   try {
     // Parse stored hash
     if (!storedHash.startsWith(HASH_PREFIX)) {
       return false;
     }
-    
+
     const parts = storedHash.slice(HASH_PREFIX.length).split('$');
     if (parts.length !== 3) {
       return false;
     }
-    
+
     const [iterationsStr, saltB64, hashB64] = parts;
     if (!iterationsStr || !saltB64 || !hashB64) {
       return false;
     }
-    
+
     const iterations = parseInt(iterationsStr, 10);
     const salt = fromBase64(saltB64);
     const expectedHash = fromBase64(hashB64);
-    
+
     if (isNaN(iterations) || iterations < 1) {
       return false;
     }
-    
+
     // Derive hash from provided password
     const actualHash = await pbkdf2(password, salt, iterations);
-    
+
     // Constant-time comparison to prevent timing attacks
     if (actualHash.length !== expectedHash.length) {
       return false;
     }
-    
+
     let result = 0;
     for (let i = 0; i < actualHash.length; i++) {
       result |= (actualHash[i] ?? 0) ^ (expectedHash[i] ?? 0);
     }
-    
+
     return result === 0;
   } catch {
     return false;

@@ -1,8 +1,8 @@
 // Core types for schema introspection
 
 // Re-export Drizzle's types for use in introspection
-export { Table } from "drizzle-orm";
-export type { AnyColumn as Column } from "drizzle-orm";
+export { Table } from 'drizzle-orm';
+export type { AnyColumn as Column } from 'drizzle-orm';
 
 /**
  * Metadata extracted from a Drizzle column

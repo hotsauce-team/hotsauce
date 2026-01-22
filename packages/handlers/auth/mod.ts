@@ -5,7 +5,7 @@
 // JWT - Token signing and verification
 // ─────────────────────────────────────────────────────────────
 export type { JwtPayload } from './jwt.ts';
-export { signJwt, verifyJwt, createJwtPayload } from './jwt.ts';
+export { createJwtPayload, signJwt, verifyJwt } from './jwt.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Password - Hashing and verification (PBKDF2)
@@ -16,8 +16,8 @@ export { hashPassword, verifyPassword } from './password.ts';
 // Providers - Authentication backends
 // ─────────────────────────────────────────────────────────────
 export type {
-  AuthUser,
   AuthProvider,
+  AuthUser,
   PasswordCredentials,
   PasswordProviderOptions,
 } from './provider.ts';
@@ -26,14 +26,14 @@ export { PasswordProvider } from './provider.ts';
 // ─────────────────────────────────────────────────────────────
 // Login UI - Login page rendering and styles
 // ─────────────────────────────────────────────────────────────
-export { renderLoginPage, loginStyles } from './login.ts';
+export { loginStyles, renderLoginPage } from './login.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Cookies - JWT cookie utilities
 // ─────────────────────────────────────────────────────────────
 export {
-  getTokenFromCookies,
   createAuthCookie,
   createClearCookie,
+  getTokenFromCookies,
   isSecureRequest,
 } from './cookies.ts';

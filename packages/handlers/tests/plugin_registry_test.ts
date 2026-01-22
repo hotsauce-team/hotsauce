@@ -2,21 +2,21 @@
 
 import { assertEquals, assertThrows } from 'jsr:@std/assert';
 import {
+  createPluginRegistry,
   PluginRegistry,
   PluginValidationError,
-  createPluginRegistry,
 } from '../plugins/registry.ts';
-import type { Plugin } from '../plugins/types.ts';
+import type { PluginConfig } from '../plugins/types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Test fixtures
 // ─────────────────────────────────────────────────────────────
 
-const minimalPlugin: Plugin = {
+const minimalPlugin: PluginConfig = {
   name: 'minimal-plugin',
 };
 
-const pluginWithTransforms: Plugin = {
+const pluginWithTransforms: PluginConfig = {
   name: 'transform-plugin',
   capabilities: {
     transforms: ['beforeSave', 'afterRead'],
@@ -29,7 +29,7 @@ const pluginWithTransforms: Plugin = {
   },
 };
 
-const pluginWithActions: Plugin = {
+const pluginWithActions: PluginConfig = {
   name: 'action-plugin',
   capabilities: {
     actions: ['create', 'update', 'delete'],
@@ -43,7 +43,7 @@ const pluginWithActions: Plugin = {
   },
 };
 
-const pluginWithRoutes: Plugin = {
+const pluginWithRoutes: PluginConfig = {
   name: 'routes-plugin',
   capabilities: {
     routes: ['/upload'],
@@ -57,7 +57,7 @@ const pluginWithRoutes: Plugin = {
   ],
 };
 
-const fullPlugin: Plugin = {
+const fullPlugin: PluginConfig = {
   name: 'full-plugin',
   description: 'A plugin with everything',
   capabilities: {
@@ -89,7 +89,7 @@ const fullPlugin: Plugin = {
 
 Deno.test('PluginRegistry: registers minimal plugin', () => {
   const registry = new PluginRegistry();
-  registry.register({ plugin: minimalPlugin });
+  registry.register(minimalPlugin);
 
   const registered = registry.get('minimal-plugin');
   assertEquals(registered?.plugin.name, 'minimal-plugin');
@@ -100,49 +100,47 @@ Deno.test('PluginRegistry: registers plugin with config', () => {
   const registry = new PluginRegistry();
   const config = { apiKey: 'secret', maxSize: 1024 };
 
-  registry.register({ plugin: minimalPlugin, config });
+  registry.register({ ...minimalPlugin, config });
 
   const registered = registry.get('minimal-plugin');
-  assertEquals(registered?.config, config);
+  assertEquals(registered?.plugin.config, config);
 });
 
 Deno.test('PluginRegistry: registerAll registers multiple plugins', () => {
   const registry = new PluginRegistry();
   registry.registerAll([
-    { plugin: minimalPlugin },
-    { plugin: pluginWithTransforms },
-    { plugin: pluginWithActions },
+    minimalPlugin,
+    pluginWithTransforms,
+    pluginWithActions,
   ]);
 
   assertEquals(registry.getAll().length, 3);
   assertEquals(registry.get('minimal-plugin')?.plugin.name, 'minimal-plugin');
-  assertEquals(registry.get('transform-plugin')?.plugin.name, 'transform-plugin');
+  assertEquals(
+    registry.get('transform-plugin')?.plugin.name,
+    'transform-plugin',
+  );
   assertEquals(registry.get('action-plugin')?.plugin.name, 'action-plugin');
 });
 
 Deno.test('PluginRegistry: rejects duplicate plugin names', () => {
   const registry = new PluginRegistry();
-  registry.register({ plugin: minimalPlugin });
+  registry.register(minimalPlugin);
 
   assertThrows(
-    () => registry.register({ plugin: minimalPlugin }),
+    () => registry.register(minimalPlugin),
     PluginValidationError,
-    'already registered'
+    'already registered',
   );
 });
 
 Deno.test('createPluginRegistry: creates registry with plugins', () => {
   const registry = createPluginRegistry([
-    { plugin: minimalPlugin },
-    { plugin: pluginWithTransforms },
+    minimalPlugin,
+    pluginWithTransforms,
   ]);
 
   assertEquals(registry.getAll().length, 2);
-});
-
-Deno.test('createPluginRegistry: accepts sandbox mode', () => {
-  const registry = createPluginRegistry([], 'deno-sandbox');
-  assertEquals(registry.getSandboxMode(), 'deno-sandbox');
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -151,23 +149,23 @@ Deno.test('createPluginRegistry: accepts sandbox mode', () => {
 
 Deno.test('PluginRegistry: rejects plugin without name', () => {
   const registry = new PluginRegistry();
-  const badPlugin = { } as Plugin;
+  const badPlugin = {} as PluginConfig;
 
   assertThrows(
-    () => registry.register({ plugin: badPlugin }),
+    () => registry.register(badPlugin),
     PluginValidationError,
-    'valid name'
+    'valid name',
   );
 });
 
 Deno.test('PluginRegistry: rejects plugin with empty name', () => {
   const registry = new PluginRegistry();
-  const badPlugin = { name: '' } as Plugin;
+  const badPlugin = { name: '' } as PluginConfig;
 
   assertThrows(
-    () => registry.register({ plugin: badPlugin }),
+    () => registry.register(badPlugin),
     PluginValidationError,
-    'valid name'
+    'valid name',
   );
 });
 
@@ -176,23 +174,23 @@ Deno.test('PluginRegistry: rejects plugin with invalid name format', () => {
 
   // Starts with number
   assertThrows(
-    () => registry.register({ plugin: { name: '123-plugin' } }),
+    () => registry.register({ name: '123-plugin' }),
     PluginValidationError,
-    'start with a letter'
+    'start with a letter',
   );
 
   // Contains invalid characters
   assertThrows(
-    () => registry.register({ plugin: { name: 'my_plugin' } }),
+    () => registry.register({ name: 'my_plugin' }),
     PluginValidationError,
-    'letters, numbers, and hyphens'
+    'letters, numbers, and hyphens',
   );
 
   // Contains spaces
   assertThrows(
-    () => registry.register({ plugin: { name: 'my plugin' } }),
+    () => registry.register({ name: 'my plugin' }),
     PluginValidationError,
-    'letters, numbers, and hyphens'
+    'letters, numbers, and hyphens',
   );
 });
 
@@ -200,60 +198,74 @@ Deno.test('PluginRegistry: accepts valid plugin names', () => {
   const registry = new PluginRegistry();
 
   // All these should work
-  registry.register({ plugin: { name: 'a' } });
-  registry.register({ plugin: { name: 'my-plugin' } });
-  registry.register({ plugin: { name: 'Plugin123' } });
-  registry.register({ plugin: { name: 'UPPERCASE' } });
-  registry.register({ plugin: { name: 'with-numbers-123' } });
+  registry.register({ name: 'a' });
+  registry.register({ name: 'my-plugin' });
+  registry.register({ name: 'Plugin123' });
+  registry.register({ name: 'UPPERCASE' });
+  registry.register({ name: 'with-numbers-123' });
 
   assertEquals(registry.getAll().length, 5);
 });
 
 Deno.test('PluginRegistry: validates route path starts with /', () => {
   const registry = new PluginRegistry();
-  const badPlugin: Plugin = {
+  const badPlugin: PluginConfig = {
     name: 'bad-routes',
     routes: [
-      { path: 'upload', method: 'POST', handler: async () => ({ status: 200 }) },
+      {
+        path: 'upload',
+        method: 'POST',
+        handler: async () => ({ status: 200 }),
+      },
     ],
   };
 
   assertThrows(
-    () => registry.register({ plugin: badPlugin }),
+    () => registry.register(badPlugin),
     PluginValidationError,
-    'start with /'
+    'start with /',
   );
 });
 
 Deno.test('PluginRegistry: validates route method', () => {
   const registry = new PluginRegistry();
-  const badPlugin: Plugin = {
+  const badPlugin: PluginConfig = {
     name: 'bad-method',
     routes: [
-      { path: '/upload', method: 'PATCH' as 'POST', handler: async () => ({ status: 200 }) },
+      {
+        path: '/upload',
+        method: 'PATCH' as 'POST',
+        handler: async () => ({ status: 200 }),
+      },
     ],
   };
 
   assertThrows(
-    () => registry.register({ plugin: badPlugin }),
+    () => registry.register(badPlugin),
     PluginValidationError,
-    'Invalid route method'
+    'Invalid route method',
   );
 });
 
 Deno.test('PluginRegistry: validates route handler is function', () => {
   const registry = new PluginRegistry();
-  const badPlugin: Plugin = {
+  const badPlugin: PluginConfig = {
     name: 'bad-handler',
     routes: [
-      { path: '/upload', method: 'POST', handler: 'not a function' as unknown as () => Promise<{ status: number }> },
+      {
+        path: '/upload',
+        method: 'POST',
+        handler: 'not a function' as unknown as () => Promise<
+          { status: number }
+        >,
+      },
     ],
   };
 
   assertThrows(
-    () => registry.register({ plugin: badPlugin }),
+    () => registry.register(badPlugin),
     PluginValidationError,
-    'must be a function'
+    'must be a function',
   );
 });
 
@@ -263,7 +275,7 @@ Deno.test('PluginRegistry: validates route handler is function', () => {
 
 Deno.test('PluginRegistry: rejects undeclared transform hooks', () => {
   const registry = new PluginRegistry();
-  const badPlugin: Plugin = {
+  const badPlugin: PluginConfig = {
     name: 'undeclared-transform',
     capabilities: {
       transforms: ['beforeSave'], // Only declares beforeSave
@@ -277,15 +289,15 @@ Deno.test('PluginRegistry: rejects undeclared transform hooks', () => {
   };
 
   assertThrows(
-    () => registry.register({ plugin: badPlugin }),
+    () => registry.register(badPlugin),
     PluginValidationError,
-    'afterRead'
+    'afterRead',
   );
 });
 
 Deno.test('PluginRegistry: rejects undeclared action hooks', () => {
   const registry = new PluginRegistry();
-  const badPlugin: Plugin = {
+  const badPlugin: PluginConfig = {
     name: 'undeclared-action',
     capabilities: {
       actions: ['create'], // Only declares create
@@ -299,16 +311,16 @@ Deno.test('PluginRegistry: rejects undeclared action hooks', () => {
   };
 
   assertThrows(
-    () => registry.register({ plugin: badPlugin }),
+    () => registry.register(badPlugin),
     PluginValidationError,
-    'delete'
+    'delete',
   );
 });
 
 Deno.test('PluginRegistry: allows hooks without capabilities (no validation)', () => {
   const registry = new PluginRegistry();
   // When capabilities is not specified, no validation happens
-  const plugin: Plugin = {
+  const plugin: PluginConfig = {
     name: 'no-caps',
     hooks: {
       transform: {
@@ -321,7 +333,7 @@ Deno.test('PluginRegistry: allows hooks without capabilities (no validation)', (
   };
 
   // Should not throw
-  registry.register({ plugin });
+  registry.register(plugin);
   assertEquals(registry.get('no-caps')?.plugin.name, 'no-caps');
 });
 
@@ -331,15 +343,18 @@ Deno.test('PluginRegistry: allows hooks without capabilities (no validation)', (
 
 Deno.test('PluginRegistry: getPluginsWithTransform finds correct plugins', () => {
   const registry = createPluginRegistry([
-    { plugin: minimalPlugin },
-    { plugin: pluginWithTransforms },
-    { plugin: pluginWithActions },
-    { plugin: fullPlugin },
+    minimalPlugin,
+    pluginWithTransforms,
+    pluginWithActions,
+    fullPlugin,
   ]);
 
   const beforeSavePlugins = registry.getPluginsWithTransform('beforeSave');
   assertEquals(beforeSavePlugins.length, 2);
-  assertEquals(beforeSavePlugins.map(p => p.plugin.name).sort(), ['full-plugin', 'transform-plugin']);
+  assertEquals(beforeSavePlugins.map((p) => p.plugin.name).sort(), [
+    'full-plugin',
+    'transform-plugin',
+  ]);
 
   const afterReadPlugins = registry.getPluginsWithTransform('afterRead');
   assertEquals(afterReadPlugins.length, 1);
@@ -348,15 +363,18 @@ Deno.test('PluginRegistry: getPluginsWithTransform finds correct plugins', () =>
 
 Deno.test('PluginRegistry: getPluginsWithAction finds correct plugins', () => {
   const registry = createPluginRegistry([
-    { plugin: minimalPlugin },
-    { plugin: pluginWithTransforms },
-    { plugin: pluginWithActions },
-    { plugin: fullPlugin },
+    minimalPlugin,
+    pluginWithTransforms,
+    pluginWithActions,
+    fullPlugin,
   ]);
 
   const createPlugins = registry.getPluginsWithAction('create');
   assertEquals(createPlugins.length, 2);
-  assertEquals(createPlugins.map(p => p.plugin.name).sort(), ['action-plugin', 'full-plugin']);
+  assertEquals(createPlugins.map((p) => p.plugin.name).sort(), [
+    'action-plugin',
+    'full-plugin',
+  ]);
 
   const deletePlugins = registry.getPluginsWithAction('delete');
   assertEquals(deletePlugins.length, 1);
@@ -368,43 +386,20 @@ Deno.test('PluginRegistry: getPluginsWithAction finds correct plugins', () => {
 
 Deno.test('PluginRegistry: getAllRoutes collects routes from all plugins', () => {
   const registry = createPluginRegistry([
-    { plugin: minimalPlugin },
-    { plugin: pluginWithRoutes },
-    { plugin: fullPlugin },
+    minimalPlugin,
+    pluginWithRoutes,
+    fullPlugin,
   ]);
 
   const routes = registry.getAllRoutes();
   assertEquals(routes.length, 2);
-  assertEquals(routes.map(r => r.route.path).sort(), ['/custom', '/upload']);
-  assertEquals(routes.find(r => r.route.path === '/upload')?.pluginName, 'routes-plugin');
-  assertEquals(routes.find(r => r.route.path === '/custom')?.pluginName, 'full-plugin');
-});
-
-// ─────────────────────────────────────────────────────────────
-// Sandbox mode tests
-// ─────────────────────────────────────────────────────────────
-
-Deno.test('PluginRegistry: getSandboxMode returns configured mode', () => {
-  const workerRegistry = new PluginRegistry('worker');
-  assertEquals(workerRegistry.getSandboxMode(), 'worker');
-
-  const denoRegistry = new PluginRegistry('deno-sandbox');
-  assertEquals(denoRegistry.getSandboxMode(), 'deno-sandbox');
-});
-
-Deno.test('PluginRegistry: defaults to worker sandbox mode', () => {
-  const registry = new PluginRegistry();
-  assertEquals(registry.getSandboxMode(), 'worker');
-});
-
-Deno.test('PluginRegistry: isDenoRuntime detects Deno', () => {
-  const registry = new PluginRegistry();
-  // We're running in Deno, so this should be true
-  assertEquals(registry.isDenoRuntime(), true);
-});
-
-Deno.test('PluginRegistry: getEffectiveSandboxMode returns requested mode on Deno', () => {
-  const registry = new PluginRegistry('deno-sandbox');
-  // We're running in Deno, so deno-sandbox should be available
-  assertEquals(registry.getEffectiveSandboxMode(), 'deno-sandbox');
+  assertEquals(routes.map((r) => r.route.path).sort(), ['/custom', '/upload']);
+  assertEquals(
+    routes.find((r) => r.route.path === '/upload')?.pluginName,
+    'routes-plugin',
+  );
+  assertEquals(
+    routes.find((r) => r.route.path === '/custom')?.pluginName,
+    'full-plugin',
+  );
 });

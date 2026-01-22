@@ -1,19 +1,19 @@
 // Schema introspection utilities
 
 import {
-  Table,
   type AnyColumn,
-  getTableName,
-  getTableColumns,
-  isTable,
-  extractTablesRelationalConfig,
   createTableRelationsHelpers,
+  extractTablesRelationalConfig,
+  getTableColumns,
+  getTableName,
+  isTable,
+  Table,
 } from 'drizzle-orm';
 import type {
   IntrospectedColumn,
-  IntrospectedTable,
   IntrospectedRelation,
   IntrospectedSchema,
+  IntrospectedTable,
   JunctionTable,
 } from './types.ts';
 
@@ -41,7 +41,7 @@ function isDrizzleColumn(value: unknown): value is AnyColumn {
  * Extract foreign key references from a table
  */
 function extractForeignKeys(
-  table: Table
+  table: Table,
 ): Map<string, { table: string; column: string }> {
   const refs = new Map<string, { table: string; column: string }>();
 
@@ -96,7 +96,8 @@ function extractForeignKeys(
  */
 function extractCompositePrimaryKey(table: Table): string[] {
   // Use Drizzle's exported symbol via Table.Symbol (marked @internal but accessible)
-  const TableSymbol = (Table as unknown as { Symbol: { ExtraConfigBuilder: symbol } }).Symbol;
+  const TableSymbol =
+    (Table as unknown as { Symbol: { ExtraConfigBuilder: symbol } }).Symbol;
   // deno-lint-ignore no-explicit-any
   const extraConfigBuilder = (table as any)[TableSymbol.ExtraConfigBuilder];
   if (typeof extraConfigBuilder !== 'function') {
@@ -111,9 +112,14 @@ function extractCompositePrimaryKey(table: Table): string[] {
 
     for (const config of extraConfig) {
       // Check if this is a PrimaryKeyBuilder
-      if (config?.constructor?.name === 'PrimaryKeyBuilder' && Array.isArray(config.columns)) {
+      if (
+        config?.constructor?.name === 'PrimaryKeyBuilder' &&
+        Array.isArray(config.columns)
+      ) {
         // deno-lint-ignore no-explicit-any
-        const columnNames = config.columns.map((col: any) => col.name as string);
+        const columnNames = config.columns.map((col: any) =>
+          col.name as string
+        );
         if (columnNames.every((name: unknown) => typeof name === 'string')) {
           return columnNames;
         }
@@ -126,14 +132,13 @@ function extractCompositePrimaryKey(table: Table): string[] {
   return [];
 }
 
-
 /**
  * Introspect a single Drizzle column
  */
 function introspectColumn(
   propertyName: string,
   column: AnyColumn,
-  foreignKeys: Map<string, { table: string; column: string }>
+  foreignKeys: Map<string, { table: string; column: string }>,
 ): IntrospectedColumn {
   const result: IntrospectedColumn = {
     name: column.name,
@@ -162,7 +167,9 @@ function introspectColumn(
     result.enumValues = column.enumValues;
   }
   // Check for enum object with name (Postgres enums)
-  const enumObj = column as unknown as { enum?: { enumName: string; enumValues: readonly string[] } };
+  const enumObj = column as unknown as {
+    enum?: { enumName: string; enumValues: readonly string[] };
+  };
   if (enumObj.enum?.enumName) {
     result.enumName = enumObj.enum.enumName;
     if (!result.enumValues && enumObj.enum.enumValues) {
@@ -197,7 +204,7 @@ export function introspectTable(table: Table): IntrospectedTable {
   // Validate input
   if (!table || typeof table !== 'object') {
     throw new Error(
-      `Invalid Drizzle table: expected a table object, received ${typeof table}`
+      `Invalid Drizzle table: expected a table object, received ${typeof table}`,
     );
   }
 
@@ -205,7 +212,7 @@ export function introspectTable(table: Table): IntrospectedTable {
   if (!isTable(table)) {
     throw new Error(
       `Invalid Drizzle table: the provided object is not a valid Drizzle table. ` +
-      `Make sure you're passing a table created with pgTable(), mysqlTable(), or sqliteTable().`
+        `Make sure you're passing a table created with pgTable(), mysqlTable(), or sqliteTable().`,
     );
   }
 
@@ -214,7 +221,7 @@ export function introspectTable(table: Table): IntrospectedTable {
   if (!tableName) {
     throw new Error(
       `Invalid Drizzle table: table name could not be extracted. ` +
-      `The table may be malformed or missing its Symbol('drizzle:Name') property.`
+        `The table may be malformed or missing its Symbol('drizzle:Name') property.`,
     );
   }
 
@@ -272,7 +279,7 @@ export function introspectTable(table: Table): IntrospectedTable {
  * ```
  */
 export function introspectSchema(
-  schema: Record<string, unknown>
+  schema: Record<string, unknown>,
 ): IntrospectedTable[] {
   const tables: IntrospectedTable[] = [];
 
@@ -299,14 +306,14 @@ export function introspectSchema(
  * ```
  */
 export function introspectRelations(
-  schema: Record<string, unknown>
+  schema: Record<string, unknown>,
 ): IntrospectedRelation[] {
   const result: IntrospectedRelation[] = [];
 
   try {
     const config = extractTablesRelationalConfig(
       schema,
-      createTableRelationsHelpers
+      createTableRelationsHelpers,
     );
 
     for (const [tableName, tableConfig] of Object.entries(config.tables)) {
@@ -345,12 +352,14 @@ export function introspectRelations(
  * @param tables - Array of introspected tables
  * @returns Array of detected junction tables
  */
-export function detectJunctionTables(tables: IntrospectedTable[]): JunctionTable[] {
+export function detectJunctionTables(
+  tables: IntrospectedTable[],
+): JunctionTable[] {
   const junctions: JunctionTable[] = [];
 
   for (const table of tables) {
     // Get FK columns
-    const fkColumns = table.columns.filter(c => c.references);
+    const fkColumns = table.columns.filter((c) => c.references);
 
     // Must have exactly 2 FK columns pointing to different tables
     if (fkColumns.length !== 2) continue;
@@ -363,9 +372,16 @@ export function detectJunctionTables(tables: IntrospectedTable[]): JunctionTable
 
     // Check if this looks like a junction (few other columns)
     // Allow: FKs + timestamps (created_at, updated_at) + maybe an order column
-    const nonFkColumns = table.columns.filter(c => !c.references);
-    const allowedExtraColumns = ['created_at', 'updated_at', 'order', 'position', 'sort_order', 'id'];
-    const hasOnlyAllowedExtras = nonFkColumns.every(c =>
+    const nonFkColumns = table.columns.filter((c) => !c.references);
+    const allowedExtraColumns = [
+      'created_at',
+      'updated_at',
+      'order',
+      'position',
+      'sort_order',
+      'id',
+    ];
+    const hasOnlyAllowedExtras = nonFkColumns.every((c) =>
       allowedExtraColumns.includes(c.name) || c.isPrimaryKey
     );
 
@@ -375,7 +391,7 @@ export function detectJunctionTables(tables: IntrospectedTable[]): JunctionTable
     const pkColumns = table.primaryKey;
     const fkNames = [fk1.name, fk2.name];
     const isCompositePK = pkColumns.length === 2 &&
-      pkColumns.every(pk => fkNames.includes(pk));
+      pkColumns.every((pk) => fkNames.includes(pk));
     const hasSimplePK = pkColumns.length <= 1;
 
     if (!isCompositePK && !hasSimplePK) continue;
@@ -412,13 +428,13 @@ export function detectJunctionTables(tables: IntrospectedTable[]): JunctionTable
  * ```
  */
 export function introspectFullSchema(
-  schema: Record<string, unknown>
+  schema: Record<string, unknown>,
 ): IntrospectedSchema {
   const tables = introspectSchema(schema);
   const junctions = detectJunctionTables(tables);
 
   // Mark junction tables
-  const junctionNames = new Set(junctions.map(j => j.tableName));
+  const junctionNames = new Set(junctions.map((j) => j.tableName));
   for (const table of tables) {
     if (junctionNames.has(table.name)) {
       table.isJunction = true;

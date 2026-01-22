@@ -15,6 +15,7 @@ deno task seed
 ```
 
 This creates the tables and an admin user with:
+
 - **Email:** `admin@example.com`
 - **Password:** `admin123`
 

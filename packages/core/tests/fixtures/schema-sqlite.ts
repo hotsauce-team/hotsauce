@@ -2,10 +2,10 @@
 // This represents a typical blog/content site
 
 import {
-  sqliteTable,
-  text,
   integer,
   primaryKey,
+  sqliteTable,
+  text,
 } from 'drizzle-orm/sqlite-core';
 import { relations } from 'drizzle-orm';
 
@@ -20,8 +20,12 @@ export const users = sqliteTable('users', {
   bio: text('bio'),
   avatarUrl: text('avatar_url', { length: 500 }),
   isAdmin: integer('is_admin', { mode: 'boolean' }).notNull().default(false),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(
+    () => new Date(),
+  ),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(
+    () => new Date(),
+  ),
 });
 
 // Posts table
@@ -33,14 +37,19 @@ export const posts = sqliteTable('posts', {
   excerpt: text('excerpt', { length: 500 }),
   body: text('body'),
   tags: text('tags', { mode: 'json' }).$type<string[]>(), // JSON array instead of native array
-  status: text('status', { enum: ['draft', 'published', 'archived'] }).notNull().default('draft'),
+  status: text('status', { enum: ['draft', 'published', 'archived'] }).notNull()
+    .default('draft'),
   authorId: integer('author_id')
     .notNull()
     .references(() => users.id),
   featuredImageId: text('featured_image_id'), // UUID stored as text
   publishedAt: integer('published_at', { mode: 'timestamp' }),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(
+    () => new Date(),
+  ),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(
+    () => new Date(),
+  ),
 });
 
 // Categories table
@@ -63,7 +72,7 @@ export const postsToCategories = sqliteTable(
       .notNull()
       .references(() => categories.id),
   },
-  (table) => [primaryKey({ columns: [table.postId, table.categoryId] })]
+  (table) => [primaryKey({ columns: [table.postId, table.categoryId] })],
 );
 
 // Uploads table
@@ -76,14 +85,18 @@ export const uploads = sqliteTable('uploads', {
   path: text('path', { length: 500 }).notNull(),
   alt: text('alt', { length: 255 }),
   metadata: text('metadata', { mode: 'json' }),
-  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull().$defaultFn(
+    () => new Date(),
+  ),
 });
 
 // Settings table (key-value with JSON)
 export const settings = sqliteTable('settings', {
   key: text('key', { length: 100 }).primaryKey(),
   value: text('value', { mode: 'json' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull().$defaultFn(
+    () => new Date(),
+  ),
 });
 
 // Relations
@@ -118,5 +131,5 @@ export const postsToCategoriesRelations = relations(
       fields: [postsToCategories.categoryId],
       references: [categories.id],
     }),
-  })
+  }),
 );

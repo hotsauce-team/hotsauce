@@ -2,16 +2,16 @@
 
 import { assertEquals } from 'jsr:@std/assert';
 import {
-  mapColumnToFieldType,
-  mapColumnToField,
   mapColumnsToFields,
+  mapColumnToField,
+  mapColumnToFieldType,
   propertyNameToLabel,
 } from '../fields/mapping.ts';
 import type { IntrospectedColumn } from '../schema/types.ts';
 
 // Helper to create mock columns
 function createMockColumn(
-  overrides: Partial<IntrospectedColumn>
+  overrides: Partial<IntrospectedColumn>,
 ): IntrospectedColumn {
   return {
     name: 'test_column',
@@ -61,7 +61,10 @@ Deno.test('mapColumnToFieldType: boolean dataType maps to boolean', () => {
 });
 
 Deno.test('mapColumnToFieldType: date dataType maps to datetime by default', () => {
-  const column = createMockColumn({ dataType: 'date', columnType: 'PgTimestamp' });
+  const column = createMockColumn({
+    dataType: 'date',
+    columnType: 'PgTimestamp',
+  });
   assertEquals(mapColumnToFieldType(column), 'datetime');
 });
 
