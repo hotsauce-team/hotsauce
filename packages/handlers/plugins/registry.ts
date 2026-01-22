@@ -5,10 +5,10 @@ import type {
   PluginConfig,
   PluginRoute,
   SandboxMode,
-  Serializable,
   TransformHooks,
   ActionHooks,
 } from './types.ts';
+import { isRemotePlugin } from './types.ts';
 
 /**
  * Validation error for plugin configuration
@@ -27,12 +27,14 @@ export class PluginValidationError extends Error {
  * Registered plugin with resolved configuration
  */
 export interface RegisteredPlugin {
-  /** Plugin definition */
+  /** Plugin definition (null for remote-only plugins) */
   plugin: Plugin;
   /** Plugin configuration (serializable) */
-  config?: Serializable;
+  config?: object;
   /** Whether the plugin has been initialized */
   initialized: boolean;
+  /** Whether this is a remote-only plugin (no main thread code) */
+  isRemote?: boolean;
 }
 
 /**
@@ -50,24 +52,70 @@ export class PluginRegistry {
    * Register a plugin with the registry
    */
   register(pluginConfig: PluginConfig): void {
-    const { plugin, config } = pluginConfig;
+    if (isRemotePlugin(pluginConfig)) {
+      // Remote plugin - only module URL, no code runs in main thread
+      const { moduleUrl, config, name } = pluginConfig;
+      
+      // Generate a name from the URL if not provided
+      const pluginName = name ?? this.nameFromUrl(moduleUrl);
+      
+      // Check for duplicates
+      if (this.plugins.has(pluginName)) {
+        throw new PluginValidationError(
+          pluginName,
+          'A plugin with this name is already registered'
+        );
+      }
 
-    // Validate plugin
-    this.validatePlugin(plugin);
+      // Create a minimal plugin stub - real plugin loaded in Worker
+      const plugin: Plugin = {
+        name: pluginName,
+        moduleUrl,
+        // No hooks defined here - they're discovered when Worker loads the module
+      };
 
-    // Check for duplicates
-    if (this.plugins.has(plugin.name)) {
-      throw new PluginValidationError(
-        plugin.name,
-        'A plugin with this name is already registered'
-      );
+      this.plugins.set(pluginName, {
+        plugin,
+        config,
+        initialized: false,
+        isRemote: true,
+      });
+    } else {
+      // Standard plugin with full definition
+      const { plugin, config } = pluginConfig;
+
+      // Validate plugin
+      this.validatePlugin(plugin);
+
+      // Check for duplicates
+      if (this.plugins.has(plugin.name)) {
+        throw new PluginValidationError(
+          plugin.name,
+          'A plugin with this name is already registered'
+        );
+      }
+
+      this.plugins.set(plugin.name, {
+        plugin,
+        config,
+        initialized: false,
+        isRemote: false,
+      });
     }
+  }
 
-    this.plugins.set(plugin.name, {
-      plugin,
-      config,
-      initialized: false,
-    });
+  /**
+   * Generate a plugin name from a module URL
+   */
+  private nameFromUrl(url: string): string {
+    try {
+      const parsed = new URL(url);
+      // Get filename without extension
+      const filename = parsed.pathname.split('/').pop() ?? 'unknown';
+      return filename.replace(/\.(ts|js|mjs)$/, '');
+    } catch {
+      return 'remote-plugin';
+    }
   }
 
   /**

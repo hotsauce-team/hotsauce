@@ -1,7 +1,7 @@
 // Audit log plugin - Worker module version
 // This file is imported by the Worker and runs in isolation
 
-import type { ActionContext, PluginHooks, Serializable } from '../types.ts';
+import type { ActionContext, PluginHooks, Serializable } from '@drizzle-cms/handlers-workers';
 
 /**
  * Configuration for the audit log plugin

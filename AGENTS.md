@@ -149,7 +149,26 @@ packages/handlers/
 ├── validation.ts       # Zod config validation
 ├── runtime-compat.ts   # Cross-runtime env var utilities (getEnv)
 ├── types.ts            # Handler types (CmsOptions, ErrorContext, etc.)
-└── auth/               # JWT authentication module
+├── auth/               # JWT authentication module
+└── plugins/            # Plugin registry, service, and types
+    ├── types.ts        # Plugin, PluginConfig, re-exports from handlers-workers
+    ├── registry.ts     # Plugin registration and validation
+    └── service.ts      # Plugin execution orchestration
+
+packages/handlers-workers/
+├── mod.ts              # Main entry, exports WorkerExecutor
+├── README.md           # Package documentation
+├── types.ts            # Serializable, PluginContext, ActionContext, etc.
+├── executor.ts         # Worker management and communication
+└── sandbox/
+    └── worker-script.ts  # Code that runs inside Workers
+
+packages/plugins/
+├── mod.ts              # Main entry, re-exports plugins and types
+├── README.md           # Package documentation
+└── audit-log/
+    ├── mod.ts          # createAuditLogPlugin factory
+    └── worker.ts       # Worker module for isolation
 ```
 
 ## Environment Variables
@@ -223,6 +242,56 @@ packages/core/tests/
 
 ## Internal Design Notes (Reference)
 
+### Plugin Architecture
+
+Plugins extend the CMS with custom hooks that run during CRUD operations. Key design decisions:
+
+**Worker Isolation (Security)**
+- Plugins run in Web Workers, isolated from the main thread
+- Plugins never receive database handles, server internals, or functions
+- All data crossing the Worker boundary must be JSON-serializable
+- This "secure by default" approach protects against malicious or buggy plugins
+
+**Module-Based Loading**
+- Plugins provide a `moduleUrl` pointing to a Worker-compatible module
+- The Worker imports this module and calls `createPlugin(config)` factory
+- Config is serialized and passed to the Worker at initialization
+- This allows plugins to have complex logic while keeping the main thread simple
+
+```typescript
+// Main entry (audit-log.ts) - for type checking and registration
+export function createAuditLogPlugin(config: Config): Plugin {
+  return {
+    name: 'audit-log',
+    moduleUrl: new URL('./audit-log.worker.ts', import.meta.url).href,
+    hooks: { /* defined for type checking */ },
+  };
+}
+
+// Worker module (audit-log.worker.ts) - actually runs in isolation
+export function createPlugin(config: Serializable): { hooks: PluginHooks } {
+  return { hooks: { on: { create: handler } } };
+}
+```
+
+**Hook Categories**
+- **Transform hooks** (`beforeSave`, `afterRead`): Modify data, always block
+- **Action hooks** (`on.create`, `on.update`, etc.): Side effects, optionally fire-and-forget
+
+**Serializable Constraint**
+- All data passed to plugins: `Serializable` type (primitives, arrays, plain objects, Date)
+- No functions, class instances, symbols, or circular references
+- Plugins receive snapshots of data, not live references
+
+### Plugin Development Guidelines
+
+When creating plugins:
+1. **Keep Worker module self-contained** — it cannot import from main thread modules
+2. **Use `createPlugin(config)` factory** — receives serialized config from CMS options
+3. **Declare capabilities** — network hosts, actions needed (for future permission enforcement)
+4. **Use `fireAndForget: true`** for logging/analytics that shouldn't block requests
+5. **Test without Worker first** — easier to debug, then verify Worker isolation works
+
 ### Uploads: What belongs in core vs plugin
 
 **First-class (core)** (so the CMS feels complete even without storage):
@@ -239,8 +308,3 @@ packages/core/tests/
 - Optional direct-to-bucket / presigned URL flow (S3/R2-style)
 - Virus scanning / transformations (if ever)
 - Cleanup policies (orphan GC, retention)
-
-### Potential plugin architecture ordering (to enable uploads)
-
-- Build a tiny plugin MVP first: **routes + nav items + hooks**
-- Implement uploads as the first official plugin to validate the architecture

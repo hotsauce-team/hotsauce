@@ -1,7 +1,7 @@
-// Example: Audit logging plugin
-// Demonstrates action hooks with fire-and-forget pattern
+// Audit log plugin - main entry point
+// For type checking and registration
 
-import type { Plugin, ActionContext } from '../types.ts';
+import type { ActionContext, PluginHooks, CrudAction } from '@drizzle-cms/handlers-workers';
 
 /**
  * Configuration for the audit log plugin
@@ -130,10 +130,26 @@ function createAuditHandler(config: AuditLogConfig) {
 }
 
 /**
+ * Plugin definition returned by createAuditLogPlugin
+ */
+export interface AuditLogPlugin {
+  name: string;
+  description: string;
+  moduleUrl: string;
+  hooks: PluginHooks;
+  capabilities: {
+    actions: CrudAction[];
+    network?: string[];
+  };
+}
+
+/**
  * Create the audit log plugin
  * 
  * @example
  * ```ts
+ * import { createAuditLogPlugin } from '@drizzle-cms/plugins/audit-log';
+ * 
  * const handler = createCmsHandler({
  *   // ... other options
  *   plugins: [
@@ -147,7 +163,7 @@ function createAuditHandler(config: AuditLogConfig) {
  * });
  * ```
  */
-export function createAuditLogPlugin(config: AuditLogConfig = {}): Plugin {
+export function createAuditLogPlugin(config: AuditLogConfig = {}): AuditLogPlugin {
   const handler = createAuditHandler(config);
   
   return {
@@ -156,7 +172,7 @@ export function createAuditLogPlugin(config: AuditLogConfig = {}): Plugin {
     
     // Worker module URL - the Worker will import this and run hooks in isolation
     // This ensures the plugin code runs sandboxed from the main thread
-    moduleUrl: new URL('./audit-log.worker.ts', import.meta.url).href,
+    moduleUrl: new URL('./worker.ts', import.meta.url).href,
     
     // Hooks are also defined here for:
     // 1. Type checking and validation at registration time
@@ -173,7 +189,7 @@ export function createAuditLogPlugin(config: AuditLogConfig = {}): Plugin {
     },
     
     capabilities: {
-      actions: ['create', 'update', 'delete', ...(config.logReads ? ['read'] : []), ...(config.logLists ? ['list'] : [])] as ('create' | 'update' | 'delete' | 'read' | 'list')[],
+      actions: ['create', 'update', 'delete', ...(config.logReads ? ['read'] : []), ...(config.logLists ? ['list'] : [])] as CrudAction[],
       network: config.webhookUrl ? [new URL(config.webhookUrl).host] : undefined,
     },
   };

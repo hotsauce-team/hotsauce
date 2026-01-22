@@ -5,7 +5,7 @@ import {
   createAuditLogPlugin,
   getAuditLog,
   clearAuditLog,
-} from '../plugins/examples/audit-log.ts';
+} from '@drizzle-cms/plugins/audit-log';
 import type { ActionContext } from '../plugins/types.ts';
 
 Deno.test('audit-log plugin', async (t) => {

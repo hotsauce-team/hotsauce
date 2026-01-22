@@ -5,6 +5,7 @@ export type {
   Serializable,
   Plugin,
   PluginConfig,
+  RemotePluginConfig,
   PluginHooks,
   PluginRoute,
   PluginCapabilities,
@@ -24,6 +25,8 @@ export type {
   PluginRequest,
   PluginResponse,
 } from './types.ts';
+
+export { isRemotePlugin } from './types.ts';
 
 export {
   PluginRegistry,

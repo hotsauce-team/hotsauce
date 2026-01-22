@@ -1,8 +1,8 @@
 // Worker sandbox executor
 // Runs plugin code in isolated Worker threads
+// Compatible with Deno and Node.js 20+
 
 import type {
-  Plugin,
   PluginContext,
   ActionContext,
   PluginRequest,
@@ -11,9 +11,9 @@ import type {
   SandboxMode,
   ActionHook,
   ActionHookConfig,
+  PluginHooks,
+  CrudAction,
 } from './types.ts';
-import type { RegisteredPlugin } from './registry.ts';
-import type { CrudAction } from '../types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Worker message protocol
@@ -46,6 +46,49 @@ interface WorkerResponse {
   success: boolean;
   result?: Serializable;
   error?: string;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Plugin registration types
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Plugin capabilities declaration
+ */
+export interface PluginCapabilities {
+  network?: string[];
+  transforms?: ('beforeSave' | 'afterRead')[];
+  actions?: ('create' | 'read' | 'update' | 'delete' | 'list')[];
+  routes?: string[];
+}
+
+/**
+ * Minimal plugin definition needed by executor
+ */
+export interface WorkerPlugin {
+  name: string;
+  description?: string;
+  moduleUrl?: string;
+  capabilities?: PluginCapabilities;
+  hooks?: PluginHooks;
+}
+
+/**
+ * A registered plugin with its configuration
+ */
+export interface RegisteredPlugin {
+  plugin: WorkerPlugin;
+  config?: object;
+  initialized: boolean;
+  /** Whether this is a remote-only plugin (no main thread code) */
+  isRemote?: boolean;
+}
+
+/**
+ * Options for creating a Worker executor
+ */
+export interface WorkerPluginOptions {
+  sandboxMode?: SandboxMode;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -115,7 +158,6 @@ export class WorkerExecutor {
     for (const { plugin } of plugins) {
       if (!plugin.hooks?.transform?.beforeSave) continue;
 
-      // Cast to Serializable for Worker messaging (context types are serializable)
       const response = await this.sendToWorker(plugin.name, 'transform:beforeSave', {
         ctx,
         data: result,
@@ -142,7 +184,6 @@ export class WorkerExecutor {
     for (const { plugin } of plugins) {
       if (!plugin.hooks?.transform?.afterRead) continue;
 
-      // Cast to Serializable for Worker messaging (context types are serializable)
       const response = await this.sendToWorker(plugin.name, 'transform:afterRead', {
         ctx,
         data: result,
@@ -196,7 +237,6 @@ export class WorkerExecutor {
     await Promise.allSettled(blockingPromises);
 
     // Fire-and-forget hooks run in background (not awaited)
-    // They're already started, just not blocking
   }
 
   /**
@@ -217,7 +257,6 @@ export class WorkerExecutor {
     action: CrudAction,
     ctx: ActionContext
   ): Promise<void> {
-    // Cast to Serializable for Worker messaging (context types are serializable)
     await this.sendToWorker(pluginName, 'action', { action, ctx } as unknown as Serializable);
   }
 
@@ -229,7 +268,6 @@ export class WorkerExecutor {
     routePath: string,
     request: PluginRequest
   ): Promise<PluginResponse> {
-    // Cast to Serializable for Worker messaging (request type is serializable)
     const response = await this.sendToWorker(pluginName, 'route', {
       path: routePath,
       request,
@@ -270,7 +308,7 @@ export class WorkerExecutor {
   /**
    * Create a Worker with appropriate sandbox settings
    */
-  private async createWorker(plugin: Plugin): Promise<Worker> {
+  private async createWorker(plugin: WorkerPlugin): Promise<Worker> {
     // Get the worker script URL
     const workerUrl = new URL('./sandbox/worker-script.ts', import.meta.url);
 
@@ -289,7 +327,7 @@ export class WorkerExecutor {
   /**
    * Create a Deno Worker with restricted permissions based on plugin capabilities
    */
-  private createDenoSandboxedWorker(workerUrl: URL, plugin: Plugin): Worker {
+  private createDenoSandboxedWorker(workerUrl: URL, plugin: WorkerPlugin): Worker {
     // Build permission object from plugin capabilities
     const capabilities = plugin.capabilities ?? {};
 
@@ -388,10 +426,8 @@ export class WorkerExecutor {
 
   /**
    * Serialize a plugin definition for sending to Worker
-   * (strips non-serializable parts)
    */
-  private serializePlugin(plugin: Plugin): Serializable {
-    // Explicitly serialize capabilities to ensure Serializable compatibility
+  private serializePlugin(plugin: WorkerPlugin): Serializable {
     const capabilities: Serializable | undefined = plugin.capabilities
       ? {
           network: plugin.capabilities.network,
@@ -405,8 +441,6 @@ export class WorkerExecutor {
       name: plugin.name,
       description: plugin.description,
       capabilities,
-      // Note: hooks and routes are function references,
-      // the Worker has its own copy from the plugin source
     };
   }
 }

@@ -148,6 +148,23 @@ export {
 } from './policies/mod.ts';
 
 // ─────────────────────────────────────────────────────────────
+// Plugins - Extensibility with Worker isolation
+// ─────────────────────────────────────────────────────────────
+export type {
+  Plugin,
+  PluginConfig,
+  PluginHooks,
+  PluginContext,
+  ActionContext,
+  PluginCapabilities,
+  SandboxMode,
+  Serializable,
+  TransformFn,
+  ActionHook,
+  ActionHandlerFn,
+} from './plugins/types.ts';
+
+// ─────────────────────────────────────────────────────────────
 // Auth - JWT authentication (optional)
 // ─────────────────────────────────────────────────────────────
 export type {

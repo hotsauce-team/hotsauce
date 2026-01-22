@@ -988,13 +988,219 @@ function tenantScoped<T extends Table>(table: T, col: keyof T & string): PolicyF
 
 > **Future:** Native `tenantId` support in `PolicyContext` is planned. This would allow `ctx.user.tenantId` directly.
 
+## Plugins
+
+Plugins extend CMS functionality with custom hooks that run during CRUD operations. Plugins are isolated in Web Workers for security, ensuring untrusted code cannot access your database or server internals.
+
+> **See also:** [`@drizzle-cms/plugins`](../plugins/README.md) for official plugins and [`@drizzle-cms/handlers-workers`](../handlers-workers/README.md) for the Worker execution layer.
+
+### Quick Start
+
+```ts
+import { createCmsHandler } from '@drizzle-cms/handlers';
+import { createAuditLogPlugin } from '@drizzle-cms/plugins/audit-log';
+import * as schema from './schema';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  plugins: [
+    {
+      plugin: createAuditLogPlugin({
+        excludeTables: ['sessions'],
+        logReads: false,
+      }),
+    },
+  ],
+});
+```
+
+### Plugin Types
+
+Plugins can define two categories of hooks:
+
+| Category | When | Blocking | Purpose |
+|----------|------|----------|---------|
+| **Transform** | During data flow | Always | Modify data before save or after read |
+| **Action** | After operation | Optional | Side effects (audit, webhooks, cache) |
+
+### Transform Hooks
+
+Transform hooks modify data as it flows through the pipeline:
+
+```ts
+const slugPlugin: Plugin = {
+  name: 'auto-slug',
+  hooks: {
+    // Modify data before database write
+    beforeSave: async (ctx, data) => {
+      if (ctx.table === 'posts' && data.title && !data.slug) {
+        return { ...data, slug: slugify(data.title) };
+      }
+      return data;
+    },
+    
+    // Add computed fields after database read
+    afterRead: async (ctx, data) => {
+      if (data.avatarKey) {
+        return { ...data, avatarUrl: getSignedUrl(data.avatarKey) };
+      }
+      return data;
+    },
+  },
+};
+```
+
+### Action Hooks
+
+Action hooks respond to CRUD operations after they complete:
+
+```ts
+const webhookPlugin: Plugin = {
+  name: 'webhook',
+  hooks: {
+    on: {
+      create: async (ctx) => {
+        await fetch('https://api.example.com/webhook', {
+          method: 'POST',
+          body: JSON.stringify({ action: 'create', table: ctx.table, data: ctx.newData }),
+        });
+      },
+      update: async (ctx) => { /* ... */ },
+      delete: async (ctx) => { /* ... */ },
+    },
+  },
+};
+```
+
+### Fire-and-Forget Actions
+
+For hooks that shouldn't block the HTTP response (logging, analytics):
+
+```ts
+const auditPlugin: Plugin = {
+  name: 'audit',
+  hooks: {
+    on: {
+      create: {
+        handler: async (ctx) => logAudit(ctx),
+        fireAndForget: true, // Don't wait for completion
+      },
+    },
+  },
+};
+```
+
+### Plugin Context
+
+All hooks receive a `PluginContext` with:
+
+```ts
+interface PluginContext {
+  table: string;           // Table being operated on
+  action: CrudAction;      // 'create' | 'read' | 'update' | 'delete' | 'list'
+  user?: {                 // Authenticated user (if available)
+    sub: string;           // User ID
+    role?: string;         // User role
+  };
+}
+
+// Action hooks get additional data
+interface ActionContext extends PluginContext {
+  recordId?: string | number;  // Primary key
+  oldData?: Serializable;      // Previous state (update/delete)
+  newData?: Serializable;      // New state (create/update)
+  timestamp: string;           // ISO 8601 timestamp
+}
+```
+
+### Worker Isolation
+
+Plugins run in isolated Web Workers by default. This provides:
+
+- **Security**: Plugins cannot access `db`, `schema`, or server internals
+- **Isolation**: A buggy plugin won't crash your server
+- **Capability-based**: Declare what permissions a plugin needs
+
+For Worker isolation to work, plugins must provide a `moduleUrl`:
+
+```ts
+// audit-log.ts (main entry)
+export function createAuditLogPlugin(config: Config): Plugin {
+  return {
+    name: 'audit-log',
+    moduleUrl: new URL('./audit-log.worker.ts', import.meta.url).href,
+    hooks: { /* defined for type checking */ },
+    capabilities: {
+      actions: ['create', 'update', 'delete'],
+      network: config.webhookUrl ? [new URL(config.webhookUrl).host] : undefined,
+    },
+  };
+}
+
+// audit-log.worker.ts (runs in Worker)
+export function createPlugin(config: Serializable): { hooks: PluginHooks } {
+  return {
+    hooks: {
+      on: {
+        create: { handler: async (ctx) => { /* ... */ }, fireAndForget: true },
+      },
+    },
+  };
+}
+```
+
+### Sandbox Modes
+
+| Mode | Runtime | Features |
+|------|---------|----------|
+| `'worker'` | All | Standard Worker isolation |
+| `'deno-sandbox'` | Deno only | Restricted permissions via Deno.permissions |
+
+```ts
+createCmsHandler({
+  // ...
+  plugins: [{ plugin: myPlugin }],
+  pluginSandbox: 'deno-sandbox', // Extra security on Deno
+});
+```
+
+### Serializable Data Constraint
+
+All data passed to/from plugins must be JSON-serializable:
+
+✅ **Allowed**: strings, numbers, booleans, null, arrays, plain objects, Date  
+❌ **Not allowed**: functions, class instances, symbols, circular references
+
+This constraint enables Worker isolation without API changes.
+
+### Official Plugins
+
+Official plugins are published in the [`@drizzle-cms/plugins`](../plugins/README.md) package.
+
+#### Audit Log
+
+Logs all CRUD operations for compliance and debugging:
+
+```ts
+import { createAuditLogPlugin } from '@drizzle-cms/plugins/audit-log';
+
+createAuditLogPlugin({
+  webhookUrl: 'https://api.example.com/audit', // Optional: POST logs here
+  includeTables: ['posts', 'users'],           // Only log these tables
+  excludeTables: ['sessions'],                 // Skip these tables
+  logReads: false,                             // Don't log read operations
+  logLists: false,                             // Don't log list operations
+});
+```
+
 ## Server Integration Examples
 
 ### Deno
 
 ```ts
 Deno.serve(handler);
-```
 ```
 
 ### Hono

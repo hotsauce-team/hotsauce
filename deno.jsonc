@@ -12,6 +12,8 @@
     "./packages/core",
     "./packages/ui",
     "./packages/handlers",
+    "./packages/handlers-workers",
+    "./packages/plugins",
 
     // Examples
     "./examples/deno-server"
@@ -23,6 +25,15 @@
     "drizzle-zod": "npm:drizzle-zod@^0.8.3",
     "postgres": "npm:postgres@^3.4.8",
     "zod": "npm:zod@^4.3.5",
+
+    // Local packages (for cross-package imports)
+    "@drizzle-cms/core": "./packages/core/mod.ts",
+    "@drizzle-cms/ui": "./packages/ui/mod.ts",
+    "@drizzle-cms/handlers": "./packages/handlers/mod.ts",
+    "@drizzle-cms/handlers-workers": "./packages/handlers-workers/mod.ts",
+    "@drizzle-cms/plugins": "./packages/plugins/mod.ts",
+    "@drizzle-cms/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
+    "@drizzle-cms/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
 
     // Dev dependencies (not shipped to users)
     "@std/assert": "jsr:@std/assert@*",

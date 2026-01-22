@@ -1,5 +1,6 @@
 // Worker script - runs inside the Worker sandbox
 // This file is loaded by the Worker and executes plugin code in isolation
+// Compatible with Deno and Node.js 20+
 
 import type {
   PluginContext,
@@ -11,8 +12,8 @@ import type {
   TransformHooks,
   ActionHooks,
   PluginRoute,
+  CrudAction,
 } from '../types.ts';
-import type { CrudAction } from '../../types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Message types (duplicated to avoid import issues in Worker)
@@ -52,7 +53,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
     switch (type) {
       case 'init':
-        result = await handleInit(payload as { plugin: Serializable; config: Serializable });
+        result = await handleInit(payload as { plugin: Serializable; config: Serializable; moduleUrl?: string });
         break;
 
       case 'transform:beforeSave':
@@ -256,16 +257,6 @@ export function registerActions(actions: ActionHooks): void {
  */
 export function registerRoutes(routes: PluginRoute[]): void {
   for (const route of routes) {
-    pluginRoutes.set(route.path, route);
-  }
-}
-
-/**
- * Get the plugin configuration (passed during init)
- */
-export function getPluginConfig<T = Serializable>(): T | null {
-  return pluginConfig as T | null;
-}
     pluginRoutes.set(route.path, route);
   }
 }

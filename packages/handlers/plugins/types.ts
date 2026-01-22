@@ -1,248 +1,35 @@
 // Plugin system types
-// All data is serializable to enable Worker isolation
+// Re-exports from @drizzle-cms/handlers-workers with CMS-specific additions
 
-import type { CrudAction } from '../types.ts';
+// Re-export all types from handlers-workers
+export type {
+  Serializable,
+  SerializableValue,
+  SerializableObject,
+  PluginContext,
+  ActionContext,
+  PluginHooks,
+  TransformHooks,
+  ActionHooks,
+  TransformFn,
+  ActionHook,
+  ActionHookConfig,
+  ActionHandlerFn,
+  PluginRequest,
+  PluginResponse,
+  PluginRoute,
+  SandboxMode,
+  CrudAction,
+} from '@drizzle-cms/handlers-workers';
 
-// ─────────────────────────────────────────────────────────────
-// Serializable constraint - enables Worker message passing
-// ─────────────────────────────────────────────────────────────
-
-/**
- * All data passed to/from plugins must be serializable.
- * This enables Worker isolation without API changes.
- * 
- * Plugins never receive:
- * - Functions (db handles, callbacks)
- * - Class instances
- * - Symbols
- * - Circular references
- */
-export type Serializable =
-  | string
-  | number
-  | boolean
-  | null
-  | undefined
-  | Date
-  | Serializable[]
-  | { [key: string]: Serializable };
-
-// ─────────────────────────────────────────────────────────────
-// Plugin context - passed to all hooks
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Context provided to plugin hooks.
- * Contains only serializable data - no db handles or functions.
- */
-export interface PluginContext {
-  /** Table name being operated on */
-  table: string;
-  /** CRUD action being performed */
-  action: CrudAction;
-  /** Authenticated user info (if available) */
-  user?: {
-    /** User ID (from JWT subject) */
-    sub: string;
-    /** User role (if provided in JWT) */
-    role?: string;
-  };
-}
-
-/**
- * Extended context for action hooks (after operation completes)
- */
-export interface ActionContext extends PluginContext {
-  /** Primary key of the affected record */
-  recordId?: string | number;
-  /** Previous record state (for update/delete) */
-  oldData?: Serializable;
-  /** New record state (for create/update) */
-  newData?: Serializable;
-  /** Timestamp of the action */
-  timestamp: string; // ISO 8601
-}
-
-// ─────────────────────────────────────────────────────────────
-// Transform hooks - modify data in the pipeline (always block)
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Transform function signature.
- * Receives data, returns modified data. Always blocks.
- */
-export type TransformFn = (
-  ctx: PluginContext,
-  data: Record<string, Serializable>
-) => Promise<Record<string, Serializable>>;
-
-/**
- * Transform hooks modify data as it flows through the pipeline.
- * These always block because they return transformed data.
- */
-export interface TransformHooks {
-  /**
-   * Transform data before database write (create/update).
-   * Return modified data or throw to abort the operation.
-   * 
-   * @example
-   * ```ts
-   * beforeSave: async (ctx, data) => {
-   *   if (ctx.table === 'posts') {
-   *     return { ...data, slug: slugify(data.title) };
-   *   }
-   *   return data;
-   * }
-   * ```
-   */
-  beforeSave?: TransformFn;
-
-  /**
-   * Transform data after database read (list/read).
-   * Useful for adding computed fields or transforming values.
-   * 
-   * @example
-   * ```ts
-   * afterRead: async (ctx, data) => {
-   *   if (data.avatarKey) {
-   *     return { ...data, avatarUrl: getSignedUrl(data.avatarKey) };
-   *   }
-   *   return data;
-   * }
-   * ```
-   */
-  afterRead?: TransformFn;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Action hooks - side effects (optionally fire-and-forget)
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Action handler function signature
- */
-export type ActionHandlerFn = (ctx: ActionContext) => Promise<void>;
-
-/**
- * Action hook with configuration options
- */
-export interface ActionHookConfig {
-  /** The action handler function */
-  handler: ActionHandlerFn;
-  /**
-   * If true, don't block the HTTP response waiting for this hook.
-   * Errors are logged but won't affect the user.
-   * 
-   * @default false
-   */
-  fireAndForget?: boolean;
-}
-
-/**
- * Action hook - either a simple function (blocking) or config object
- */
-export type ActionHook = ActionHandlerFn | ActionHookConfig;
-
-/**
- * Action hooks for CRUD operations.
- * Called after the operation completes successfully.
- * Use for audit logging, webhooks, notifications, cache invalidation, etc.
- * 
- * @example
- * ```ts
- * on: {
- *   // Simple form - blocks response
- *   create: async (ctx) => { await sendWebhook(ctx); },
- *   
- *   // Config form - fire and forget
- *   update: {
- *     handler: async (ctx) => { await auditLog(ctx); },
- *     fireAndForget: true,
- *   },
- * }
- * ```
- */
-export interface ActionHooks {
-  /** Called after a record is created */
-  create?: ActionHook;
-  /** Called after a record is read/viewed */
-  read?: ActionHook;
-  /** Called after a record is updated */
-  update?: ActionHook;
-  /** Called after a record is deleted */
-  delete?: ActionHook;
-  /** Called after a list query */
-  list?: ActionHook;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Combined plugin hooks
-// ─────────────────────────────────────────────────────────────
-
-/**
- * All hooks a plugin can implement.
- * 
- * - `transform`: Modify data in the pipeline (always blocks)
- * - `on`: Side effects after operations (optionally fire-and-forget)
- */
-export interface PluginHooks {
-  /**
-   * Transform hooks modify data as it flows through.
-   * Always block because they return transformed data.
-   */
-  transform?: TransformHooks;
-  
-  /**
-   * Action hooks for side effects after CRUD operations.
-   * Can be configured to fire-and-forget (non-blocking).
-   */
-  on?: ActionHooks;
-}
-
-// ─────────────────────────────────────────────────────────────
-// Plugin routes - custom endpoints
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Serializable representation of a request (for Worker messaging)
- */
-export interface PluginRequest {
-  /** URL path parameters */
-  params: Record<string, string>;
-  /** Query string parameters */
-  query: Record<string, string>;
-  /** Request body (parsed JSON or form data) */
-  body?: Serializable;
-  /** Request headers (selected safe headers only) */
-  headers: Record<string, string>;
-}
-
-/**
- * Serializable representation of a response (for Worker messaging)
- */
-export interface PluginResponse {
-  /** HTTP status code */
-  status: number;
-  /** Response headers */
-  headers?: Record<string, string>;
-  /** Response body (will be JSON serialized) */
-  body?: Serializable;
-}
-
-/**
- * A custom route provided by a plugin
- */
-export interface PluginRoute {
-  /** Path pattern (e.g., '/upload/:table') relative to basePath */
-  path: string;
-  /** HTTP method */
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  /**
-   * Route handler - receives serializable request, returns serializable response.
-   * Runs in Worker sandbox.
-   */
-  handler: (request: PluginRequest) => Promise<PluginResponse>;
-}
+// Import for use in local type definitions
+import type {
+  PluginHooks,
+  PluginRoute,
+  SandboxMode,
+  TransformHooks,
+  ActionHooks,
+} from '@drizzle-cms/handlers-workers';
 
 // ─────────────────────────────────────────────────────────────
 // Plugin capabilities - declared permissions
@@ -311,8 +98,6 @@ export interface PluginCapabilities {
  *         },
  *         fireAndForget: true,
  *       },
- *       update: { handler: auditLog, fireAndForget: true },
- *       delete: { handler: auditLog, fireAndForget: true },
  *     },
  *   },
  * };
@@ -329,10 +114,7 @@ export interface Plugin {
    * URL of the plugin module for Worker isolation.
    * The Worker will dynamically import this module.
    * 
-   * The module must export:
-   * - `default`: Plugin definition (hooks, routes, etc.)
-   * - Or call registerHooks()/registerActions() from worker-script.ts
-   * 
+   * The module must export a `createPlugin(config)` factory function.
    * If not provided, hooks run in-process (not isolated).
    * 
    * @example
@@ -354,14 +136,6 @@ export interface Plugin {
   /**
    * Custom field renderers (registered separately in UI package).
    * Maps field type or column name pattern to renderer name.
-   * 
-   * @example
-   * ```ts
-   * fields: {
-   *   'file': 'file-upload',        // Match by field type
-   *   'avatar': 'image-preview',    // Match by column name
-   * }
-   * ```
    */
   fields?: Record<string, string>;
 }
@@ -371,26 +145,58 @@ export interface Plugin {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Sandbox mode for plugin execution
+ * Remote plugin reference - loads plugin code entirely in Worker isolation.
+ * Use this when you don't want ANY plugin code to run in the main thread.
+ * 
+ * @example
+ * ```ts
+ * plugins: [
+ *   {
+ *     // Plugin loaded entirely in Worker - no code runs in main thread
+ *     moduleUrl: 'https://example.com/plugins/audit-log.js',
+ *     config: { webhookUrl: 'https://audit.example.com/events' },
+ *   },
+ * ]
+ * ```
  */
-export type SandboxMode =
-  /** Standard Worker isolation (works on all runtimes) */
-  | 'worker'
-  /** Deno Worker with restricted permissions (Deno only, strongest isolation) */
-  | 'deno-sandbox';
-
-/**
- * Plugin configuration passed to createCmsHandler
- */
-export interface PluginConfig {
-  /** The plugin definition */
-  plugin: Plugin;
+export interface RemotePluginConfig {
+  /**
+   * URL of the plugin module to load in the Worker.
+   * The module must export a `createPlugin(config)` factory function
+   * that returns { name, hooks, routes? }.
+   */
+  moduleUrl: string;
 
   /**
-   * Configuration passed to the plugin.
-   * Must be serializable (sent to Worker).
+   * Configuration passed to the plugin's createPlugin() factory.
+   * Must be serializable (JSON-compatible). Use a typed interface
+   * with `import type` for better DX without running plugin code.
    */
-  config?: Serializable;
+  config?: object;
+
+  /**
+   * Optional name override (otherwise derived from module response).
+   * Useful for identifying the plugin in logs/errors before it's loaded.
+   */
+  name?: string;
+}
+
+/**
+ * Plugin configuration passed to createCmsHandler.
+ * 
+ * Two forms are supported:
+ * 1. `{ plugin: Plugin }` - Plugin object (may run code in main thread for validation)
+ * 2. `{ moduleUrl: string }` - Remote plugin (all code runs in Worker)
+ */
+export type PluginConfig = 
+  | { plugin: Plugin; config?: object }
+  | RemotePluginConfig;
+
+/**
+ * Type guard to check if config is a remote plugin reference
+ */
+export function isRemotePlugin(config: PluginConfig): config is RemotePluginConfig {
+  return 'moduleUrl' in config && !('plugin' in config);
 }
 
 /**

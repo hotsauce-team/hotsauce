@@ -7,20 +7,29 @@ import {
   ownedBy,
   PasswordProvider,
   readOnly,
-} from '../../packages/handlers/mod.ts';
-import { createAuditLogPlugin } from '../../packages/handlers/plugins/examples/audit-log.ts';
+  type SandboxMode,
+} from '@drizzle-cms/handlers';
+// Type-only import - no plugin code runs, just compile-time type checking
+import type { AuditLogConfig } from '@drizzle-cms/plugins/audit-log';
 import { schema, posts, users, parsers } from './schema.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
 const db = drizzle(client, { schema });
 
-// Audit log plugin - logs all CMS operations
-const auditPlugin = createAuditLogPlugin({
+// Plugin sandbox mode:
+// - 'worker': Standard Worker isolation (works on all runtimes)
+// - 'deno-sandbox': Deno Worker with restricted permissions (Deno only)
+// - 'off': No isolation (for debugging - NOT recommended in production)
+const pluginSandbox: SandboxMode = 'worker';
+
+// Audit log plugin configuration (type-only import for DX, no runtime code)
+// The plugin code is loaded ONLY in the Worker - no plugin code runs in main thread
+const auditLogConfig: AuditLogConfig = {
   logReads: false, // Skip read operations (can be noisy)
   logLists: false, // Skip list operations
   // webhookUrl: 'https://audit.example.com/events', // Optional: send to external service
-});
+};
 
 // Create CMS handler with authentication
 // Secrets can be passed directly or via environment variables:
@@ -41,7 +50,16 @@ const cmsHandler = createCmsHandler({
     categories: (readOnly()), // Admins: full access, others: read-only
   },
   // Plugins for extending CMS functionality
-  plugins: [{ plugin: auditPlugin }],
+  // Remote plugins: only moduleUrl + config - code loads entirely in Worker isolation
+  plugins: [
+    {
+      name: 'audit-log',
+      moduleUrl: import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+      config: auditLogConfig,
+    },
+  ],
+  // Sandbox mode for plugin execution
+  pluginSandbox,
   // User input parsers for validation (validation library agnostic)
   parsers,
   // Log errors to console (in production, use a proper logging service)

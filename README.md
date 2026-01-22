@@ -7,7 +7,7 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 - **Single source of truth**: Your Drizzle schema defines database tables, TypeScript types, validation rules, AND CMS fields
 - **Minimal dependencies**: Core stack is `drizzle-orm` + `zod` + `drizzle-zod` (all zero transitive deps)
 - **Secure by default**: CSRF protection, JWT auth, row-level policies, XSS-safe templates
-- **Flexible & extensible**: Pluggable auth, custom validation, row-level policies, error hooks
+- **Flexible & extensible**: Pluggable auth, custom validation, row-level policies, plugins with Worker isolation
 - **Cross-runtime**: Works in Deno and Node.js — Web Standard `Request`/`Response` everywhere
 - **Database-agnostic**: Works with any Drizzle-supported database (Postgres, MySQL, SQLite)
 
@@ -52,29 +52,38 @@ Each package has its own README with detailed API documentation:
 | [`@drizzle-cms/core`](packages/core/) | Schema introspection, field mapping, validation | [README](packages/core/README.md) |
 | [`@drizzle-cms/ui`](packages/ui/) | HTML generation, form rendering, views | [README](packages/ui/README.md) |
 | [`@drizzle-cms/handlers`](packages/handlers/) | CRUD route handlers (Request → Response) | [README](packages/handlers/README.md) |
+| [`@drizzle-cms/handlers-workers`](packages/handlers-workers/) | Worker sandbox for plugin isolation | [README](packages/handlers-workers/README.md) |
+| [`@drizzle-cms/plugins`](packages/plugins/) | Official plugins (audit-log, etc.) | [README](packages/plugins/README.md) |
 
 ```
 packages/
-├── core/           # Schema introspection, field mapping, validation
-│   │               # Runtime-agnostic, zero Deno/Node specific code
-│   ├── schema/     # Schema parsing and metadata extraction
-│   ├── fields/     # Column type → CMS field mapping
-│   └── validation/ # drizzle-zod integration
+├── core/              # Schema introspection, field mapping, validation
+│   │                  # Runtime-agnostic, zero Deno/Node specific code
+│   ├── schema/        # Schema parsing and metadata extraction
+│   ├── fields/        # Column type → CMS field mapping
+│   └── validation/    # drizzle-zod integration
 │
-├── ui/             # HTML generation, form rendering
-│   │               # Pure functions returning strings, zero dependencies
-│   ├── html.ts     # Tagged template with auto-escaping
-│   ├── forms/      # Form field renderers (text, select, etc.)
-│   ├── views/      # List, detail, edit views
-│   └── components/ # Layout, pagination, alerts
+├── ui/                # HTML generation, form rendering
+│   │                  # Pure functions returning strings, zero dependencies
+│   ├── html.ts        # Tagged template with auto-escaping
+│   ├── forms/         # Form field renderers (text, select, etc.)
+│   ├── views/         # List, detail, edit views
+│   └── components/    # Layout, pagination, alerts
 │
-└── handlers/       # CRUD route handlers (Web Standard Request/Response)
-    │               # Bring Your Own Server - works with any framework
-    ├── router.ts   # URL routing and handler dispatch
-    ├── crud.ts     # List, create, read, update, delete handlers
-    ├── csrf.ts     # CSRF token generation and validation
-    ├── http.ts     # HTTP response helpers
-    └── types.ts    # Handler types and options
+├── handlers/          # CRUD route handlers (Web Standard Request/Response)
+│   │                  # Bring Your Own Server - works with any framework
+│   ├── router.ts      # URL routing and handler dispatch
+│   ├── crud.ts        # List, create, read, update, delete handlers
+│   ├── auth/          # JWT authentication module
+│   └── plugins/       # Plugin registry and service (uses handlers-workers)
+│
+├── handlers-workers/  # Worker sandbox for plugin isolation
+│   │                  # Compatible with Deno and Node.js 20+
+│   ├── executor.ts    # Manages Worker instances
+│   └── sandbox/       # Worker script that runs plugin code
+│
+└── plugins/           # Official plugins
+    └── audit-log/     # Logs all CRUD operations
 ```
 
 ## Bring Your Own Server

@@ -8,7 +8,7 @@ import type {
   Serializable,
 } from './types.ts';
 import type { PluginRegistry } from './registry.ts';
-import { WorkerExecutor } from './executor.ts';
+import { WorkerExecutor } from '@drizzle-cms/handlers-workers';
 
 /**
  * Plugin service provides a convenient API for executing plugin hooks.
