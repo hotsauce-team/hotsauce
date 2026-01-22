@@ -8,33 +8,13 @@ import {
   PasswordProvider,
   readOnly,
 } from '@drizzle-cms/handlers';
-// Type-only import - no plugin code runs, just compile-time type checking
-import type { AuditLogConfig } from '@drizzle-cms/plugins/audit-log';
+import { isolatedAuditLogPlugin, inProcessFormatNamesPlugin } from './plugins.ts';
 import { parsers, posts, schema, users } from './schema.ts';
+
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
 const db = drizzle(client, { schema });
-
-// Create Worker for the audit log plugin
-// The plugin code is loaded ONLY in the Worker - no plugin code runs in main thread
-// You control permissions - the plugin code runs entirely in this Worker
-// Worker console.log outputs appear in the terminal prefixed with [audit]
-const auditLogWorker = new Worker(
-  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
-  {
-    type: 'module',
-    // Deno-specific: restrict what the plugin can access
-    deno: { permissions: {} },
-  },
-);
-
-// Audit log plugin configuration
-const auditLogConfig: AuditLogConfig = {
-  logReads: false, // Skip read operations (can be noisy)
-  logLists: false, // Skip list operations
-  // webhookUrl: 'https://audit.example.com/events', // Optional: send to external service
-};
 
 // Create CMS handler with authentication
 // Secrets can be passed directly or via environment variables:
@@ -55,40 +35,11 @@ const cmsHandler = createCmsHandler({
     categories: (readOnly()), // Admins: full access, others: read-only
   },
   // Plugins for extending CMS functionality
-  // Pass a pre-created Worker for full control over isolation and permissions
   plugins: [
     // Worker-isolated plugin (recommended for third-party)
-    {
-      name: 'audit-log',
-      worker: auditLogWorker,
-      // Filter which hooks are forwarded to the Worker
-      // Return true to invoke, false to skip (avoids Worker message overhead)
-      filter: (ctx) =>
-        ctx.hookType === 'action' &&
-        ['create', 'update', 'delete'].includes(ctx.action),
-      config: auditLogConfig,
-    },
+    isolatedAuditLogPlugin,
     // In-process plugin example (for trusted first-party code)
-    {
-      name: 'format-names',
-      hooks: {
-        transform: {
-          beforeSave: (ctx, data) => {
-            if (ctx.table === 'users' && typeof data['name'] === 'string') {
-              data['name'] = data['name']
-                .split(' ')
-                .map((part) =>
-                  part.charAt(0).toUpperCase() + part.slice(1).toLowerCase()
-                )
-                .join(' ');
-            }
-            return data;
-          },
-        },
-      },
-      // Filter can also be used for in-process plugins
-      filter: (ctx) => ctx.table !== 'sessions',
-    },
+    inProcessFormatNamesPlugin
   ],
   // User input parsers for validation (validation library agnostic)
   parsers,
