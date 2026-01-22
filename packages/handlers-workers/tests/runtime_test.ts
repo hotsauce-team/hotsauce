@@ -29,14 +29,14 @@ Deno.test('createWorkerPlugin throws error without allow function', async () => 
   
   // Should throw when allow is not provided
   assertThrows(
-    () => createWorkerPlugin(mockWorker, { config: {} }),
+    () => createWorkerPlugin(mockWorker, { config: {} } as any),
     Error,
     'Worker plugin requires an "allow" function'
   );
   
   // Should throw when options is empty
   assertThrows(
-    () => createWorkerPlugin(mockWorker, {}),
+    () => createWorkerPlugin(mockWorker, {} as any),
     Error,
     'Worker plugin requires an "allow" function'
   );

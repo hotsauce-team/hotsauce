@@ -26,7 +26,7 @@ import type { WorkerPluginOptions, WorkerMessage, WorkerResponse, FilterContext 
  */
 export function createWorkerPlugin<TConfig = unknown>(
   worker: Worker,
-  options: WorkerPluginOptions<TConfig> = {}
+  options: WorkerPluginOptions<TConfig>
 ): Plugin {
   // Require allow function for security
   if (!options.allow) {
@@ -148,39 +148,39 @@ export function createWorkerPlugin<TConfig = unknown>(
 
   // Before hooks - synchronous (must wait for validation)
   hooks.beforeCreate = (ctx: BeforeContext) => 
-    executeHook('beforeCreate', { ...ctx, data: ctx.data });
+    executeHook('beforeCreate', { ...ctx, hook: 'beforeCreate' as const, data: ctx.data });
   
   hooks.beforeUpdate = (ctx: BeforeContext) => 
-    executeHook('beforeUpdate', { ...ctx, data: ctx.data });
+    executeHook('beforeUpdate', { ...ctx, hook: 'beforeUpdate' as const, data: ctx.data });
   
   hooks.beforeDelete = (ctx: AfterContext) => 
-    executeHook('beforeDelete', { ...ctx, record: ctx.record });
+    executeHook('beforeDelete', { ...ctx, hook: 'beforeDelete' as const, record: ctx.record });
   
   hooks.beforeRead = (ctx: PluginContext & { recordId: string }) => 
-    executeHook('beforeRead', { ...ctx, recordId: ctx.recordId });
+    executeHook('beforeRead', { ...ctx, hook: 'beforeRead' as const, recordId: ctx.recordId });
   
   hooks.beforeList = (ctx: PluginContext) => 
-    executeHook('beforeList', ctx);
+    executeHook('beforeList', { ...ctx, hook: 'beforeList' as const });
 
   // After hooks - fire-and-forget (don't block response)
   hooks.afterCreate = (ctx: AfterContext) => {
-    executeHookAsync('afterCreate', { ...ctx, record: ctx.record });
+    executeHookAsync('afterCreate', { ...ctx, hook: 'afterCreate' as const, record: ctx.record });
   };
   
   hooks.afterUpdate = (ctx: AfterContext) => {
-    executeHookAsync('afterUpdate', { ...ctx, record: ctx.record });
+    executeHookAsync('afterUpdate', { ...ctx, hook: 'afterUpdate' as const, record: ctx.record });
   };
   
   hooks.afterDelete = (ctx: AfterContext) => {
-    executeHookAsync('afterDelete', { ...ctx, record: ctx.record });
+    executeHookAsync('afterDelete', { ...ctx, hook: 'afterDelete' as const, record: ctx.record });
   };
   
   hooks.afterRead = (ctx: AfterContext) => {
-    executeHookAsync('afterRead', { ...ctx, record: ctx.record });
+    executeHookAsync('afterRead', { ...ctx, hook: 'afterRead' as const, record: ctx.record });
   };
   
   hooks.afterList = (ctx: PluginContext & { records: Record<string, unknown>[] }) => {
-    executeHookAsync('afterList', { ...ctx, records: ctx.records });
+    executeHookAsync('afterList', { ...ctx, hook: 'afterList' as const, records: ctx.records });
   };
 
   return {
