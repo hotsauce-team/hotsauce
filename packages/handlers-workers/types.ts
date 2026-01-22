@@ -1,37 +1,31 @@
 // Worker-based plugin isolation types
 
-import type { Plugin, PluginHooks } from '@drizzle-cms/handlers';
+import type { PluginHooks, PluginContext } from '@drizzle-cms/handlers';
 
 /**
- * Deno-specific worker permissions
+ * Context passed to filter function
  */
-export interface DenoPermissions {
-  /** File read permissions */
-  read?: boolean | string[];
-  /** File write permissions */
-  write?: boolean | string[];
-  /** Network access permissions */
-  net?: boolean | string[];
-  /** Environment variable access */
-  env?: boolean | string[];
-  /** Subprocess execution */
-  run?: boolean | string[];
-  /** Foreign function interface */
-  ffi?: boolean | string[];
-  /** High-resolution time */
-  hrtime?: boolean;
+export interface FilterContext extends PluginContext {
+  /** Hook being executed */
+  hook: keyof PluginHooks;
+  /** Record data (for before/after hooks) */
+  data?: Record<string, unknown>;
+  /** Record (for after hooks) */
+  record?: Record<string, unknown>;
+  /** Record ID (for read/delete hooks) */
+  recordId?: string;
+  /** Records list (for afterList hook) */
+  records?: Record<string, unknown>[];
 }
 
 /**
  * Options for creating a worker-isolated plugin
  */
-export interface WorkerPluginOptions {
-  /** The plugin to run in isolation */
-  plugin: Plugin;
-  /** URL to the worker entry file */
-  workerUrl: URL | string;
-  /** Deno-specific permissions (ignored in Node.js) */
-  permissions?: DenoPermissions;
+export interface WorkerPluginOptions<TConfig = unknown> {
+  /** Plugin configuration to pass to worker */
+  config?: TConfig;
+  /** Filter function to selectively execute hooks */
+  filter?: (ctx: FilterContext) => boolean;
   /** Timeout for hook execution in milliseconds (default: 30000) */
   timeout?: number;
 }
@@ -39,13 +33,15 @@ export interface WorkerPluginOptions {
 /**
  * Message sent from main process to worker
  */
-export interface WorkerMessage {
+export interface WorkerMessage<TConfig = unknown> {
   /** Unique message ID for response correlation */
   id: string;
   /** Hook name to execute */
   hook: keyof PluginHooks;
   /** Context data (serialized) */
   context: unknown;
+  /** Plugin configuration */
+  config?: TConfig;
 }
 
 /**

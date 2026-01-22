@@ -4,9 +4,14 @@ import type { Plugin } from '@drizzle-cms/handlers';
 import type { WorkerMessage, WorkerResponse } from './types.ts';
 
 /**
- * Set up plugin execution in a worker context
+ * Plugin factory function type - creates plugin with config from message
+ */
+export type PluginFactory<TConfig = unknown> = (config?: TConfig) => Plugin;
+
+/**
+ * Set up plugin execution in a worker context with a plugin factory
  * 
- * This should be called in the worker file to handle incoming hook execution requests.
+ * The factory receives config from each message, allowing dynamic configuration.
  * 
  * @example
  * ```typescript
@@ -14,14 +19,14 @@ import type { WorkerMessage, WorkerResponse } from './types.ts';
  * import { createAuditLogPlugin } from '@drizzle-cms/plugins';
  * import { setupWorkerPlugin } from '@drizzle-cms/handlers-workers/worker';
  * 
- * const plugin = createAuditLogPlugin({
- *   // configuration
- * });
- * 
- * setupWorkerPlugin(plugin);
+ * setupWorkerPlugin((config) => 
+ *   createAuditLogPlugin({ ...config, db })
+ * );
  * ```
  */
-export function setupWorkerPlugin(plugin: Plugin): void {
+export function setupWorkerPlugin<TConfig = unknown>(
+  pluginFactory: PluginFactory<TConfig>
+): void {
   // Detect if we're in a worker context
   const isDenoWorker = typeof self !== 'undefined' && 'onmessage' in self;
   const isNodeWorker = typeof process !== 'undefined' && 'parentPort' in (process as any);
@@ -34,20 +39,20 @@ export function setupWorkerPlugin(plugin: Plugin): void {
 
   // Handle messages
   if (isDenoWorker) {
-    setupDenoWorker(plugin);
+    setupDenoWorker(pluginFactory);
   } else if (isNodeWorker) {
-    setupNodeWorker(plugin);
+    setupNodeWorker(pluginFactory);
   }
 }
 
 /**
  * Set up Deno Worker message handling
  */
-function setupDenoWorker(plugin: Plugin): void {
+function setupDenoWorker<TConfig>(pluginFactory: PluginFactory<TConfig>): void {
   // @ts-ignore: Worker context has onmessage
   self.onmessage = async (event: MessageEvent) => {
-    const message = event.data as WorkerMessage;
-    const response = await executePluginHook(plugin, message);
+    const message = event.data as WorkerMessage<TConfig>;
+    const response = await executePluginHook(pluginFactory, message);
     // @ts-ignore: Worker context has postMessage
     self.postMessage(response);
   };
@@ -56,7 +61,7 @@ function setupDenoWorker(plugin: Plugin): void {
 /**
  * Set up Node.js Worker message handling
  */
-function setupNodeWorker(plugin: Plugin): void {
+function setupNodeWorker<TConfig>(pluginFactory: PluginFactory<TConfig>): void {
   // @ts-ignore - Node.js specific
   const { parentPort } = require('worker_threads');
   
@@ -64,8 +69,8 @@ function setupNodeWorker(plugin: Plugin): void {
     throw new Error('parentPort not available in worker_threads');
   }
 
-  parentPort.on('message', async (message: WorkerMessage) => {
-    const response = await executePluginHook(plugin, message);
+  parentPort.on('message', async (message: WorkerMessage<TConfig>) => {
+    const response = await executePluginHook(pluginFactory, message);
     parentPort.postMessage(response);
   });
 }
@@ -73,13 +78,16 @@ function setupNodeWorker(plugin: Plugin): void {
 /**
  * Execute a plugin hook and return the result
  */
-async function executePluginHook(
-  plugin: Plugin,
-  message: WorkerMessage
+async function executePluginHook<TConfig>(
+  pluginFactory: PluginFactory<TConfig>,
+  message: WorkerMessage<TConfig>
 ): Promise<WorkerResponse> {
-  const { id, hook, context } = message;
+  const { id, hook, context, config } = message;
 
   try {
+    // Create plugin instance with config from message
+    const plugin = pluginFactory(config);
+    
     // Get the hook function
     const hookFn = plugin.hooks[hook];
     

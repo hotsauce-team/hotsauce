@@ -25,52 +25,75 @@ npm install @drizzle-cms/handlers-workers
 
 ### Basic Worker Isolation
 
+The user creates the Worker instance with appropriate permissions, then passes it to `createWorkerPlugin`:
+
 ```typescript
 import { createCmsHandler } from '@drizzle-cms/handlers';
 import { createWorkerPlugin } from '@drizzle-cms/handlers-workers';
-import { createAuditLogPlugin } from '@drizzle-cms/handlers';
 
-// Wrap your plugin with worker isolation
-const isolatedAuditPlugin = createWorkerPlugin({
-  plugin: createAuditLogPlugin({
-    db,
-    auditTable: schema.auditLogs,
-    logFullRecord: true,
-  }),
-  // Worker file path
-  workerUrl: new URL('./audit-worker.ts', import.meta.url),
-  // Optional: Deno-specific permissions
-  permissions: {
-    read: false,
-    write: ['./audit-logs'],
-    net: false,
+// Create worker with Deno permissions
+const auditWorker = new Worker(
+  new URL('./audit-worker.ts', import.meta.url),
+  { 
+    type: 'module',
+    deno: { 
+      permissions: { 
+        write: ['./audit-logs'],
+        read: false,
+        net: false 
+      } 
+    }
+  }
+);
+
+// Create plugin with config and filter
+const plugin = createWorkerPlugin(auditWorker, {
+  // Plugin configuration passed to worker
+  config: { 
+    auditTable: 'audit_logs',
+    logFullRecord: true 
+  },
+  // Optional: Filter which hooks to execute
+  filter: (ctx) => {
+    // Only audit these hooks
+    const allowedHooks = ['afterCreate', 'afterUpdate', 'afterDelete'];
+    if (!allowedHooks.includes(ctx.hook)) return false;
+    
+    // Skip admin tables
+    return ctx.table !== 'admin_logs';
   },
 });
 
 const handler = createCmsHandler({
   db,
   schema,
-  plugins: [isolatedAuditPlugin],
+  plugins: [plugin],
 });
 ```
 
 ### Worker Plugin File
 
-Create a worker file that handles plugin hooks:
+Create a worker file that receives config from each message:
 
 ```typescript
 // audit-worker.ts
-import { createAuditLogPlugin } from '@drizzle-cms/handlers';
+import { createAuditLogPlugin } from '@drizzle-cms/plugins';
 import { setupWorkerPlugin } from '@drizzle-cms/handlers-workers/worker';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
 
-// Initialize plugin in worker context
-const auditPlugin = createAuditLogPlugin({
-  // Plugin configuration
-  // Note: db instance passed via IPC proxy
+// Set up database connection in worker
+const sql = postgres(Deno.env.get('DATABASE_URL')!);
+const db = drizzle(sql);
+
+// Set up plugin factory - receives config from each message
+setupWorkerPlugin((config) => {
+  return createAuditLogPlugin({
+    db,
+    auditTable: config?.auditTable,
+    logFullRecord: config?.logFullRecord || false,
+  });
 });
-
-// Set up worker message handling
-setupWorkerPlugin(auditPlugin);
 ```
 
 ## How It Works
@@ -99,17 +122,51 @@ User Request → CRUD → Wait for Worker → Continue/Abort
 
 ### Deno Permissions
 
+Set permissions when creating the Worker instance:
+
 ```typescript
-createWorkerPlugin({
-  plugin: myPlugin,
-  workerUrl,
-  permissions: {
-    read: ['./data'],           // Limited file read
-    write: ['./logs'],          // Limited file write
-    net: ['api.example.com'],   // Specific domains only
-    env: false,                 // No env access
-    run: false,                 // No subprocess spawn
-  },
+const worker = new Worker(
+  new URL('./plugin-worker.ts', import.meta.url),
+  { 
+    type: 'module',
+    deno: { 
+      permissions: {
+        read: ['./data'],           // Limited file read
+        write: ['./logs'],          // Limited file write
+        net: ['api.example.com'],   // Specific domains only
+        env: false,                 // No env access
+        run: false,                 // No subprocess spawn
+      } 
+    }
+  }
+);
+```
+
+### Hook Filtering
+
+The `filter` function provides fine-grained control:
+
+```typescript
+createWorkerPlugin(worker, {
+  config: { /* ... */ },
+  filter: (ctx) => {
+    // Hook allowlist
+    if (!['afterCreate', 'afterUpdate'].includes(ctx.hook)) {
+      return false;
+    }
+    
+    // Table filtering
+    if (ctx.table === 'internal_logs') {
+      return false;
+    }
+    
+    // User-based filtering
+    if (ctx.authUser?.role === 'admin') {
+      return false; // Don't audit admins
+    }
+    
+    return true;
+  }
 });
 ```
 
@@ -124,24 +181,67 @@ Node.js worker_threads don't have built-in permission sandboxing. Use OS-level i
 
 ## API Reference
 
-### `createWorkerPlugin(options)`
+### `createWorkerPlugin<TConfig>(worker, options?)`
 
-Wraps a plugin to run in an isolated worker process.
+Creates a worker-isolated plugin wrapper.
 
-**Options:**
-- `plugin: Plugin` - The plugin to isolate
-- `workerUrl: URL` - Path to worker entry file
-- `permissions?: DenoPermissions` - Deno-only permission object
-- `timeout?: number` - Hook execution timeout (default: 30000ms)
+**Parameters:**
+- `worker: Worker` - Worker instance created by the user
+- `options?: WorkerPluginOptions<TConfig>` - Optional configuration
+  - `config?: TConfig` - Plugin configuration passed to worker
+  - `filter?: (ctx: FilterContext) => boolean` - Hook filter function
+  - `timeout?: number` - Hook execution timeout (default: 30000ms)
 
 **Returns:** `Plugin` - Worker-wrapped plugin
 
-### `setupWorkerPlugin(plugin)`
+**Example:**
+```typescript
+const worker = new Worker(new URL('./worker.ts', import.meta.url), {
+  type: 'module',
+  deno: { permissions: { write: ['./logs'] } }
+});
+
+const plugin = createWorkerPlugin(worker, {
+  config: { logLevel: 'info' },
+  filter: (ctx) => ctx.hook.startsWith('after')
+});
+```
+
+### `setupWorkerPlugin<TConfig>(pluginFactory)`
 
 Called inside worker file to handle IPC messages.
 
 **Parameters:**
-- `plugin: Plugin` - Plugin instance to execute
+- `pluginFactory: (config?: TConfig) => Plugin` - Factory that creates plugin with config
+
+**Example:**
+```typescript
+setupWorkerPlugin((config) => {
+  return createMyPlugin({
+    ...config,
+    db: createDbConnection()
+  });
+});
+```
+
+### `FilterContext`
+
+Context object passed to filter function:
+
+```typescript
+interface FilterContext {
+  hook: keyof PluginHooks;     // Hook name being executed
+  table: string;               // Table name
+  action: 'create' | 'update' | 'delete' | 'read' | 'list';
+  authUser?: { id: string };   // Authenticated user
+  request: Request;            // HTTP request
+  db: unknown;                 // Database instance
+  data?: Record<string, unknown>;      // For before hooks
+  record?: Record<string, unknown>;    // For after hooks
+  recordId?: string;           // For read/delete hooks
+  records?: Record<string, unknown>[]; // For list hooks
+}
+```
 
 ## Performance
 
