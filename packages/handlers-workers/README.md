@@ -46,15 +46,16 @@ const auditWorker = new Worker(
   }
 );
 
-// Create plugin with config and filter
+// Create plugin with config and allow function
 const plugin = createWorkerPlugin(auditWorker, {
   // Plugin configuration passed to worker
   config: { 
     auditTable: 'audit_logs',
     logFullRecord: true 
   },
-  // Optional: Filter which hooks to execute
-  filter: (ctx) => {
+  // Optional: Allow function to control which hooks execute
+  // Note: Defaults to deny all - must explicitly allow hooks
+  allow: (ctx) => {
     // Only audit these hooks
     const allowedHooks = ['afterCreate', 'afterUpdate', 'afterDelete'];
     if (!allowedHooks.includes(ctx.hook)) return false;
@@ -144,12 +145,12 @@ const worker = new Worker(
 
 ### Hook Filtering
 
-The `filter` function provides fine-grained control:
+The `allow` function provides fine-grained control over which hooks execute. **By default, all hooks are denied** - you must explicitly allow the hooks you need:
 
 ```typescript
 createWorkerPlugin(worker, {
   config: { /* ... */ },
-  filter: (ctx) => {
+  allow: (ctx) => {
     // Hook allowlist
     if (!['afterCreate', 'afterUpdate'].includes(ctx.hook)) {
       return false;
@@ -189,7 +190,7 @@ Creates a worker-isolated plugin wrapper.
 - `worker: Worker` - Worker instance created by the user
 - `options?: WorkerPluginOptions<TConfig>` - Optional configuration
   - `config?: TConfig` - Plugin configuration passed to worker
-  - `filter?: (ctx: FilterContext) => boolean` - Hook filter function
+  - `allow?: (ctx: FilterContext) => boolean` - Hook allow function (default: deny all)
   - `timeout?: number` - Hook execution timeout (default: 30000ms)
 
 **Returns:** `Plugin` - Worker-wrapped plugin
@@ -203,7 +204,7 @@ const worker = new Worker(new URL('./worker.ts', import.meta.url), {
 
 const plugin = createWorkerPlugin(worker, {
   config: { logLevel: 'info' },
-  filter: (ctx) => ctx.hook.startsWith('after')
+  allow: (ctx) => ctx.hook.startsWith('after')
 });
 ```
 
@@ -226,7 +227,7 @@ setupWorkerPlugin((config) => {
 
 ### `FilterContext`
 
-Context object passed to filter function:
+Context object passed to allow function:
 
 ```typescript
 interface FilterContext {

@@ -3,7 +3,7 @@
 import type { PluginHooks, PluginContext } from '@drizzle-cms/handlers';
 
 /**
- * Context passed to filter function
+ * Context passed to allow function
  */
 export interface FilterContext extends PluginContext {
   /** Hook being executed */
@@ -24,8 +24,8 @@ export interface FilterContext extends PluginContext {
 export interface WorkerPluginOptions<TConfig = unknown> {
   /** Plugin configuration to pass to worker */
   config?: TConfig;
-  /** Filter function to selectively execute hooks */
-  filter?: (ctx: FilterContext) => boolean;
+  /** Allow function to selectively execute hooks (default: deny all) */
+  allow?: (ctx: FilterContext) => boolean;
   /** Timeout for hook execution in milliseconds (default: 30000) */
   timeout?: number;
 }

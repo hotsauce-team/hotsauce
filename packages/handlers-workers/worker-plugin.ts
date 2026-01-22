@@ -20,7 +20,7 @@ import type { WorkerPluginOptions, WorkerMessage, WorkerResponse, FilterContext 
  * // Create plugin
  * const plugin = createWorkerPlugin(worker, {
  *   config: { logFullRecord: true },
- *   filter: (ctx) => ['afterCreate', 'afterUpdate'].includes(ctx.hook)
+ *   allow: (ctx) => ['afterCreate', 'afterUpdate'].includes(ctx.hook)
  * });
  * ```
  */
@@ -54,15 +54,15 @@ export function createWorkerPlugin<TConfig = unknown>(
     }
   };
 
-  // Check if hook should be executed based on filter
+  // Check if hook should be executed based on allow function
   function shouldExecute(hook: keyof PluginHooks, context: FilterContext): boolean {
-    if (!options.filter) return true;
-    return options.filter({ ...context, hook });
+    if (!options.allow) return false; // Deny by default (secure)
+    return options.allow({ ...context, hook });
   }
 
   // Send hook execution to worker
   async function executeHook(hook: keyof PluginHooks, context: FilterContext): Promise<void> {
-    // Apply filter
+    // Apply allow function
     if (!shouldExecute(hook, context)) {
       return; // Skip execution
     }
@@ -99,7 +99,7 @@ export function createWorkerPlugin<TConfig = unknown>(
 
   // Fire-and-forget for after hooks
   function executeHookAsync(hook: keyof PluginHooks, context: FilterContext): void {
-    // Apply filter
+    // Apply allow function
     if (!shouldExecute(hook, context)) {
       return; // Skip execution
     }
