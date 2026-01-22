@@ -38,7 +38,8 @@ const cmsHandler = createCmsHandler({
   parsers,
   // Plugins for extending CMS functionality
   plugins: [
-    // Audit log plugin - tracks all database changes
+    // Audit log plugin - tracks all database changes (in-process)
+    // For worker-based isolation, see packages/handlers-workers/README.md
     createAuditLogPlugin({
       db,
       auditTable: auditLogs,

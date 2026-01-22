@@ -1177,20 +1177,32 @@ For enhanced security, you can run plugins in isolated worker processes using th
 
 ```ts
 import { createWorkerPlugin } from '@drizzle-cms/handlers-workers';
-import { createAuditLogPlugin } from '@drizzle-cms/plugins';
 
-// Wrap plugin to run in isolated worker
-const isolatedAuditPlugin = createWorkerPlugin({
-  plugin: createAuditLogPlugin({
-    db,
+// Create worker with Deno permissions
+const auditWorker = new Worker(
+  new URL('./audit-worker.ts', import.meta.url),
+  { 
+    type: 'module',
+    deno: { 
+      permissions: { 
+        write: ['./audit-logs'],
+        read: false,
+        net: false 
+      } 
+    }
+  }
+);
+
+// Wrap worker with plugin interface
+const isolatedAuditPlugin = createWorkerPlugin(auditWorker, {
+  config: { 
     auditTable: schema.auditLogs,
-    logFullRecord: true,
-  }),
-  workerUrl: new URL('./audit-worker.ts', import.meta.url),
-  permissions: {  // Deno-only: restrict worker permissions
-    read: false,
-    write: ['./audit-logs'],
-    net: false,
+    logFullRecord: true 
+  },
+  // REQUIRED: Must explicitly allow hooks for security
+  allow: (ctx) => {
+    const allowedHooks = ['afterCreate', 'afterUpdate', 'afterDelete'];
+    return allowedHooks.includes(ctx.hook) && ctx.table !== 'admin_logs';
   },
 });
 
