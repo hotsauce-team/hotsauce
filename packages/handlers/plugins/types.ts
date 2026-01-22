@@ -194,7 +194,22 @@ export interface PluginConfig {
 }
 
 /**
- * Type guard to check if plugin runs in a Worker
+ * Type guard to check if a plugin is configured to run in a Worker.
+ *
+ * Worker plugins have their code executed in an isolated Worker thread,
+ * while in-process plugins run directly in the main thread.
+ *
+ * @param config - The plugin configuration to check
+ * @returns `true` if the plugin has a Worker instance configured
+ *
+ * @example
+ * ```ts
+ * if (isWorkerPlugin(pluginConfig)) {
+ *   // Plugin runs in isolated Worker
+ * } else {
+ *   // Plugin runs in main thread
+ * }
+ * ```
  */
 export function isWorkerPlugin(config: PluginConfig): boolean {
   return config.worker !== undefined;

@@ -36,6 +36,6 @@ export {
   type RegisteredPlugin,
 } from './registry.ts';
 
-export { createWorkerExecutor, WorkerExecutor } from './executor.ts';
+export { createWorkerExecutor, WorkerExecutor } from '@drizzle-cms/handlers-workers';
 
 export { createPluginService, PluginService } from './service.ts';

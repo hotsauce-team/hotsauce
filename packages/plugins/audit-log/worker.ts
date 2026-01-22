@@ -1,12 +1,17 @@
 // Audit log plugin - Worker module version
 // This file is loaded directly by a Worker and handles all messages
 
+/// <reference lib="webworker" />
+
 import type {
   ActionContext,
   CrudAction,
   PluginHooks,
   Serializable,
 } from '@drizzle-cms/handlers-workers';
+
+// Declare Worker globals for TypeScript
+declare const self: DedicatedWorkerGlobalScope;
 
 // ─────────────────────────────────────────────────────────────
 // Worker message types
@@ -25,34 +30,9 @@ interface WorkerResponse {
   error?: string;
 }
 
-/**
- * Configuration for the audit log plugin
- */
-export interface AuditLogConfig {
-  /** Webhook URL to POST audit events to */
-  webhookUrl?: string;
-  /** Tables to include (empty = all) */
-  includeTables?: string[];
-  /** Tables to exclude */
-  excludeTables?: string[];
-  /** Whether to log read operations */
-  logReads?: boolean;
-  /** Whether to log list operations */
-  logLists?: boolean;
-}
-
-/**
- * Audit log entry structure
- */
-export interface AuditEntry {
-  timestamp: string;
-  action: string;
-  table: string;
-  recordId?: string | number;
-  user?: { sub: string; role?: string };
-  oldData?: unknown;
-  newData?: unknown;
-}
+// Import shared types from mod.ts to avoid duplication
+import type { AuditEntry, AuditLogConfig } from './mod.ts';
+export type { AuditEntry, AuditLogConfig };
 
 // ─────────────────────────────────────────────────────────────
 // Plugin state
@@ -148,7 +128,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       }
 
       case 'action': {
-        const actionPayload = payload as {
+        const actionPayload = payload as unknown as {
           action: CrudAction;
           ctx: ActionContext;
         };

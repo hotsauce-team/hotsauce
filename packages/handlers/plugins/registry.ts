@@ -235,7 +235,22 @@ export class PluginRegistry {
 }
 
 /**
- * Create a plugin registry from configuration
+ * Create a plugin registry and register the provided plugins.
+ *
+ * This is a convenience factory that creates a new `PluginRegistry`
+ * and registers all plugins in one step.
+ *
+ * @param plugins - Array of plugin configurations to register
+ * @returns A new `PluginRegistry` with all plugins registered
+ * @throws {PluginValidationError} If any plugin configuration is invalid
+ *
+ * @example
+ * ```ts
+ * const registry = createPluginRegistry([
+ *   { name: 'audit-log', worker: auditWorker },
+ *   { name: 'custom', hooks: { on: { create: async () => {} } } },
+ * ]);
+ * ```
  */
 export function createPluginRegistry(
   plugins: PluginConfig[] = [],
