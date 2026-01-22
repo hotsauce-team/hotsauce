@@ -9,7 +9,7 @@ import {
   readOnly,
 } from '../../packages/handlers/mod.ts';
 import { createWorkerPlugin } from '../../packages/handlers-workers/mod.ts';
-import { schema, posts, users, auditLogs, parsers } from './schema.ts';
+import { schema, posts, users, parsers } from './schema.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
@@ -32,28 +32,24 @@ const cmsHandler = createCmsHandler({
   policies: {
     posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
     categories: (readOnly()), // Admins: full access, others: read-only
-    auditLogs: readOnly(), // Audit logs are read-only for everyone
   },
   // User input parsers for validation (validation library agnostic)
   parsers,
   // Plugins for extending CMS functionality with process isolation
   plugins: [
     // Audit log plugin with worker-based isolation
-    // The worker runs in a separate process with limited permissions
+    // The worker runs in a separate process with no database access (just console.logs)
     createWorkerPlugin(
-      // Create worker with Deno permissions
-      new Worker(new URL('./audit-worker.ts', import.meta.url), {
-        type: 'module',
-        deno: {
-          permissions: {
-            read: ['./data'], // Allow reading database
-            write: ['./data'], // Allow writing to database
-            net: false, // No network access
-            env: false, // No environment variable access
-            run: false, // No subprocess execution
+      // Create worker pointing to plugin package's worker entrypoint
+      new Worker(
+        import.meta.resolve('@drizzle-cms/plugins/audit-log-worker.ts'),
+        {
+          type: 'module',
+          deno: {
+            permissions: {}, // No permissions needed for console logging
           },
         },
-      }),
+      ),
       {
         // Plugin configuration passed to worker via IPC
         config: {
@@ -78,8 +74,8 @@ const PORT = 3000;
 
 console.log(`🚀 CMS running at http://localhost:${PORT}/admin`);
 console.log(`   Login with the admin account created by seed.ts`);
-console.log(`   All changes are logged via worker-based audit plugin`);
-console.log(`   Worker runs in isolated process with limited permissions`);
+console.log(`   All changes are logged to console via worker-based audit plugin`);
+console.log(`   Worker runs in isolated process with zero permissions`);
 
 Deno.serve({ port: PORT, hostname: '127.0.0.1' }, async (request: Request) => {
   const url = new URL(request.url);
