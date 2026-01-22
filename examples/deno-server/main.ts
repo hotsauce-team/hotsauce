@@ -8,7 +8,7 @@ import {
   PasswordProvider,
   readOnly,
 } from '../../packages/handlers/mod.ts';
-import { createAuditLogPlugin } from '../../packages/plugins/mod.ts';
+import { createWorkerPlugin } from '../../packages/handlers-workers/mod.ts';
 import { schema, posts, users, auditLogs, parsers } from './schema.ts';
 
 // Database connection (persisted to ./data)
@@ -36,16 +36,38 @@ const cmsHandler = createCmsHandler({
   },
   // User input parsers for validation (validation library agnostic)
   parsers,
-  // Plugins for extending CMS functionality
+  // Plugins for extending CMS functionality with process isolation
   plugins: [
-    // Audit log plugin - tracks all database changes (in-process)
-    // For worker-based isolation, see packages/handlers-workers/README.md
-    createAuditLogPlugin({
-      db,
-      auditTable: auditLogs,
-      logFullRecord: true, // Include full record data in logs
-      excludeTables: ['audit_logs'], // Don't audit the audit table itself
-    }),
+    // Audit log plugin with worker-based isolation
+    // The worker runs in a separate process with limited permissions
+    createWorkerPlugin(
+      // Create worker with Deno permissions
+      new Worker(new URL('./audit-worker.ts', import.meta.url), {
+        type: 'module',
+        deno: {
+          permissions: {
+            read: ['./data'], // Allow reading database
+            write: ['./data'], // Allow writing to database
+            net: false, // No network access
+            env: false, // No environment variable access
+            run: false, // No subprocess execution
+          },
+        },
+      }),
+      {
+        // Plugin configuration passed to worker via IPC
+        config: {
+          logFullRecord: true,
+          excludeTables: ['audit_logs'],
+        },
+        // REQUIRED: Explicitly allow which hooks can execute (secure by default)
+        allow: (ctx) => {
+          // Only audit create, update, and delete operations
+          const allowedHooks = ['afterCreate', 'afterUpdate', 'afterDelete'];
+          return allowedHooks.includes(ctx.hook);
+        },
+      },
+    ),
   ],
   // Log errors to console (in production, use a proper logging service)
   onError: (error, context) => console.error('CMS Error:', { error, context }),
@@ -56,7 +78,8 @@ const PORT = 3000;
 
 console.log(`🚀 CMS running at http://localhost:${PORT}/admin`);
 console.log(`   Login with the admin account created by seed.ts`);
-console.log(`   All changes are logged to the audit_logs table`);
+console.log(`   All changes are logged via worker-based audit plugin`);
+console.log(`   Worker runs in isolated process with limited permissions`);
 
 Deno.serve({ port: PORT, hostname: '127.0.0.1' }, async (request: Request) => {
   const url = new URL(request.url);
