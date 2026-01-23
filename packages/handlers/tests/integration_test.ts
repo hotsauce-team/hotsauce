@@ -129,6 +129,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
   function createHandler() {
     return createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',
@@ -451,6 +452,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
   await t.step('authentication check', async () => {
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',
@@ -564,7 +566,7 @@ Deno.test('integration: JWT auth tests', async (t) => {
           roleField: 'role',
         }),
       },
-      policies: {},
+      policies: 'dangerously-open',
       ...extraOptions,
     });
   }
@@ -1006,6 +1008,174 @@ Deno.test('integration: policy tests', async (t) => {
     assertEquals(post?.title, 'Alice Post');
     assertEquals(post?.body, 'Original');
   });
+
+  // Cleanup
+  await client.close();
+});
+
+// ============================================================================
+// Secure by Default Tests - auth enabled but policies undefined
+// ============================================================================
+
+Deno.test('integration: secure by default tests', async (t) => {
+  // Create single PGlite instance for all secure-by-default tests
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithAuth });
+
+  // Create tables
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      name VARCHAR(100) NOT NULL,
+      bio TEXT,
+      is_admin BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS posts (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      body TEXT,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS admin_users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role VARCHAR(50)
+    )
+  `);
+
+  // Insert test data
+  await db.insert(users).values({ email: 'alice@test.com', name: 'Alice' });
+  await db.insert(posts).values({
+    title: 'Test Post',
+    body: 'Content',
+    authorId: 1,
+  });
+
+  // Create admin user for auth
+  const passwordHash = await hashPassword('admin123');
+  await db.insert(adminUsers).values({
+    email: 'admin@test.com',
+    passwordHash,
+    role: 'admin',
+  });
+
+  await t.step(
+    'denies access when auth enabled but policies undefined (safeguard test)',
+    async () => {
+      // This tests the runtime safeguard in crud.ts that denies access
+      // when auth is enabled but policies are undefined.
+      // This scenario shouldn't happen with proper Zod validation,
+      // but the safeguard protects against bugs or bypasses.
+
+      // Import the handleList function directly to test with crafted options
+      const { handleList } = await import('../crud.ts');
+      const { introspectFullSchema } = await import('@drizzle-cms/core');
+
+      const introspected = introspectFullSchema(schemaWithAuth);
+      const usersTable = introspected.tables.find((t) => t.name === 'users')!;
+
+      // Craft options with auth enabled but policies undefined
+      const craftedOptions = {
+        introspected,
+        db,
+        basePath: '/admin',
+        title: 'Test CMS',
+        csrfSecret: TEST_CSRF_SECRET,
+        isAuthenticated: () => true,
+        canAccess: () => true,
+        parsers: {},
+        policies: undefined, // This is what we're testing!
+        auth: {
+          secret: AUTH_SECRET,
+          provider: new PasswordProvider({ db, usersTable: adminUsers }),
+          maxAge: 3600,
+          cookieName: 'cms_token',
+          loginTitle: 'Login',
+          identityLabel: 'Email',
+        },
+      };
+
+      const request = new Request('http://localhost/admin/users');
+      const ctx = {
+        request,
+        url: new URL(request.url),
+        // @ts-ignore - intentionally testing with undefined policies
+        options: craftedOptions,
+        route: { type: 'list', table: usersTable },
+        authUser: undefined,
+      };
+
+      // @ts-ignore - RouteContext type mismatch is expected for this safeguard test
+      const response = await handleList(ctx);
+
+      // Should redirect with forbidden flash message
+      assertEquals(response.status, 303);
+      const location = response.headers.get('Location');
+      assertStringIncludes(location ?? '', '_flash=list_forbidden');
+    },
+  );
+
+  await t.step(
+    'allows access with policies: dangerously-open (explicit opt-in)',
+    async () => {
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithAuth,
+        basePath: '/admin',
+        auth: 'dangerously-open',
+      });
+
+      const request = new Request('http://localhost/admin/users');
+      const response = await handler(request);
+
+      // Should allow access - no auth required
+      assertEquals(response.status, 200);
+      const text = await response.text();
+      assertStringIncludes(text, 'Alice');
+    },
+  );
+
+  await t.step(
+    'allows CRUD operations with dangerously-open auth',
+    async () => {
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithAuth,
+        basePath: '/admin',
+        auth: 'dangerously-open',
+      });
+
+      // Test list
+      const listReq = new Request('http://localhost/admin/posts');
+      const listRes = await handler(listReq);
+      assertEquals(listRes.status, 200);
+
+      // Test read
+      const readReq = new Request('http://localhost/admin/posts/1');
+      const readRes = await handler(readReq);
+      assertEquals(readRes.status, 200);
+
+      // Test create form
+      const createReq = new Request('http://localhost/admin/posts/new');
+      const createRes = await handler(createReq);
+      assertEquals(createRes.status, 200);
+
+      // Test edit form
+      const editReq = new Request('http://localhost/admin/posts/1/edit');
+      const editRes = await handler(editReq);
+      assertEquals(editRes.status, 200);
+    },
+  );
 
   // Cleanup
   await client.close();

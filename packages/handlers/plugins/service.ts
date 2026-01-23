@@ -83,8 +83,8 @@ export class PluginService {
 
     return plugins.filter((registered) => {
       const filter = registered.plugin.filter;
-      // No filter = include all
-      if (!filter) return true;
+      // 'dangerously-open' = include all
+      if (filter === 'dangerously-open') return true;
       // Apply filter function
       return filter(filterCtx);
     });

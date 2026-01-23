@@ -146,7 +146,11 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   const drizzleTable = table.table;
 
   // Apply policy for list action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(cmsUrl(basePath), 'list_forbidden');
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'list');
 
@@ -290,7 +294,11 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const drizzleTable = table.table;
 
   // Apply policy for read action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'read_forbidden');
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'read');
 
@@ -406,7 +414,11 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
   const drizzleTable = table.table;
 
   // Apply policy for create action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'create');
 
@@ -510,7 +522,14 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   const drizzleTable = table.table;
 
   // Apply policy for update action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(
+      cmsUrl(basePath, table.name, recordId),
+      'update_forbidden',
+    );
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'update');
 
@@ -663,7 +682,11 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   const drizzleTable = table.table;
 
   // Apply policy for delete action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'delete');
 

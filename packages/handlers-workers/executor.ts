@@ -65,14 +65,31 @@ export interface PluginCapabilities {
  * Plugin configuration (flat structure).
  * Note: The full PluginConfig in handlers/plugins/types.ts also has `filter`.
  * This simplified version is used by the executor which doesn't need filter.
+ *
+ * For Worker plugins, `hooks` may be a declarative declaration (arrays)
+ * rather than actual functions. The executor handles both patterns.
  */
 export interface PluginConfig {
   name: string;
   description?: string;
   worker?: Worker;
-  hooks?: PluginHooks;
+  /**
+   * For Worker plugins: declarative arrays like { on: ['create', 'update'] }
+   * For in-process plugins: actual functions like { on: { create: fn } }
+   */
+  hooks?: PluginHooks | WorkerHookDeclaration;
   capabilities?: PluginCapabilities;
   config?: object;
+}
+
+/**
+ * Declarative hook names for Worker plugins.
+ * Worker plugins declare which hooks they handle; the actual functions
+ * live in the Worker module, not in the main thread config.
+ */
+export interface WorkerHookDeclaration {
+  transform?: ('beforeSave' | 'afterRead')[];
+  on?: ('create' | 'read' | 'update' | 'delete' | 'list')[];
 }
 
 /**
@@ -159,10 +176,9 @@ export class WorkerExecutor {
 
     for (const registered of plugins) {
       const { plugin, isWorker } = registered;
-      const hook = plugin.hooks?.transform?.beforeSave;
 
       if (isWorker) {
-        // Send to Worker
+        // Send to Worker (declarative hooks - Worker handles internally)
         const response = await this.sendToWorker(
           plugin.name,
           'transform:beforeSave',
@@ -177,9 +193,12 @@ export class WorkerExecutor {
         ) {
           result = response as Record<string, Serializable>;
         }
-      } else if (hook) {
-        // Execute in-process
-        result = await hook(ctx, result);
+      } else {
+        // Execute in-process hook (function form)
+        const hook = this.getInProcessTransformHook(plugin.hooks, 'beforeSave');
+        if (hook) {
+          result = await hook(ctx, result);
+        }
       }
     }
 
@@ -198,10 +217,9 @@ export class WorkerExecutor {
 
     for (const registered of plugins) {
       const { plugin, isWorker } = registered;
-      const hook = plugin.hooks?.transform?.afterRead;
 
       if (isWorker) {
-        // Send to Worker
+        // Send to Worker (declarative hooks - Worker handles internally)
         const response = await this.sendToWorker(
           plugin.name,
           'transform:afterRead',
@@ -216,13 +234,41 @@ export class WorkerExecutor {
         ) {
           result = response as Record<string, Serializable>;
         }
-      } else if (hook) {
-        // Execute in-process
-        result = await hook(ctx, result);
+      } else {
+        // Execute in-process hook (function form)
+        const hook = this.getInProcessTransformHook(plugin.hooks, 'afterRead');
+        if (hook) {
+          result = await hook(ctx, result);
+        }
       }
     }
 
     return result;
+  }
+
+  /**
+   * Get a transform hook from in-process plugin hooks (function form)
+   */
+  private getInProcessTransformHook(
+    hooks: PluginConfig['hooks'],
+    hookName: 'beforeSave' | 'afterRead',
+  ):
+    | ((
+      ctx: PluginContext,
+      data: Record<string, Serializable>,
+    ) => Promise<Record<string, Serializable>> | Record<string, Serializable>)
+    | undefined {
+    if (!hooks) return undefined;
+    // Check if it's in-process hooks (object with functions, not array)
+    const transformHooks = hooks.transform;
+    if (!transformHooks || Array.isArray(transformHooks)) return undefined;
+    return (transformHooks as Record<
+      string,
+      (
+        ctx: PluginContext,
+        data: Record<string, Serializable>,
+      ) => Promise<Record<string, Serializable>> | Record<string, Serializable>
+    >)[hookName];
   }
 
   /**
@@ -239,44 +285,42 @@ export class WorkerExecutor {
 
     for (const registered of plugins) {
       const { plugin, isWorker } = registered;
-      const hook = plugin.hooks?.on?.[action];
 
       if (isWorker) {
-        // Worker plugins: send message, assume fire-and-forget unless hooks say otherwise
-        const isFireAndForget = hook ? this.isFireAndForget(hook) : true;
-
+        // Worker plugins: declarative hooks (arrays)
+        // Workers default to fire-and-forget unless capabilities say otherwise
         const promise = this.executeActionHook(plugin.name, action, ctx);
 
-        if (isFireAndForget) {
-          fireAndForgetPromises.push(
-            promise.catch((error) => {
-              console.error(
-                `Plugin ${plugin.name} action hook (${action}) failed:`,
-                error instanceof Error ? error.message : error,
-              );
-            }),
-          );
-        } else {
-          blockingPromises.push(promise);
-        }
-      } else if (hook) {
-        // In-process: execute directly
-        const isFireAndForget = this.isFireAndForget(hook);
-        const handler = typeof hook === 'function' ? hook : hook.handler;
+        fireAndForgetPromises.push(
+          promise.catch((error) => {
+            console.error(
+              `Plugin ${plugin.name} action hook (${action}) failed:`,
+              error instanceof Error ? error.message : error,
+            );
+          }),
+        );
+      } else {
+        // In-process plugins: function hooks
+        const hook = this.getInProcessActionHook(plugin.hooks, action);
 
-        const promise = Promise.resolve(handler(ctx)).then(() => {});
+        if (hook) {
+          const isFireAndForget = this.isFireAndForget(hook);
+          const handler = typeof hook === 'function' ? hook : hook.handler;
 
-        if (isFireAndForget) {
-          fireAndForgetPromises.push(
-            promise.catch((error) => {
-              console.error(
-                `Plugin ${plugin.name} action hook (${action}) failed:`,
-                error instanceof Error ? error.message : error,
-              );
-            }),
-          );
-        } else {
-          blockingPromises.push(promise);
+          const promise = Promise.resolve(handler(ctx)).then(() => {});
+
+          if (isFireAndForget) {
+            fireAndForgetPromises.push(
+              promise.catch((error) => {
+                console.error(
+                  `Plugin ${plugin.name} action hook (${action}) failed:`,
+                  error instanceof Error ? error.message : error,
+                );
+              }),
+            );
+          } else {
+            blockingPromises.push(promise);
+          }
         }
       }
     }
@@ -285,6 +329,20 @@ export class WorkerExecutor {
     await Promise.allSettled(blockingPromises);
 
     // Fire-and-forget hooks run in background (not awaited)
+  }
+
+  /**
+   * Get an action hook from in-process plugin hooks (function form)
+   */
+  private getInProcessActionHook(
+    hooks: PluginConfig['hooks'],
+    action: CrudAction,
+  ): ActionHook | undefined {
+    if (!hooks) return undefined;
+    // Check if it's in-process hooks (object with functions, not array)
+    const onHooks = hooks.on;
+    if (!onHooks || Array.isArray(onHooks)) return undefined;
+    return (onHooks as Record<string, ActionHook>)[action];
   }
 
   /**

@@ -194,7 +194,8 @@ export interface CmsOptionsWithAuth extends CmsOptionsBase {
    * Policies return SQL conditions that filter queries atomically.
    * This prevents TOCTOU race conditions - the permission check IS the query.
    *
-   * Use `{}` to grant full access to all authenticated users.
+   * Tables without an explicit policy get full access (like 'dangerously-open').
+   * Use `'dangerously-open'` or `{}` to grant full access to all tables.
    *
    * @example
    * ```ts
@@ -209,42 +210,57 @@ export interface CmsOptionsWithAuth extends CmsOptionsBase {
    *
    *   // Everyone can read, no one can modify
    *   audit_logs: readOnly(),
+   *
+   *   // Tables not listed here get full access
    * }
+   *
+   * // Or bypass policies entirely:
+   * policies: 'dangerously-open'
    * ```
    */
-  policies: Policies;
+  policies: Policies | 'dangerously-open';
 }
 
 /**
  * CMS options without authentication.
+ * Requires explicit acknowledgment that the CMS is open to anyone.
  * Policies are optional when auth is not used.
  */
 export interface CmsOptionsWithoutAuth extends CmsOptionsBase {
-  /** Auth not configured */
-  auth?: undefined;
-
   /**
-   * Row-level security policies (optional without auth).
+   * Explicit acknowledgment that the CMS is open without authentication.
    *
-   * Policies return SQL conditions that filter queries atomically.
-   * This prevents TOCTOU race conditions - the permission check IS the query.
+   * This string literal forces developers to consciously opt-in to running
+   * the CMS without any authentication, preventing accidental exposure.
    *
    * @example
    * ```ts
-   * import { ownedBy, adminOr, readOnly } from '@drizzle-cms/handlers';
-   *
-   * policies: {
-   *   posts: ownedBy(schema.posts, 'authorId'),
-   * }
+   * createCmsHandler({
+   *   db,
+   *   schema,
+   *   auth: 'dangerously-open', // I understand this is insecure
+   * });
    * ```
    */
-  policies?: Policies;
+  auth: 'dangerously-open';
+
+  /**
+   * Policies must NOT be set when auth is 'dangerously-open'.
+   *
+   * Without authentication, there's no user context for policies to evaluate.
+   * If you need policies, configure proper authentication instead.
+   */
+  policies?: never;
 }
 
 /**
  * Options for creating the CMS handler.
  *
- * When `auth` is provided, `policies` is required to ensure explicit authorization.
+ * Authentication is required by design:
+ * - Provide `auth: { provider: ... }` for proper authentication
+ * - Or use `auth: 'dangerously-open'` to explicitly run without auth
+ *
+ * When `auth` is a configuration object, `policies` is required to ensure explicit authorization.
  * Use `policies: {}` to grant full access to all authenticated users.
  */
 export type CmsOptions = CmsOptionsWithAuth | CmsOptionsWithoutAuth;
@@ -310,8 +326,8 @@ export interface ResolvedCmsOptions {
   onError?: (error: Error, context: ErrorContext) => void;
   /** Custom parsers for validation */
   parsers: Parsers;
-  /** Row-level security policies */
-  policies: Policies;
+  /** Row-level security policies (undefined if auth is disabled) */
+  policies?: Policies;
   /** JWT auth config (resolved) - undefined if auth disabled */
   auth?: ResolvedAuthOptions;
   /** Plugin registry (undefined if no plugins configured) */

@@ -156,6 +156,7 @@ Deno.test('ActionHook: isFireAndForget helper', () => {
 Deno.test('Plugin: minimal definition', () => {
   const plugin: PluginConfig = {
     name: 'minimal',
+    filter: 'dangerously-open',
   };
   assertEquals(plugin.name, 'minimal');
 });
@@ -163,6 +164,7 @@ Deno.test('Plugin: minimal definition', () => {
 Deno.test('Plugin: with transforms only', () => {
   const plugin: PluginConfig = {
     name: 'transform-only',
+    filter: (ctx) => ctx.hookType.startsWith('transform'),
     hooks: {
       transform: {
         beforeSave: async (
@@ -179,6 +181,7 @@ Deno.test('Plugin: with transforms only', () => {
 Deno.test('Plugin: with actions only', () => {
   const plugin: PluginConfig = {
     name: 'action-only',
+    filter: (ctx) => ctx.hookType === 'action',
     hooks: {
       on: {
         create: async () => {},
@@ -194,6 +197,7 @@ Deno.test('Plugin: with actions only', () => {
 Deno.test('Plugin: with routes', () => {
   const plugin: PluginConfig = {
     name: 'with-routes',
+    filter: 'dangerously-open',
     routes: [
       {
         path: '/api/custom',
@@ -212,6 +216,7 @@ Deno.test('Plugin: with routes', () => {
 Deno.test('Plugin: with capabilities', () => {
   const plugin: PluginConfig = {
     name: 'with-caps',
+    filter: 'dangerously-open',
     capabilities: {
       network: ['api.example.com', '*.s3.amazonaws.com'],
       transforms: ['beforeSave'],
@@ -228,6 +233,9 @@ Deno.test('Plugin: full example', () => {
   const plugin: PluginConfig = {
     name: 'audit-logger',
     description: 'Logs all CRUD operations to external service',
+    filter: (ctx) =>
+      ctx.hookType === 'action' &&
+      ['create', 'update', 'delete'].includes(ctx.action),
     capabilities: {
       actions: ['create', 'update', 'delete'],
       network: ['audit.example.com'],
@@ -601,12 +609,14 @@ Deno.test('Plugin: with filter function', () => {
 
   assertEquals(plugin.name, 'audit-log');
   assertEquals(typeof plugin.filter, 'function');
+  // Type guard: filter is a function in this test
+  const filterFn = plugin.filter as (ctx: FilterContext) => boolean;
   assertEquals(
-    plugin.filter!({ hookType: 'action', table: 'posts', action: 'create' }),
+    filterFn({ hookType: 'action', table: 'posts', action: 'create' }),
     true,
   );
   assertEquals(
-    plugin.filter!({ hookType: 'action', table: 'posts', action: 'read' }),
+    filterFn({ hookType: 'action', table: 'posts', action: 'read' }),
     false,
   );
 });
@@ -629,15 +639,23 @@ Deno.test('Plugin: filter replaces stub hooks for Worker filtering', () => {
   };
 
   assertEquals(
-    newPlugin.filter!({ hookType: 'action', table: 'posts', action: 'create' }),
+    (newPlugin.filter as (ctx: FilterContext) => boolean)({
+      hookType: 'action',
+      table: 'posts',
+      action: 'create',
+    }),
     true,
   );
   assertEquals(
-    newPlugin.filter!({ hookType: 'action', table: 'posts', action: 'list' }),
+    (newPlugin.filter as (ctx: FilterContext) => boolean)({
+      hookType: 'action',
+      table: 'posts',
+      action: 'list',
+    }),
     false,
   );
   assertEquals(
-    newPlugin.filter!({
+    (newPlugin.filter as (ctx: FilterContext) => boolean)({
       hookType: 'transform:beforeSave',
       table: 'posts',
       action: 'create',

@@ -19,7 +19,7 @@ import {
   SECURITY_HEADERS,
 } from './http.ts';
 import { generateCsrfToken, validateCsrfToken } from './csrf.ts';
-import { validateCmsOptions } from './validation.ts';
+import { validateCmsOptions, validateResolvedSecrets } from './validation.ts';
 import { getEnv } from './runtime-compat.ts';
 import { createPluginRegistry } from './plugins/registry.ts';
 import { createPluginService } from './plugins/service.ts';
@@ -68,7 +68,9 @@ export type {
 export {
   CmsConfigError,
   CmsOptionsSchema,
+  ResolvedSecretsSchema,
   validateCmsOptions,
+  validateResolvedSecrets,
 } from './validation.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -267,23 +269,21 @@ export function createCmsHandler(options: CmsOptions): Handler {
   // Validate configuration (throws CmsConfigError on invalid)
   validateCmsOptions(options);
 
-  // Validate auth options if provided
-  let resolvedAuthSecret: string | undefined;
-  if (options.auth) {
-    // Resolve auth secret from options or environment
-    resolvedAuthSecret = options.auth.secret || getEnv('CMS_JWT_SECRET');
-    if (!resolvedAuthSecret) {
-      throw new Error(
-        'auth.secret is required. Either pass it directly or set CMS_JWT_SECRET environment variable.',
-      );
-    }
-    if (resolvedAuthSecret.length < 32) {
-      throw new Error('auth.secret must be at least 32 characters');
-    }
-    if (!options.auth.provider) {
-      throw new Error('auth.provider is required when auth is configured');
-    }
-  }
+  // Check if using real auth or running dangerously open
+  const hasRealAuth = options.auth !== 'dangerously-open';
+
+  // Resolve secrets from options or environment variables, then validate
+  const unresolvedAuthSecret = hasRealAuth
+    ? (options.auth.secret || getEnv('CMS_JWT_SECRET'))
+    : undefined;
+  const unresolvedCsrfSecret = options.csrfSecret || getEnv('CMS_CSRF_SECRET');
+
+  // Validate resolved secrets (after env var fallback) - returns typed values
+  const { csrfSecret, authSecret: resolvedAuthSecret } =
+    validateResolvedSecrets({
+      csrfSecret: unresolvedCsrfSecret,
+      authSecret: unresolvedAuthSecret,
+    });
 
   // Introspect schema if needed (check if it's already introspected)
   const isAlreadyIntrospected = 'tables' in options.schema &&
@@ -293,17 +293,8 @@ export function createCmsHandler(options: CmsOptions): Handler {
       .schema as unknown as import('@drizzle-cms/core').IntrospectedSchema
     : introspectFullSchema(options.schema);
 
-  // Resolve CSRF secret from options or environment
-  const csrfSecret = options.csrfSecret || getEnv('CMS_CSRF_SECRET');
-  if (!csrfSecret) {
-    throw new Error(
-      'csrfSecret is required. Either pass it directly or set CMS_CSRF_SECRET environment variable. ' +
-        'Generate one with: openssl rand -base64 32',
-    );
-  }
-
   // Resolve auth options if provided
-  const resolvedAuth: ResolvedAuthOptions | undefined = options.auth
+  const resolvedAuth: ResolvedAuthOptions | undefined = hasRealAuth
     ? {
       secret: resolvedAuthSecret!,
       provider: options.auth.provider,
@@ -315,16 +306,9 @@ export function createCmsHandler(options: CmsOptions): Handler {
     }
     : undefined;
 
-  // Require policies when auth is enabled (runtime check for JS users)
-  if (options.auth && options.policies === undefined) {
-    throw new Error(
-      "'policies' is required when 'auth' is enabled. " +
-        'Use `policies: {}` to explicitly grant full access to all authenticated users.',
-    );
-  }
-
-  // Resolve policies (empty object = no policies = full access)
-  const resolvedPolicies: Policies = options.policies ?? {};
+  // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
+  const resolvedPolicies: Policies | undefined =
+    options.policies === 'dangerously-open' ? {} : options.policies;
 
   // Initialize plugin registry if plugins are configured
   const pluginRegistry = options.plugins && options.plugins.length > 0

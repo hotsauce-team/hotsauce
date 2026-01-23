@@ -97,51 +97,47 @@ export interface FilterContext {
  * Filter function type.
  * Return true to invoke the hook, false to skip.
  */
-export type PluginFilter = (ctx: FilterContext) => boolean;
+/**
+ * Filter function type.
+ * Return true to invoke the hook, false to skip.
+ *
+ * Use `'dangerously-open'` to explicitly allow all data to flow to the plugin.
+ */
+export type PluginFilter =
+  | ((ctx: FilterContext) => boolean)
+  | 'dangerously-open';
+
+// ─────────────────────────────────────────────────────────────
+// Worker hook declarations (declarative, not functions)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Declarative hook names for Worker plugins.
+ * Worker plugins declare which hooks they handle; the actual functions
+ * live in the Worker module, not in the main thread config.
+ */
+export interface WorkerHookDeclaration {
+  /**
+   * Transform hooks the Worker handles.
+   * @example ['beforeSave', 'afterRead']
+   */
+  transform?: (keyof TransformHooks)[];
+
+  /**
+   * Action hooks the Worker handles.
+   * @example ['create', 'update', 'delete']
+   */
+  on?: CrudAction[];
+}
 
 // ─────────────────────────────────────────────────────────────
 // Plugin configuration for CMS
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Plugin configuration passed to createCmsHandler.
- *
- * Two execution modes based on presence of `worker`:
- *
- * 1. **Worker-isolated** (has `worker`): Plugin code runs entirely in the Worker.
- *    Use `filter` to control which hooks are forwarded to the Worker.
- *
- * 2. **In-process** (no `worker`): Plugin hooks run directly in the main thread.
- *    Use `filter` to skip hook invocation for certain contexts.
- *
- * @example
- * ```ts
- * plugins: [
- *   // Worker-isolated with filter (recommended for third-party)
- *   {
- *     name: 'audit-log',
- *     worker: new Worker(import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'), {
- *       type: 'module',
- *       deno: { permissions: { net: ['audit.example.com'] } },
- *     }),
- *     // Only forward create/update/delete actions, skip reads and lists
- *     filter: (ctx) => ctx.hookType === 'action' && !['read', 'list'].includes(ctx.action),
- *     config: { webhookUrl: 'https://audit.example.com/events' },
- *   },
- *
- *   // In-process with filter
- *   {
- *     name: 'custom-logger',
- *     hooks: {
- *       on: { create: async (ctx) => console.log('Created', ctx.recordId) },
- *     },
- *     // Skip logging for admin users
- *     filter: (ctx) => ctx.user?.role !== 'admin',
- *   },
- * ]
- * ```
+ * Base plugin configuration shared by both Worker and in-process plugins.
  */
-export interface PluginConfig {
+interface PluginConfigBase {
   /** Unique plugin identifier */
   name: string;
 
@@ -149,42 +145,30 @@ export interface PluginConfig {
   description?: string;
 
   /**
-   * Pre-created Worker instance for isolated execution.
-   * If provided, messages are sent to the Worker.
-   * If omitted, hooks run in-process (main thread).
-   */
-  worker?: Worker;
-
-  /**
-   * Filter function to control when hooks are invoked.
-   * Return true to invoke/forward the hook, false to skip.
-   * If omitted, all hooks are invoked.
+   * Filter function to control when hooks are invoked and what data flows to the plugin.
+   *
+   * **REQUIRED** - This is a security feature to prevent unintentional data exposure.
+   * Use `'dangerously-open'` to explicitly allow all data to flow to the plugin.
    *
    * @example
    * ```ts
    * // Only handle action hooks (skip transforms)
    * filter: (ctx) => ctx.hookType === 'action'
    *
-   * // Skip certain tables
-   * filter: (ctx) => ctx.table !== 'sessions'
+   * // Skip certain tables (e.g., sensitive data)
+   * filter: (ctx) => !['users', 'sessions', 'payments'].includes(ctx.table)
    *
    * // Multiple conditions
    * filter: (ctx) => ctx.hookType === 'action' && ['create', 'update', 'delete'].includes(ctx.action)
+   *
+   * // Allow all data (use with caution)
+   * filter: 'dangerously-open'
    * ```
    */
-  filter?: PluginFilter;
-
-  /**
-   * Lifecycle hooks (for in-process plugins).
-   * Worker plugins define hooks in the Worker module, not here.
-   */
-  hooks?: PluginHooks;
+  filter: PluginFilter;
 
   /** Declared capabilities (for documentation and validation) */
   capabilities?: PluginCapabilities;
-
-  /** Custom routes (in-process only) */
-  routes?: PluginRoute[];
 
   /**
    * Configuration passed to the Worker's createPlugin() factory.
@@ -192,6 +176,105 @@ export interface PluginConfig {
    */
   config?: object;
 }
+
+/**
+ * Worker plugin configuration.
+ * Plugin code runs entirely in an isolated Worker thread.
+ *
+ * @example
+ * ```ts
+ * {
+ *   name: 'audit-log',
+ *   worker: new Worker(import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'), {
+ *     type: 'module',
+ *     deno: { permissions: { net: ['audit.example.com'] } },
+ *   }),
+ *   // Declare which hooks the Worker handles (actual functions live in the Worker)
+ *   hooks: {
+ *     on: ['create', 'update', 'delete'],
+ *   },
+ *   filter: (ctx) => ctx.hookType === 'action',
+ *   config: { webhookUrl: 'https://audit.example.com/events' },
+ * }
+ * ```
+ */
+export interface WorkerPluginConfig extends PluginConfigBase {
+  /** Worker instance for isolated execution */
+  worker: Worker;
+
+  /**
+   * Declarative hooks - lists which hooks the Worker handles.
+   * The actual hook functions are defined in the Worker module.
+   * If omitted, the Worker receives all hook types (filtered by `filter`).
+   */
+  hooks?: WorkerHookDeclaration;
+
+  /** Routes not supported for Worker plugins (they'd need main-thread access) */
+  routes?: never;
+}
+
+/**
+ * In-process plugin configuration.
+ * Plugin hooks run directly in the main thread.
+ *
+ * @example
+ * ```ts
+ * {
+ *   name: 'format-names',
+ *   hooks: {
+ *     transform: {
+ *       beforeSave: (ctx, data) => {
+ *         if (ctx.table === 'users') {
+ *           data.name = capitalize(data.name);
+ *         }
+ *         return data;
+ *       },
+ *     },
+ *   },
+ *   filter: (ctx) => ctx.table !== 'sessions',
+ * }
+ * ```
+ */
+export interface InProcessPluginConfig extends PluginConfigBase {
+  /** No Worker = in-process execution */
+  worker?: never;
+
+  /**
+   * Lifecycle hooks with actual functions.
+   * These run directly in the main thread.
+   */
+  hooks?: PluginHooks;
+
+  /** Custom routes (in-process only) */
+  routes?: PluginRoute[];
+}
+
+/**
+ * Plugin configuration - either Worker-isolated or in-process.
+ *
+ * @example
+ * ```ts
+ * plugins: [
+ *   // Worker-isolated (recommended for third-party plugins)
+ *   {
+ *     name: 'audit-log',
+ *     worker: auditWorker,
+ *     hooks: { on: ['create', 'update', 'delete'] }, // Declarative
+ *     filter: (ctx) => ctx.hookType === 'action',
+ *   },
+ *
+ *   // In-process (for your own trusted code)
+ *   {
+ *     name: 'custom-logger',
+ *     hooks: {
+ *       on: { create: async (ctx) => console.log('Created', ctx.recordId) },
+ *     },
+ *     filter: (ctx) => ctx.user?.role !== 'admin',
+ *   },
+ * ]
+ * ```
+ */
+export type PluginConfig = WorkerPluginConfig | InProcessPluginConfig;
 
 /**
  * Type guard to check if a plugin is configured to run in a Worker.

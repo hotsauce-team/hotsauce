@@ -24,7 +24,9 @@ Deno.test('escapeHtml: converts non-strings to string', () => {
 // html tagged template tests
 Deno.test('html: escapes interpolated values', () => {
   const userInput = '<script>alert("xss")</script>';
-  const result = html`<p>${userInput}</p>`;
+  const result = html`
+    <p>${userInput}</p>
+  `;
   assertEquals(
     result,
     '<p>&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;</p>',
@@ -33,26 +35,34 @@ Deno.test('html: escapes interpolated values', () => {
 
 Deno.test('html: preserves raw() content', () => {
   const trustedHtml = raw('<strong>Bold</strong>');
-  const result = html`<p>${trustedHtml}</p>`;
+  const result = html`
+    <p>${trustedHtml}</p>
+  `;
   assertEquals(result, '<p><strong>Bold</strong></p>');
 });
 
 Deno.test('html: handles arrays', () => {
   const items = ['<a>', '<b>', '<c>'];
-  const result = html`<ul>${items}</ul>`;
+  const result = html`
+    <ul>${items}</ul>
+  `;
   assertEquals(result, '<ul>&lt;a&gt;&lt;b&gt;&lt;c&gt;</ul>');
 });
 
 Deno.test('html: handles arrays with raw items', () => {
   const items = [raw('<li>One</li>'), raw('<li>Two</li>')];
-  const result = html`<ul>${items}</ul>`;
+  const result = html`
+    <ul>${items}</ul>
+  `;
   assertEquals(result, '<ul><li>One</li><li>Two</li></ul>');
 });
 
 Deno.test('html: handles multiple interpolations', () => {
   const name = 'John';
   const age = 30;
-  const result = html`<p>Name: ${name}, Age: ${age}</p>`;
+  const result = html`
+    <p>Name: ${name}, Age: ${age}</p>
+  `;
   assertEquals(result, '<p>Name: John, Age: 30</p>');
 });
 

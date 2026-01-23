@@ -8,9 +8,11 @@ import {
   PasswordProvider,
   readOnly,
 } from '@drizzle-cms/handlers';
-import { isolatedAuditLogPlugin, inProcessFormatNamesPlugin } from './plugins.ts';
+import {
+  inProcessFormatNamesPlugin,
+  isolatedAuditLogPlugin,
+} from './plugins.ts';
 import { parsers, posts, schema, users } from './schema.ts';
-
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
@@ -39,7 +41,7 @@ const cmsHandler = createCmsHandler({
     // Worker-isolated plugin (recommended for third-party)
     isolatedAuditLogPlugin,
     // In-process plugin example (for trusted first-party code)
-    inProcessFormatNamesPlugin
+    inProcessFormatNamesPlugin,
   ],
   // User input parsers for validation (validation library agnostic)
   parsers,

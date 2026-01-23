@@ -228,6 +228,7 @@ This matches PostgreSQL RLS semantics and provides good DX — you only define p
 ### Do NOT "fix" by changing the default
 
 Changing `applyPolicy` to return `allowed: false` would:
+
 - Break the documented API contract
 - Cause silent failures for unlisted tables
 - Force verbose `() => undefined` policies for every table
@@ -327,26 +328,71 @@ plugins: [
   {
     name: 'audit-log',
     worker: auditWorker,
-    filter: (ctx) =>
-      ctx.hookType === 'action' &&
-      ['create', 'update', 'delete'].includes(ctx.action),
+    // Declarative: list which hooks the Worker handles
+    hooks: { on: ['create', 'update', 'delete'] },
+    filter: (ctx) => !['sessions', 'audit_logs'].includes(ctx.table), // Skip noisy/recursive tables
     config: { webhookUrl: 'https://audit.example.com/events' },
   },
 ];
 ```
 
-**Filter Function (Hook Filtering)**
+**Filter Function (Data Flow Security)**
 
-- `filter?: (ctx: FilterContext) => boolean` controls which hooks are invoked
-- For Worker plugins: prevents unnecessary Worker messages
-- For in-process plugins: prevents unnecessary hook invocations
+- `filter: ((ctx: FilterContext) => boolean) | 'dangerously-open'` is **REQUIRED**
+- Controls what data flows to plugins — this is a **security feature**
+- Prevents unintentional data exposure to third-party plugin code
+- Use `'dangerously-open'` to explicitly allow all data (acknowledge the risk)
 - FilterContext: `{ hookType, table, action, user }`
 - HookType: `'transform:beforeSave' | 'transform:afterRead' | 'action'`
+
+```typescript
+// Good: explicit filter prevents sending sensitive tables to plugin
+filter: ((ctx) => !['users', 'sessions', 'payments'].includes(ctx.table));
+
+// Good: only send specific actions
+filter: ((ctx) =>
+  ctx.hookType === 'action' && ['create', 'update'].includes(ctx.action));
+
+// Explicit opt-in to send everything (use with caution)
+filter: 'dangerously-open';
+```
 
 **Hook Categories**
 
 - **Transform hooks** (`beforeSave`, `afterRead`): Modify data, always block
 - **Action hooks** (`on.create`, `on.update`, etc.): Side effects, optionally fire-and-forget
+
+**Declarative vs Function Hooks**
+
+Worker plugins use **declarative hooks** (arrays of hook names), while in-process plugins use **function hooks**:
+
+```typescript
+// Worker plugin: declarative hooks (functions live in Worker module)
+{
+  name: 'audit-log',
+  worker: auditWorker,
+  hooks: {
+    on: ['create', 'update', 'delete'],  // Array of action names
+  },
+  filter: (ctx) => !['sessions', 'audit_logs'].includes(ctx.table),  // Skip noisy/recursive tables
+}
+
+// In-process plugin: function hooks (run in main thread)
+{
+  name: 'format-names',
+  hooks: {
+    transform: {
+      beforeSave: async (ctx, data) => ({ ...data, name: data.name.toUpperCase() }),
+    },
+  },
+  filter: (ctx) => ctx.table === 'users',  // Applies to all hook types for this table
+}
+```
+
+This distinction is enforced at registration time:
+
+- Worker plugins with function hooks will be rejected (confusing - functions never run)
+- In-process plugins with declarative hooks will be rejected
 
 **Serializable Constraint**
 
@@ -362,18 +408,8 @@ When creating plugins:
 2. **Use `createPlugin(config)` factory** — receives serialized config from CMS options
 3. **Declare capabilities** — network hosts, actions needed (for documentation and validation)
 4. **Use `fireAndForget: true`** for logging/analytics that shouldn't block requests
-5. **Use `filter` function** — cleaner than stub hooks for controlling which hooks run
+5. **Use declarative hooks for Workers** — `hooks: { on: ['create'] }` instead of functions
 6. **Test without Worker first** — easier to debug, then verify Worker isolation works
-
-**Filter vs Stub Hooks:**
-
-```typescript
-// Old pattern (stub hooks) - confusing, hooks don't actually run
-hooks: { on: { create: async () => {}, update: async () => {} } }
-
-// New pattern (filter function) - clear intent
-filter: (ctx) => ctx.hookType === 'action' && ['create', 'update'].includes(ctx.action)
-```
 
 ### Uploads: What belongs in core vs plugin
 

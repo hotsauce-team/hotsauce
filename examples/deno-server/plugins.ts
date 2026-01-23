@@ -24,7 +24,7 @@ const auditLogConfig: AuditLogConfig = {
 
 /**
  * Pre-configured isolated audit log plugin
- * 
+ *
  * This plugin runs in a Worker, isolating it from the main CMS process.
  * It logs create, update, and delete actions to the console
  * and can optionally send audit entries to a webhook.
@@ -32,18 +32,20 @@ const auditLogConfig: AuditLogConfig = {
 export const isolatedAuditLogPlugin: PluginConfig = {
   name: 'audit-log',
   worker: auditLogWorker,
-  // Filter which hooks are forwarded to the Worker
-  // Return true to invoke, false to skip (avoids Worker message overhead)
-  filter: (ctx) =>
-    ctx.hookType === 'action' &&
-    ['create', 'update', 'delete'].includes(ctx.action),
+  // Declare which hooks the Worker handles
+  hooks: {
+    on: ['create', 'update', 'delete'],
+  },
+  // Filter which messages are forwarded to the Worker
+  // e.g. skip audit for sessions table
+  filter: (ctx) => ctx.table !== 'sessions',
   // Plugin configuration object passed to the Worker
   config: auditLogConfig,
 };
 
 /**
  * In-process plugin that formats user names before saving.
- * 
+ *
  * This plugin runs directly in the main CMS process.
  * It capitalizes the first letter of each part of the user's name
  * when a user record is created or updated.
