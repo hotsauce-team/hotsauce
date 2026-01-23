@@ -190,6 +190,49 @@ The CMS uses these environment variables for secrets (can also be passed directl
 | `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)   |
 | `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars) |
 
+## Authorization & Policy Model
+
+The CMS uses a **layered security model** for authorization. Understanding this prevents accidental "fixes" that break intended behavior.
+
+### Security Layers (in order)
+
+1. **Type-level enforcement** (`CmsOptions` in `types.ts`)
+   - When `auth` is configured, `policies` is **required** by TypeScript
+   - Forces developers to explicitly choose an authorization strategy
+   - Options: `policies: { ... }`, `policies: {}`, or `policies: 'dangerously-open'`
+
+2. **Zod validation at startup** (`validateCmsOptions` in `validation.ts`)
+   - Validates entire config when `createCmsHandler()` is called
+   - Throws `CmsConfigError` with detailed messages for invalid config
+   - Enforces: policies required with auth, policies forbidden with `auth: 'dangerously-open'`
+
+3. **Runtime validation** (`crud.ts` handlers)
+   - If auth is enabled but policies somehow undefined, handlers return 403
+   - Belt-and-suspenders check in case types are bypassed
+
+4. **Policy application** (`applyPolicy` in `policies/apply.ts`)
+   - Low-level utility that evaluates a single policy
+   - **Intentionally returns `allowed: true` when policy is undefined**
+   - By this point, the caller has already validated the configuration
+
+### Why `applyPolicy(undefined, ...)` returns `allowed: true`
+
+This is **intentional, not a security bug**. The semantic meaning:
+
+> "I have a `Policies` object, but this specific table has no entry"
+
+Per the documented behavior: "Tables without an explicit policy get full access."
+
+This matches PostgreSQL RLS semantics and provides good DX — you only define policies for tables that need restrictions.
+
+### Do NOT "fix" by changing the default
+
+Changing `applyPolicy` to return `allowed: false` would:
+- Break the documented API contract
+- Cause silent failures for unlisted tables
+- Force verbose `() => undefined` policies for every table
+- Push users toward `'dangerously-open'` to avoid friction
+
 ## Development Environment
 
 - **Deno is the primary development runtime** — no Node.js/npm required locally
