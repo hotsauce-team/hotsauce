@@ -270,6 +270,7 @@ interface TableParsers {
 - [ ] Column-level access control
 - [ ] File uploads (local + S3)
 - [ ] Audit logging
+- [ ] Plugin data obfuscation (PII/credential redaction)
 - [ ] Customizable UI components
 
 ## Database Support
