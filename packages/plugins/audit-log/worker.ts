@@ -29,8 +29,8 @@ interface WorkerResponse {
   error?: string;
 }
 
-// Import shared types from mod.ts to avoid duplication
-import type { AuditEntry, AuditLogConfig } from './mod.ts';
+// Import shared types
+import type { AuditEntry, AuditLogConfig } from './types.ts';
 export type { AuditEntry, AuditLogConfig };
 
 // ─────────────────────────────────────────────────────────────
