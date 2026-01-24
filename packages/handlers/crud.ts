@@ -668,7 +668,19 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   }
 
   // Handle GET - show form
-  return await renderEditForm(ctx, record);
+  // Execute afterRead transform before displaying form
+  // Use 'read' action type since we're loading a single record for display
+  let transformedRecord = record;
+  if (ctx.pluginService) {
+    transformedRecord = await ctx.pluginService.afterRead(
+      table.name,
+      'read',
+      record,
+      getPluginUser(ctx),
+    );
+  }
+
+  return await renderEditForm(ctx, transformedRecord);
 }
 
 /**

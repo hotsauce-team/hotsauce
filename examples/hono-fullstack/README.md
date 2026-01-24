@@ -1,0 +1,262 @@
+# Hono Fullstack Example
+
+A complete blog site with a server-rendered public frontend (Hono) and a headless CMS admin interface (drizzle-cms) sharing the same database.
+
+## Features
+
+- **Public Blog** - Server-rendered pages using Hono and template literals
+- **CMS Admin** - Full admin interface powered by drizzle-cms
+- **Shared Database** - Both frontend and admin use the same Drizzle schema
+- **Zero Extra Dependencies** - Hono has no dependencies, templates use `@drizzle-cms/ui`
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Single Deno Server                       │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   ┌─────────────────┐         ┌─────────────────────────┐  │
+│   │  Public Routes  │         │    Admin Routes         │  │
+│   │    (Hono)       │         │    (drizzle-cms)        │  │
+│   │                 │         │                         │  │
+│   │  GET /          │         │  /admin/* → cmsHandler  │  │
+│   │  GET /post/:id  │         │  /admin/login           │  │
+│   │  GET /page/:id  │         │  /admin/posts           │  │
+│   │  GET /category  │         │  /admin/pages           │  │
+│   │  GET /author    │         │  ...                    │  │
+│   └────────┬────────┘         └────────────┬────────────┘  │
+│            │                               │               │
+│            └───────────┬───────────────────┘               │
+│                        ▼                                   │
+│              ┌─────────────────┐                           │
+│              │  Drizzle ORM    │                           │
+│              │  (shared schema)│                           │
+│              └────────┬────────┘                           │
+│                       │                                    │
+└───────────────────────┼────────────────────────────────────┘
+                        ▼
+               ┌─────────────────┐
+               │    PostgreSQL   │
+               │    (PGlite)     │
+               └─────────────────┘
+```
+
+## Quick Start
+
+1. **Seed the database:**
+
+```bash
+deno task seed
+```
+
+2. **Run the server:**
+
+```bash
+deno task dev
+```
+
+> **Note:** The dev task uses `--unstable-worker-options` to enable Worker permissions for the markdown plugin. This flag is required when using `deno.permissions` in Worker constructors.
+
+3. **Open the site:**
+
+- **Blog:** http://localhost:3000
+- **CMS Admin:** http://localhost:3000/admin
+
+## Admin Credentials
+
+- **Email:** `admin@example.com`
+- **Password:** `admin123`
+
+## Project Structure
+
+```
+examples/hono-fullstack/
+│
+├── server.ts       # Entry point - wires site + admin together
+├── security.ts     # CSP and security headers
+├── db.ts           # Database connection (shared)
+├── schema.ts       # Drizzle schema (shared)
+├── seed.ts         # Database seeding script
+├── deno.jsonc      # Deno configuration
+│
+├── admin/          # CMS admin (admin only)
+│   ├── admin.ts    # CMS handler configuration
+│   ├── markdown-plugin.ts # beforeSave transform
+│   └── markdown.ts # Vendored snarkdown parser
+│
+├── site/           # Public frontend (site only)
+│   ├── routes.ts   # Hono routes for public pages
+│   ├── templates.ts # HTML templates
+│   └── static/     # Static assets
+│       └── styles.css
+│
+└── data/           # PGlite database (created on first run)
+```
+
+### File Responsibilities
+
+| File                       | Used By    | Purpose                            |
+| -------------------------- | ---------- | ---------------------------------- |
+| `server.ts`                | Both       | Entry point, combines site + admin |
+| `security.ts`              | Server     | CSP middleware                     |
+| `db.ts`                    | Both       | Database connection                |
+| `schema.ts`                | Both       | Drizzle tables & relations         |
+| `admin/admin.ts`           | Admin only | CMS handler configuration          |
+| `admin/markdown-worker.ts` | Admin only | Markdown Worker plugin             |
+| `admin/markdown.ts`        | Seed only  | Vendored snarkdown parser          |
+| `site/routes.ts`           | Site only  | Public page routes                 |
+| `site/templates.ts`        | Site only  | HTML rendering                     |
+| `site/static/styles.css`   | Site only  | Stylesheet                         |
+| `seed.ts`                  | Setup      | Initial data population            |
+
+## Security
+
+The site uses a strict Content Security Policy (CSP) that:
+
+- **No inline scripts** (`script-src 'none'`) — Pure server-rendered HTML
+- **No inline styles** — All CSS served from `/static/styles.css`
+- **Same-origin forms** — Form submissions restricted to same origin
+- **No iframes** — Cannot be embedded in other sites
+
+The CSP middleware in [security.ts](security.ts) applies to all site routes but **skips `/admin/*`** since drizzle-cms uses inline styles.
+
+## Markdown Rendering
+
+Markdown is rendered to HTML **at save time** using a CMS Worker plugin, not at read time:
+
+1. **Vendored parser** — [admin/markdown-worker.ts](admin/markdown-worker.ts) contains a vendored copy of [snarkdown](https://github.com/developit/snarkdown) (~100 lines, zero dependencies)
+2. **Worker isolation** — Plugin runs in a Web Worker with limited permissions for security
+3. **CMS plugin** — `beforeSave` transform populates `contentHtml` column automatically
+4. **Fast reads** — Templates use pre-rendered `contentHtml` column
+
+This approach:
+
+- Parses markdown once (not on every page view)
+- Avoids supply chain risk (no npm dependencies)
+- Keeps the parser auditable (~100 lines of code)
+- Demonstrates Worker plugin pattern for isolation
+
+## Schema
+
+The example includes these tables:
+
+| Table         | Purpose                                                              |
+| ------------- | -------------------------------------------------------------------- |
+| `posts`       | Blog posts with title, content, contentHtml, excerpt, publish status |
+| `pages`       | Static pages with content and contentHtml                            |
+| `authors`     | Content creators with bio                                            |
+| `categories`  | Post organization                                                    |
+| `settings`    | Key-value site configuration                                         |
+| `admin_users` | CMS authentication                                                   |
+
+## Templates
+
+Templates use `@drizzle-cms/ui`'s `html` tagged template for XSS-safe rendering:
+
+```typescript
+// site/templates.ts
+import { html, raw } from '@drizzle-cms/ui';
+
+function postCard(post: Post): string {
+  return html`
+    <article>
+      <h2>${post.title}</h2>
+      <!-- auto-escaped -->
+      <div>${raw(post.htmlContent)}</div>
+      <!-- trusted HTML -->
+    </article>
+  `;
+}
+```
+
+## Public Routes
+
+| Route                 | Description                     |
+| --------------------- | ------------------------------- |
+| `GET /`               | Homepage with recent posts      |
+| `GET /post/:slug`     | Single post page                |
+| `GET /page/:slug`     | Static page (about, contact)    |
+| `GET /category/:slug` | Posts in a category             |
+| `GET /categories`     | All categories with post counts |
+| `GET /author/:slug`   | Author profile with their posts |
+
+## CMS Routes
+
+All `/admin/*` routes are handled by drizzle-cms:
+
+| Route                   | Description                           |
+| ----------------------- | ------------------------------------- |
+| `GET /admin`            | Dashboard                             |
+| `GET /admin/login`      | Login page                            |
+| `GET /admin/posts`      | Post management                       |
+| `GET /admin/pages`      | Page management                       |
+| `GET /admin/authors`    | Author management                     |
+| `GET /admin/categories` | Category management                   |
+| `GET /admin/settings`   | Site settings (read-only for editors) |
+
+## Customization
+
+### Adding New Routes
+
+Add routes in `site/routes.ts`:
+
+```typescript
+app.get('/search', async (c) => {
+  const q = c.req.query('q');
+  const results = await db.query.posts.findMany({
+    where: ilike(posts.title, `%${q}%`),
+  });
+  // ... render results
+});
+```
+
+### Styling
+
+Edit the `styles()` function in `site/templates.ts`. CSS is inlined for simplicity but could be moved to a separate file served via Hono's static file middleware.
+
+### Adding HTMX
+
+For interactive features without a full SPA, add HTMX:
+
+```typescript
+// In site/templates.ts layout()
+<script src="https://unpkg.com/htmx.org@2"></script>
+
+// In a template
+<button hx-post="/api/like/${post.id}" hx-swap="outerHTML">
+  👍 ${post.likes}
+</button>
+
+// In site/routes.ts
+app.post('/api/like/:id', async (c) => {
+  // Update likes, return new button HTML
+});
+```
+
+## Deploying to Deno Deploy
+
+For production deployment:
+
+1. Replace PGlite with a real PostgreSQL database:
+
+```typescript
+import postgres from 'postgres';
+import { drizzle } from 'drizzle-orm/postgres-js';
+
+const client = postgres(Deno.env.get('DATABASE_URL')!);
+const db = drizzle(client, { schema });
+```
+
+2. Set environment variables in Deno Deploy dashboard:
+   - `DATABASE_URL` - PostgreSQL connection string
+   - `CMS_CSRF_SECRET` - 32+ character secret
+   - `CMS_JWT_SECRET` - 32+ character secret
+
+3. Deploy via GitHub integration or `deployctl`
+
+## Notes
+
+- PGlite data is persisted to `./data` directory
+- The CMS handles all authentication - no separate auth needed for the frontend
+- Settings are read-only for non-admin users (configured via policies)
