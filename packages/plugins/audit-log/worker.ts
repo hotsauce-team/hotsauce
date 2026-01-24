@@ -6,7 +6,6 @@
 import type {
   ActionContext,
   CrudAction,
-  PluginHooks,
   Serializable,
 } from '@drizzle-cms/handlers-workers';
 
@@ -166,35 +165,3 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
 
 // Log that the worker has loaded
 console.log('[audit] Worker loaded');
-
-// ─────────────────────────────────────────────────────────────
-// Exports for type-only usage (not used at runtime in Worker)
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Factory function (for non-Worker usage or sandbox loader)
- */
-export function createPlugin(config: Serializable): { hooks: PluginHooks } {
-  const auditConfig = (config ?? {}) as AuditLogConfig;
-
-  const handler = async (ctx: ActionContext): Promise<void> => {
-    pluginConfig = auditConfig;
-    await handleAuditAction(ctx);
-  };
-
-  return {
-    hooks: {
-      on: {
-        create: { handler, fireAndForget: true },
-        update: { handler, fireAndForget: true },
-        delete: { handler, fireAndForget: true },
-        read: auditConfig.logReads
-          ? { handler, fireAndForget: true }
-          : undefined,
-        list: auditConfig.logLists
-          ? { handler, fireAndForget: true }
-          : undefined,
-      },
-    },
-  };
-}
