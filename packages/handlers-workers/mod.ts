@@ -3,6 +3,11 @@
 // Compatible with Deno and Node.js 20+
 
 // ─────────────────────────────────────────────────────────────
+// Worker isolation guard - for plugin authors
+// ─────────────────────────────────────────────────────────────
+export { assertWorkerContext, isWorkerContext } from './guard.ts';
+
+// ─────────────────────────────────────────────────────────────
 // Types - Re-export plugin types needed for Workers
 // ─────────────────────────────────────────────────────────────
 export type {

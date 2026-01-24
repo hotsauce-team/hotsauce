@@ -8,6 +8,7 @@ import type {
   CrudAction,
   Serializable,
 } from '@drizzle-cms/handlers-workers';
+import { assertWorkerContext } from '@drizzle-cms/handlers-workers';
 
 // Declare Worker globals for TypeScript
 declare const self: DedicatedWorkerGlobalScope;
@@ -42,7 +43,11 @@ let pluginConfig: AuditLogConfig = {};
 /**
  * Check if a table should be audited based on config
  */
-function shouldAuditTable(table: string, config: AuditLogConfig): boolean {
+export function shouldAuditTable(
+  table: string,
+  config: AuditLogConfig,
+): boolean {
+  assertWorkerContext();
   if (config.excludeTables?.includes(table)) {
     return false;
   }

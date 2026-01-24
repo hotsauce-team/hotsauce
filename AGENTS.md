@@ -2,6 +2,20 @@
 
 Guidelines for AI coding assistants working on this project.
 
+## ⛔ CRITICAL RULES
+
+**Read these first. Violating these will break the project or CI.**
+
+1. **NO `--allow-*` FLAGS** — Run tests with `deno task test` or `deno test -P`. Never pass `--allow-read`, `--allow-env`, `--allow-net`, etc. Permissions are configured in `deno.jsonc`.
+
+2. **NO NEW DEPENDENCIES** — Only `drizzle-orm`, `postgres`, `zod`, `drizzle-zod` are allowed in production. Do not suggest adding packages.
+
+3. **NO `npm`/`yarn`/`pnpm`** — This is a Deno project. Use `deno` commands only.
+
+4. **NO `Deno.*` IN PACKAGES** — Code must be runtime-agnostic. Use Web Standard APIs only (`Request`, `Response`, `crypto`, `fetch`).
+
+---
+
 ## Core Constraints
 
 ### Dependencies
