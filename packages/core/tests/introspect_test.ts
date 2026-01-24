@@ -2,11 +2,11 @@
 
 import { assertEquals, assertExists, assertThrows } from 'jsr:@std/assert';
 import {
-  introspectTable,
-  introspectSchema,
-  introspectRelations,
-  introspectFullSchema,
   detectJunctionTables,
+  introspectFullSchema,
+  introspectRelations,
+  introspectSchema,
+  introspectTable,
 } from '../schema/introspect.ts';
 import * as schema from './fixtures/schema-pg.ts';
 import * as sqliteSchema from './fixtures/schema-sqlite.ts';
@@ -178,7 +178,7 @@ Deno.test('introspectTable - throws on null input', () => {
     // deno-lint-ignore no-explicit-any
     () => introspectTable(null as any),
     Error,
-    'expected a table object'
+    'expected a table object',
   );
 });
 
@@ -187,7 +187,7 @@ Deno.test('introspectTable - throws on non-table object', () => {
     // deno-lint-ignore no-explicit-any
     () => introspectTable({ notATable: true } as any),
     Error,
-    'not a valid Drizzle table'
+    'not a valid Drizzle table',
   );
 });
 
@@ -200,7 +200,7 @@ Deno.test('introspectRelations - extracts all relations', () => {
 
   // Check users -> posts relation (many)
   const usersPosts = relations.find(
-    (r) => r.sourceTable === 'users' && r.name === 'posts'
+    (r) => r.sourceTable === 'users' && r.name === 'posts',
   );
   assertExists(usersPosts);
   assertEquals(usersPosts.type, 'many');
@@ -212,7 +212,7 @@ Deno.test('introspectRelations - extracts one relations', () => {
 
   // posts.author is a "one" relation
   const postsAuthor = relations.find(
-    (r) => r.sourceTable === 'posts' && r.name === 'author'
+    (r) => r.sourceTable === 'posts' && r.name === 'author',
   );
   assertExists(postsAuthor);
   assertEquals(postsAuthor.type, 'one');
@@ -259,7 +259,7 @@ Deno.test('detectJunctionTables - does not detect normal tables', () => {
   const tables = introspectSchema(schema);
   const junctions = detectJunctionTables(tables);
 
-  const junctionNames = junctions.map(j => j.tableName);
+  const junctionNames = junctions.map((j) => j.tableName);
   assertEquals(junctionNames.includes('users'), false);
   assertEquals(junctionNames.includes('posts'), false);
   assertEquals(junctionNames.includes('categories'), false);
@@ -276,12 +276,14 @@ Deno.test('introspectFullSchema - includes junctions array', () => {
 Deno.test('introspectFullSchema - marks junction tables with isJunction', () => {
   const result = introspectFullSchema(schema);
 
-  const junctionTable = result.tables.find(t => t.name === 'posts_to_categories');
+  const junctionTable = result.tables.find((t) =>
+    t.name === 'posts_to_categories'
+  );
   assertExists(junctionTable);
   assertEquals(junctionTable.isJunction, true);
 
   // Normal tables should not be marked
-  const postsTable = result.tables.find(t => t.name === 'posts');
+  const postsTable = result.tables.find((t) => t.name === 'posts');
   assertExists(postsTable);
   assertEquals(postsTable.isJunction, undefined);
 });
@@ -438,7 +440,7 @@ Deno.test('sqlite: introspectRelations - extracts all relations', () => {
 
   // Check users -> posts relation (many)
   const usersPosts = relations.find(
-    (r) => r.sourceTable === 'users' && r.name === 'posts'
+    (r) => r.sourceTable === 'users' && r.name === 'posts',
   );
   assertExists(usersPosts);
   assertEquals(usersPosts.type, 'many');
@@ -450,7 +452,7 @@ Deno.test('sqlite: introspectRelations - extracts one relations', () => {
 
   // posts.author is a "one" relation
   const postsAuthor = relations.find(
-    (r) => r.sourceTable === 'posts' && r.name === 'author'
+    (r) => r.sourceTable === 'posts' && r.name === 'author',
   );
   assertExists(postsAuthor);
   assertEquals(postsAuthor.type, 'one');
@@ -503,12 +505,14 @@ Deno.test('sqlite: introspectFullSchema - includes junctions array', () => {
 Deno.test('sqlite: introspectFullSchema - marks junction tables with isJunction', () => {
   const result = introspectFullSchema(sqliteSchema);
 
-  const junctionTable = result.tables.find(t => t.name === 'posts_to_categories');
+  const junctionTable = result.tables.find((t) =>
+    t.name === 'posts_to_categories'
+  );
   assertExists(junctionTable);
   assertEquals(junctionTable.isJunction, true);
 
   // Normal tables should not be marked
-  const postsTable = result.tables.find(t => t.name === 'posts');
+  const postsTable = result.tables.find((t) => t.name === 'posts');
   assertExists(postsTable);
   assertEquals(postsTable.isJunction, undefined);
 });

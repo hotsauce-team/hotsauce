@@ -3,54 +3,91 @@
 import { asc, desc, sql } from 'drizzle-orm';
 import type { Table } from 'drizzle-orm';
 
-import { layout, alert, pagination } from '@drizzle-cms/ui';
+import { alert, layout, pagination } from '@drizzle-cms/ui';
 import { listView } from '@drizzle-cms/ui';
 import { detailView } from '@drizzle-cms/ui';
-import { editView, createView } from '@drizzle-cms/ui';
+import { createView, editView } from '@drizzle-cms/ui';
 import { html, raw } from '@drizzle-cms/ui';
 import type { RouteContext } from './types.ts';
-import { htmlResponse, redirect, redirectWithFlash, parseFlashFromUrl, notFound, parseFormData, coerceFormValues, getPagination, getSort } from './http.ts';
+import {
+  coerceFormValues,
+  getPagination,
+  getSort,
+  htmlResponse,
+  notFound,
+  parseFlashFromUrl,
+  parseFormData,
+  redirect,
+  redirectWithFlash,
+} from './http.ts';
 import { cmsUrl, formatTableName } from './router.ts';
-import type { NavItem, ListViewOptions, DetailViewOptions, EditViewOptions, LayoutOptions } from '@drizzle-cms/ui';
-import { generateCsrfToken, validateCsrfToken, getCsrfTokenFromFormData } from './csrf.ts';
+import type {
+  DetailViewOptions,
+  EditViewOptions,
+  LayoutOptions,
+  ListViewOptions,
+  NavItem,
+} from '@drizzle-cms/ui';
+import {
+  generateCsrfToken,
+  getCsrfTokenFromFormData,
+  validateCsrfToken,
+} from './csrf.ts';
 import {
   buildNavItems,
-  getPrimaryKeyColumn,
-  getPrimaryKeyValue,
-  getEditableColumns,
-  getListColumns,
-  tableToCmsFields,
-  recordToValues,
   fetchAllRelationOptions,
   fetchManyToManyData,
   fetchManyToManyDisplayData,
-  saveManyToManyData,
+  getEditableColumns,
+  getListColumns,
+  getPrimaryKeyColumn,
+  getPrimaryKeyValue,
   getSafeErrorMessage,
   isForeignKeyViolation,
+  recordToValues,
+  saveManyToManyData,
+  tableToCmsFields,
   validateWithParsers,
 } from './crud-helpers.ts';
 import {
   applyPolicy,
   createPolicyContext,
+  deleteWithPolicy,
   findRecordWithPolicy,
   recordExists,
   updateWithPolicy,
-  deleteWithPolicy,
 } from './policies/mod.ts';
+
+/**
+ * Get plugin user context from RouteContext
+ */
+function getPluginUser(
+  ctx: RouteContext,
+): { sub: string; role?: string } | undefined {
+  return ctx.authUser
+    ? { sub: ctx.authUser.id, role: ctx.authUser.role }
+    : undefined;
+}
 
 /**
  * Build common layout options for a page
  */
-function buildLayoutOptions(ctx: RouteContext, title: string, navItems: NavItem[]): LayoutOptions {
+function buildLayoutOptions(
+  ctx: RouteContext,
+  title: string,
+  navItems: NavItem[],
+): LayoutOptions {
   const { options, authUser } = ctx;
   const basePath = options.basePath;
-  
+
   return {
     title,
     siteName: options.title,
     nav: navItems,
     stylesheetUrl: `${basePath}/styles.css`,
-    user: authUser ? { name: `User ${authUser.id}`, logoutUrl: `${basePath}/logout` } : undefined,
+    user: authUser
+      ? { name: `User ${authUser.id}`, logoutUrl: `${basePath}/logout` }
+      : undefined,
   };
 }
 
@@ -60,36 +97,42 @@ function buildLayoutOptions(ctx: RouteContext, title: string, navItems: NavItem[
 export function handleDashboard(ctx: RouteContext): Response {
   const { options } = ctx;
   const basePath = options.basePath;
-  
+
   // Filter out junction tables from dashboard
-  const visibleTables = options.introspected.tables.filter(t => !t.isJunction);
-  
+  const visibleTables = options.introspected.tables.filter((t) =>
+    !t.isJunction
+  );
+
   const navItems: NavItem[] = [
     { href: cmsUrl(basePath), label: 'Dashboard', active: true },
-    ...visibleTables.map(t => ({
+    ...visibleTables.map((t) => ({
       href: cmsUrl(basePath, t.name),
       label: formatTableName(t.name),
       active: false,
     })),
   ];
-  
+
   const content = html`
     <h1>Dashboard</h1>
     <p>Welcome to the ${options.title} admin panel.</p>
-    
+
     <h2>Tables</h2>
     <div class="cms-table-grid">
-      ${raw(visibleTables.map(table => html`
-        <a href="${cmsUrl(basePath, table.name)}" class="cms-table-card">
-          <h3>${formatTableName(table.name)}</h3>
-          <p>${table.columns.length} columns</p>
-        </a>
-      `).join(''))}
+      ${raw(
+        visibleTables.map((table) =>
+          html`
+            <a href="${cmsUrl(basePath, table.name)}" class="cms-table-card">
+              <h3>${formatTableName(table.name)}</h3>
+              <p>${table.columns.length} columns</p>
+            </a>
+          `
+        ).join(''),
+      )}
     </div>
   `;
-  
+
   const page = layout(content, buildLayoutOptions(ctx, 'Dashboard', navItems));
-  
+
   return htmlResponse(page);
 }
 
@@ -101,69 +144,100 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   const table = route.table!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
-  
+
   // Apply policy for list action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(cmsUrl(basePath), 'list_forbidden');
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'list');
-  
+
   if (!policyResult.allowed) {
     return redirectWithFlash(cmsUrl(basePath), 'list_forbidden');
   }
-  
+
   // Get pagination and sort
   const { page, limit, offset } = getPagination(url);
-  const columnNames = table.columns.map(c => c.name);
+  const columnNames = table.columns.map((c) => c.name);
   const sortInfo = getSort(url, columnNames);
-  
+
   // Count total records (with policy filter)
   let countQuery = options.db
     .select({ count: sql<number>`count(*)` })
     .from(drizzleTable);
-  
+
   if (policyResult.condition) {
     countQuery = countQuery.where(policyResult.condition);
   }
-  
+
   const countResult = await countQuery;
   const totalRecords = Number(countResult[0]?.count ?? 0);
   const totalPages = Math.ceil(totalRecords / limit);
-  
+
   // Fetch records (with policy filter)
   let query = options.db.select().from(drizzleTable);
-  
+
   // Apply policy condition
   if (policyResult.condition) {
     query = query.where(policyResult.condition);
   }
-  
+
   // Apply sorting
   if (sortInfo) {
     const col = (drizzleTable as Record<string, unknown>)[sortInfo.column];
     if (col) {
-      query = query.orderBy(sortInfo.direction === 'desc' ? desc(col as never) : asc(col as never));
+      query = query.orderBy(
+        sortInfo.direction === 'desc' ? desc(col as never) : asc(col as never),
+      );
     }
   }
-  
+
   // Apply pagination
   query = query.limit(limit).offset(offset);
-  
-  const records = await query as Record<string, unknown>[];
-  
+
+  let records = await query as Record<string, unknown>[];
+
+  // Execute afterRead transform for each record
+  if (ctx.pluginService) {
+    records = await ctx.pluginService.afterReadMany(
+      table.name,
+      records,
+      getPluginUser(ctx),
+    );
+  }
+
+  // Execute list action hooks (fire-and-forget for audit logging etc.)
+  if (ctx.pluginService) {
+    ctx.pluginService.onAction(
+      table.name,
+      'list',
+      undefined,
+      getPluginUser(ctx),
+    );
+  }
+
   // Generate navigation
   const navItems = buildNavItems(options.introspected, basePath, table.name);
-  
+
   // Build columns for list
   const listColumns = getListColumns(table);
-  
+
   // Fetch relation data for FK columns
   const relationData = await fetchAllRelationOptions(options, table);
-  
+
   // Fetch M2M display data for all records
   const pkCol = getPrimaryKeyColumn(table);
-  const recordIds = records.map(r => r[pkCol.propertyName] as string | number);
-  const m2mDisplayData = await fetchManyToManyDisplayData(options, table, recordIds);
-  
+  const recordIds = records.map((r) =>
+    r[pkCol.propertyName] as string | number
+  );
+  const m2mDisplayData = await fetchManyToManyDisplayData(
+    options,
+    table,
+    recordIds,
+  );
+
   // List view options
   const listOptions: ListViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -172,16 +246,16 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     showDelete: true,
     showView: true,
   };
-  
+
   // Build content
   let content = '';
-  
+
   // Add flash message if present (from URL params or context)
   const flash = ctx.flash ?? parseFlashFromUrl(url);
   if (flash) {
     content += alert(flash.message, flash.type);
   }
-  
+
   // Add list view
   content += listView(
     formatTableName(table.name),
@@ -191,7 +265,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     relationData,
     m2mDisplayData,
   );
-  
+
   // Add pagination if needed
   if (totalPages > 1) {
     content += pagination({
@@ -200,9 +274,12 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       baseUrl: cmsUrl(basePath, table.name),
     });
   }
-  
-  const pageHtml = layout(content, buildLayoutOptions(ctx, formatTableName(table.name), navItems));
-  
+
+  const pageHtml = layout(
+    content,
+    buildLayoutOptions(ctx, formatTableName(table.name), navItems),
+  );
+
   return htmlResponse(pageHtml);
 }
 
@@ -215,47 +292,83 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
-  
+
   // Apply policy for read action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'read_forbidden');
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'read');
-  
+
   if (!policyResult.allowed) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'read_forbidden');
   }
-  
+
   // Fetch record with policy condition
   const record = await findRecordWithPolicy(
     options.db,
     drizzleTable as Table,
     table,
     recordId,
-    policyResult.condition
+    policyResult.condition,
   );
-  
+
   if (!record) {
     // Check if record exists at all (to distinguish 404 vs 403)
-    const exists = await recordExists(options.db, drizzleTable as Table, table, recordId);
+    const exists = await recordExists(
+      options.db,
+      drizzleTable as Table,
+      table,
+      recordId,
+    );
     if (exists) {
       return redirectWithFlash(cmsUrl(basePath, table.name), 'read_forbidden');
     }
     return notFound(`Record not found`);
   }
-  
+
+  // Execute afterRead transform
+  let transformedRecord = record;
+  if (ctx.pluginService) {
+    transformedRecord = await ctx.pluginService.afterRead(
+      table.name,
+      'read',
+      record,
+      getPluginUser(ctx),
+    );
+  }
+
+  // Execute read action hooks
+  const pkCol = getPrimaryKeyColumn(table);
+  const actualRecordId = transformedRecord[pkCol.propertyName] as
+    | string
+    | number;
+  if (ctx.pluginService) {
+    ctx.pluginService.onAction(
+      table.name,
+      'read',
+      actualRecordId,
+      getPluginUser(ctx),
+      undefined,
+      transformedRecord,
+    );
+  }
+
   const navItems = buildNavItems(options.introspected, basePath, table.name);
   const cmsFields = tableToCmsFields(table);
   const relationData = await fetchAllRelationOptions(options, table);
-  
+
   // Fetch M2M display data for this record - use actual ID from record, not URL string
-  const pkCol = getPrimaryKeyColumn(table);
-  const actualRecordId = record[pkCol.propertyName] as string | number;
-  const m2mMap = await fetchManyToManyDisplayData(options, table, [actualRecordId]);
+  const m2mMap = await fetchManyToManyDisplayData(options, table, [
+    actualRecordId,
+  ]);
   const m2mDisplayData = m2mMap.get(actualRecordId) ?? [];
-  
+
   // Generate CSRF token for delete form
   const csrfToken = await generateCsrfToken(options.csrfSecret);
-  
+
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
@@ -264,27 +377,30 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     showBack: true,
     csrfToken,
   };
-  
+
   // Build content with optional flash message
   let content = '';
-  
+
   // Add flash message if present (from URL params or context)
   const flash = ctx.flash ?? parseFlashFromUrl(url);
   if (flash) {
     content += alert(flash.message, flash.type);
   }
-  
+
   content += detailView(
     formatTableName(table.name),
     cmsFields,
-    record,
+    transformedRecord,
     detailOptions,
     relationData,
     m2mDisplayData,
   );
-  
-  const page = layout(content, buildLayoutOptions(ctx, `View ${formatTableName(table.name)}`, navItems));
-  
+
+  const page = layout(
+    content,
+    buildLayoutOptions(ctx, `View ${formatTableName(table.name)}`, navItems),
+  );
+
   return htmlResponse(page);
 }
 
@@ -296,32 +412,46 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
   const table = route.table!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
-  
+
   // Apply policy for create action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'create');
-  
+
   // For create, policy can only allow or deny (no filtering)
   if (!policyResult.allowed) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
   }
-  
+
   // Handle POST - create record
   if (request.method === 'POST') {
     const formData = await parseFormData(request);
-    
+
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
-      return await renderCreateForm(ctx, recordToValues(formData), 'Invalid or expired form. Please try again.');
+      return await renderCreateForm(
+        ctx,
+        recordToValues(formData),
+        'Invalid or expired form. Please try again.',
+      );
     }
-    
+
     const editableColumns = getEditableColumns(table);
     const values = coerceFormValues(formData, editableColumns);
-    
+
     // Validate form data (uses custom parser if provided, else drizzle-zod)
-    const validation = validateWithParsers(options, table.name, drizzleTable, values, 'insert');
+    const validation = validateWithParsers(
+      options,
+      table.name,
+      drizzleTable,
+      values,
+      'insert',
+    );
     if (!validation.success) {
       return await renderCreateForm(
         ctx,
@@ -330,19 +460,45 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
         validation.errors,
       );
     }
-    
+
     try {
+      // Apply beforeSave transform if plugin service available
+      let dataToInsert = validation.data ?? values;
+      if (ctx.pluginService) {
+        const pluginUser = getPluginUser(ctx);
+        dataToInsert = await ctx.pluginService.beforeSave(
+          table.name,
+          'create',
+          dataToInsert,
+          pluginUser,
+        );
+      }
+
       const result = await options.db
         .insert(drizzleTable)
-        .values(validation.data ?? values)
+        .values(dataToInsert)
         .returning();
-      
+
       const newRecord = result[0] as Record<string, unknown>;
       const newId = getPrimaryKeyValue(table, newRecord);
-      
+
       // Save many-to-many relations
       await saveManyToManyData(options, table, newId, formData);
-      
+
+      // Fire create action hook (may be fire-and-forget)
+      if (ctx.pluginService) {
+        const pluginUser = getPluginUser(ctx);
+        // Don't await - allow fire-and-forget plugins
+        ctx.pluginService.onAction(
+          table.name,
+          'create',
+          newId,
+          pluginUser,
+          undefined,
+          newRecord,
+        );
+      }
+
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
       // Re-render form with safe error message
@@ -350,7 +506,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       return await renderCreateForm(ctx, values, safeMessage);
     }
   }
-  
+
   // Handle GET - show form
   return await renderCreateForm(ctx);
 }
@@ -364,49 +520,77 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
-  
+
   // Apply policy for update action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(
+      cmsUrl(basePath, table.name, recordId),
+      'update_forbidden',
+    );
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'update');
-  
+
   if (!policyResult.allowed) {
-    return redirectWithFlash(cmsUrl(basePath, table.name, recordId), 'update_forbidden');
+    return redirectWithFlash(
+      cmsUrl(basePath, table.name, recordId),
+      'update_forbidden',
+    );
   }
-  
+
   // Fetch record with policy condition (for GET form display)
   const record = await findRecordWithPolicy(
     options.db,
     drizzleTable as Table,
     table,
     recordId,
-    policyResult.condition
+    policyResult.condition,
   );
-  
+
   if (!record) {
     // Check if record exists at all (to distinguish 404 vs 403)
-    const exists = await recordExists(options.db, drizzleTable as Table, table, recordId);
+    const exists = await recordExists(
+      options.db,
+      drizzleTable as Table,
+      table,
+      recordId,
+    );
     if (exists) {
-      return redirectWithFlash(cmsUrl(basePath, table.name), 'update_forbidden');
+      return redirectWithFlash(
+        cmsUrl(basePath, table.name),
+        'update_forbidden',
+      );
     }
     return notFound(`Record not found`);
   }
-  
+
   // Handle POST - update record
   if (request.method === 'POST') {
     const formData = await parseFormData(request);
-    
+
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
-      return await renderEditForm(ctx, recordToValues(formData), 'Invalid or expired form. Please try again.');
+      return await renderEditForm(
+        ctx,
+        recordToValues(formData),
+        'Invalid or expired form. Please try again.',
+      );
     }
-    
+
     const editableColumns = getEditableColumns(table);
     const values = coerceFormValues(formData, editableColumns);
-    
+
     // Validate form data (uses custom parser if provided, else drizzle-zod)
-    const validation = validateWithParsers(options, table.name, drizzleTable, values, 'update');
+    const validation = validateWithParsers(
+      options,
+      table.name,
+      drizzleTable,
+      values,
+      'update',
+    );
     if (!validation.success) {
       return await renderEditForm(
         ctx,
@@ -415,30 +599,66 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
         validation.errors,
       );
     }
-    
+
     try {
+      // Apply beforeSave transform if plugin service available
+      let dataToUpdate = validation.data ?? values;
+      if (ctx.pluginService) {
+        const pluginUser = getPluginUser(ctx);
+        dataToUpdate = await ctx.pluginService.beforeSave(
+          table.name,
+          'update',
+          dataToUpdate,
+          pluginUser,
+        );
+      }
+
       // Update with policy condition (atomic check + update)
       const updateResult = await updateWithPolicy(
         options.db,
         drizzleTable as Table,
         table,
         recordId,
-        validation.data ?? values,
-        policyResult.condition
+        dataToUpdate,
+        policyResult.condition,
       );
-      
+
       // If 0 rows affected, policy filtered it out (race condition protection)
       if (updateResult.rowsAffected === 0) {
-        const exists = await recordExists(options.db, drizzleTable as Table, table, recordId);
+        const exists = await recordExists(
+          options.db,
+          drizzleTable as Table,
+          table,
+          recordId,
+        );
         if (exists) {
-          return redirectWithFlash(cmsUrl(basePath, table.name), 'update_forbidden');
+          return redirectWithFlash(
+            cmsUrl(basePath, table.name),
+            'update_forbidden',
+          );
         }
-        return redirectWithFlash(cmsUrl(basePath, table.name), 'update_not_found');
+        return redirectWithFlash(
+          cmsUrl(basePath, table.name),
+          'update_not_found',
+        );
       }
-      
+
       // Save many-to-many relations
       await saveManyToManyData(options, table, recordId, formData);
-      
+
+      // Fire update action hook (may be fire-and-forget)
+      if (ctx.pluginService) {
+        const pluginUser = getPluginUser(ctx);
+        ctx.pluginService.onAction(
+          table.name,
+          'update',
+          recordId,
+          pluginUser,
+          record,
+          { ...record, ...dataToUpdate },
+        );
+      }
+
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
       // Re-render form with safe error message
@@ -446,7 +666,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       return await renderEditForm(ctx, values, safeMessage);
     }
   }
-  
+
   // Handle GET - show form
   return await renderEditForm(ctx, record);
 }
@@ -460,16 +680,20 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
-  
+
   // Apply policy for delete action
-  const policy = options.policies[table.name];
+  // If auth is enabled but policies are undefined, deny access (secure by default)
+  if (options.auth && !options.policies) {
+    return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
+  }
+  const policy = options.policies?.[table.name];
   const policyCtx = createPolicyContext(request, authUser);
   const policyResult = await applyPolicy(policy, policyCtx, 'delete');
-  
+
   if (!policyResult.allowed) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
   }
-  
+
   // For delete, also validate CSRF from form data
   if (request.method === 'POST') {
     const formData = await parseFormData(request);
@@ -478,35 +702,70 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
     }
   }
-  
+
   try {
+    // Fetch record before deletion for audit purposes
+    const recordToDelete = ctx.pluginService
+      ? await findRecordWithPolicy(
+        options.db,
+        drizzleTable as Table,
+        table,
+        recordId,
+        policyResult.condition,
+      )
+      : null;
+
     // Delete with policy condition (atomic check + delete)
     const deleteResult = await deleteWithPolicy(
       options.db,
       drizzleTable as Table,
       table,
       recordId,
-      policyResult.condition
+      policyResult.condition,
     );
-    
+
     // If 0 rows affected, either doesn't exist or policy filtered it out
     if (deleteResult.rowsAffected === 0) {
-      const exists = await recordExists(options.db, drizzleTable as Table, table, recordId);
+      const exists = await recordExists(
+        options.db,
+        drizzleTable as Table,
+        table,
+        recordId,
+      );
       if (exists) {
         // Record exists but policy denied access
-        return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
+        return redirectWithFlash(
+          cmsUrl(basePath, table.name),
+          'delete_forbidden',
+        );
       }
       // Record doesn't exist
-      return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_not_found');
+      return redirectWithFlash(
+        cmsUrl(basePath, table.name),
+        'delete_not_found',
+      );
     }
-    
+
+    // Fire delete action hook (may be fire-and-forget)
+    if (ctx.pluginService && recordToDelete) {
+      const pluginUser = getPluginUser(ctx);
+      ctx.pluginService.onAction(
+        table.name,
+        'delete',
+        recordId,
+        pluginUser,
+        recordToDelete,
+        undefined,
+      );
+    }
+
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');
   } catch (error) {
     // Use helper to check for FK violation
     if (isForeignKeyViolation(error)) {
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_fk_error');
     }
-    
+
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
   }
 }
@@ -525,26 +784,26 @@ async function renderCreateForm(
   const table = route.table!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
-  
+
   const cmsFields = tableToCmsFields(table, true); // editable only
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, undefined);
-  
+
   // Generate CSRF token
   const csrfToken = await generateCsrfToken(options.csrfSecret);
-  
+
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     action: cmsUrl(basePath, table.name) + '/new',
     csrfToken,
   };
-  
+
   // Merge form-level and field-level errors
   const errors: Record<string, string> = { ...fieldErrors };
   if (formError) {
     errors._form = formError;
   }
-  
+
   let content = '';
   if (formError) {
     content += alert(formError, 'error');
@@ -558,9 +817,12 @@ async function renderCreateForm(
     relationData,
     manyToManyData,
   );
-  
-  const page = layout(content, buildLayoutOptions(ctx, `Create ${formatTableName(table.name)}`, navItems));
-  
+
+  const page = layout(
+    content,
+    buildLayoutOptions(ctx, `Create ${formatTableName(table.name)}`, navItems),
+  );
+
   return htmlResponse(page);
 }
 
@@ -575,26 +837,26 @@ async function renderEditForm(
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
-  
+
   const cmsFields = tableToCmsFields(table, true); // editable only
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, recordId);
-  
+
   // Generate CSRF token
   const csrfToken = await generateCsrfToken(options.csrfSecret);
-  
+
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
     csrfToken,
   };
-  
+
   // Merge form-level and field-level errors
   const errors: Record<string, string> = { ...fieldErrors };
   if (formError) {
     errors._form = formError;
   }
-  
+
   let content = '';
   if (formError) {
     content += alert(formError, 'error');
@@ -608,8 +870,11 @@ async function renderEditForm(
     relationData,
     manyToManyData,
   );
-  
-  const page = layout(content, buildLayoutOptions(ctx, `Edit ${formatTableName(table.name)}`, navItems));
-  
+
+  const page = layout(
+    content,
+    buildLayoutOptions(ctx, `Edit ${formatTableName(table.name)}`, navItems),
+  );
+
   return htmlResponse(page);
 }

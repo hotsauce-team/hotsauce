@@ -1,15 +1,26 @@
 // CRUD helper functions
 // Extracted from crud.ts to reduce file size and improve maintainability
 
-import { eq, inArray, and } from 'drizzle-orm';
-import type { IntrospectedTable, IntrospectedColumn, IntrospectedSchema, CMSField, JunctionTable } from '@drizzle-cms/core';
-import { mapColumnToField, mapColumnToFieldType, createInsertSchema, createUpdateSchema } from '@drizzle-cms/core';
+import { and, eq, inArray } from 'drizzle-orm';
+import type {
+  CMSField,
+  IntrospectedColumn,
+  IntrospectedSchema,
+  IntrospectedTable,
+  JunctionTable,
+} from '@drizzle-cms/core';
+import {
+  createInsertSchema,
+  createUpdateSchema,
+  mapColumnToField,
+  mapColumnToFieldType,
+} from '@drizzle-cms/core';
 import { ZodError } from 'zod';
-import type { RelationOption, ManyToManyData } from '@drizzle-cms/ui';
+import type { ManyToManyData, RelationOption } from '@drizzle-cms/ui';
 import type { ManyToManyDisplayData } from '@drizzle-cms/ui';
-import type { ResolvedCmsOptions, ParserFn } from './types.ts';
-import { cmsUrl, formatTableName, formatColumnName } from './router.ts';
-import type { NavItem, ListColumn } from '@drizzle-cms/ui';
+import type { ParserFn, ResolvedCmsOptions } from './types.ts';
+import { cmsUrl, formatColumnName, formatTableName } from './router.ts';
+import type { ListColumn, NavItem } from '@drizzle-cms/ui';
 
 // ============================================================================
 // Navigation helpers
@@ -21,11 +32,11 @@ export function buildNavItems(
   activeTable?: string,
 ): NavItem[] {
   // Filter out junction tables from navigation
-  const visibleTables = schema.tables.filter(t => !t.isJunction);
-  
+  const visibleTables = schema.tables.filter((t) => !t.isJunction);
+
   return [
     { href: cmsUrl(basePath), label: 'Dashboard', active: !activeTable },
-    ...visibleTables.map(t => ({
+    ...visibleTables.map((t) => ({
       href: cmsUrl(basePath, t.name),
       label: formatTableName(t.name),
       active: t.name === activeTable,
@@ -37,21 +48,28 @@ export function buildNavItems(
 // Record helpers
 // ============================================================================
 
-export function getPrimaryKeyColumn(table: IntrospectedTable): IntrospectedColumn {
-  const pk = table.columns.find(c => c.isPrimaryKey);
+export function getPrimaryKeyColumn(
+  table: IntrospectedTable,
+): IntrospectedColumn {
+  const pk = table.columns.find((c) => c.isPrimaryKey);
   if (!pk) {
     throw new Error(`Table ${table.name} has no primary key`);
   }
   return pk;
 }
 
-export function getPrimaryKeyValue(table: IntrospectedTable, record: Record<string, unknown>): string {
+export function getPrimaryKeyValue(
+  table: IntrospectedTable,
+  record: Record<string, unknown>,
+): string {
   const pk = getPrimaryKeyColumn(table);
   return String(record[pk.name] ?? '');
 }
 
-export function getEditableColumns(table: IntrospectedTable): IntrospectedColumn[] {
-  return table.columns.filter(c => {
+export function getEditableColumns(
+  table: IntrospectedTable,
+): IntrospectedColumn[] {
+  return table.columns.filter((c) => {
     // Exclude auto-generated columns
     if (c.isPrimaryKey && c.hasDefault) return false;
     if (c.name === 'created_at' || c.name === 'updated_at') return false;
@@ -65,30 +83,35 @@ export function getEditableColumns(table: IntrospectedTable): IntrospectedColumn
 
 export function getListColumns(table: IntrospectedTable): ListColumn[] {
   return table.columns
-    .filter(c => {
+    .filter((c) => {
       // Exclude large text fields from list
       const fieldType = mapColumnToFieldType(c);
       if (fieldType === 'textarea' || fieldType === 'json') return false;
       return true;
     })
     .slice(0, 6)
-    .map(c => ({
+    .map((c) => ({
       // Use propertyName for key to match relationData keys and record property access
       key: c.propertyName,
       label: formatColumnName(c.name),
     }));
 }
 
-export function tableToCmsFields(table: IntrospectedTable, editableOnly = false): CMSField[] {
+export function tableToCmsFields(
+  table: IntrospectedTable,
+  editableOnly = false,
+): CMSField[] {
   let columns = table.columns;
   if (editableOnly) {
     columns = getEditableColumns(table);
   }
-  
-  return columns.map(col => mapColumnToField(col));
+
+  return columns.map((col) => mapColumnToField(col));
 }
 
-export function recordToValues(formData: Record<string, string | string[]>): Record<string, unknown> {
+export function recordToValues(
+  formData: Record<string, string | string[]>,
+): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(formData)) {
     result[key] = Array.isArray(value) ? value[0] : value;
@@ -104,22 +127,33 @@ export function recordToValues(formData: Record<string, string | string[]>): Rec
  * Get the best display column for a table (for relation labels)
  * Looks for common naming patterns: name, title, label, email, etc.
  */
-export function getDisplayColumn(table: IntrospectedTable): IntrospectedColumn | null {
-  const preferredNames = ['name', 'title', 'label', 'email', 'username', 'slug'];
-  
+export function getDisplayColumn(
+  table: IntrospectedTable,
+): IntrospectedColumn | null {
+  const preferredNames = [
+    'name',
+    'title',
+    'label',
+    'email',
+    'username',
+    'slug',
+  ];
+
   for (const name of preferredNames) {
-    const col = table.columns.find(c => c.name === name);
+    const col = table.columns.find((c) => c.name === name);
     if (col && col.dataType === 'string') {
       return col;
     }
   }
-  
+
   // Fall back to first non-PK string column
-  const stringCol = table.columns.find(c => c.dataType === 'string' && !c.isPrimaryKey);
+  const stringCol = table.columns.find((c) =>
+    c.dataType === 'string' && !c.isPrimaryKey
+  );
   if (stringCol) return stringCol;
-  
+
   // Last resort: first non-PK column
-  return table.columns.find(c => !c.isPrimaryKey) ?? null;
+  return table.columns.find((c) => !c.isPrimaryKey) ?? null;
 }
 
 /**
@@ -127,26 +161,26 @@ export function getDisplayColumn(table: IntrospectedTable): IntrospectedColumn |
  */
 export async function fetchRelationOptions(
   options: ResolvedCmsOptions,
-  tableName: string
+  tableName: string,
 ): Promise<RelationOption[]> {
-  const table = options.introspected.tables.find(t => t.name === tableName);
+  const table = options.introspected.tables.find((t) => t.name === tableName);
   if (!table) return [];
-  
+
   const drizzleTable = table.table;
-  const pkColumn = table.columns.find(c => c.isPrimaryKey);
+  const pkColumn = table.columns.find((c) => c.isPrimaryKey);
   const displayColumn = getDisplayColumn(table);
-  
+
   if (!pkColumn) return [];
-  
+
   try {
     const records = await options.db.select().from(drizzleTable).limit(500);
-    
-    return (records as Record<string, unknown>[]).map(record => {
+
+    return (records as Record<string, unknown>[]).map((record) => {
       const value = record[pkColumn.name];
-      const label = displayColumn 
+      const label = displayColumn
         ? String(record[displayColumn.name] ?? value)
         : String(value);
-      
+
       return {
         value: value as string | number,
         label,
@@ -162,23 +196,26 @@ export async function fetchRelationOptions(
  */
 export async function fetchAllRelationOptions(
   options: ResolvedCmsOptions,
-  table: IntrospectedTable
+  table: IntrospectedTable,
 ): Promise<Record<string, RelationOption[]>> {
   const relationData: Record<string, RelationOption[]> = {};
-  
+
   // Find all columns with foreign key references
-  const fkColumns = table.columns.filter(c => c.references);
-  
+  const fkColumns = table.columns.filter((c) => c.references);
+
   // Fetch options for each FK column in parallel
   // Use propertyName as key since that's what forms use for field lookup
   await Promise.all(
     fkColumns.map(async (col) => {
       if (col.references) {
-        relationData[col.propertyName] = await fetchRelationOptions(options, col.references.table);
+        relationData[col.propertyName] = await fetchRelationOptions(
+          options,
+          col.references.table,
+        );
       }
-    })
+    }),
   );
-  
+
   return relationData;
 }
 
@@ -191,9 +228,19 @@ export async function fetchAllRelationOptions(
  */
 export function getJunctionsForTable(
   junctions: JunctionTable[],
-  tableName: string
-): { junction: JunctionTable; relatedTable: string; thisColumn: string; relatedColumn: string }[] {
-  const result: { junction: JunctionTable; relatedTable: string; thisColumn: string; relatedColumn: string }[] = [];
+  tableName: string,
+): {
+  junction: JunctionTable;
+  relatedTable: string;
+  thisColumn: string;
+  relatedColumn: string;
+}[] {
+  const result: {
+    junction: JunctionTable;
+    relatedTable: string;
+    thisColumn: string;
+    relatedColumn: string;
+  }[] = [];
 
   for (const junction of junctions) {
     if (junction.leftTable === tableName) {
@@ -222,20 +269,29 @@ export function getJunctionsForTable(
 export async function fetchManyToManyData(
   options: ResolvedCmsOptions,
   table: IntrospectedTable,
-  recordId: string | number | undefined
+  recordId: string | number | undefined,
 ): Promise<ManyToManyData[]> {
-  const junctions = getJunctionsForTable(options.introspected.junctions, table.name);
+  const junctions = getJunctionsForTable(
+    options.introspected.junctions,
+    table.name,
+  );
   if (junctions.length === 0) return [];
 
   const result: ManyToManyData[] = [];
 
-  for (const { junction, relatedTable, thisColumn, relatedColumn } of junctions) {
+  for (
+    const { junction, relatedTable, thisColumn, relatedColumn } of junctions
+  ) {
     // Find the junction table
-    const junctionTableInfo = options.introspected.tables.find(t => t.name === junction.tableName);
+    const junctionTableInfo = options.introspected.tables.find((t) =>
+      t.name === junction.tableName
+    );
     if (!junctionTableInfo) continue;
 
     // Find the related table
-    const relatedTableInfo = options.introspected.tables.find(t => t.name === relatedTable);
+    const relatedTableInfo = options.introspected.tables.find((t) =>
+      t.name === relatedTable
+    );
     if (!relatedTableInfo) continue;
 
     // Fetch all options from the related table
@@ -247,8 +303,12 @@ export async function fetchManyToManyData(
       try {
         const junctionTable = junctionTableInfo.table;
         // Find the column that points to this table
-        const junctionThisCol = junctionTableInfo.columns.find(c => c.propertyName === thisColumn);
-        const junctionRelatedCol = junctionTableInfo.columns.find(c => c.propertyName === relatedColumn);
+        const junctionThisCol = junctionTableInfo.columns.find((c) =>
+          c.propertyName === thisColumn
+        );
+        const junctionRelatedCol = junctionTableInfo.columns.find((c) =>
+          c.propertyName === relatedColumn
+        );
 
         if (junctionThisCol && junctionRelatedCol) {
           // deno-lint-ignore no-explicit-any
@@ -260,7 +320,7 @@ export async function fetchManyToManyData(
               .where(eq(drizzleCol, recordId));
 
             selectedValues = (rows as Record<string, unknown>[]).map(
-              row => row[relatedColumn] as string | number
+              (row) => row[relatedColumn] as string | number,
             );
           }
         }
@@ -288,31 +348,42 @@ export async function fetchManyToManyData(
 export async function fetchManyToManyDisplayData(
   options: ResolvedCmsOptions,
   table: IntrospectedTable,
-  recordIds: (string | number)[]
+  recordIds: (string | number)[],
 ): Promise<Map<string | number, ManyToManyDisplayData[]>> {
   const result = new Map<string | number, ManyToManyDisplayData[]>();
   if (recordIds.length === 0) return result;
-  
+
   // Initialize empty arrays for all records
   for (const id of recordIds) {
     result.set(id, []);
   }
 
-  const junctions = getJunctionsForTable(options.introspected.junctions, table.name);
+  const junctions = getJunctionsForTable(
+    options.introspected.junctions,
+    table.name,
+  );
   if (junctions.length === 0) return result;
 
-  for (const { junction, relatedTable, thisColumn, relatedColumn } of junctions) {
+  for (
+    const { junction, relatedTable, thisColumn, relatedColumn } of junctions
+  ) {
     // Find the junction table
-    const junctionTableInfo = options.introspected.tables.find(t => t.name === junction.tableName);
+    const junctionTableInfo = options.introspected.tables.find((t) =>
+      t.name === junction.tableName
+    );
     if (!junctionTableInfo) continue;
 
     // Find the related table
-    const relatedTableInfo = options.introspected.tables.find(t => t.name === relatedTable);
+    const relatedTableInfo = options.introspected.tables.find((t) =>
+      t.name === relatedTable
+    );
     if (!relatedTableInfo) continue;
 
     // Fetch all options from the related table (for display labels)
     const allOptions = await fetchRelationOptions(options, relatedTable);
-    const optionLabels = new Map(allOptions.map(o => [String(o.value), o.label]));
+    const optionLabels = new Map(
+      allOptions.map((o) => [String(o.value), o.label]),
+    );
 
     // Fetch junction rows for all recordIds at once
     try {
@@ -339,10 +410,10 @@ export async function fetchManyToManyDisplayData(
         // Build display data for each record
         for (const id of recordIds) {
           const selectedIds = groupedByRecord.get(id) ?? [];
-          const displayValues = selectedIds.map(relId => 
+          const displayValues = selectedIds.map((relId) =>
             optionLabels.get(String(relId)) ?? String(relId)
           );
-          
+
           result.get(id)!.push({
             fieldName: `${relatedTable}Ids`,
             label: formatTableName(relatedTable),
@@ -365,16 +436,21 @@ export async function saveManyToManyData(
   options: ResolvedCmsOptions,
   table: IntrospectedTable,
   recordId: string | number,
-  formData: Record<string, string | string[]>
+  formData: Record<string, string | string[]>,
 ): Promise<void> {
-  const junctions = getJunctionsForTable(options.introspected.junctions, table.name);
+  const junctions = getJunctionsForTable(
+    options.introspected.junctions,
+    table.name,
+  );
   if (junctions.length === 0) return;
 
-  for (const { junction, relatedTable, thisColumn, relatedColumn } of junctions) {
+  for (
+    const { junction, relatedTable, thisColumn, relatedColumn } of junctions
+  ) {
     // Get field name for this relation
     const fieldName = `${relatedTable}Ids`;
     const rawValues = formData[fieldName];
-    
+
     // Parse selected values from form
     const selectedIds = new Set<string>();
     if (rawValues) {
@@ -385,7 +461,9 @@ export async function saveManyToManyData(
     }
 
     // Find the junction table
-    const junctionTableInfo = options.introspected.tables.find(t => t.name === junction.tableName);
+    const junctionTableInfo = options.introspected.tables.find((t) =>
+      t.name === junction.tableName
+    );
     if (!junctionTableInfo) continue;
 
     const junctionTable = junctionTableInfo.table;
@@ -393,7 +471,7 @@ export async function saveManyToManyData(
     const drizzleThisCol = (junctionTable as any)[thisColumn];
     // deno-lint-ignore no-explicit-any
     const drizzleRelatedCol = (junctionTable as any)[relatedColumn];
-    
+
     if (!drizzleThisCol || !drizzleRelatedCol) continue;
 
     try {
@@ -404,12 +482,14 @@ export async function saveManyToManyData(
         .where(eq(drizzleThisCol, recordId));
 
       const existingIds = new Set(
-        (existingRows as Record<string, unknown>[]).map(r => String(r[relatedColumn]))
+        (existingRows as Record<string, unknown>[]).map((r) =>
+          String(r[relatedColumn])
+        ),
       );
 
       // Calculate what to delete and insert
-      const toDelete = [...existingIds].filter(id => !selectedIds.has(id));
-      const toInsert = [...selectedIds].filter(id => !existingIds.has(id));
+      const toDelete = [...existingIds].filter((id) => !selectedIds.has(id));
+      const toInsert = [...selectedIds].filter((id) => !existingIds.has(id));
 
       // Delete removed relations
       if (toDelete.length > 0) {
@@ -417,13 +497,16 @@ export async function saveManyToManyData(
           .delete(junctionTable)
           .where(and(
             eq(drizzleThisCol, recordId),
-            inArray(drizzleRelatedCol, toDelete.map(id => parseInt(id, 10) || id))
+            inArray(
+              drizzleRelatedCol,
+              toDelete.map((id) => parseInt(id, 10) || id),
+            ),
           ));
       }
 
       // Insert new relations
       if (toInsert.length > 0) {
-        const insertValues = toInsert.map(relatedId => ({
+        const insertValues = toInsert.map((relatedId) => ({
           [thisColumn]: recordId,
           [relatedColumn]: parseInt(relatedId, 10) || relatedId,
         }));
@@ -460,16 +543,17 @@ const UNIQUE_VIOLATION_PATTERNS = [
 export function isForeignKeyViolation(error: unknown): boolean {
   const errorCode = (error as { code?: string })?.code;
   const errorMessage = error instanceof Error ? error.message : String(error);
-  const causedBy = (error as { cause?: { message?: string } })?.cause?.message ?? '';
+  const causedBy =
+    (error as { cause?: { message?: string } })?.cause?.message ?? '';
   const fullMessage = `${errorMessage} ${causedBy}`.toLowerCase();
-  
+
   if (errorCode && FK_VIOLATION_PATTERNS.includes(errorCode)) {
     return true;
   }
-  
+
   return fullMessage.includes('foreign key constraint') ||
-         fullMessage.includes('foreign key') ||
-         fullMessage.includes('violates foreign key');
+    fullMessage.includes('foreign key') ||
+    fullMessage.includes('violates foreign key');
 }
 
 /**
@@ -478,34 +562,38 @@ export function isForeignKeyViolation(error: unknown): boolean {
 export function isUniqueViolation(error: unknown): boolean {
   const errorCode = (error as { code?: string })?.code;
   const errorMessage = error instanceof Error ? error.message : String(error);
-  const causedBy = (error as { cause?: { message?: string } })?.cause?.message ?? '';
+  const causedBy =
+    (error as { cause?: { message?: string } })?.cause?.message ?? '';
   const fullMessage = `${errorMessage} ${causedBy}`.toLowerCase();
-  
+
   if (errorCode && UNIQUE_VIOLATION_PATTERNS.includes(errorCode)) {
     return true;
   }
-  
+
   return fullMessage.includes('unique constraint') ||
-         fullMessage.includes('duplicate key') ||
-         fullMessage.includes('unique');
+    fullMessage.includes('duplicate key') ||
+    fullMessage.includes('unique');
 }
 
 /**
  * Get a safe, user-friendly error message from a database error
  * Never exposes raw error details to the user
  */
-export function getSafeErrorMessage(error: unknown, action: 'create' | 'update' | 'delete'): string {
+export function getSafeErrorMessage(
+  error: unknown,
+  action: 'create' | 'update' | 'delete',
+): string {
   if (isForeignKeyViolation(error)) {
     if (action === 'delete') {
       return 'Cannot delete this record because it is referenced by other records. Remove those references first.';
     }
     return 'The selected reference does not exist. Please choose a valid option.';
   }
-  
+
   if (isUniqueViolation(error)) {
     return 'A record with these values already exists. Please use different values.';
   }
-  
+
   // Generic safe messages based on action
   switch (action) {
     case 'create':
@@ -537,7 +625,7 @@ export interface ValidationResult<T = Record<string, unknown>> {
  */
 export function formatZodErrors(zodError: ZodError): Record<string, string> {
   const errors: Record<string, string> = {};
-  
+
   for (const issue of zodError.issues) {
     // Use the first path segment as the field name
     const fieldName = issue.path[0];
@@ -545,14 +633,14 @@ export function formatZodErrors(zodError: ZodError): Record<string, string> {
       errors[fieldName] = issue.message;
     }
   }
-  
+
   return errors;
 }
 
 /**
  * Validate form data against the Drizzle table's schema
  * Uses drizzle-zod's createInsertSchema or createUpdateSchema based on mode
- * 
+ *
  * @param drizzleTable - The Drizzle table definition
  * @param values - Coerced form values to validate
  * @param mode - 'insert' for new records (required fields enforced), 'update' for edits (all fields optional)
@@ -571,25 +659,25 @@ export function validateFormData(
     const schema = mode === 'insert'
       ? createInsertSchema(tableArg)
       : createUpdateSchema(tableArg);
-    
+
     // Validate the values
     const result = schema.safeParse(values);
-    
+
     if (result.success) {
       return {
         success: true,
         data: result.data as Record<string, unknown>,
       };
     }
-    
+
     // Format errors for form display
     const errors = formatZodErrors(result.error);
-    
+
     return {
       success: false,
       errors,
-      formError: Object.keys(errors).length > 0 
-        ? 'Please fix the errors below.' 
+      formError: Object.keys(errors).length > 0
+        ? 'Please fix the errors below.'
         : 'Validation failed. Please check your input.',
     };
   } catch (err) {
@@ -603,7 +691,7 @@ export function validateFormData(
 
 /**
  * Validate form data using custom parser if provided, otherwise use drizzle-zod
- * 
+ *
  * @param options - Resolved CMS options containing custom parsers
  * @param tableName - Name of the table being validated
  * @param drizzleTable - The Drizzle table definition (for fallback)
@@ -619,7 +707,7 @@ export function validateWithParsers(
   mode: 'insert' | 'update',
 ): ValidationResult {
   const customParser: ParserFn | undefined = options.parsers[tableName]?.[mode];
-  
+
   if (customParser) {
     try {
       const data = customParser(values) as Record<string, unknown>;
@@ -627,7 +715,7 @@ export function validateWithParsers(
     } catch (error) {
       // Extract field errors from the error
       const errors: Record<string, string> = {};
-      
+
       if (error instanceof ZodError) {
         // ZodError has type-safe access to issues
         for (const issue of error.issues) {
@@ -638,7 +726,9 @@ export function validateWithParsers(
         }
       } else {
         // Try Valibot-style errors as fallback
-        const err = error as { errors?: Array<{ path?: string; message?: string }> };
+        const err = error as {
+          errors?: Array<{ path?: string; message?: string }>;
+        };
         if (err.errors) {
           for (const e of err.errors) {
             if (e.path && !errors[e.path]) {
@@ -647,18 +737,18 @@ export function validateWithParsers(
           }
         }
       }
-      
+
       const hasFieldErrors = Object.keys(errors).length > 0;
       return {
         success: false,
         errors: hasFieldErrors ? errors : undefined,
-        formError: hasFieldErrors 
+        formError: hasFieldErrors
           ? 'Please fix the errors below.'
           : (error instanceof Error ? error.message : 'Validation failed'),
       };
     }
   }
-  
+
   // Fall back to drizzle-zod
   try {
     return validateFormData(drizzleTable, values, mode);
@@ -672,14 +762,15 @@ export function validateWithParsers(
           url: new URL('http://localhost/validation'),
           route: null,
           action: mode === 'insert' ? 'create' : 'update',
-        }
+        },
       );
     }
-    
+
     // Return explicit failure - don't silently pass unvalidated data
     return {
       success: false,
-      formError: 'Validation unavailable for this table. Please provide a custom parser or contact the administrator.',
+      formError:
+        'Validation unavailable for this table. Please provide a custom parser or contact the administrator.',
     };
   }
 }

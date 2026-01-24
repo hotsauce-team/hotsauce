@@ -1,7 +1,7 @@
 // Login/logout UI templates
 // Uses the same styling as the rest of the CMS
 
-import { html, raw, attrs } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@drizzle-cms/ui';
 import { layout } from '@drizzle-cms/ui';
 
 /**
@@ -25,21 +25,23 @@ export function renderLoginPage(options: {
     identityValue = '',
     csrfToken,
   } = options;
-  
+
   const formContent = html`
     <div class="cms-login-container">
       <div class="cms-login-box">
         <h1 class="cms-login-title">${title}</h1>
-        
-        ${error ? raw(html`
-          <div class="cms-alert cms-alert-error">
-            ${error}
-          </div>
-        `) : ''}
-        
+
+        ${error
+          ? raw(html`
+            <div class="cms-alert cms-alert-error">
+              ${error}
+            </div>
+          `)
+          : ''}
+
         <form method="POST" action="${basePath}/login" class="cms-login-form">
           <input type="hidden" name="_csrf" value="${csrfToken}" />
-          
+
           <div class="cms-form-field">
             <label for="identity" class="cms-label">${identityLabel}</label>
             <input
@@ -56,7 +58,7 @@ export function renderLoginPage(options: {
               class="cms-input"
             />
           </div>
-          
+
           <div class="cms-form-field">
             <label for="password" class="cms-label">Password</label>
             <input
@@ -71,7 +73,7 @@ export function renderLoginPage(options: {
               class="cms-input"
             />
           </div>
-          
+
           <button type="submit" class="cms-btn cms-btn-primary cms-login-btn">
             Sign In
           </button>
@@ -79,7 +81,7 @@ export function renderLoginPage(options: {
       </div>
     </div>
   `;
-  
+
   // Use layout without nav for login page
   return layout(formContent, {
     title: `Login - ${title}`,

@@ -1,9 +1,9 @@
 // Tests for view components
 
 import { assertEquals, assertStringIncludes } from 'jsr:@std/assert';
-import { listTable, listView, fieldsToListColumns } from '../views/list.ts';
-import { detailView, detailField } from '../views/detail.ts';
-import { editView, createView } from '../views/edit.ts';
+import { fieldsToListColumns, listTable, listView } from '../views/list.ts';
+import { detailField, detailView } from '../views/detail.ts';
+import { createView, editView } from '../views/edit.ts';
 import type { CMSField, IntrospectedColumn } from '@drizzle-cms/core';
 
 // Helper to create mock CMSField
@@ -111,7 +111,9 @@ Deno.test('listView: renders header with title and create button', () => {
   const columns = [{ key: 'id', label: 'ID' }];
   const records = [{ id: 1 }];
 
-  const result = listView('Users', columns, records, { baseUrl: '/admin/users' });
+  const result = listView('Users', columns, records, {
+    baseUrl: '/admin/users',
+  });
 
   assertStringIncludes(result, '<h1>Users</h1>');
   assertStringIncludes(result, '/admin/users/new');
@@ -121,8 +123,14 @@ Deno.test('listView: renders header with title and create button', () => {
 // fieldsToListColumns tests
 Deno.test('fieldsToListColumns: converts fields to columns', () => {
   const fields = [
-    createMockField({ column: { propertyName: 'id' } as IntrospectedColumn, label: 'ID' }),
-    createMockField({ column: { propertyName: 'name' } as IntrospectedColumn, label: 'Name' }),
+    createMockField({
+      column: { propertyName: 'id' } as IntrospectedColumn,
+      label: 'ID',
+    }),
+    createMockField({
+      column: { propertyName: 'name' } as IntrospectedColumn,
+      label: 'Name',
+    }),
   ];
 
   const columns = fieldsToListColumns(fields);
@@ -134,8 +142,15 @@ Deno.test('fieldsToListColumns: converts fields to columns', () => {
 
 Deno.test('fieldsToListColumns: excludes hidden fields', () => {
   const fields = [
-    createMockField({ column: { propertyName: 'id' } as IntrospectedColumn, label: 'ID', hidden: true }),
-    createMockField({ column: { propertyName: 'name' } as IntrospectedColumn, label: 'Name' }),
+    createMockField({
+      column: { propertyName: 'id' } as IntrospectedColumn,
+      label: 'ID',
+      hidden: true,
+    }),
+    createMockField({
+      column: { propertyName: 'name' } as IntrospectedColumn,
+      label: 'Name',
+    }),
   ];
 
   const columns = fieldsToListColumns(fields);
@@ -146,8 +161,14 @@ Deno.test('fieldsToListColumns: excludes hidden fields', () => {
 
 Deno.test('fieldsToListColumns: respects exclude list', () => {
   const fields = [
-    createMockField({ column: { propertyName: 'id' } as IntrospectedColumn, label: 'ID' }),
-    createMockField({ column: { propertyName: 'password' } as IntrospectedColumn, label: 'Password' }),
+    createMockField({
+      column: { propertyName: 'id' } as IntrospectedColumn,
+      label: 'ID',
+    }),
+    createMockField({
+      column: { propertyName: 'password' } as IntrospectedColumn,
+      label: 'Password',
+    }),
   ];
 
   const columns = fieldsToListColumns(fields, ['password']);
@@ -199,7 +220,10 @@ Deno.test('detailField: formats JSON values', () => {
 // detailView tests
 Deno.test('detailView: renders view with title and fields', () => {
   const fields = [
-    createMockField({ column: { propertyName: 'name' } as IntrospectedColumn, label: 'Name' }),
+    createMockField({
+      column: { propertyName: 'name' } as IntrospectedColumn,
+      label: 'Name',
+    }),
   ];
   const record = { name: 'Test' };
 
@@ -256,13 +280,21 @@ Deno.test('createView: renders form for creating', () => {
 
 Deno.test('editView: shows validation errors', () => {
   const fields = [
-    createMockField({ column: { propertyName: 'email' } as IntrospectedColumn }),
+    createMockField({
+      column: { propertyName: 'email' } as IntrospectedColumn,
+    }),
   ];
 
-  const result = editView('Edit', fields, {
-    baseUrl: '/admin/users',
-    id: 1,
-  }, {}, { email: 'Invalid email address' });
+  const result = editView(
+    'Edit',
+    fields,
+    {
+      baseUrl: '/admin/users',
+      id: 1,
+    },
+    {},
+    { email: 'Invalid email address' },
+  );
 
   assertStringIncludes(result, 'Invalid email address');
   assertStringIncludes(result, 'cms-error');

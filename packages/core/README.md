@@ -37,13 +37,13 @@ Works with any Drizzle dialect (Postgres, MySQL, SQLite).
 
 > **Tested with both Postgres and SQLite schemas** — see `tests/fixtures/` for examples.
 
-| Export | Purpose |
-|--------|---------|
-| `introspectTable(table)` | Get metadata for a single table |
-| `introspectSchema(schema)` | Get metadata for all tables in a schema module |
-| `introspectRelations(schema)` | Extract relation definitions |
-| `introspectFullSchema(schema)` | Combined tables + relations + junctions |
-| `detectJunctionTables(tables)` | Find many-to-many link tables |
+| Export                         | Purpose                                        |
+| ------------------------------ | ---------------------------------------------- |
+| `introspectTable(table)`       | Get metadata for a single table                |
+| `introspectSchema(schema)`     | Get metadata for all tables in a schema module |
+| `introspectRelations(schema)`  | Extract relation definitions                   |
+| `introspectFullSchema(schema)` | Combined tables + relations + junctions        |
+| `detectJunctionTables(tables)` | Find many-to-many link tables                  |
 
 **Example:**
 
@@ -52,37 +52,37 @@ import { introspectTable } from '@drizzle-cms/core';
 import { users } from './schema';
 
 const meta = introspectTable(users);
-console.log(meta.name);       // 'users'
+console.log(meta.name); // 'users'
 console.log(meta.primaryKey); // ['id']
-console.log(meta.columns);    // [{name: 'id', dataType: 'number', ...}, ...]
+console.log(meta.columns); // [{name: 'id', dataType: 'number', ...}, ...]
 ```
 
 ### `fields/` - Field Mapping
 
 Map database columns to CMS UI field types.
 
-| Export | Purpose |
-|--------|---------|
+| Export                         | Purpose                                                  |
+| ------------------------------ | -------------------------------------------------------- |
 | `mapColumnToFieldType(column)` | Column → field type (`text`, `number`, `relation`, etc.) |
-| `mapColumnToField(column)` | Full field definition with label, hints |
-| `mapColumnsToFields(columns)` | Batch conversion for all columns |
-| `propertyNameToLabel(name)` | `authorId` → `"Author Id"` |
+| `mapColumnToField(column)`     | Full field definition with label, hints                  |
+| `mapColumnsToFields(columns)`  | Batch conversion for all columns                         |
+| `propertyNameToLabel(name)`    | `authorId` → `"Author Id"`                               |
 
 **Field Types:**
 
-| CMSFieldType | Used For |
-|--------------|----------|
-| `text` | Short strings (varchar) |
-| `textarea` | Long text (text columns) |
-| `number` | Integers, decimals |
-| `boolean` | Boolean columns |
-| `date` | Date-only columns |
-| `datetime` | Timestamp columns |
-| `select` | Enum columns |
-| `relation` | Foreign key references |
-| `json` | JSON/JSONB columns |
-| `uuid` | UUID columns |
-| `array` | Array columns (Postgres) |
+| CMSFieldType | Used For                 |
+| ------------ | ------------------------ |
+| `text`       | Short strings (varchar)  |
+| `textarea`   | Long text (text columns) |
+| `number`     | Integers, decimals       |
+| `boolean`    | Boolean columns          |
+| `date`       | Date-only columns        |
+| `datetime`   | Timestamp columns        |
+| `select`     | Enum columns             |
+| `relation`   | Foreign key references   |
+| `json`       | JSON/JSONB columns       |
+| `uuid`       | UUID columns             |
+| `array`      | Array columns (Postgres) |
 
 **Example:**
 
@@ -91,18 +91,18 @@ import { mapColumnToField } from '@drizzle-cms/core';
 
 const field = mapColumnToField(meta.columns[0]);
 console.log(field.fieldType); // 'text'
-console.log(field.label);     // 'Email'
-console.log(field.column);    // Original column metadata
+console.log(field.label); // 'Email'
+console.log(field.column); // Original column metadata
 ```
 
 ### `validation/` - Zod Schema Generation
 
 Re-exports from `drizzle-zod` for form validation.
 
-| Export | Purpose |
-|--------|---------|
+| Export                      | Purpose                         |
+| --------------------------- | ------------------------------- |
 | `createInsertSchema(table)` | Zod schema for creating records |
-| `createSelectSchema(table)` | Zod schema for reading records |
+| `createSelectSchema(table)` | Zod schema for reading records  |
 
 **Example:**
 
@@ -120,10 +120,10 @@ const result = insertSchema.safeParse(formData);
 
 ```ts
 interface IntrospectedColumn {
-  name: string;           // Database column name (snake_case)
-  propertyName: string;   // Drizzle property name (camelCase)
-  columnType: string;     // e.g., 'PgVarchar', 'SQLiteInteger'
-  dataType: string;       // e.g., 'string', 'number', 'boolean'
+  name: string; // Database column name (snake_case)
+  propertyName: string; // Drizzle property name (camelCase)
+  columnType: string; // e.g., 'PgVarchar', 'SQLiteInteger'
+  dataType: string; // e.g., 'string', 'number', 'boolean'
   notNull: boolean;
   hasDefault: boolean;
   isPrimaryKey: boolean;
@@ -142,8 +142,8 @@ interface IntrospectedTable {
   name: string;
   columns: IntrospectedColumn[];
   primaryKey: string[];
-  table: unknown;         // Original Drizzle table reference
-  isJunction?: boolean;   // True for many-to-many link tables
+  table: unknown; // Original Drizzle table reference
+  isJunction?: boolean; // True for many-to-many link tables
 }
 ```
 

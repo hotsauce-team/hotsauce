@@ -3,6 +3,13 @@
   "version": "0.0.1",
   "exports": "./mod.ts",
   "publish": {
-    "include": ["mod.ts", "forms/", "views/", "components/", "README.md", "LICENSE"]
+    "include": [
+      "mod.ts",
+      "forms/",
+      "views/",
+      "components/",
+      "README.md",
+      "LICENSE"
+    ]
   }
 }

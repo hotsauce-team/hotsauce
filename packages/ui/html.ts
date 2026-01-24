@@ -36,19 +36,22 @@ export function raw(html: string): SafeHtml {
 /**
  * Tagged template literal for safe HTML generation
  * Automatically escapes interpolated values unless wrapped in raw()
- * 
+ *
  * @example
  * ```ts
  * const name = '<script>alert("xss")</script>';
- * html`<p>Hello ${name}</p>` 
+ * html`<p>Hello ${name}</p>`
  * // Returns: <p>Hello &lt;script&gt;alert("xss")&lt;/script&gt;</p>
- * 
+ *
  * const trustedHtml = raw('<strong>Bold</strong>');
  * html`<p>${trustedHtml}</p>`
  * // Returns: <p><strong>Bold</strong></p>
  * ```
  */
-export function html(strings: TemplateStringsArray, ...values: unknown[]): string {
+export function html(
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+): string {
   let result = '';
   for (let i = 0; i < strings.length; i++) {
     result += strings[i];
@@ -58,7 +61,9 @@ export function html(strings: TemplateStringsArray, ...values: unknown[]): strin
         result += value.value;
       } else if (Array.isArray(value)) {
         // Join arrays (for mapping over items)
-        result += value.map(v => v instanceof SafeHtml ? v.value : escapeHtml(v)).join('');
+        result += value.map((v) =>
+          v instanceof SafeHtml ? v.value : escapeHtml(v)
+        ).join('');
       } else {
         result += escapeHtml(value);
       }
@@ -70,7 +75,7 @@ export function html(strings: TemplateStringsArray, ...values: unknown[]): strin
 /**
  * Build HTML attributes from an object
  * Omits null/undefined/false values, handles boolean attributes
- * 
+ *
  * @example
  * ```ts
  * attrs({ type: 'text', required: true, disabled: false, value: null })
@@ -97,12 +102,18 @@ export function attrs(attributes: Record<string, unknown>): SafeHtml {
  * Conditionally include content
  */
 export function when(condition: unknown, content: string | SafeHtml): SafeHtml {
-  return condition ? raw(content instanceof SafeHtml ? content.value : content) : raw('');
+  return condition
+    ? raw(content instanceof SafeHtml ? content.value : content)
+    : raw('');
 }
 
 /**
  * Join multiple HTML fragments
  */
 export function join(items: (string | SafeHtml)[], separator = ''): SafeHtml {
-  return raw(items.map(item => item instanceof SafeHtml ? item.value : item).join(separator));
+  return raw(
+    items.map((item) => item instanceof SafeHtml ? item.value : item).join(
+      separator,
+    ),
+  );
 }

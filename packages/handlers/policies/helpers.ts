@@ -1,10 +1,9 @@
 // Policy helper factories for common authorization patterns
 // These reduce boilerplate for typical use cases
 
-import { eq, or, and, arrayContains, isNotNull } from 'drizzle-orm';
-import type { SQL, Table, Column } from 'drizzle-orm';
-import type { PolicyFn, ActionPolicies } from './types.ts';
-
+import { and, arrayContains, eq, isNotNull, or } from 'drizzle-orm';
+import type { Column, SQL, Table } from 'drizzle-orm';
+import type { ActionPolicies, PolicyFn } from './types.ts';
 
 // ============================================================================
 // Core helpers
@@ -12,7 +11,7 @@ import type { PolicyFn, ActionPolicies } from './types.ts';
 
 /**
  * Always allow access (no filter applied)
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -26,7 +25,7 @@ export function always(): PolicyFn {
 
 /**
  * Always deny access (returns 403 Forbidden)
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -40,7 +39,7 @@ export function never(): PolicyFn {
 
 /**
  * Require authentication (any logged-in user)
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -58,10 +57,10 @@ export function authenticated(): PolicyFn {
 
 /**
  * Only allow users with a specific role
- * 
+ *
  * @param role - Required role
  * @param policy - Policy to apply if role matches (default: always())
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -81,10 +80,10 @@ export function roleIs(role: string, policy: PolicyFn = always()): PolicyFn {
 
 /**
  * Allow users with any of the specified roles
- * 
+ *
  * @param roles - Array of allowed roles
  * @param policy - Policy to apply if any role matches
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -108,14 +107,14 @@ export function roleIn(roles: string[], policy: PolicyFn = always()): PolicyFn {
 /**
  * Filter to records owned by the current user
  * Compares table column to JWT subject (user ID)
- * 
+ *
  * @param table - Drizzle table object
  * @param ownerColumn - Column name containing owner user ID
- * 
+ *
  * @example
  * ```ts
  * import { posts } from './schema';
- * 
+ *
  * const policies = {
  *   posts: ownedBy(posts, 'authorId'),
  * };
@@ -135,15 +134,15 @@ export function ownedBy<T extends Table>(
 /**
  * Filter to records where user is owner OR a contributor
  * Works with tables that have an owner column and a contributors array column
- * 
+ *
  * @param table - Drizzle table object
  * @param ownerColumn - Column name containing owner user ID
  * @param contributorsColumn - Column name containing array of contributor user IDs
- * 
+ *
  * @example
  * ```ts
  * import { posts } from './schema';
- * 
+ *
  * const policies = {
  *   // posts.contributors is text[]
  *   posts: ownedByOrContributor(posts, 'authorId', 'contributors'),
@@ -159,13 +158,13 @@ export function ownedByOrContributor<T extends Table>(
     if (!ctx.user) return false;
     const owner = table[ownerColumn] as Column;
     const contributors = table[contributorsColumn] as Column;
-    
+
     return or(
       eq(owner, ctx.user.sub),
       and(
         isNotNull(contributors),
-        arrayContains(contributors, [ctx.user.sub])
-      )
+        arrayContains(contributors, [ctx.user.sub]),
+      ),
     ) as SQL;
   };
 }
@@ -177,9 +176,9 @@ export function ownedByOrContributor<T extends Table>(
 /**
  * Apply the first policy that grants access
  * Useful for "admin OR owner" patterns
- * 
+ *
  * @param policies - Array of policies to try in order
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -193,31 +192,31 @@ export function ownedByOrContributor<T extends Table>(
 export function anyOf(policies: PolicyFn[]): PolicyFn {
   return async (ctx, action) => {
     const conditions: SQL[] = [];
-    
+
     for (const policy of policies) {
       const result = await policy(ctx, action);
-      
+
       // If any policy grants full access, grant it
       if (result === undefined) {
         return undefined;
       }
-      
+
       // If policy returns a condition, collect it
       if (result !== false) {
         conditions.push(result);
       }
     }
-    
+
     // If no policies granted access, deny
     if (conditions.length === 0) {
       return false;
     }
-    
+
     // Combine all conditions with OR
     if (conditions.length === 1) {
       return conditions[0];
     }
-    
+
     return or(...conditions) as SQL;
   };
 }
@@ -225,9 +224,9 @@ export function anyOf(policies: PolicyFn[]): PolicyFn {
 /**
  * Require ALL policies to grant access
  * Useful for combining multiple conditions
- * 
+ *
  * @param policies - Array of policies that must all pass
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -241,31 +240,31 @@ export function anyOf(policies: PolicyFn[]): PolicyFn {
 export function allOf(policies: PolicyFn[]): PolicyFn {
   return async (ctx, action) => {
     const conditions: SQL[] = [];
-    
+
     for (const policy of policies) {
       const result = await policy(ctx, action);
-      
+
       // If any policy denies, deny
       if (result === false) {
         return false;
       }
-      
+
       // Collect non-undefined conditions
       if (result !== undefined) {
         conditions.push(result);
       }
     }
-    
+
     // If no conditions, grant full access
     if (conditions.length === 0) {
       return undefined;
     }
-    
+
     // Combine all conditions with AND
     if (conditions.length === 1) {
       return conditions[0];
     }
-    
+
     return and(...conditions) as SQL;
   };
 }
@@ -276,9 +275,9 @@ export function allOf(policies: PolicyFn[]): PolicyFn {
 
 /**
  * Apply different policies for different actions
- * 
+ *
  * @param actionPolicies - Object mapping actions to policies
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -295,21 +294,21 @@ export function allOf(policies: PolicyFn[]): PolicyFn {
 export function forActions(actionPolicies: ActionPolicies): PolicyFn {
   return (ctx, action) => {
     const policy = actionPolicies[action] ?? actionPolicies['*'];
-    
+
     if (!policy) {
       // No policy for this action = full access
       return undefined;
     }
-    
+
     return policy(ctx, action);
   };
 }
 
 /**
  * Read-only access: allow list and read, deny create/update/delete
- * 
+ *
  * @param readPolicy - Policy for list/read actions (default: always())
- * 
+ *
  * @example
  * ```ts
  * const policies = {
@@ -330,10 +329,10 @@ export function readOnly(readPolicy: PolicyFn = always()): PolicyFn {
 
 /**
  * Common pattern: admins have full access, others need to pass a policy
- * 
+ *
  * @param otherPolicy - Policy for non-admin users
  * @param adminRole - Role that gets full access (default: 'admin')
- * 
+ *
  * @example
  * ```ts
  * const policies = {

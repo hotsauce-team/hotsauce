@@ -7,8 +7,12 @@ import {
   ownedBy,
   PasswordProvider,
   readOnly,
-} from '../../packages/handlers/mod.ts';
-import { schema, posts, users, parsers } from './schema.ts';
+} from '@drizzle-cms/handlers';
+import {
+  inProcessFormatNamesPlugin,
+  isolatedAuditLogPlugin,
+} from './plugins.ts';
+import { parsers, posts, schema, users } from './schema.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
@@ -32,6 +36,13 @@ const cmsHandler = createCmsHandler({
     posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
     categories: (readOnly()), // Admins: full access, others: read-only
   },
+  // Plugins for extending CMS functionality
+  plugins: [
+    // Worker-isolated plugin (recommended for third-party)
+    isolatedAuditLogPlugin,
+    // In-process plugin example (for trusted first-party code)
+    inProcessFormatNamesPlugin,
+  ],
   // User input parsers for validation (validation library agnostic)
   parsers,
   // Log errors to console (in production, use a proper logging service)

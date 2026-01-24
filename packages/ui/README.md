@@ -5,7 +5,7 @@ HTML generation, form rendering, and view components for the CMS admin interface
 ## Installation
 
 ```ts
-import { html, raw, layout, editView } from '@drizzle-cms/ui';
+import { editView, html, layout, raw } from '@drizzle-cms/ui';
 ```
 
 ## Architecture
@@ -38,32 +38,38 @@ import { html, raw, layout, editView } from '@drizzle-cms/ui';
 
 Tagged template literal with automatic XSS escaping.
 
-| Export | Purpose |
-|--------|---------|
-| `html` | Tagged template that auto-escapes values |
-| `raw(string)` | Mark trusted HTML (skip escaping) |
-| `escapeHtml(value)` | Manual HTML escaping |
-| `attrs(object)` | Build attribute strings safely |
-| `when(condition, content)` | Conditional rendering helper |
-| `join(items, separator)` | Join with SafeHtml support |
-| `SafeHtml` | Class for pre-escaped content |
+| Export                     | Purpose                                  |
+| -------------------------- | ---------------------------------------- |
+| `html`                     | Tagged template that auto-escapes values |
+| `raw(string)`              | Mark trusted HTML (skip escaping)        |
+| `escapeHtml(value)`        | Manual HTML escaping                     |
+| `attrs(object)`            | Build attribute strings safely           |
+| `when(condition, content)` | Conditional rendering helper             |
+| `join(items, separator)`   | Join with SafeHtml support               |
+| `SafeHtml`                 | Class for pre-escaped content            |
 
 **Example:**
 
 ```ts
-import { html, raw, attrs } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@drizzle-cms/ui';
 
 // Auto-escaping prevents XSS
 const userInput = '<script>alert("xss")</script>';
-html`<p>${userInput}</p>`;
+html`
+  <p>${userInput}</p>
+`;
 // → <p>&lt;script&gt;alert("xss")&lt;/script&gt;</p>
 
 // Trusted HTML with raw()
-html`<div>${raw('<strong>Bold</strong>')}</div>`;
+html`
+  <div>${raw('<strong>Bold</strong>')}</div>
+`;
 // → <div><strong>Bold</strong></div>
 
 // Safe attribute building
-html`<input ${attrs({ type: 'text', value: userInput, disabled: false })} />`;
+html`
+  <input ${attrs({ type: 'text', value: userInput, disabled: false })} />
+`;
 // → <input type="text" value="&lt;script&gt;..." />
 ```
 
@@ -71,8 +77,8 @@ html`<input ${attrs({ type: 'text', value: userInput, disabled: false })} />`;
 
 External CSS stylesheet for strict CSP compliance.
 
-| Export | Purpose |
-|--------|---------|
+| Export          | Purpose                  |
+| --------------- | ------------------------ |
 | `cmsStylesheet` | Complete CSS as a string |
 
 The stylesheet is served externally at `{basePath}/styles.css` by the handlers package. This enables strict Content Security Policy (`style-src 'self'`) without requiring nonces.
@@ -88,28 +94,28 @@ console.log(cmsStylesheet.length); // ~8KB
 
 Individual input components for different field types.
 
-| Export | Purpose |
-|--------|---------|
-| `textInput(opts)` | Text input with maxlength |
-| `textareaInput(opts)` | Multi-line text |
-| `numberInput(opts)` | Numeric input |
-| `booleanInput(opts)` | Checkbox |
-| `dateInput(opts)` | Date picker |
-| `datetimeInput(opts)` | Datetime picker |
-| `selectInput(opts)` | Dropdown select |
-| `relationInput(opts)` | Foreign key select |
-| `checkboxListInput(opts)` | Many-to-many checkboxes |
-| `uuidInput(opts)` | UUID with pattern validation |
-| `jsonInput(opts)` | JSON textarea |
-| `hiddenInput(opts)` | Hidden field |
+| Export                                 | Purpose                      |
+| -------------------------------------- | ---------------------------- |
+| `textInput(opts)`                      | Text input with maxlength    |
+| `textareaInput(opts)`                  | Multi-line text              |
+| `numberInput(opts)`                    | Numeric input                |
+| `booleanInput(opts)`                   | Checkbox                     |
+| `dateInput(opts)`                      | Date picker                  |
+| `datetimeInput(opts)`                  | Datetime picker              |
+| `selectInput(opts)`                    | Dropdown select              |
+| `relationInput(opts)`                  | Foreign key select           |
+| `checkboxListInput(opts)`              | Many-to-many checkboxes      |
+| `uuidInput(opts)`                      | UUID with pattern validation |
+| `jsonInput(opts)`                      | JSON textarea                |
+| `hiddenInput(opts)`                    | Hidden field                 |
 | `renderFieldInput(field, value, opts)` | Auto-routes to correct input |
-| `formField(field, value, opts)` | Field with label and wrapper |
-| `form(opts)` | Complete form with fields |
+| `formField(field, value, opts)`        | Field with label and wrapper |
+| `form(opts)`                           | Complete form with fields    |
 
 **Example:**
 
 ```ts
-import { textInput, selectInput, formField } from '@drizzle-cms/ui';
+import { formField, selectInput, textInput } from '@drizzle-cms/ui';
 
 // Basic text input
 textInput({ name: 'title', value: 'Hello', required: true, maxLength: 200 });
@@ -132,15 +138,15 @@ formField(cmsField, record.title, { relationOptions });
 
 Complete page views for CRUD operations.
 
-| Export | Purpose |
-|--------|---------|
-| `listView(opts)` | Table listing with pagination |
-| `listTable(opts)` | Just the data table |
+| Export                        | Purpose                         |
+| ----------------------------- | ------------------------------- |
+| `listView(opts)`              | Table listing with pagination   |
+| `listTable(opts)`             | Just the data table             |
 | `fieldsToListColumns(fields)` | Convert fields to table columns |
-| `detailView(opts)` | Read-only record view |
-| `detailField(field, value)` | Single field display |
-| `editView(opts)` | Edit form for existing record |
-| `createView(opts)` | Create form for new record |
+| `detailView(opts)`            | Read-only record view           |
+| `detailField(field, value)`   | Single field display            |
+| `editView(opts)`              | Edit form for existing record   |
+| `createView(opts)`            | Create form for new record      |
 
 **Types:**
 
@@ -169,12 +175,15 @@ interface EditViewOptions {
 **Example:**
 
 ```ts
-import { listView, editView } from '@drizzle-cms/ui';
+import { editView, listView } from '@drizzle-cms/ui';
 
 // List page
 const html = listView({
   title: 'Posts',
-  columns: [{ key: 'title', label: 'Title' }, { key: 'status', label: 'Status' }],
+  columns: [{ key: 'title', label: 'Title' }, {
+    key: 'status',
+    label: 'Status',
+  }],
   records: posts,
   primaryKey: 'id',
   basePath: '/admin',
@@ -194,17 +203,17 @@ const html = editView({
 
 Page chrome and reusable UI elements.
 
-| Export | Purpose |
-|--------|---------|
-| `layout(opts)` | Full HTML page with CSS |
-| `nav(items)` | Sidebar navigation |
-| `alert(message)` | Flash message display |
-| `pagination(opts)` | Page navigation links |
+| Export             | Purpose                 |
+| ------------------ | ----------------------- |
+| `layout(opts)`     | Full HTML page with CSS |
+| `nav(items)`       | Sidebar navigation      |
+| `alert(message)`   | Flash message display   |
+| `pagination(opts)` | Page navigation links   |
 
 **Example:**
 
 ```ts
-import { layout, nav, alert } from '@drizzle-cms/ui';
+import { alert, layout, nav } from '@drizzle-cms/ui';
 
 layout({
   title: 'Posts - Admin',
@@ -232,7 +241,7 @@ interface RelationOption {
 
 ```ts
 interface ManyToManyData {
-  name: string;           // Relation name (e.g., "categories")
+  name: string; // Relation name (e.g., "categories")
   options: RelationOption[];
   selectedValues: (string | number)[];
 }

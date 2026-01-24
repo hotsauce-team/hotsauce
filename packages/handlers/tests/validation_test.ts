@@ -1,12 +1,17 @@
 // Tests for CMS configuration validation
 
 import { assertEquals, assertThrows } from '@std/assert';
-import { validateCmsOptions, CmsConfigError, CmsOptionsSchema } from '../validation.ts';
+import {
+  CmsConfigError,
+  CmsOptionsSchema,
+  validateCmsOptions,
+} from '../validation.ts';
 
 // Mock minimal valid options
 const validOptions = {
   db: { query: () => {} },
   schema: { users: { name: 'users' } },
+  auth: 'dangerously-open' as const,
 };
 
 Deno.test('validateCmsOptions: accepts valid config', () => {
@@ -24,7 +29,11 @@ Deno.test('validateCmsOptions: throws CmsConfigError on invalid config', () => {
 
 Deno.test('validateCmsOptions: requires db', () => {
   assertThrows(
-    () => validateCmsOptions({ schema: { users: {} } }),
+    () =>
+      validateCmsOptions({
+        schema: { users: {} },
+        auth: 'dangerously-open',
+      }),
     CmsConfigError,
     'db is required',
   );
@@ -32,7 +41,12 @@ Deno.test('validateCmsOptions: requires db', () => {
 
 Deno.test('validateCmsOptions: requires schema with tables', () => {
   assertThrows(
-    () => validateCmsOptions({ db: {}, schema: {} }),
+    () =>
+      validateCmsOptions({
+        db: {},
+        schema: {},
+        auth: 'dangerously-open',
+      }),
     CmsConfigError,
     'at least one table',
   );
@@ -43,6 +57,113 @@ Deno.test('validateCmsOptions: validates basePath starts with /', () => {
     () => validateCmsOptions({ ...validOptions, basePath: 'admin' }),
     CmsConfigError,
     'basePath must start with /',
+  );
+});
+
+Deno.test('validateCmsOptions: requires auth property', () => {
+  const { auth: _, ...optionsWithoutAuth } = validOptions;
+  assertThrows(
+    () => validateCmsOptions(optionsWithoutAuth),
+    CmsConfigError,
+    'Invalid CMS configuration',
+  );
+});
+
+Deno.test("validateCmsOptions: accepts auth: 'dangerously-open'", () => {
+  // Should not throw
+  validateCmsOptions({
+    ...validOptions,
+    auth: 'dangerously-open',
+  });
+});
+
+Deno.test("validateCmsOptions: rejects policies when auth is 'dangerously-open'", () => {
+  assertThrows(
+    () =>
+      validateCmsOptions({
+        ...validOptions,
+        auth: 'dangerously-open',
+        policies: { users: () => undefined },
+      }),
+    CmsConfigError,
+    'policies must not be set',
+  );
+});
+
+Deno.test('validateCmsOptions: accepts auth config object with policies', () => {
+  // Should not throw - policies required when auth is an object
+  validateCmsOptions({
+    ...validOptions,
+    auth: {
+      provider: { authenticate: () => {} },
+    },
+    policies: { users: () => undefined },
+  });
+});
+
+Deno.test("validateCmsOptions: accepts auth config with policies: 'dangerously-open'", () => {
+  // Should not throw
+  validateCmsOptions({
+    ...validOptions,
+    auth: {
+      provider: { authenticate: () => {} },
+    },
+    policies: 'dangerously-open',
+  });
+});
+
+Deno.test('validateCmsOptions: requires policies when auth is config object', () => {
+  assertThrows(
+    () =>
+      validateCmsOptions({
+        ...validOptions,
+        auth: {
+          provider: { authenticate: () => {} },
+        },
+        // policies missing
+      }),
+    CmsConfigError,
+    'policies',
+  );
+});
+
+Deno.test('validateCmsOptions: accepts empty policies object (full access)', () => {
+  // Empty policies {} is equivalent to 'dangerously-open' - full access to all tables
+  validateCmsOptions({
+    ...validOptions,
+    auth: {
+      provider: { authenticate: () => {} },
+    },
+    policies: {},
+  });
+});
+
+Deno.test('validateCmsOptions: validates auth.provider is required', () => {
+  assertThrows(
+    () =>
+      validateCmsOptions({
+        ...validOptions,
+        auth: {} as { provider: unknown },
+        policies: 'dangerously-open',
+      }),
+    CmsConfigError,
+    'auth.provider must be an AuthProvider',
+  );
+});
+
+Deno.test('validateCmsOptions: validates auth.secret length', () => {
+  assertThrows(
+    () =>
+      validateCmsOptions({
+        ...validOptions,
+        auth: {
+          provider: { authenticate: () => {} },
+          secret: 'short',
+        },
+        policies: 'dangerously-open',
+      }),
+    CmsConfigError,
+    'at least 32 characters',
   );
 });
 
@@ -79,7 +200,10 @@ Deno.test('validateCmsOptions: handles Symbol keys in error paths', () => {
   } catch (error) {
     // Should be CmsConfigError, not TypeError
     assertEquals(error instanceof CmsConfigError, true);
-    assertEquals((error as CmsConfigError).message.includes('Invalid CMS configuration'), true);
+    assertEquals(
+      (error as CmsConfigError).message.includes('Invalid CMS configuration'),
+      true,
+    );
   }
 });
 

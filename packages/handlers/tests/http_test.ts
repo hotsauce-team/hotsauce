@@ -2,17 +2,17 @@
 
 import { assertEquals, assertExists } from '@std/assert';
 import {
-  htmlResponse,
-  redirect,
-  jsonResponse,
-  notFound,
-  forbidden,
-  methodNotAllowed,
-  parseFormData,
   coerceFormValues,
   coerceValue,
+  forbidden,
   getPagination,
   getSort,
+  htmlResponse,
+  jsonResponse,
+  methodNotAllowed,
+  notFound,
+  parseFormData,
+  redirect,
 } from '../http.ts';
 import type { IntrospectedColumn } from '@drizzle-cms/core';
 
@@ -22,47 +22,50 @@ import type { IntrospectedColumn } from '@drizzle-cms/core';
 
 Deno.test('htmlResponse: creates HTML response', () => {
   const response = htmlResponse('<p>Hello</p>');
-  
+
   assertEquals(response.status, 200);
-  assertEquals(response.headers.get('Content-Type'), 'text/html; charset=utf-8');
+  assertEquals(
+    response.headers.get('Content-Type'),
+    'text/html; charset=utf-8',
+  );
 });
 
 Deno.test('htmlResponse: custom status code', () => {
   const response = htmlResponse('<p>Error</p>', 500);
-  
+
   assertEquals(response.status, 500);
 });
 
 Deno.test('redirect: creates redirect response', () => {
   const response = redirect('/admin/users');
-  
+
   assertEquals(response.status, 303);
   assertEquals(response.headers.get('Location'), '/admin/users');
 });
 
 Deno.test('redirect: custom status code', () => {
   const response = redirect('/admin', 302);
-  
+
   assertEquals(response.status, 302);
 });
 
 Deno.test('jsonResponse: creates JSON response', () => {
   const response = jsonResponse({ success: true });
-  
+
   assertEquals(response.status, 200);
   assertEquals(response.headers.get('Content-Type'), 'application/json');
 });
 
 Deno.test('notFound: creates 404 response', () => {
   const response = notFound('Page not found');
-  
+
   assertEquals(response.status, 404);
 });
 
 Deno.test('notFound: escapes HTML in message to prevent XSS', async () => {
   const response = notFound('<script>alert("xss")</script>');
   const body = await response.text();
-  
+
   assertEquals(response.status, 404);
   // Should escape HTML special characters
   assertEquals(body.includes('&lt;script&gt;'), true);
@@ -71,14 +74,14 @@ Deno.test('notFound: escapes HTML in message to prevent XSS', async () => {
 
 Deno.test('forbidden: creates 403 response', () => {
   const response = forbidden('Access denied');
-  
+
   assertEquals(response.status, 403);
 });
 
 Deno.test('forbidden: escapes HTML in message to prevent XSS', async () => {
   const response = forbidden('<img src=x onerror=alert(1)>');
   const body = await response.text();
-  
+
   assertEquals(response.status, 403);
   // Should escape HTML special characters
   assertEquals(body.includes('&lt;img'), true);
@@ -87,7 +90,7 @@ Deno.test('forbidden: escapes HTML in message to prevent XSS', async () => {
 
 Deno.test('methodNotAllowed: creates 405 response', () => {
   const response = methodNotAllowed(['GET', 'POST']);
-  
+
   assertEquals(response.status, 405);
   assertEquals(response.headers.get('Allow'), 'GET, POST');
 });
@@ -152,15 +155,42 @@ Deno.test('coerceFormValues: converts form data based on column types', () => {
     age: '30',
     active: 'true',
   };
-  
+
   const columns: IntrospectedColumn[] = [
-    { name: 'name', propertyName: 'name', columnType: 'PgVarchar', dataType: 'string', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
-    { name: 'age', propertyName: 'age', columnType: 'PgInteger', dataType: 'number', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
-    { name: 'active', propertyName: 'active', columnType: 'PgBoolean', dataType: 'boolean', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
+    {
+      name: 'name',
+      propertyName: 'name',
+      columnType: 'PgVarchar',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+    {
+      name: 'age',
+      propertyName: 'age',
+      columnType: 'PgInteger',
+      dataType: 'number',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+    {
+      name: 'active',
+      propertyName: 'active',
+      columnType: 'PgBoolean',
+      dataType: 'boolean',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
   ];
-  
+
   const result = coerceFormValues(formData, columns);
-  
+
   assertEquals(result.name, 'John');
   assertEquals(result.age, 30);
   assertEquals(result.active, true);
@@ -170,13 +200,22 @@ Deno.test('coerceFormValues: handles nullable fields with empty values', () => {
   const formData = {
     bio: '',
   };
-  
+
   const columns: IntrospectedColumn[] = [
-    { name: 'bio', propertyName: 'bio', columnType: 'PgText', dataType: 'string', notNull: false, hasDefault: false, isPrimaryKey: false, isUnique: false },
+    {
+      name: 'bio',
+      propertyName: 'bio',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
   ];
-  
+
   const result = coerceFormValues(formData, columns);
-  
+
   assertEquals(result.bio, null);
 });
 
@@ -184,30 +223,57 @@ Deno.test('coerceFormValues: handles array values', () => {
   const formData = {
     tags: ['one', 'two'],
   };
-  
+
   const columns: IntrospectedColumn[] = [
-    { name: 'tags', propertyName: 'tags', columnType: 'PgVarchar', dataType: 'string', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
+    {
+      name: 'tags',
+      propertyName: 'tags',
+      columnType: 'PgVarchar',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
   ];
-  
+
   const result = coerceFormValues(formData, columns);
-  
+
   assertEquals(result.tags, 'one'); // Uses first value
 });
 
 Deno.test('coerceFormValues: uses propertyName for form lookup and output', () => {
   // Form uses camelCase (propertyName), Drizzle also expects propertyName
   const formData = {
-    authorId: '42',  // Form field uses propertyName
+    authorId: '42', // Form field uses propertyName
     createdAt: '2024-01-01',
   };
-  
+
   const columns: IntrospectedColumn[] = [
-    { name: 'author_id', propertyName: 'authorId', columnType: 'PgInteger', dataType: 'number', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
-    { name: 'created_at', propertyName: 'createdAt', columnType: 'PgTimestamp', dataType: 'date', notNull: true, hasDefault: false, isPrimaryKey: false, isUnique: false },
+    {
+      name: 'author_id',
+      propertyName: 'authorId',
+      columnType: 'PgInteger',
+      dataType: 'number',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+    {
+      name: 'created_at',
+      propertyName: 'createdAt',
+      columnType: 'PgTimestamp',
+      dataType: 'date',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
   ];
-  
+
   const result = coerceFormValues(formData, columns);
-  
+
   // Output should use propertyName for Drizzle compatibility
   assertEquals(result.authorId, 42);
   assertEquals(result.createdAt, '2024-01-01');
@@ -222,7 +288,7 @@ Deno.test('coerceFormValues: uses propertyName for form lookup and output', () =
 Deno.test('getPagination: default values', () => {
   const url = new URL('http://localhost/admin/users');
   const { page, limit, offset } = getPagination(url);
-  
+
   assertEquals(page, 1);
   assertEquals(limit, 25);
   assertEquals(offset, 0);
@@ -231,7 +297,7 @@ Deno.test('getPagination: default values', () => {
 Deno.test('getPagination: custom page', () => {
   const url = new URL('http://localhost/admin/users?page=3');
   const { page, offset } = getPagination(url);
-  
+
   assertEquals(page, 3);
   assertEquals(offset, 50); // (3-1) * 25
 });
@@ -239,7 +305,7 @@ Deno.test('getPagination: custom page', () => {
 Deno.test('getPagination: custom limit', () => {
   const url = new URL('http://localhost/admin/users?limit=10');
   const { limit, offset } = getPagination(url);
-  
+
   assertEquals(limit, 10);
   assertEquals(offset, 0);
 });
@@ -247,14 +313,14 @@ Deno.test('getPagination: custom limit', () => {
 Deno.test('getPagination: enforces min page 1', () => {
   const url = new URL('http://localhost/admin/users?page=0');
   const { page } = getPagination(url);
-  
+
   assertEquals(page, 1);
 });
 
 Deno.test('getPagination: enforces max limit 100', () => {
   const url = new URL('http://localhost/admin/users?limit=500');
   const { limit } = getPagination(url);
-  
+
   assertEquals(limit, 100);
 });
 
@@ -265,7 +331,7 @@ Deno.test('getPagination: enforces max limit 100', () => {
 Deno.test('getSort: returns null without sort param', () => {
   const url = new URL('http://localhost/admin/users');
   const columns = ['id', 'name', 'email'];
-  
+
   assertEquals(getSort(url, columns), null);
 });
 
@@ -273,7 +339,7 @@ Deno.test('getSort: ascending sort', () => {
   const url = new URL('http://localhost/admin/users?sort=name');
   const columns = ['id', 'name', 'email'];
   const sort = getSort(url, columns);
-  
+
   assertExists(sort);
   assertEquals(sort.column, 'name');
   assertEquals(sort.direction, 'asc');
@@ -283,7 +349,7 @@ Deno.test('getSort: descending sort', () => {
   const url = new URL('http://localhost/admin/users?sort=-created_at');
   const columns = ['id', 'created_at'];
   const sort = getSort(url, columns);
-  
+
   assertExists(sort);
   assertEquals(sort.column, 'created_at');
   assertEquals(sort.direction, 'desc');
@@ -292,7 +358,7 @@ Deno.test('getSort: descending sort', () => {
 Deno.test('getSort: returns null for invalid column', () => {
   const url = new URL('http://localhost/admin/users?sort=unknown');
   const columns = ['id', 'name'];
-  
+
   assertEquals(getSort(url, columns), null);
 });
 
@@ -304,14 +370,14 @@ Deno.test('parseFormData: parses form data', async () => {
   const formData = new FormData();
   formData.append('name', 'John');
   formData.append('email', 'john@example.com');
-  
+
   const request = new Request('http://localhost', {
     method: 'POST',
     body: formData,
   });
-  
+
   const result = await parseFormData(request);
-  
+
   assertEquals(result.name, 'John');
   assertEquals(result.email, 'john@example.com');
 });
@@ -320,13 +386,13 @@ Deno.test('parseFormData: handles multiple values with same name', async () => {
   const formData = new FormData();
   formData.append('tag', 'one');
   formData.append('tag', 'two');
-  
+
   const request = new Request('http://localhost', {
     method: 'POST',
     body: formData,
   });
-  
+
   const result = await parseFormData(request);
-  
+
   assertEquals(result.tag, ['one', 'two']);
 });

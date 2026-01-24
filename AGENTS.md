@@ -2,9 +2,24 @@
 
 Guidelines for AI coding assistants working on this project.
 
+## ⛔ CRITICAL RULES
+
+**Read these first. Violating these will break the project or CI.**
+
+1. **NO `--allow-*` FLAGS** — Run tests with `deno task test` or `deno test -P`. Never pass `--allow-read`, `--allow-env`, `--allow-net`, etc. Permissions are configured in `deno.jsonc`.
+
+2. **NO NEW DEPENDENCIES** — Only `drizzle-orm`, `postgres`, `zod`, `drizzle-zod` are allowed in production. Do not suggest adding packages.
+
+3. **NO `npm`/`yarn`/`pnpm`** — This is a Deno project. Use `deno` commands only.
+
+4. **NO `Deno.*` IN PACKAGES** — Code must be runtime-agnostic. Use Web Standard APIs only (`Request`, `Response`, `crypto`, `fetch`).
+
+---
+
 ## Core Constraints
 
 ### Dependencies
+
 - **ONLY** these production dependencies are allowed:
   - `drizzle-orm`
   - `postgres` (postgres.js driver)
@@ -14,12 +29,14 @@ Guidelines for AI coding assistants working on this project.
 - All four packages have zero transitive dependencies — keep it that way
 
 ### Dev Dependencies (testing only)
+
 - `@electric-sql/pglite` — in-memory Postgres for tests
 - `sql.js` — in-memory SQLite for tests
 - `@std/assert` — Deno standard library assertions
 - Dev dependencies are OK since they don't ship to users
 
 ### Runtime Compatibility
+
 - All packages must be **runtime-agnostic**
 - No `Deno.*` or Node-specific APIs — use Web Standard APIs only
 - Handlers use Web Standard `Request`/`Response` (works in Deno, Node 20+, Bun, Workers)
@@ -27,15 +44,16 @@ Guidelines for AI coding assistants working on this project.
 
 ## Package Boundaries
 
-| Package | Purpose | Runtime APIs | DB-Specific Code | DB-Specific Tests |
-|---------|---------|--------------|------------------|-------------------|
-| `core` | Schema introspection, field mapping, validation | ❌ None | ❌ Generic only | ✅ PGlite + sql.js |
-| `ui` | HTML generation, form rendering | ❌ None | ❌ Generic only | ❌ None |
-| `handlers` | CRUD route handlers (Request → Response) | ❌ Web Standard only | ❌ Generic only | ✅ PGlite + sql.js |
+| Package    | Purpose                                         | Runtime APIs         | DB-Specific Code | DB-Specific Tests  |
+| ---------- | ----------------------------------------------- | -------------------- | ---------------- | ------------------ |
+| `core`     | Schema introspection, field mapping, validation | ❌ None              | ❌ Generic only  | ✅ PGlite + sql.js |
+| `ui`       | HTML generation, form rendering                 | ❌ None              | ❌ Generic only  | ❌ None            |
+| `handlers` | CRUD route handlers (Request → Response)        | ❌ Web Standard only | ❌ Generic only  | ✅ PGlite + sql.js |
 
 ## Database Guidelines
 
 ### Database-Agnostic Design
+
 - Core schema introspection must work with **any** Drizzle schema (pg, mysql, sqlite)
 - Use Drizzle's generic types in core, not `drizzle-orm/pg-core` directly
 - Database-specific features (arrays, enums, JSON) should:
@@ -43,26 +61,28 @@ Guidelines for AI coding assistants working on this project.
   - Degrade gracefully when not available
 
 ### Drizzle ORM Helper Functions
+
 - **Use exported helper functions** instead of direct symbol/property access
 - Drizzle exports utilities like `getTableName`, `getTableColumns`, `isTable`
 - These provide type-safe access without needing `as unknown as` casts
 
 ```typescript
 // Good: use Drizzle's helpers
-import { getTableName, getTableColumns, Table } from 'drizzle-orm';
+import { getTableColumns, getTableName, Table } from 'drizzle-orm';
 
-const name = getTableName(table);           // type-safe
-const cols = getTableColumns(table);        // returns typed columns object
+const name = getTableName(table); // type-safe
+const cols = getTableColumns(table); // returns typed columns object
 
 // Bad: direct symbol access
 const TABLE_NAME = Symbol.for('drizzle:Name');
-const name = (table as any)[TABLE_NAME];    // loses type safety
+const name = (table as any)[TABLE_NAME]; // loses type safety
 ```
 
 - For properties without helpers (e.g., foreign keys), use symbol access with appropriate casts
 - Check drizzle-orm's exports before adding custom symbol lookups
 
 ### Feature Detection Pattern
+
 ```typescript
 // Good: detect capabilities
 const capabilities = detectCapabilities(schema);
@@ -82,6 +102,7 @@ import { pgTable } from 'drizzle-orm/pg-core';
 - Keep functions **pure** where possible — side effects in server packages
 
 ### UI Package Guidelines
+
 - Use the `html` tagged template from `packages/ui/html.ts` for XSS-safe HTML
 - Interpolated values are auto-escaped; use `raw()` for trusted HTML
 - Use `attrs()` helper to build attribute strings safely
@@ -91,18 +112,23 @@ import { pgTable } from 'drizzle-orm/pg-core';
 
 ```typescript
 // Good: auto-escaped template
-import { html, raw, attrs } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@drizzle-cms/ui';
 
-html`<input ${attrs({ name, value: userInput })} />`;  // userInput is escaped
-html`<div>${raw(trustedHtml)}</div>`;                  // explicitly trusted
+html`
+  <input ${attrs({ name, value: userInput })} />
+`; // userInput is escaped
+html`
+  <div>${raw(trustedHtml)}</div>
+`; // explicitly trusted
 
 // Bad: string concatenation
-`<input value="${userInput}" />`;  // XSS vulnerability
+`<input value="${userInput}" />`; // XSS vulnerability
 ```
 
 ## File Organization
 
 Each package has a README with detailed API documentation:
+
 - [`packages/core/README.md`](packages/core/README.md) — Schema introspection, field mapping
 - [`packages/ui/README.md`](packages/ui/README.md) — HTML generation, forms, views
 - [`packages/handlers/README.md`](packages/handlers/README.md) — CRUD handlers, routing
@@ -149,17 +175,78 @@ packages/handlers/
 ├── validation.ts       # Zod config validation
 ├── runtime-compat.ts   # Cross-runtime env var utilities (getEnv)
 ├── types.ts            # Handler types (CmsOptions, ErrorContext, etc.)
-└── auth/               # JWT authentication module
+├── auth/               # JWT authentication module
+└── plugins/            # Plugin registry, service, and types
+    ├── types.ts        # Plugin, PluginConfig, re-exports from handlers-workers
+    ├── registry.ts     # Plugin registration and validation
+    └── service.ts      # Plugin execution orchestration
+
+packages/handlers-workers/
+├── mod.ts              # Main entry, exports WorkerExecutor
+├── README.md           # Package documentation
+├── types.ts            # Serializable, PluginContext, ActionContext, etc.
+└── executor.ts         # Worker management and communication
+
+packages/plugins/
+├── mod.ts              # Main entry, re-exports plugins and types
+├── README.md           # Package documentation
+└── audit-log/
+    ├── mod.ts          # Type exports for DX (AuditLogConfig)
+    └── worker.ts       # Worker module (handles messages directly)
 ```
 
 ## Environment Variables
 
 The CMS uses these environment variables for secrets (can also be passed directly):
 
-| Variable | Purpose |
-|----------|---------|
-| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars) |
-| `CMS_JWT_SECRET` | JWT signing for auth (32+ chars) |
+| Variable          | Purpose                          |
+| ----------------- | -------------------------------- |
+| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)   |
+| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars) |
+
+## Authorization & Policy Model
+
+The CMS uses a **layered security model** for authorization. Understanding this prevents accidental "fixes" that break intended behavior.
+
+### Security Layers (in order)
+
+1. **Type-level enforcement** (`CmsOptions` in `types.ts`)
+   - When `auth` is configured, `policies` is **required** by TypeScript
+   - Forces developers to explicitly choose an authorization strategy
+   - Options: `policies: { ... }`, `policies: {}`, or `policies: 'dangerously-open'`
+
+2. **Zod validation at startup** (`validateCmsOptions` in `validation.ts`)
+   - Validates entire config when `createCmsHandler()` is called
+   - Throws `CmsConfigError` with detailed messages for invalid config
+   - Enforces: policies required with auth, policies forbidden with `auth: 'dangerously-open'`
+
+3. **Runtime validation** (`crud.ts` handlers)
+   - If auth is enabled but policies somehow undefined, handlers return 403
+   - Belt-and-suspenders check in case types are bypassed
+
+4. **Policy application** (`applyPolicy` in `policies/apply.ts`)
+   - Low-level utility that evaluates a single policy
+   - **Intentionally returns `allowed: true` when policy is undefined**
+   - By this point, the caller has already validated the configuration
+
+### Why `applyPolicy(undefined, ...)` returns `allowed: true`
+
+This is **intentional, not a security bug**. The semantic meaning:
+
+> "I have a `Policies` object, but this specific table has no entry"
+
+Per the documented behavior: "Tables without an explicit policy get full access."
+
+This matches PostgreSQL RLS semantics and provides good DX — you only define policies for tables that need restrictions.
+
+### Do NOT "fix" by changing the default
+
+Changing `applyPolicy` to return `allowed: false` would:
+
+- Break the documented API contract
+- Cause silent failures for unlisted tables
+- Force verbose `() => undefined` policies for every table
+- Push users toward `'dangerously-open'` to avoid friction
 
 ## Development Environment
 
@@ -215,13 +302,128 @@ packages/core/tests/
 ## Common Mistakes to Avoid
 
 1. **Adding dependencies** — find a zero-dep solution or use built-in APIs
-2. **Using Deno.* in core** — breaks Node compatibility
+2. __Using Deno._ in core_* — breaks Node compatibility
 3. **Hardcoding database-specific types in core** — breaks extensibility
 4. **Mixing concerns** — keep schema logic, UI, and HTTP handling separate
 5. **Forgetting feature detection** — not all DBs support arrays, enums, JSON, etc.
 6. **Silent failures** — errors should either be logged via `onError` and/or block the operation with a user-facing message; never silently pass through
 
 ## Internal Design Notes (Reference)
+
+### Plugin Architecture
+
+Plugins extend the CMS with custom hooks that run during CRUD operations. Key design decisions:
+
+**Worker Isolation (Security)**
+
+- Plugins run in Web Workers, isolated from the main thread
+- Plugins never receive database handles, server internals, or functions
+- All data crossing the Worker boundary must be JSON-serializable
+- This "secure by default" approach protects against malicious or buggy plugins
+
+**User-Provided Workers**
+
+- Users create their own `Worker` instance with desired permissions
+- Gives full control over isolation (Deno permissions, Node policies, etc.)
+- The CMS sends messages to the Worker; plugin code runs entirely inside
+
+```typescript
+// User creates Worker with explicit permissions
+const auditWorker = new Worker(
+  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  {
+    type: 'module',
+    deno: { permissions: { net: ['audit.example.com'] } },
+  },
+);
+
+// Plugin config references the Worker
+plugins: [
+  {
+    name: 'audit-log',
+    worker: auditWorker,
+    // Declarative: list which hooks the Worker handles
+    hooks: { on: ['create', 'update', 'delete'] },
+    filter: (ctx) => !['sessions', 'audit_logs'].includes(ctx.table), // Skip noisy/recursive tables
+    config: { webhookUrl: 'https://audit.example.com/events' },
+  },
+];
+```
+
+**Filter Function (Data Flow Security)**
+
+- `filter: ((ctx: FilterContext) => boolean) | 'dangerously-open'` is **REQUIRED**
+- Controls what data flows to plugins — this is a **security feature**
+- Prevents unintentional data exposure to third-party plugin code
+- Use `'dangerously-open'` to explicitly allow all data (acknowledge the risk)
+- FilterContext: `{ hookType, table, action, user }`
+- HookType: `'transform:beforeSave' | 'transform:afterRead' | 'action'`
+
+```typescript
+// Good: explicit filter prevents sending sensitive tables to plugin
+filter: ((ctx) => !['users', 'sessions', 'payments'].includes(ctx.table));
+
+// Good: only send specific actions
+filter: ((ctx) =>
+  ctx.hookType === 'action' && ['create', 'update'].includes(ctx.action));
+
+// Explicit opt-in to send everything (use with caution)
+filter: 'dangerously-open';
+```
+
+**Hook Categories**
+
+- **Transform hooks** (`beforeSave`, `afterRead`): Modify data, always block
+- **Action hooks** (`on.create`, `on.update`, etc.): Side effects, optionally fire-and-forget
+
+**Declarative vs Function Hooks**
+
+Worker plugins use **declarative hooks** (arrays of hook names), while in-process plugins use **function hooks**:
+
+```typescript
+// Worker plugin: declarative hooks (functions live in Worker module)
+{
+  name: 'audit-log',
+  worker: auditWorker,
+  hooks: {
+    on: ['create', 'update', 'delete'],  // Array of action names
+  },
+  filter: (ctx) => !['sessions', 'audit_logs'].includes(ctx.table),  // Skip noisy/recursive tables
+}
+
+// In-process plugin: function hooks (run in main thread)
+{
+  name: 'format-names',
+  hooks: {
+    transform: {
+      beforeSave: async (ctx, data) => ({ ...data, name: data.name.toUpperCase() }),
+    },
+  },
+  filter: (ctx) => ctx.table === 'users',  // Applies to all hook types for this table
+}
+```
+
+This distinction is enforced at registration time:
+
+- Worker plugins with function hooks will be rejected (confusing - functions never run)
+- In-process plugins with declarative hooks will be rejected
+
+**Serializable Constraint**
+
+- All data passed to plugins: `Serializable` type (primitives, arrays, plain objects, Date)
+- No functions, class instances, symbols, or circular references
+- Plugins receive snapshots of data, not live references
+
+### Plugin Development Guidelines
+
+When creating plugins:
+
+1. **Keep Worker module self-contained** — it cannot import from main thread modules
+2. **Use `createPlugin(config)` factory** — receives serialized config from CMS options
+3. **Declare capabilities** — network hosts, actions needed (for documentation and validation)
+4. **Use `blocking: false`** for logging/analytics that shouldn't block requests
+5. **Use declarative hooks for Workers** — `hooks: { on: ['create'] }` instead of functions
+6. **Test without Worker first** — easier to debug, then verify Worker isolation works
 
 ### Uploads: What belongs in core vs plugin
 
@@ -239,8 +441,3 @@ packages/core/tests/
 - Optional direct-to-bucket / presigned URL flow (S3/R2-style)
 - Virus scanning / transformations (if ever)
 - Cleanup policies (orphan GC, retention)
-
-### Potential plugin architecture ordering (to enable uploads)
-
-- Build a tiny plugin MVP first: **routes + nav items + hooks**
-- Implement uploads as the first official plugin to validate the architecture

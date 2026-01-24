@@ -5,7 +5,7 @@ import { escapeHtml } from '@drizzle-cms/ui';
 
 /**
  * Security headers for HTML responses
- * 
+ *
  * These headers enable strict Content Security Policy and other protections:
  * - CSP: Restricts resources to same-origin, enabling strict style-src
  * - X-Content-Type-Options: Prevents MIME sniffing
@@ -13,7 +13,8 @@ import { escapeHtml } from '@drizzle-cms/ui';
  * - Referrer-Policy: Limits referrer information leakage
  */
 export const SECURITY_HEADERS: Record<string, string> = {
-  'Content-Security-Policy': "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'",
+  'Content-Security-Policy':
+    "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'",
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
@@ -47,7 +48,7 @@ export function redirect(url: string, status = 303): Response {
 /**
  * Predefined flash message codes (secure - no user input echoed)
  */
-export type FlashCode = 
+export type FlashCode =
   | 'list_forbidden'
   | 'read_forbidden'
   | 'delete_success'
@@ -63,27 +64,68 @@ export type FlashCode =
   | 'update_forbidden'
   | 'update_not_found';
 
-const FLASH_MESSAGES: Record<FlashCode, { type: 'success' | 'error' | 'info' | 'warning'; message: string }> = {
-  list_forbidden: { type: 'error', message: 'You do not have permission to view this table.' },
-  read_forbidden: { type: 'error', message: 'You do not have permission to view this record.' },
+const FLASH_MESSAGES: Record<
+  FlashCode,
+  { type: 'success' | 'error' | 'info' | 'warning'; message: string }
+> = {
+  list_forbidden: {
+    type: 'error',
+    message: 'You do not have permission to view this table.',
+  },
+  read_forbidden: {
+    type: 'error',
+    message: 'You do not have permission to view this record.',
+  },
   delete_success: { type: 'success', message: 'Record deleted successfully.' },
-  delete_fk_error: { type: 'error', message: 'Cannot delete this record because it is referenced by other records. Remove those references first.' },
-  delete_error: { type: 'error', message: 'Failed to delete record. Please try again.' },
-  delete_forbidden: { type: 'error', message: 'You do not have permission to delete this record.' },
-  delete_not_found: { type: 'error', message: 'Record not found. It may have already been deleted.' },
+  delete_fk_error: {
+    type: 'error',
+    message:
+      'Cannot delete this record because it is referenced by other records. Remove those references first.',
+  },
+  delete_error: {
+    type: 'error',
+    message: 'Failed to delete record. Please try again.',
+  },
+  delete_forbidden: {
+    type: 'error',
+    message: 'You do not have permission to delete this record.',
+  },
+  delete_not_found: {
+    type: 'error',
+    message: 'Record not found. It may have already been deleted.',
+  },
   create_success: { type: 'success', message: 'Record created successfully.' },
-  create_error: { type: 'error', message: 'Failed to create record. Please try again.' },
-  create_forbidden: { type: 'error', message: 'You do not have permission to create records in this table.' },
+  create_error: {
+    type: 'error',
+    message: 'Failed to create record. Please try again.',
+  },
+  create_forbidden: {
+    type: 'error',
+    message: 'You do not have permission to create records in this table.',
+  },
   update_success: { type: 'success', message: 'Record updated successfully.' },
-  update_error: { type: 'error', message: 'Failed to update record. Please try again.' },
-  update_forbidden: { type: 'error', message: 'You do not have permission to update this record.' },
-  update_not_found: { type: 'error', message: 'Record not found. It may have been deleted.' },
+  update_error: {
+    type: 'error',
+    message: 'Failed to update record. Please try again.',
+  },
+  update_forbidden: {
+    type: 'error',
+    message: 'You do not have permission to update this record.',
+  },
+  update_not_found: {
+    type: 'error',
+    message: 'Record not found. It may have been deleted.',
+  },
 };
 
 /**
  * Create a redirect response with a flash message code
  */
-export function redirectWithFlash(url: string, code: FlashCode, status = 303): Response {
+export function redirectWithFlash(
+  url: string,
+  code: FlashCode,
+  status = 303,
+): Response {
   const urlObj = new URL(url, 'http://localhost');
   urlObj.searchParams.set('_flash', code);
   const redirectUrl = urlObj.pathname + urlObj.search;
@@ -98,7 +140,11 @@ export function redirectWithFlash(url: string, code: FlashCode, status = 303): R
 /**
  * Parse flash message from URL query params (looks up predefined messages)
  */
-export function parseFlashFromUrl(url: URL): { type: 'success' | 'error' | 'info' | 'warning'; message: string } | undefined {
+export function parseFlashFromUrl(
+  url: URL,
+):
+  | { type: 'success' | 'error' | 'info' | 'warning'; message: string }
+  | undefined {
   const code = url.searchParams.get('_flash');
   if (code && code in FLASH_MESSAGES) {
     return FLASH_MESSAGES[code as FlashCode];
@@ -122,7 +168,8 @@ export function jsonResponse(data: unknown, status = 200): Response {
  * Create a 404 Not Found response
  */
 export function notFound(message = 'Not Found'): Response {
-  return htmlResponse(`
+  return htmlResponse(
+    `
     <!DOCTYPE html>
     <html>
     <head><title>404 Not Found</title></head>
@@ -131,14 +178,17 @@ export function notFound(message = 'Not Found'): Response {
       <p>${escapeHtml(message)}</p>
     </body>
     </html>
-  `, 404);
+  `,
+    404,
+  );
 }
 
 /**
  * Create a 403 Forbidden response
  */
 export function forbidden(message = 'Forbidden'): Response {
-  return htmlResponse(`
+  return htmlResponse(
+    `
     <!DOCTYPE html>
     <html>
     <head><title>403 Forbidden</title></head>
@@ -147,7 +197,9 @@ export function forbidden(message = 'Forbidden'): Response {
       <p>${escapeHtml(message)}</p>
     </body>
     </html>
-  `, 403);
+  `,
+    403,
+  );
 }
 
 /**
@@ -166,16 +218,18 @@ export function methodNotAllowed(allowed: string[]): Response {
  * Parse form data from a Request
  * Returns a plain object with string values (or string[] for multiple values)
  */
-export async function parseFormData(request: Request): Promise<Record<string, string | string[]>> {
+export async function parseFormData(
+  request: Request,
+): Promise<Record<string, string | string[]>> {
   const formData = await request.formData();
   const result: Record<string, string | string[]> = {};
-  
+
   for (const [key, value] of formData.entries()) {
     // Skip file inputs for now (handle separately)
     if (value instanceof File) {
       continue;
     }
-    
+
     const existing = result[key];
     if (existing !== undefined) {
       // Multiple values with same name
@@ -188,7 +242,7 @@ export async function parseFormData(request: Request): Promise<Record<string, st
       result[key] = value;
     }
   }
-  
+
   return result;
 }
 
@@ -201,11 +255,11 @@ export function coerceFormValues(
   columns: IntrospectedColumn[],
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
-  
+
   for (const column of columns) {
     // Form fields use propertyName (e.g., authorId)
     const rawValue = formData[column.propertyName];
-    
+
     // Handle missing values
     if (rawValue === undefined || rawValue === '') {
       if (!column.notNull) {
@@ -213,10 +267,12 @@ export function coerceFormValues(
       }
       continue;
     }
-    
+
     // Get string value (use first if array)
-    const value: string = Array.isArray(rawValue) ? (rawValue[0] ?? '') : rawValue;
-    
+    const value: string = Array.isArray(rawValue)
+      ? (rawValue[0] ?? '')
+      : rawValue;
+
     // Skip empty strings for non-nullable columns
     if (value === '') {
       if (!column.notNull) {
@@ -224,11 +280,14 @@ export function coerceFormValues(
       }
       continue;
     }
-    
+
     // Coerce based on data type, output using propertyName for Drizzle
-    result[column.propertyName] = coerceValue(value, column.dataType ?? 'string');
+    result[column.propertyName] = coerceValue(
+      value,
+      column.dataType ?? 'string',
+    );
   }
-  
+
   return result;
 }
 
@@ -240,18 +299,20 @@ export function coerceValue(value: string, dataType: string): unknown {
   if (value === '' && dataType !== 'string') {
     return null;
   }
-  
+
   // Integer types
   if (dataType === 'number' || dataType === 'bigint') {
-    const parsed = dataType === 'bigint' ? parseInt(value, 10) : parseFloat(value);
+    const parsed = dataType === 'bigint'
+      ? parseInt(value, 10)
+      : parseFloat(value);
     return isNaN(parsed) ? null : parsed;
   }
-  
+
   // Boolean
   if (dataType === 'boolean') {
     return value === 'true' || value === '1' || value === 'on';
   }
-  
+
   // JSON types
   if (dataType === 'json') {
     try {
@@ -260,12 +321,12 @@ export function coerceValue(value: string, dataType: string): unknown {
       return null;
     }
   }
-  
+
   // Date types - keep as string for database driver
   if (dataType === 'date') {
     return value || null;
   }
-  
+
   // String types (default)
   return value;
 }
@@ -273,7 +334,10 @@ export function coerceValue(value: string, dataType: string): unknown {
 /**
  * Build URL with query parameters
  */
-export function buildUrl(base: string, params: Record<string, string | number | undefined>): string {
+export function buildUrl(
+  base: string,
+  params: Record<string, string | number | undefined>,
+): string {
   const url = new URL(base, 'http://localhost');
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined) {
@@ -286,9 +350,18 @@ export function buildUrl(base: string, params: Record<string, string | number | 
 /**
  * Extract pagination parameters from URL
  */
-export function getPagination(url: URL, defaultLimit = 25): { page: number; limit: number; offset: number } {
+export function getPagination(
+  url: URL,
+  defaultLimit = 25,
+): { page: number; limit: number; offset: number } {
   const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
-  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || String(defaultLimit), 10)));
+  const limit = Math.min(
+    100,
+    Math.max(
+      1,
+      parseInt(url.searchParams.get('limit') || String(defaultLimit), 10),
+    ),
+  );
   const offset = (page - 1) * limit;
   return { page, limit, offset };
 }
@@ -296,15 +369,18 @@ export function getPagination(url: URL, defaultLimit = 25): { page: number; limi
 /**
  * Extract sort parameters from URL
  */
-export function getSort(url: URL, columns: string[]): { column: string; direction: 'asc' | 'desc' } | null {
+export function getSort(
+  url: URL,
+  columns: string[],
+): { column: string; direction: 'asc' | 'desc' } | null {
   const sort = url.searchParams.get('sort');
   if (!sort) return null;
-  
+
   const direction = sort.startsWith('-') ? 'desc' : 'asc';
   const column = sort.startsWith('-') ? sort.slice(1) : sort;
-  
+
   // Validate column exists
   if (!columns.includes(column)) return null;
-  
+
   return { column, direction };
 }

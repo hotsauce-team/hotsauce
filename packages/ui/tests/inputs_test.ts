@@ -2,19 +2,19 @@
 
 import { assertEquals, assertStringIncludes } from 'jsr:@std/assert';
 import {
-  textInput,
-  textareaInput,
-  numberInput,
   booleanInput,
+  checkboxListInput,
   dateInput,
   datetimeInput,
-  selectInput,
-  uuidInput,
-  jsonInput,
   hiddenInput,
-  renderFieldInput,
+  jsonInput,
+  numberInput,
   relationInput,
-  checkboxListInput,
+  renderFieldInput,
+  selectInput,
+  textareaInput,
+  textInput,
+  uuidInput,
 } from '../forms/inputs.ts';
 import type { CMSField, IntrospectedColumn } from '@drizzle-cms/core';
 
@@ -44,7 +44,7 @@ function createMockField(overrides: Partial<CMSField> = {}): CMSField {
 Deno.test('textInput: renders basic text input', () => {
   const field = createMockField();
   const result = textInput(field);
-  
+
   assertStringIncludes(result, 'type="text"');
   assertStringIncludes(result, 'name="testField"');
   assertStringIncludes(result, 'class="cms-input cms-input-text"');
@@ -53,14 +53,14 @@ Deno.test('textInput: renders basic text input', () => {
 Deno.test('textInput: includes value', () => {
   const field = createMockField();
   const result = textInput(field, { value: 'Hello' });
-  
+
   assertStringIncludes(result, 'value="Hello"');
 });
 
 Deno.test('textInput: escapes value', () => {
   const field = createMockField();
   const result = textInput(field, { value: '<script>' });
-  
+
   assertStringIncludes(result, 'value="&lt;script&gt;"');
 });
 
@@ -69,7 +69,7 @@ Deno.test('textInput: adds required attribute', () => {
     column: { notNull: true, hasDefault: false } as IntrospectedColumn,
   });
   const result = textInput(field);
-  
+
   assertStringIncludes(result, 'required');
 });
 
@@ -78,14 +78,14 @@ Deno.test('textInput: adds maxlength attribute', () => {
     column: { maxLength: 100 } as IntrospectedColumn,
   });
   const result = textInput(field);
-  
+
   assertStringIncludes(result, 'maxlength="100"');
 });
 
 Deno.test('textInput: adds disabled attribute', () => {
   const field = createMockField();
   const result = textInput(field, { disabled: true });
-  
+
   assertStringIncludes(result, 'disabled');
 });
 
@@ -93,7 +93,7 @@ Deno.test('textInput: adds disabled attribute', () => {
 Deno.test('textareaInput: renders textarea', () => {
   const field = createMockField({ fieldType: 'textarea' });
   const result = textareaInput(field, { value: 'Content' });
-  
+
   assertStringIncludes(result, '<textarea');
   assertStringIncludes(result, 'name="testField"');
   assertStringIncludes(result, '>Content</textarea>');
@@ -103,7 +103,7 @@ Deno.test('textareaInput: renders textarea', () => {
 Deno.test('numberInput: renders number input', () => {
   const field = createMockField({ fieldType: 'number' });
   const result = numberInput(field);
-  
+
   assertStringIncludes(result, 'type="number"');
 });
 
@@ -111,7 +111,7 @@ Deno.test('numberInput: renders number input', () => {
 Deno.test('booleanInput: renders checkbox', () => {
   const field = createMockField({ fieldType: 'boolean' });
   const result = booleanInput(field);
-  
+
   assertStringIncludes(result, 'type="checkbox"');
   assertStringIncludes(result, 'value="true"');
 });
@@ -119,7 +119,7 @@ Deno.test('booleanInput: renders checkbox', () => {
 Deno.test('booleanInput: adds checked when value is true', () => {
   const field = createMockField({ fieldType: 'boolean' });
   const result = booleanInput(field, { value: true });
-  
+
   assertStringIncludes(result, 'checked');
 });
 
@@ -127,7 +127,7 @@ Deno.test('booleanInput: adds checked when value is true', () => {
 Deno.test('dateInput: renders date input', () => {
   const field = createMockField({ fieldType: 'date' });
   const result = dateInput(field);
-  
+
   assertStringIncludes(result, 'type="date"');
 });
 
@@ -135,7 +135,7 @@ Deno.test('dateInput: formats Date object', () => {
   const field = createMockField({ fieldType: 'date' });
   const date = new Date('2024-06-15T12:00:00Z');
   const result = dateInput(field, { value: date });
-  
+
   assertStringIncludes(result, 'value="2024-06-15"');
 });
 
@@ -143,7 +143,7 @@ Deno.test('dateInput: formats Date object', () => {
 Deno.test('datetimeInput: renders datetime-local input', () => {
   const field = createMockField({ fieldType: 'datetime' });
   const result = datetimeInput(field);
-  
+
   assertStringIncludes(result, 'type="datetime-local"');
 });
 
@@ -164,7 +164,7 @@ Deno.test('selectInput: renders select with options', () => {
     },
   });
   const result = selectInput(field);
-  
+
   assertStringIncludes(result, '<select');
   assertStringIncludes(result, '<option');
   assertStringIncludes(result, 'value="draft"');
@@ -188,7 +188,7 @@ Deno.test('selectInput: marks selected option', () => {
     },
   });
   const result = selectInput(field, { value: 'b' });
-  
+
   assertStringIncludes(result, 'value="b" selected');
 });
 
@@ -196,7 +196,7 @@ Deno.test('selectInput: marks selected option', () => {
 Deno.test('uuidInput: renders with UUID pattern', () => {
   const field = createMockField({ fieldType: 'uuid' });
   const result = uuidInput(field);
-  
+
   assertStringIncludes(result, 'type="text"');
   assertStringIncludes(result, 'pattern=');
 });
@@ -205,7 +205,7 @@ Deno.test('uuidInput: renders with UUID pattern', () => {
 Deno.test('jsonInput: renders textarea for JSON', () => {
   const field = createMockField({ fieldType: 'json' });
   const result = jsonInput(field, { value: { key: 'value' } });
-  
+
   assertStringIncludes(result, '<textarea');
   assertStringIncludes(result, 'cms-json');
   // JSON gets escaped - quotes become &quot;
@@ -216,7 +216,7 @@ Deno.test('jsonInput: renders textarea for JSON', () => {
 Deno.test('hiddenInput: renders hidden input', () => {
   const field = createMockField();
   const result = hiddenInput(field, { value: 'secret' });
-  
+
   assertStringIncludes(result, 'type="hidden"');
   assertStringIncludes(result, 'value="secret"');
 });
@@ -225,33 +225,41 @@ Deno.test('hiddenInput: renders hidden input', () => {
 Deno.test('renderFieldInput: renders hidden for hidden fields', () => {
   const field = createMockField({ hidden: true });
   const result = renderFieldInput(field, { value: 'test' });
-  
+
   assertStringIncludes(result, 'type="hidden"');
 });
 
 Deno.test('renderFieldInput: disables readonly fields', () => {
   const field = createMockField({ readOnly: true });
   const result = renderFieldInput(field);
-  
+
   assertStringIncludes(result, 'disabled');
 });
 
 Deno.test('renderFieldInput: routes to correct input by fieldType', () => {
   assertEquals(
-    renderFieldInput(createMockField({ fieldType: 'text' })).includes('type="text"'),
-    true
+    renderFieldInput(createMockField({ fieldType: 'text' })).includes(
+      'type="text"',
+    ),
+    true,
   );
   assertEquals(
-    renderFieldInput(createMockField({ fieldType: 'textarea' })).includes('<textarea'),
-    true
+    renderFieldInput(createMockField({ fieldType: 'textarea' })).includes(
+      '<textarea',
+    ),
+    true,
   );
   assertEquals(
-    renderFieldInput(createMockField({ fieldType: 'number' })).includes('type="number"'),
-    true
+    renderFieldInput(createMockField({ fieldType: 'number' })).includes(
+      'type="number"',
+    ),
+    true,
   );
   assertEquals(
-    renderFieldInput(createMockField({ fieldType: 'boolean' })).includes('type="checkbox"'),
-    true
+    renderFieldInput(createMockField({ fieldType: 'boolean' })).includes(
+      'type="checkbox"',
+    ),
+    true,
   );
 });
 
@@ -272,7 +280,7 @@ Deno.test('relationInput: renders select element', () => {
     },
   });
   const result = relationInput(field);
-  
+
   assertStringIncludes(result, '<select');
   assertStringIncludes(result, 'name="authorId"');
   assertStringIncludes(result, 'class="cms-input cms-select cms-relation"');
@@ -294,7 +302,7 @@ Deno.test('relationInput: shows placeholder with table name', () => {
     },
   });
   const result = relationInput(field);
-  
+
   assertStringIncludes(result, '-- Select users --');
 });
 
@@ -319,7 +327,7 @@ Deno.test('relationInput: renders options from relationOptions', () => {
       { value: 2, label: 'Bob' },
     ],
   });
-  
+
   assertStringIncludes(result, '<option');
   assertStringIncludes(result, 'value="1"');
   assertStringIncludes(result, '>Alice</option>');
@@ -349,7 +357,7 @@ Deno.test('relationInput: marks selected option', () => {
       { value: 2, label: 'Bob' },
     ],
   });
-  
+
   assertStringIncludes(result, 'value="2" selected');
 });
 
@@ -369,7 +377,7 @@ Deno.test('relationInput: adds required for notNull fields', () => {
     },
   });
   const result = relationInput(field);
-  
+
   assertStringIncludes(result, 'required');
 });
 
@@ -393,7 +401,7 @@ Deno.test('renderFieldInput: routes relation to relationInput', () => {
       { value: 1, label: 'Alice' },
     ],
   });
-  
+
   assertStringIncludes(result, '<select');
   assertStringIncludes(result, '>Alice</option>');
 });
@@ -408,7 +416,7 @@ Deno.test('checkboxListInput: renders checkbox list', () => {
       { value: 2, label: 'News' },
     ],
   });
-  
+
   assertStringIncludes(result, '<div');
   assertStringIncludes(result, 'class="cms-checkbox-list"');
   assertStringIncludes(result, 'type="checkbox"');
@@ -424,7 +432,7 @@ Deno.test('checkboxListInput: renders all options', () => {
       { value: 3, label: 'Sports' },
     ],
   });
-  
+
   assertStringIncludes(result, '>Tech</span>');
   assertStringIncludes(result, '>News</span>');
   assertStringIncludes(result, '>Sports</span>');
@@ -440,7 +448,7 @@ Deno.test('checkboxListInput: marks selected options', () => {
     ],
     selectedValues: [2],
   });
-  
+
   // Should have one checked checkbox (News)
   assertStringIncludes(result, 'value="2" checked');
   // Tech should not be checked
@@ -453,7 +461,7 @@ Deno.test('checkboxListInput: handles empty options', () => {
     label: 'Categories',
     options: [],
   });
-  
+
   assertStringIncludes(result, 'cms-checkbox-list-empty');
   assertStringIncludes(result, 'No categories available');
 });
@@ -464,7 +472,7 @@ Deno.test('checkboxListInput: uses correct name attribute', () => {
     label: 'Tags',
     options: [{ value: 1, label: 'Tag1' }],
   });
-  
+
   assertStringIncludes(result, 'name="tagIds"');
 });
 
@@ -478,7 +486,7 @@ Deno.test('checkboxListInput: generates unique ids', () => {
       { value: 2, label: 'News' },
     ],
   });
-  
+
   assertStringIncludes(result, 'id="cats-0"');
   assertStringIncludes(result, 'id="cats-1"');
 });

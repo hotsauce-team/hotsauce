@@ -25,13 +25,17 @@ Deno.test('schema [postgres] - tables are importable', () => {
 Deno.test('schema [postgres] - enum is defined', () => {
   assertExists(pgSchema.postStatus);
   // pgEnum creates an object with enumValues
-  assertEquals(pgSchema.postStatus.enumValues, ['draft', 'published', 'archived']);
+  assertEquals(pgSchema.postStatus.enumValues, [
+    'draft',
+    'published',
+    'archived',
+  ]);
 });
 
 Deno.test('schema [postgres] - can access table columns', () => {
   // Drizzle tables have columns accessible as properties
   const userColumns = Object.keys(pgSchema.users);
-  
+
   // Should include our defined columns
   assertEquals(userColumns.includes('id'), true);
   assertEquals(userColumns.includes('email'), true);
@@ -43,9 +47,9 @@ Deno.test('schema [postgres] - can access table columns', () => {
 Deno.test('schema [postgres] - column has metadata', () => {
   // Each column should have introspectable properties
   const emailColumn = pgSchema.users.email;
-  
+
   assertExists(emailColumn);
-  
+
   // Key properties available on columns:
   // - name, columnType, dataType, notNull, hasDefault, isUnique, primary
   // - length (for varchar), enumValues (for enums)
@@ -57,7 +61,7 @@ Deno.test('schema [postgres] - column has metadata', () => {
 Deno.test('schema [postgres] - foreign key references', () => {
   // posts.authorId references users.id
   const authorIdColumn = pgSchema.posts.authorId;
-  
+
   assertExists(authorIdColumn);
   assertEquals(authorIdColumn.name, 'author_id');
   assertEquals(authorIdColumn.columnType, 'PgInteger');
@@ -87,7 +91,7 @@ Deno.test('schema [sqlite] - tables are importable', () => {
 Deno.test('schema [sqlite] - can access table columns', () => {
   // Drizzle tables have columns accessible as properties
   const userColumns = Object.keys(sqliteSchema.users);
-  
+
   // Should include our defined columns
   assertEquals(userColumns.includes('id'), true);
   assertEquals(userColumns.includes('email'), true);
@@ -99,9 +103,9 @@ Deno.test('schema [sqlite] - can access table columns', () => {
 Deno.test('schema [sqlite] - column has metadata', () => {
   // Each column should have introspectable properties
   const emailColumn = sqliteSchema.users.email;
-  
+
   assertExists(emailColumn);
-  
+
   // Key properties available on columns:
   // - name, columnType, dataType, notNull, hasDefault, isUnique, primary
   // - length (for text), enumValues (for text enums)
@@ -113,7 +117,7 @@ Deno.test('schema [sqlite] - column has metadata', () => {
 Deno.test('schema [sqlite] - foreign key references', () => {
   // posts.authorId references users.id
   const authorIdColumn = sqliteSchema.posts.authorId;
-  
+
   assertExists(authorIdColumn);
   assertEquals(authorIdColumn.name, 'author_id');
   assertEquals(authorIdColumn.columnType, 'SQLiteInteger');
@@ -135,4 +139,3 @@ Deno.test('schema [sqlite] - text enum has values', () => {
   // SQLite text columns with enum have enumValues property
   assertEquals(statusColumn.enumValues, ['draft', 'published', 'archived']);
 });
-

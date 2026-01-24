@@ -3,7 +3,7 @@
 
 /**
  * CMS stylesheet content
- * 
+ *
  * All CSS is served from a single external file to enable
  * strict Content Security Policy (style-src 'self') without nonces.
  */

@@ -153,7 +153,7 @@ export function mapColumnToField(column: IntrospectedColumn): CMSField {
  * Map all columns from an introspected table to CMS fields
  */
 export function mapColumnsToFields(
-  columns: IntrospectedColumn[]
+  columns: IntrospectedColumn[],
 ): CMSField[] {
   return columns.map(mapColumnToField);
 }
