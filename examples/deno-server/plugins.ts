@@ -1,5 +1,5 @@
 // Type-only import - no plugin code runs, just compile-time type checking
-import type { AuditLogConfig } from '@drizzle-cms/plugins/audit-log/types';
+import type { AuditLogConfig } from '@drizzle-cms/plugins/audit-log';
 import type { PluginConfig } from '@drizzle-cms/handlers';
 
 // Create Worker for the audit log plugin
