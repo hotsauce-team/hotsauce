@@ -39,8 +39,12 @@ export class PluginService {
     if (this.initialized) return;
 
     // Use a shared promise to avoid multiple concurrent initializations
+    // Clear on failure to allow retry (transient errors like network issues)
     if (!this.initPromise) {
-      this.initPromise = this.doInitialize();
+      this.initPromise = this.doInitialize().catch((error) => {
+        this.initPromise = null; // Allow retry on next call
+        throw error;
+      });
     }
     await this.initPromise;
   }
