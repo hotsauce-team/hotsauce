@@ -267,10 +267,12 @@ interface TableParsers {
 - [x] External authentication (reverse proxy / OAuth integration)
 - [x] Row-level security policies (atomic authorization)
 - [x] Multi-tenant compatibility (shared database with tenant column)
+- [x] Plugin system with Worker isolation (Deno + Node.js 20+)
+- [ ] Plugin config - timeout, worker response validation, load testing
+- [ ] Plugin data obfuscation (PII/credential redaction)
 - [ ] Column-level access control
 - [ ] File uploads (local + S3)
 - [ ] Audit logging
-- [ ] Plugin data obfuscation (PII/credential redaction)
 - [ ] Customizable UI components
 
 ## Database Support
