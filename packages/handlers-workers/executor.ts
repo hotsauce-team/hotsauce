@@ -149,8 +149,12 @@ export class WorkerExecutor {
       this.handleWorkerResponse(event.data);
     };
 
+    // SECURITY: Log Worker errors but don't expose details
+    // Prevents credential leakage via error messages
     worker.onerror = (event: ErrorEvent) => {
-      console.error(`Worker error in plugin ${plugin.name}:`, event.message);
+      console.error(`[plugin:${plugin.name}] Worker error (details hidden)`);
+      // Prevent default which might expose error details
+      event.preventDefault();
     };
 
     this.workers.set(plugin.name, worker);
@@ -292,10 +296,11 @@ export class WorkerExecutor {
         const promise = this.executeActionHook(plugin.name, action, ctx);
 
         fireAndForgetPromises.push(
-          promise.catch((error) => {
+          promise.catch(() => {
+            // SECURITY: Don't log Worker error details (may contain credentials)
+            // The error is already logged in handleWorkerResponse
             console.error(
-              `Plugin ${plugin.name} action hook (${action}) failed:`,
-              error instanceof Error ? error.message : error,
+              `[plugin:${plugin.name}] Action hook (${action}) failed`,
             );
           }),
         );
@@ -312,8 +317,9 @@ export class WorkerExecutor {
           if (isFireAndForget) {
             fireAndForgetPromises.push(
               promise.catch((error) => {
+                // In-process plugins: log full error (user's own code)
                 console.error(
-                  `Plugin ${plugin.name} action hook (${action}) failed:`,
+                  `[plugin:${plugin.name}] Action hook (${action}) failed:`,
                   error instanceof Error ? error.message : error,
                 );
               }),
@@ -460,7 +466,11 @@ export class WorkerExecutor {
   }
 
   /**
-   * Handle response from Worker
+   * Handle response from Worker.
+   *
+   * SECURITY: Worker error messages are logged but NOT propagated.
+   * This prevents plugins from leaking credentials or sensitive data
+   * via intentional or accidental error messages.
    */
   private handleWorkerResponse(response: WorkerResponse): void {
     const pending = this.pendingRequests.get(response.id);
@@ -474,7 +484,17 @@ export class WorkerExecutor {
     if (response.success) {
       pending.resolve(response.result ?? null);
     } else {
-      pending.reject(new Error(response.error ?? 'Unknown plugin error'));
+      // Log the actual error for operators (server-side only)
+      // Extract plugin name from request ID (format: "pluginName-123")
+      const pluginName = response.id.split('-').slice(0, -1).join('-');
+      console.error(
+        `[plugin:${pluginName}] Worker error:`,
+        response.error ?? 'Unknown error',
+      );
+
+      // Return sanitized error - never expose Worker error messages
+      // This prevents credential leakage via error messages
+      pending.reject(new Error(`Plugin "${pluginName}" execution failed`));
     }
   }
 
