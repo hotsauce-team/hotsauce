@@ -41,7 +41,12 @@ export type { AuditEntry, AuditLogConfig };
 let pluginConfig: AuditLogConfig = {};
 
 /**
- * Check if a table should be audited based on config
+ * Check if a table should be audited based on config.
+ *
+ * @param table - The table name to check
+ * @param config - Audit log configuration
+ * @returns true if the table should be audited
+ * @throws {Error} If called outside a Worker thread or test environment
  */
 export function shouldAuditTable(
   table: string,

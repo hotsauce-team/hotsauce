@@ -76,7 +76,14 @@ export function assertWorkerContext(): void {
  * Check if current context allows worker function execution.
  * Use this for conditional logic instead of throwing.
  *
- * @returns true if in Worker thread or test environment
+ * @returns `true` if in Worker thread or test environment, `false` otherwise
+ *
+ * @example
+ * ```typescript
+ * if (isWorkerContext()) {
+ *   // Safe to run worker code
+ * }
+ * ```
  */
 export function isWorkerContext(): boolean {
   return isWorkerThread() || isTestEnvironment();
