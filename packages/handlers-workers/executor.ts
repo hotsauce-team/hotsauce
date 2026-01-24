@@ -13,6 +13,7 @@ import type {
   PluginResponse,
   Serializable,
 } from './types.ts';
+import { validateSerializable } from './validate.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Worker message protocol
@@ -457,6 +458,19 @@ export class WorkerExecutor {
     const worker = this.workers.get(pluginName);
     if (!worker) {
       return Promise.reject(new Error(`No worker for plugin: ${pluginName}`));
+    }
+
+    // Validate payload is actually serializable at runtime
+    // Catches functions, circular refs, Map/Set, etc. that TypeScript can't detect
+    try {
+      validateSerializable(payload);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return Promise.reject(
+        new Error(
+          `Plugin "${pluginName}" received non-serializable data: ${message}`,
+        ),
+      );
     }
 
     const id = `${pluginName}-${++this.messageIdCounter}`;

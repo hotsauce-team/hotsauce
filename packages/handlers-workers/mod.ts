@@ -8,6 +8,16 @@
 export { assertWorkerContext, isWorkerContext } from './guard.ts';
 
 // ─────────────────────────────────────────────────────────────
+// Serialization validation - runtime checks for Worker data
+// ─────────────────────────────────────────────────────────────
+export {
+  isSerializable,
+  SerializationError,
+  validateSerializable,
+} from './validate.ts';
+export type { ValidationOptions } from './validate.ts';
+
+// ─────────────────────────────────────────────────────────────
 // Types - Re-export plugin types needed for Workers
 // ─────────────────────────────────────────────────────────────
 export type {
