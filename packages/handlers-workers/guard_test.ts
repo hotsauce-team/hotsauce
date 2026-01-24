@@ -3,18 +3,44 @@
 import { assertEquals } from '@std/assert';
 import { assertWorkerContext, isWorkerContext } from './guard.ts';
 
-Deno.test('isWorkerContext: returns true in test environment', () => {
-  // We're in a test, so this should return true
+Deno.test('isWorkerContext: returns true when main thread marker not set', () => {
+  // In tests, createCmsHandler is never called, so marker is undefined
   assertEquals(isWorkerContext(), true);
 });
 
-Deno.test('assertWorkerContext: does not throw in test environment', () => {
-  // Should not throw since we're in a test
+Deno.test('assertWorkerContext: does not throw when marker not set', () => {
+  // Should not throw since createCmsHandler was never called
   assertWorkerContext();
 });
 
-Deno.test('assertWorkerContext: provides helpful error message', () => {
-  // We can't easily test the throw case since we're in a test environment,
-  // but we can at least verify the function exists and is callable
-  assertEquals(typeof assertWorkerContext, 'function');
+Deno.test('isWorkerContext: returns false when main thread marker is set', () => {
+  // Simulate being on the main CMS thread
+  const original = globalThis.__CMS_MAIN_PROCESS__;
+  try {
+    globalThis.__CMS_MAIN_PROCESS__ = true;
+    assertEquals(isWorkerContext(), false);
+  } finally {
+    globalThis.__CMS_MAIN_PROCESS__ = original;
+  }
+});
+
+Deno.test('assertWorkerContext: throws when main thread marker is set', () => {
+  const original = globalThis.__CMS_MAIN_PROCESS__;
+  try {
+    globalThis.__CMS_MAIN_PROCESS__ = true;
+    let threw = false;
+    try {
+      assertWorkerContext();
+    } catch (e) {
+      threw = true;
+      assertEquals(e instanceof Error, true);
+      assertEquals(
+        (e as Error).message.includes('Worker thread'),
+        true,
+      );
+    }
+    assertEquals(threw, true, 'assertWorkerContext should have thrown');
+  } finally {
+    globalThis.__CMS_MAIN_PROCESS__ = original;
+  }
 });

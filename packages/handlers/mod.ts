@@ -265,7 +265,20 @@ export {
  * });
  * ```
  */
+/**
+ * Global marker set on the main thread when CMS handler is created.
+ * Used by worker guard to detect if code is running in main thread vs Worker.
+ * Plugin authors: `if (globalThis.__CMS_MAIN_PROCESS__) throw new Error('Worker only');`
+ */
+declare global {
+  // deno-lint-ignore no-var
+  var __CMS_MAIN_PROCESS__: boolean | undefined;
+}
+
 export function createCmsHandler(options: CmsOptions): Handler {
+  // Mark the main thread - Workers won't have this set
+  globalThis.__CMS_MAIN_PROCESS__ = true;
+
   // Validate configuration (throws CmsConfigError on invalid)
   validateCmsOptions(options);
 

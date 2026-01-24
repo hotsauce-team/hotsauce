@@ -3,7 +3,7 @@
 
   "tasks": {
     "dev": "deno run --env-file=.env.example --permission-set=example-deno-server --unstable-worker-options main.ts",
-    "dev:debug": "RUST_BACKTRACE=1 deno run --env-file=.env.example --permission-set=example-deno-server --unstable-worker-options main.ts",
+    "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno run --env-file=.env.example --permission-set=example-deno-server --unstable-worker-options main.ts",
     "dev:watch": "deno run --env-file=.env.example --watch --permission-set=example-deno-server --unstable-worker-options main.ts",
     "seed": "deno run --permission-set=example-deno-server seed.ts"
   },

@@ -2,13 +2,13 @@
 // This file is loaded directly by a Worker and handles all messages
 
 /// <reference lib="webworker" />
+/// <reference types="@drizzle-cms/handlers-workers" />
 
 import type {
   ActionContext,
   CrudAction,
   Serializable,
 } from '@drizzle-cms/handlers-workers';
-import { assertWorkerContext } from '@drizzle-cms/handlers-workers';
 
 // Declare Worker globals for TypeScript
 declare const self: DedicatedWorkerGlobalScope;
@@ -52,7 +52,7 @@ export function shouldAuditTable(
   table: string,
   config: AuditLogConfig,
 ): boolean {
-  assertWorkerContext();
+  if (globalThis.__CMS_MAIN_PROCESS__) throw new Error('Worker only');
   if (config.excludeTables?.includes(table)) {
     return false;
   }
