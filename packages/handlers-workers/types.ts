@@ -133,12 +133,15 @@ export interface ActionHookConfig {
   /** The action handler function */
   handler: ActionHandlerFn;
   /**
-   * If true, don't block the HTTP response waiting for this hook.
-   * Errors are logged but won't affect the user.
+   * If true (default), wait for the hook to complete before responding.
+   * Errors will bubble up and affect the response.
    *
-   * @default false
+   * If false, run as fire-and-forget: don't block the HTTP response.
+   * Errors are logged via onError but won't affect the user.
+   *
+   * @default true
    */
-  fireAndForget?: boolean;
+  blocking?: boolean;
 }
 
 /**

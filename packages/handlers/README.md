@@ -1117,9 +1117,9 @@ const webhookPlugin: Plugin = {
 };
 ```
 
-### Fire-and-Forget Actions
+### Non-Blocking Actions
 
-For hooks that shouldn't block the HTTP response (logging, analytics):
+By default, action hooks block the HTTP response until they complete. For hooks that shouldn't block (logging, analytics), set `blocking: false`:
 
 ```ts
 const auditPlugin: Plugin = {
@@ -1128,7 +1128,7 @@ const auditPlugin: Plugin = {
     on: {
       create: {
         handler: async (ctx) => logAudit(ctx),
-        fireAndForget: true, // Don't wait for completion
+        blocking: false, // Fire-and-forget: don't wait for completion
       },
     },
   },
@@ -1240,12 +1240,11 @@ export function createPlugin(config: Serializable): { hooks: PluginHooks } {
   return {
     hooks: {
       on: {
-        create: { handler: async (ctx) => { /* ... */ }, fireAndForget: true },
+        create: { handler: async (ctx) => { /* ... */ }, blocking: false },
       },
     },
   };
 }
-  }
 ```
 
 ### In-Process Plugins

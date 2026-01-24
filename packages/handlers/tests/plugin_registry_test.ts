@@ -40,8 +40,8 @@ const pluginWithActions: PluginConfig = {
   hooks: {
     on: {
       create: async () => {},
-      update: { handler: async () => {}, fireAndForget: true },
-      delete: { handler: async () => {}, fireAndForget: false },
+      update: { handler: async () => {}, blocking: false },
+      delete: { handler: async () => {}, blocking: true },
     },
   },
 };
@@ -76,7 +76,7 @@ const fullPlugin: PluginConfig = {
       beforeSave: async (_ctx, data) => ({ ...data, modified: true }),
     },
     on: {
-      create: { handler: async () => {}, fireAndForget: true },
+      create: { handler: async () => {}, blocking: false },
     },
   },
   routes: [

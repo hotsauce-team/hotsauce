@@ -421,7 +421,7 @@ When creating plugins:
 1. **Keep Worker module self-contained** — it cannot import from main thread modules
 2. **Use `createPlugin(config)` factory** — receives serialized config from CMS options
 3. **Declare capabilities** — network hosts, actions needed (for documentation and validation)
-4. **Use `fireAndForget: true`** for logging/analytics that shouldn't block requests
+4. **Use `blocking: false`** for logging/analytics that shouldn't block requests
 5. **Use declarative hooks for Workers** — `hooks: { on: ['create'] }` instead of functions
 6. **Test without Worker first** — easier to debug, then verify Worker isolation works
 

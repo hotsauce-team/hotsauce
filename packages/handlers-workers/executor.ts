@@ -329,12 +329,12 @@ export class WorkerExecutor {
         const hook = this.getInProcessActionHook(plugin.hooks, action);
 
         if (hook) {
-          const isFireAndForget = this.isFireAndForget(hook);
+          const blocking = this.isBlocking(hook);
           const handler = typeof hook === 'function' ? hook : hook.handler;
 
           const promise = Promise.resolve(handler(ctx)).then(() => {});
 
-          if (isFireAndForget) {
+          if (!blocking) {
             fireAndForgetPromises.push(
               promise.catch((error) => {
                 // In-process plugins: call onError with full error (user's own code)
@@ -376,13 +376,14 @@ export class WorkerExecutor {
   }
 
   /**
-   * Check if an action hook is configured as fire-and-forget
+   * Check if an action hook is configured as blocking (waits for completion)
    */
-  private isFireAndForget(hook: ActionHook): boolean {
+  private isBlocking(hook: ActionHook): boolean {
     if (typeof hook === 'function') {
-      return false; // Simple function form defaults to blocking
+      return true; // Simple function form defaults to blocking
     }
-    return (hook as ActionHookConfig).fireAndForget === true;
+    // Default to blocking (true) if not specified
+    return (hook as ActionHookConfig).blocking !== false;
   }
 
   /**

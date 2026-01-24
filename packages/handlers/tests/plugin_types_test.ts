@@ -110,43 +110,43 @@ Deno.test('ActionHook: function form (blocking by default)', () => {
   assertEquals(typeof hook, 'function');
 });
 
-Deno.test('ActionHook: config form with fireAndForget', () => {
+Deno.test('ActionHook: config form with blocking: false (fire-and-forget)', () => {
   const hook: ActionHook = {
     handler: async (_ctx) => {},
-    fireAndForget: true,
+    blocking: false,
   };
   assertEquals(typeof hook, 'object');
-  assertEquals((hook as ActionHookConfig).fireAndForget, true);
+  assertEquals((hook as ActionHookConfig).blocking, false);
 });
 
-Deno.test('ActionHook: config form blocking', () => {
+Deno.test('ActionHook: config form with blocking: true (explicit)', () => {
   const hook: ActionHook = {
     handler: async (_ctx) => {},
-    fireAndForget: false,
+    blocking: true,
   };
-  assertEquals((hook as ActionHookConfig).fireAndForget, false);
+  assertEquals((hook as ActionHookConfig).blocking, true);
 });
 
-// Helper to check if hook is fire-and-forget
-function isFireAndForget(hook: ActionHook): boolean {
-  if (typeof hook === 'function') return false;
-  return hook.fireAndForget === true;
+// Helper to check if hook is blocking (waits for completion)
+function isBlocking(hook: ActionHook): boolean {
+  if (typeof hook === 'function') return true; // Default to blocking
+  return hook.blocking !== false; // Default to blocking if not specified
 }
 
-Deno.test('ActionHook: isFireAndForget helper', () => {
+Deno.test('ActionHook: isBlocking helper', () => {
   const blockingFn: ActionHook = async () => {};
   const blockingConfig: ActionHook = {
     handler: async () => {},
-    fireAndForget: false,
+    blocking: true,
   };
   const fireAndForget: ActionHook = {
     handler: async () => {},
-    fireAndForget: true,
+    blocking: false,
   };
 
-  assertEquals(isFireAndForget(blockingFn), false);
-  assertEquals(isFireAndForget(blockingConfig), false);
-  assertEquals(isFireAndForget(fireAndForget), true);
+  assertEquals(isBlocking(blockingFn), true);
+  assertEquals(isBlocking(blockingConfig), true);
+  assertEquals(isBlocking(fireAndForget), false);
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ Deno.test('Plugin: with actions only', () => {
     hooks: {
       on: {
         create: async () => {},
-        update: { handler: async () => {}, fireAndForget: true },
+        update: { handler: async () => {}, blocking: false },
       },
     },
   };
@@ -247,19 +247,19 @@ Deno.test('Plugin: full example', () => {
             // Would send to audit service
             console.log('Created:', ctx.recordId);
           },
-          fireAndForget: true,
+          blocking: false,
         },
         update: {
           handler: async (ctx: ActionContext) => {
             console.log('Updated:', ctx.recordId);
           },
-          fireAndForget: true,
+          blocking: false,
         },
         delete: {
           handler: async (ctx: ActionContext) => {
             console.log('Deleted:', ctx.recordId);
           },
-          fireAndForget: true,
+          blocking: false,
         },
       },
     },
@@ -391,17 +391,17 @@ Deno.test('ActionHooks: mixed blocking and fire-and-forget', async () => {
       handler: async () => {
         results.push('fire-and-forget-update');
       },
-      fireAndForget: true,
+      blocking: false,
     },
   };
 
-  // Simulate execution with fireAndForget handling
+  // Simulate execution with blocking handling
   const executeAction = async (hook: ActionHook | undefined) => {
     if (!hook) return;
     const handler = typeof hook === 'function' ? hook : hook.handler;
-    const isAsync = typeof hook !== 'function' && hook.fireAndForget;
+    const isBlocking = typeof hook === 'function' || hook.blocking !== false;
 
-    if (isAsync) {
+    if (!isBlocking) {
       // Fire and forget - don't await
       handler({} as ActionContext);
     } else {

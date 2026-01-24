@@ -301,7 +301,7 @@ export class PluginRegistry {
           ) {
             throw new PluginValidationError(
               plugin.name,
-              `Action hook "${actionName}" must be a function or { handler, fireAndForget } object`,
+              `Action hook "${actionName}" must be a function or { handler, blocking? } object`,
             );
           }
         }
