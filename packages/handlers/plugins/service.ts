@@ -11,6 +11,10 @@ import type {
 } from './types.ts';
 import type { PluginRegistry, RegisteredPlugin } from './registry.ts';
 import { WorkerExecutor } from '@drizzle-cms/handlers-workers';
+import type { PluginErrorHandler } from '@drizzle-cms/handlers-workers';
+
+// Re-export for convenience
+export type { PluginErrorHandler } from '@drizzle-cms/handlers-workers';
 
 /**
  * Plugin service provides a convenient API for executing plugin hooks.
@@ -22,9 +26,9 @@ export class PluginService {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
 
-  constructor(registry: PluginRegistry) {
+  constructor(registry: PluginRegistry, onError?: PluginErrorHandler) {
     this.registry = registry;
-    this.executor = new WorkerExecutor();
+    this.executor = new WorkerExecutor(onError);
   }
 
   /**
@@ -240,12 +244,16 @@ export class PluginService {
 /**
  * Create a plugin service from a registry.
  * Returns null if no plugins are configured.
+ *
+ * @param registry - Plugin registry (or undefined)
+ * @param onError - Optional error handler for plugin failures
  */
 export function createPluginService(
   registry: PluginRegistry | undefined,
+  onError?: PluginErrorHandler,
 ): PluginService | null {
   if (!registry || registry.getAll().length === 0) {
     return null;
   }
-  return new PluginService(registry);
+  return new PluginService(registry, onError);
 }

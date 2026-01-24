@@ -63,6 +63,12 @@ export interface PluginCapabilities {
   routes?: string[];
 }
 
+// Re-export error context from handlers-workers
+export type {
+  PluginErrorContext,
+  PluginErrorHandler,
+} from '@drizzle-cms/handlers-workers';
+
 // ─────────────────────────────────────────────────────────────
 // Plugin filter context - for deciding whether to invoke hooks
 // ─────────────────────────────────────────────────────────────

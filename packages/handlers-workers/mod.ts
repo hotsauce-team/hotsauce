@@ -35,6 +35,8 @@ export type {
 export { createWorkerExecutor, WorkerExecutor } from './executor.ts';
 export type {
   PluginConfig as WorkerPluginConfig,
+  PluginErrorContext,
+  PluginErrorHandler,
   RegisteredPlugin,
   WorkerHookDeclaration,
 } from './executor.ts';

@@ -107,6 +107,26 @@ export interface RegisteredPlugin {
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Context for plugin error reporting
+ */
+export interface PluginErrorContext {
+  /** Plugin name that failed */
+  plugin: string;
+  /** Type of operation that failed */
+  operation: 'init' | 'transform:beforeSave' | 'transform:afterRead' | 'action';
+  /** CRUD action (for action hooks) */
+  action?: CrudAction;
+}
+
+/**
+ * Error handler callback for plugin failures
+ */
+export type PluginErrorHandler = (
+  error: Error,
+  context: PluginErrorContext,
+) => void;
+
+/**
  * Manages Worker instances for plugins.
  * Users provide their own Worker instances for full control over permissions.
  */
@@ -115,8 +135,14 @@ export class WorkerExecutor {
   private pendingRequests: Map<string, {
     resolve: (value: Serializable) => void;
     reject: (error: Error) => void;
+    context: PluginErrorContext;
   }> = new Map();
   private messageIdCounter = 0;
+  private onError?: PluginErrorHandler;
+
+  constructor(onError?: PluginErrorHandler) {
+    this.onError = onError;
+  }
 
   /**
    * Initialize a Worker for a plugin.
@@ -295,15 +321,8 @@ export class WorkerExecutor {
         // Workers default to fire-and-forget unless capabilities say otherwise
         const promise = this.executeActionHook(plugin.name, action, ctx);
 
-        fireAndForgetPromises.push(
-          promise.catch(() => {
-            // SECURITY: Don't log Worker error details (may contain credentials)
-            // The error is already logged in handleWorkerResponse
-            console.error(
-              `[plugin:${plugin.name}] Action hook (${action}) failed`,
-            );
-          }),
-        );
+        // Fire-and-forget: errors handled via onError callback in handleWorkerResponse
+        fireAndForgetPromises.push(promise.catch(() => {}));
       } else {
         // In-process plugins: function hooks
         const hook = this.getInProcessActionHook(plugin.hooks, action);
@@ -317,11 +336,15 @@ export class WorkerExecutor {
           if (isFireAndForget) {
             fireAndForgetPromises.push(
               promise.catch((error) => {
-                // In-process plugins: log full error (user's own code)
-                console.error(
-                  `[plugin:${plugin.name}] Action hook (${action}) failed:`,
-                  error instanceof Error ? error.message : error,
-                );
+                // In-process plugins: call onError with full error (user's own code)
+                const err = error instanceof Error
+                  ? error
+                  : new Error(String(error));
+                this.onError?.(err, {
+                  plugin: plugin.name,
+                  operation: 'action',
+                  action,
+                });
               }),
             );
           } else {
@@ -373,6 +396,7 @@ export class WorkerExecutor {
       pluginName,
       'action',
       { action, ctx } as unknown as Serializable,
+      action,
     );
   }
 
@@ -428,6 +452,7 @@ export class WorkerExecutor {
     pluginName: string,
     type: WorkerMessageType,
     payload: Serializable,
+    action?: CrudAction,
   ): Promise<Serializable> {
     const worker = this.workers.get(pluginName);
     if (!worker) {
@@ -436,27 +461,35 @@ export class WorkerExecutor {
 
     const id = `${pluginName}-${++this.messageIdCounter}`;
 
-    return new Promise((resolve, reject) => {
-      // Store pending request
-      this.pendingRequests.set(id, { resolve, reject });
+    // Build error context for this request
+    const context: PluginErrorContext = {
+      plugin: pluginName,
+      operation: type === 'init'
+        ? 'init'
+        : type as PluginErrorContext['operation'],
+      action,
+    };
 
+    return new Promise((resolve, reject) => {
       // Set timeout
       const timeout = setTimeout(() => {
         this.pendingRequests.delete(id);
-        reject(new Error(`Plugin ${pluginName} timed out on ${type}`));
+        const error = new Error(`Plugin ${pluginName} timed out on ${type}`);
+        this.onError?.(error, context);
+        reject(error);
       }, 30000); // 30 second timeout
 
-      // Clear timeout when resolved
-      const originalResolve = resolve;
+      // Store pending request with context
       this.pendingRequests.set(id, {
         resolve: (value) => {
           clearTimeout(timeout);
-          originalResolve(value);
+          resolve(value);
         },
         reject: (error) => {
           clearTimeout(timeout);
           reject(error);
         },
+        context,
       });
 
       // Send message
@@ -468,9 +501,9 @@ export class WorkerExecutor {
   /**
    * Handle response from Worker.
    *
-   * SECURITY: Worker error messages are logged but NOT propagated.
-   * This prevents plugins from leaking credentials or sensitive data
-   * via intentional or accidental error messages.
+   * SECURITY: Worker error messages are passed to onError for logging
+   * but NOT propagated in the thrown error. This prevents plugins from
+   * leaking credentials or sensitive data via error messages to end users.
    */
   private handleWorkerResponse(response: WorkerResponse): void {
     const pending = this.pendingRequests.get(response.id);
@@ -484,17 +517,17 @@ export class WorkerExecutor {
     if (response.success) {
       pending.resolve(response.result ?? null);
     } else {
-      // Log the actual error for operators (server-side only)
-      // Extract plugin name from request ID (format: "pluginName-123")
-      const pluginName = response.id.split('-').slice(0, -1).join('-');
-      console.error(
-        `[plugin:${pluginName}] Worker error:`,
-        response.error ?? 'Unknown error',
-      );
+      // Create error with FULL message for onError callback
+      const fullError = new Error(response.error ?? 'Unknown plugin error');
 
-      // Return sanitized error - never expose Worker error messages
+      // Call onError with full error details for server-side logging
+      this.onError?.(fullError, pending.context);
+
+      // Return sanitized error - never expose Worker error messages externally
       // This prevents credential leakage via error messages
-      pending.reject(new Error(`Plugin "${pluginName}" execution failed`));
+      pending.reject(
+        new Error(`Plugin "${pending.context.plugin}" execution failed`),
+      );
     }
   }
 
