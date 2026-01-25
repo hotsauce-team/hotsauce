@@ -450,6 +450,10 @@ filter: 'dangerously-open';
 - **Transform hooks** (`beforeSave`, `afterRead`): Modify data, always block
 - **Action hooks** (`on.create`, `on.update`, etc.): Side effects, optionally fire-and-forget
 
+**Column Policy Interaction**
+
+Transform hooks (`afterRead`, `afterReadMany`) receive **column-filtered** records. Hidden columns are removed *before* plugins see the data. This is intentional for security — plugins cannot access or leak column-policy-hidden data.
+
 **Declarative vs Function Hooks**
 
 Worker plugins use **declarative hooks** (arrays of hook names), while in-process plugins use **function hooks**:

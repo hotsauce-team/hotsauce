@@ -1471,6 +1471,30 @@ All data passed to/from plugins must be JSON-serializable:
 
 This constraint enables Worker isolation without API changes.
 
+### Column Policies and Plugin Data
+
+**Important:** Transform hooks (`afterRead`, `afterReadMany`) receive **column-filtered** records, not raw database results. If a column policy hides a field from the current user, plugins cannot access that field.
+
+```
+DB Query → Column Policy Filter → afterRead Plugin → Response
+                ↑
+         Hidden columns removed BEFORE plugins see data
+```
+
+This is intentional for security:
+
+- Plugins (especially Worker-isolated ones) may be untrusted third-party code
+- Column policies are enforced consistently across all data paths
+- Defense in depth: even if a plugin is compromised, it can't leak hidden data
+
+**Implications:**
+
+- A plugin cannot compute derived fields from hidden columns
+- Audit plugins see the same filtered view as the user
+- If you need full record access, use `beforeSave` (which runs before filtering matters)
+
+If you have a trusted plugin that needs full record access for `afterRead`, consider running it in-process and fetching the data directly via `db` in your handler layer instead.
+
 ### Official Plugins
 
 Official plugins are published in the [`@drizzle-cms/plugins`](../plugins/README.md) package.
