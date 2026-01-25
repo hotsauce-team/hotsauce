@@ -138,6 +138,41 @@ const policies = {
 - Return SQL condition to filter records
 - Test policies thoroughly for each action type
 
+### 7. Column-Level Permissions
+
+Hide sensitive columns from specific users. Hidden columns:
+
+- **Never sent to the browser** — data stays server-side
+- **Automatically excluded from forms** — users can't even attempt to set them
+- **Can inject defaults** — auto-fill hidden required columns (e.g., tenantId)
+
+```typescript
+// Example: Hide salary from non-admins, auto-inject tenantId
+const policies = {
+  employees: {
+    row: ownedBy(schema.employees, 'managerId'),
+    columns: {
+      salary: {
+        read: (ctx) => ctx.user?.role === 'admin',
+        write: (ctx) => ctx.user?.role === 'admin',
+      },
+      tenantId: {
+        read: () => false,
+        write: () => false,
+        default: (ctx) => ctx.user?.tenantId,
+      },
+    },
+  },
+};
+```
+
+**Best Practices:**
+
+- Use column policies for PII, financial data, and internal fields
+- Always provide `default` for hidden required columns (validated at runtime during create)
+- Combine with row policies for defense-in-depth
+- Test that restricted columns are truly absent from API responses
+
 ## Environment Variables
 
 ### Required Secrets

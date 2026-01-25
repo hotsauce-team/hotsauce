@@ -1012,6 +1012,202 @@ function tenantScoped<T extends Table>(
 
 > **Future:** Native `tenantId` support in `PolicyContext` is planned. This would allow `ctx.user.tenantId` directly.
 
+## Column-Level Permissions
+
+Beyond row-level security, you can restrict access to specific **columns** within a table. Hidden columns are automatically excluded from the UI—data never reaches the browser.
+
+### Quick Start
+
+```ts
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  auth: { jwtSecret },
+  policies: {
+    users: {
+      // Row-level policy (optional, existing behavior)
+      row: ownedBy(schema.users, 'id'),
+
+      // Column-level policies (new)
+      columns: {
+        // Salary is hidden from non-admins entirely
+        salary: {
+          read: (ctx) => ctx.user?.role === 'admin',
+          write: (ctx) => ctx.user?.role === 'admin',
+        },
+        // SSN is completely hidden (never readable or writable)
+        ssn: {
+          read: () => false,
+          write: () => false,
+        },
+        // tenantId is auto-injected, never shown to users
+        tenantId: {
+          read: () => false,
+          write: () => false,
+          default: (ctx) => ctx.user?.tenantId, // Auto-inject on create
+        },
+      },
+    },
+  },
+});
+```
+
+### How Column Policies Work
+
+Each column policy has three optional properties:
+
+| Property    | Type                                | Default | Purpose                                        |
+| ----------- | ----------------------------------- | ------- | ---------------------------------------------- |
+| **read**    | `(ctx: PolicyContext) => boolean`   | `true`  | Can user see this column?                      |
+| **write**   | `(ctx: PolicyContext) => boolean`   | `true`  | Can user edit this column?                     |
+| **default** | `(ctx: PolicyContext) => unknown`   | —       | Value to inject for non-writable columns on create |
+
+The CMS evaluates column policies and:
+
+1. **Filters list/detail views** — Hidden columns excluded from API responses
+2. **Filters form fields** — Non-writable columns hidden from create/edit forms
+3. **Injects defaults on create** — Non-writable columns get their `default` value (required for NOT NULL columns without DB default)
+
+### Read vs Write Permissions
+
+```ts
+columns: {
+  // Read-only: visible but not editable
+  createdAt: {
+    read: () => true,
+    write: () => false,
+  },
+
+  // Write-only: can set but not see (rare)
+  password: {
+    read: () => false,
+    write: () => true,
+  },
+
+  // Admin-only: both read and write restricted
+  internalNotes: {
+    read: (ctx) => ctx.user?.role === 'admin',
+    write: (ctx) => ctx.user?.role === 'admin',
+  },
+}
+```
+
+### Hidden Required Columns
+
+When a required column (NOT NULL without default) is hidden from users, you **must** provide a `default` in the policy. The CMS validates this **at runtime** during create operations and returns an error message if misconfigured.
+
+```ts
+// ✅ Correct: hidden required column has a default
+columns: {
+  tenantId: {
+    read: () => false,
+    write: () => false,
+    default: (ctx) => ctx.user?.tenantId,
+  },
+}
+
+// ❌ Error at runtime: "Column 'tenantId' is required (NOT NULL) but hidden..."
+columns: {
+  tenantId: {
+    read: () => false,
+    write: () => false,
+    // Missing default!
+  },
+}
+```
+
+> **Note:** Columns with database defaults (e.g., `default(sql\`now()\`)`) don't need policy defaults—the database provides the value.
+
+### Multi-Tenant Pattern
+
+Column policies are ideal for multi-tenancy where `tenantId` should be:
+
+- **Invisible** to users (they can't see or change it)
+- **Auto-injected** on record creation
+- **Filtered** by row policy (users only see their tenant's data)
+
+```ts
+import { eq, type Column, type Table } from 'drizzle-orm';
+import type { PolicyFn, TablePolicy } from '@drizzle-cms/handlers';
+
+function multiTenant<T extends Table>(
+  table: T,
+  tenantColumn: keyof T & string,
+): TablePolicy {
+  return {
+    // Row filter: only see records from your tenant
+    row: ((ctx) => {
+      const tenantId = (ctx.user as any)?.tenantId;
+      if (!tenantId) return false;
+      return eq(table[tenantColumn] as Column, tenantId);
+    }) as PolicyFn,
+
+    // Column policy: hide and auto-inject tenantId
+    columns: {
+      [tenantColumn]: {
+        read: () => false,
+        write: () => false,
+        default: (ctx) => (ctx.user as any)?.tenantId,
+      },
+    },
+  };
+}
+
+// Usage
+policies: {
+  posts: multiTenant(schema.posts, 'tenantId'),
+  comments: multiTenant(schema.comments, 'tenantId'),
+}
+```
+
+### Combining Row and Column Policies
+
+The `TablePolicy` type supports both:
+
+```ts
+type TablePolicy = {
+  row?: Policy;           // Row-level filtering (WHERE clause)
+  columns?: ColumnPolicies; // Column-level permissions
+};
+
+// Or just a row policy (backward compatible)
+type Policy = PolicyFn | { [action]: PolicyFn };
+```
+
+Existing row-only policies continue to work:
+
+```ts
+// These are equivalent:
+policies: {
+  posts: ownedBy(schema.posts, 'authorId'),
+}
+
+policies: {
+  posts: { row: ownedBy(schema.posts, 'authorId') },
+}
+```
+
+### Role-Based Column Access
+
+Combine with role checks for fine-grained control:
+
+```ts
+const adminOnly = (ctx: PolicyContext) => ctx.user?.role === 'admin';
+const managerOrAbove = (ctx: PolicyContext) =>
+  ['admin', 'manager'].includes(ctx.user?.role ?? '');
+
+policies: {
+  employees: {
+    columns: {
+      salary: { read: managerOrAbove, write: adminOnly },
+      ssn: { read: adminOnly, write: () => false }, // Admin read, no one writes
+      performanceReview: { read: managerOrAbove, write: managerOrAbove },
+    },
+  },
+}
+```
+
 ## Plugins
 
 Plugins extend CMS functionality with custom hooks that run during CRUD operations. Plugins are isolated in Web Workers for security, ensuring untrusted code cannot access your database or server internals.
@@ -1282,6 +1478,30 @@ All data passed to/from plugins must be JSON-serializable:
 ❌ **Not allowed**: functions, class instances, symbols, circular references
 
 This constraint enables Worker isolation without API changes.
+
+### Column Policies and Plugin Data
+
+**Important:** Transform hooks (`afterRead`) receive **column-filtered** records, not raw database results. If a column policy hides a field from the current user, plugins cannot access that field.
+
+```
+DB Query → Column Policy Filter → afterRead Plugin → Response
+                ↑
+         Hidden columns removed BEFORE plugins see data
+```
+
+This is intentional for security:
+
+- Plugins (especially Worker-isolated ones) may be untrusted third-party code
+- Column policies are enforced consistently across all data paths
+- Defense in depth: even if a plugin is compromised, it can't leak hidden data
+
+**Implications:**
+
+- A plugin cannot compute derived fields from hidden columns
+- Audit plugins see the same filtered view as the user
+- If you need full record access, use `beforeSave` (which runs before filtering matters)
+
+If you have a trusted plugin that needs full record access for `afterRead`, consider running it in-process and fetching the data directly via `db` in your handler layer instead.
 
 ### Official Plugins
 
