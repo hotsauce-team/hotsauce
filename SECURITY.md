@@ -169,7 +169,7 @@ const policies = {
 **Best Practices:**
 
 - Use column policies for PII, financial data, and internal fields
-- Always provide `default` for hidden required columns (validated at startup)
+- Always provide `default` for hidden required columns (validated at runtime during create)
 - Combine with row policies for defense-in-depth
 - Test that restricted columns are truly absent from API responses
 

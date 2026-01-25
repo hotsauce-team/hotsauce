@@ -219,11 +219,11 @@ The CMS uses a **layered security model** for authorization. Understanding this 
    - Validates entire config when `createCmsHandler()` is called
    - Throws `CmsConfigError` with detailed messages for invalid config
    - Enforces: policies required with auth, policies forbidden with `auth: 'dangerously-open'`
-   - **Validates column policies** — hidden required columns must have defaults
 
-3. **Runtime validation** (`crud.ts` handlers)
+3. **Runtime column policy column policy validation** (`crud.ts` handlers)
    - If auth is enabled but policies somehow undefined, handlers return 403
-   - Belt-and-suspenders check in case types are bypassed
+   - **Validates hidden required columns** — checks if required columns missing from `writableColumns` have policy defaults
+   - Returns clear error message if misconfigured (catches issues that depend on user context)
 
 4. **Policy application** (`applyPolicy` in `policies/apply.ts`)
    - Low-level utility that evaluates a single policy
@@ -285,20 +285,23 @@ type Policies = Record<string, Policy | TablePolicy>;
 
 ### Hidden Required Column Validation
 
-This is validated at startup to prevent runtime failures:
+This is validated **at runtime** during create operations when we have user context:
 
 ```typescript
-// validation.ts → validateColumnPolicies()
-// If column is NOT NULL + no DB default + hidden (read=false OR write=false) + no policy default
-// → Throws CmsConfigError
+// crud.ts → handleCreate()
+// After evaluating column policies with actual user context:
+// If column is NOT NULL + no DB default + not in writableColumns + no policy default
+// → Returns error message in form
 ```
 
 Example error:
 
 ```
-Hidden required column 'tenantId' in table 'posts' needs a default value.
-Add a 'default' function to the column policy or use a database default.
+Configuration error: Column 'tenantId' is required (NOT NULL) but hidden from this user without a default.
+Either provide a 'default' function in the column policy, add a database default, or make the column nullable.
 ```
+
+> **Why runtime?** Column policies are functions that depend on user context (e.g., `write: (ctx) => ctx.user?.role === 'admin'`). We can't know at startup whether a column will be writable for every possible user.
 
 ### Why `applyPolicy(undefined, ...)` returns `allowed: true`
 

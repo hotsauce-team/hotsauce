@@ -19,7 +19,7 @@ import {
   SECURITY_HEADERS,
 } from './http.ts';
 import { generateCsrfToken, validateCsrfToken } from './csrf.ts';
-import { validateCmsOptions, validateResolvedSecrets, validateColumnPolicies } from './validation.ts';
+import { validateCmsOptions, validateResolvedSecrets } from './validation.ts';
 import { getEnv } from './runtime-compat.ts';
 import { createPluginRegistry } from './plugins/registry.ts';
 import { createPluginService } from './plugins/service.ts';
@@ -309,10 +309,6 @@ export function createCmsHandler(options: CmsOptions): Handler {
   // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
   const resolvedPolicies: Policies | undefined =
     options.policies === 'dangerously-open' ? {} : options.policies;
-
-  // Validate column policies against introspected schema
-  // Catches hidden required columns without defaults at startup
-  validateColumnPolicies(introspected.tables, resolvedPolicies);
 
   // Resolve auth options if provided
   const resolvedAuth: ResolvedAuthOptions | undefined = hasRealAuth

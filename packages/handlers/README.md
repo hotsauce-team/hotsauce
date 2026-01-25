@@ -1095,7 +1095,7 @@ columns: {
 
 ### Hidden Required Columns
 
-When a required column (NOT NULL without default) is hidden from users, you **must** provide a `default` in the policy. The CMS validates this at startup and throws `CmsConfigError` if misconfigured.
+When a required column (NOT NULL without default) is hidden from users, you **must** provide a `default` in the policy. The CMS validates this **at runtime** during create operations and returns an error message if misconfigured.
 
 ```ts
 // ✅ Correct: hidden required column has a default
@@ -1107,7 +1107,7 @@ columns: {
   },
 }
 
-// ❌ Error at startup: "Hidden required column 'tenantId' needs a default"
+// ❌ Error at runtime: "Column 'tenantId' is required (NOT NULL) but hidden..."
 columns: {
   tenantId: {
     read: () => false,

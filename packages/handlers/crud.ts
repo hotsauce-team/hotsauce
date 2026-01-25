@@ -62,6 +62,7 @@ import {
   injectColumnDefaults,
   recordExists,
   updateWithPolicy,
+  validateHiddenRequiredColumns,
 } from './policies/mod.ts';
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
 
@@ -474,6 +475,20 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     table.columns,
     policyCtx,
   );
+
+  // Validate that all required columns are writable or have defaults
+  // This catches policy misconfigurations at runtime when we have user context
+  const hiddenErrors = validateHiddenRequiredColumns(table.columns, columnResult);
+  if (hiddenErrors.length > 0) {
+    // Configuration error - return 500 with clear message for debugging
+    const errorMessages = hiddenErrors.map((e) => e.message).join(' ');
+    return await renderCreateForm(
+      ctx,
+      columnResult,
+      {},
+      `Configuration error: ${errorMessages}`,
+    );
+  }
 
   // Handle POST - create record
   if (request.method === 'POST') {

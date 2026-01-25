@@ -502,3 +502,74 @@ export function injectColumnDefaults(
   // Defaults are injected, but form data takes precedence if somehow present
   return { ...defaults, ...formData };
 }
+
+/**
+ * Validation error for hidden required columns missing defaults
+ */
+export interface HiddenColumnError {
+  /** Column name */
+  column: string;
+  /** Error message */
+  message: string;
+}
+
+/**
+ * Validate that all required columns are either writable or have defaults
+ *
+ * Called at runtime during create operations when we have actual user context.
+ * Returns validation errors for any required columns that are:
+ * - NOT NULL without database default
+ * - Not writable by the current user (based on evaluated column policies)
+ * - Missing a policy default value
+ *
+ * This catches configuration issues that can't be detected at startup
+ * (because policies depend on runtime user context).
+ *
+ * @param columns - All columns from introspected table
+ * @param columnResult - Evaluated column policies with writable columns and defaults
+ * @returns Array of validation errors (empty if valid)
+ *
+ * @example
+ * ```ts
+ * const errors = validateHiddenRequiredColumns(table.columns, columnResult);
+ * if (errors.length > 0) {
+ *   // Return 400 with clear error message
+ * }
+ * ```
+ */
+export function validateHiddenRequiredColumns(
+  columns: IntrospectedColumn[],
+  columnResult: EvaluatedColumnPolicies,
+): HiddenColumnError[] {
+  const errors: HiddenColumnError[] = [];
+
+  for (const col of columns) {
+    // Skip if column has a database default
+    if (col.hasDefault) continue;
+
+    // Skip if column is nullable
+    if (!col.notNull) continue;
+
+    // Skip auto-generated columns
+    if (isAutoColumn(col)) continue;
+
+    // Check if column is writable by current user
+    const isWritable = columnResult.writableColumns.includes(col.name);
+    if (isWritable) continue;
+
+    // Check if column has a policy default
+    const hasDefault = col.name in columnResult.defaults;
+    if (hasDefault) continue;
+
+    // Required column is hidden without a default - this will fail on insert
+    errors.push({
+      column: col.name,
+      message:
+        `Column '${col.name}' is required (NOT NULL) but hidden from this user without a default. ` +
+        `Either provide a 'default' function in the column policy, add a database default, ` +
+        `or make the column nullable.`,
+    });
+  }
+
+  return errors;
+}

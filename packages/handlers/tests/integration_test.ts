@@ -1014,6 +1014,497 @@ Deno.test('integration: policy tests', async (t) => {
 });
 
 // ============================================================================
+// Column Policy Integration Tests
+// ============================================================================
+
+Deno.test('integration: column policy tests', async (t) => {
+  // Create single PGlite instance for column policy tests
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithAuth });
+
+  // Create tables
+  await db.execute(sql`
+    CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      name VARCHAR(100) NOT NULL,
+      bio TEXT,
+      is_admin BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE posts (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      body TEXT,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE admin_users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role VARCHAR(50)
+    )
+  `);
+
+  // Helper to reset tables between tests
+  async function resetDb() {
+    await db.execute(
+      sql`TRUNCATE TABLE posts, users, admin_users RESTART IDENTITY CASCADE`,
+    );
+  }
+
+  await t.step('read: false hides column from list view', async () => {
+    await resetDb();
+
+    // Create test data
+    await db.insert(users).values([
+      { email: 'secret@example.com', name: 'Secret User', bio: 'Public bio' },
+      { email: 'another@example.com', name: 'Another User' },
+    ]);
+
+    // Create admin user for auth
+    const passwordHash = await hashPassword('password');
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithAuth,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: new PasswordProvider({ db, usersTable: adminUsers }),
+      },
+      policies: {
+        users: {
+          columns: {
+            email: { read: () => false }, // Hide email from all users
+          },
+        },
+      },
+    });
+
+    // Create JWT
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+
+    const request = new Request('http://localhost/admin/users', {
+      headers: { Cookie: `cms_token=${token}` },
+    });
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const html = await response.text();
+
+    // Name should be visible
+    assertStringIncludes(html, 'Secret User');
+    assertStringIncludes(html, 'Another User');
+
+    // Email should NOT be visible (hidden by column policy)
+    assertEquals(
+      html.includes('secret@example.com'),
+      false,
+      'Email should be hidden from list view',
+    );
+    assertEquals(
+      html.includes('another@example.com'),
+      false,
+      'Email should be hidden from list view',
+    );
+  });
+
+  await t.step('read: false hides column from detail view', async () => {
+    await resetDb();
+
+    // Create test data
+    await db.insert(users).values({
+      email: 'private@example.com',
+      name: 'Private User',
+      bio: 'This bio is public',
+    });
+
+    // Create admin user for auth
+    const passwordHash = await hashPassword('password');
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithAuth,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: new PasswordProvider({ db, usersTable: adminUsers }),
+      },
+      policies: {
+        users: {
+          columns: {
+            email: { read: () => false },
+          },
+        },
+      },
+    });
+
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+
+    const request = new Request('http://localhost/admin/users/1', {
+      headers: { Cookie: `cms_token=${token}` },
+    });
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const html = await response.text();
+
+    // Name and bio should be visible
+    assertStringIncludes(html, 'Private User');
+    assertStringIncludes(html, 'This bio is public');
+
+    // Email should NOT be visible
+    assertEquals(
+      html.includes('private@example.com'),
+      false,
+      'Email should be hidden from detail view',
+    );
+  });
+
+  await t.step('read: false hides column from edit form', async () => {
+    await resetDb();
+
+    // Create test data
+    await db.insert(users).values({
+      email: 'hidden@example.com',
+      name: 'Editable User',
+    });
+
+    // Create admin user for auth
+    const passwordHash = await hashPassword('password');
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithAuth,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: new PasswordProvider({ db, usersTable: adminUsers }),
+      },
+      policies: {
+        users: {
+          columns: {
+            email: { read: () => false },
+          },
+        },
+      },
+    });
+
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+
+    const request = new Request('http://localhost/admin/users/1/edit', {
+      headers: { Cookie: `cms_token=${token}` },
+    });
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const html = await response.text();
+
+    // Name should have an input field
+    assertStringIncludes(html, 'Editable User');
+
+    // Email should NOT be visible (no input, no value)
+    assertEquals(
+      html.includes('hidden@example.com'),
+      false,
+      'Email value should be hidden from edit form',
+    );
+    // Check that the email input field is not rendered
+    assertEquals(
+      html.includes('name="email"'),
+      false,
+      'Email input field should not exist in edit form',
+    );
+  });
+
+  await t.step('role-based column visibility works', async () => {
+    await resetDb();
+
+    // Create test data
+    await db.insert(users).values({
+      email: 'user@example.com',
+      name: 'Test User',
+    });
+
+    // Create admin user with role
+    const passwordHash = await hashPassword('password');
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+      role: 'admin',
+    });
+    await db.insert(adminUsers).values({
+      email: 'editor@example.com',
+      passwordHash,
+      role: 'editor',
+    });
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithAuth,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: new PasswordProvider({ db, usersTable: adminUsers }),
+      },
+      policies: {
+        users: {
+          columns: {
+            // Only admins can see email
+            email: { read: (ctx) => ctx.user?.role === 'admin' },
+          },
+        },
+      },
+    });
+
+    // Admin can see email
+    const adminPayload = createJwtPayload('1', 'admin');
+    const adminToken = await signJwt(adminPayload, AUTH_SECRET);
+
+    const adminRequest = new Request('http://localhost/admin/users/1', {
+      headers: { Cookie: `cms_token=${adminToken}` },
+    });
+    const adminResponse = await handler(adminRequest);
+    const adminHtml = await adminResponse.text();
+
+    assertEquals(adminResponse.status, 200);
+    assertStringIncludes(adminHtml, 'user@example.com', 'Admin should see email');
+
+    // Editor cannot see email
+    const editorPayload = createJwtPayload('2', 'editor');
+    const editorToken = await signJwt(editorPayload, AUTH_SECRET);
+
+    const editorRequest = new Request('http://localhost/admin/users/1', {
+      headers: { Cookie: `cms_token=${editorToken}` },
+    });
+    const editorResponse = await handler(editorRequest);
+    const editorHtml = await editorResponse.text();
+
+    assertEquals(editorResponse.status, 200);
+    assertStringIncludes(editorHtml, 'Test User', 'Editor should see name');
+    assertEquals(
+      editorHtml.includes('user@example.com'),
+      false,
+      'Editor should NOT see email',
+    );
+  });
+
+  await t.step('write: false ignores posted data for that column', async () => {
+    await resetDb();
+
+    // Create test user
+    await db.insert(users).values({
+      email: 'original@example.com',
+      name: 'Original Name',
+    });
+
+    // Create admin user for auth
+    const passwordHash = await hashPassword('password');
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithAuth,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: new PasswordProvider({ db, usersTable: adminUsers }),
+      },
+      policies: {
+        users: {
+          columns: {
+            // Email is read-only (can see but not edit)
+            email: { write: () => false },
+          },
+        },
+      },
+    });
+
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+    // Try to update with new email (should be ignored)
+    const formData = createFormData({
+      name: 'Updated Name',
+      email: 'hacked@example.com', // This should be ignored!
+      _csrf: csrfToken,
+    });
+
+    const request = new Request('http://localhost/admin/users/1/edit', {
+      method: 'POST',
+      headers: { Cookie: `cms_token=${token}` },
+      body: formData,
+    });
+    const response = await handler(request);
+
+    // Should redirect on success
+    assertEquals(response.status, 303);
+
+    // Verify: name was updated, but email was NOT changed
+    const [user] = await db.select().from(users).where(sql`id = 1`);
+    assertEquals(user?.name, 'Updated Name');
+    assertEquals(
+      user?.email,
+      'original@example.com',
+      'Email should NOT be changed when write: false',
+    );
+  });
+
+  await t.step('write: false on required column during create needs default', async () => {
+    await resetDb();
+
+    // Create admin user for auth
+    const passwordHash = await hashPassword('password');
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
+    // Handler where email is hidden from writing but has no default
+    // This should show an error when trying to create (email is required)
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithAuth,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: new PasswordProvider({ db, usersTable: adminUsers }),
+      },
+      policies: {
+        users: {
+          columns: {
+            // Email is hidden from writing with NO default
+            email: { write: () => false },
+          },
+        },
+      },
+    });
+
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+
+    // Just GET the create form - it should show a configuration error
+    const request = new Request('http://localhost/admin/users/new', {
+      headers: { Cookie: `cms_token=${token}` },
+    });
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const html = await response.text();
+
+    // Should show configuration error about missing default
+    assertStringIncludes(
+      html,
+      'Configuration error',
+      'Should show config error for hidden required column without default',
+    );
+    assertStringIncludes(
+      html,
+      'email',
+      'Error should mention the problematic column',
+    );
+  });
+
+  await t.step('write: false with default injects value on create', async () => {
+    await resetDb();
+
+    // Create admin user for auth
+    const passwordHash = await hashPassword('password');
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+    });
+
+    // Handler where email is hidden but has a default
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithAuth,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: new PasswordProvider({ db, usersTable: adminUsers }),
+      },
+      policies: {
+        users: {
+          columns: {
+            email: {
+              write: () => false,
+              default: () => 'auto-generated@example.com',
+            },
+          },
+        },
+      },
+    });
+
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+    // Create user without email (it should be auto-filled)
+    const formData = createFormData({
+      name: 'New User',
+      _csrf: csrfToken,
+    });
+
+    const request = new Request('http://localhost/admin/users/new', {
+      method: 'POST',
+      headers: { Cookie: `cms_token=${token}` },
+      body: formData,
+    });
+    const response = await handler(request);
+
+    // Should redirect on success
+    assertEquals(response.status, 303);
+
+    // Verify: email was auto-filled with the default
+    const [user] = await db.select().from(users).where(sql`id = 1`);
+    assertEquals(user?.name, 'New User');
+    assertEquals(
+      user?.email,
+      'auto-generated@example.com',
+      'Email should be auto-filled from policy default',
+    );
+  });
+
+  // Cleanup
+  await client.close();
+});
+
+// ============================================================================
 // Secure by Default Tests - auth enabled but policies undefined
 // ============================================================================
 

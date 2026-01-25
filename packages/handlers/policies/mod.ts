@@ -60,7 +60,7 @@ export {
 // ─────────────────────────────────────────────────────────────
 // Column Policy Application - Apply column policies to filter fields
 // ─────────────────────────────────────────────────────────────
-export type { EvaluatedColumnPolicies } from './apply.ts';
+export type { EvaluatedColumnPolicies, HiddenColumnError } from './apply.ts';
 export {
   evaluateColumnPolicies,
   extractColumnPolicies,
@@ -69,4 +69,5 @@ export {
   filterRecordsColumns,
   injectColumnDefaults,
   isTablePolicy,
+  validateHiddenRequiredColumns,
 } from './apply.ts';
