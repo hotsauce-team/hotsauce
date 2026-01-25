@@ -754,7 +754,19 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
 
   // Handle GET - show form with readable columns filtered
   const filteredRecord = filterRecordColumns(record, columnResult.readableColumns);
-  return await renderEditForm(ctx, columnResult, filteredRecord);
+
+  // Execute afterRead transform before displaying form
+  let transformedRecord = filteredRecord;
+  if (ctx.pluginService) {
+    transformedRecord = await ctx.pluginService.afterRead(
+      table.name,
+      'read',
+      filteredRecord,
+      getPluginUser(ctx),
+    );
+  }
+
+  return await renderEditForm(ctx, columnResult, transformedRecord);
 }
 
 /**

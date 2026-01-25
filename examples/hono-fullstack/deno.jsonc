@@ -1,0 +1,40 @@
+{
+  "name": "hono-fullstack-example",
+  "version": "0.0.1",
+
+  "tasks": {
+    "dev": "deno run --unstable-worker-options --env-file=.env.example --permission-set=hono-fullstack server.ts",
+    "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno run --unstable-worker-options --env-file=.env.example --permission-set=hono-fullstack server.ts",
+    "dev:watch": "deno run --unstable-worker-options --env-file=.env.example --watch --permission-set=hono-fullstack server.ts",
+    "seed": "deno run --permission-set=hono-fullstack seed.ts"
+  },
+
+  "exports": "./server.ts",
+
+  "permissions": {
+    "hono-fullstack": {
+      "read": [
+        "./data",
+        "./admin",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm",
+        "./site/static"
+      ],
+      "write": [
+        "./data"
+      ],
+      "net": [
+        "127.0.0.1:3000"
+      ],
+      "env": [
+        "CMS_CSRF_SECRET",
+        "CMS_JWT_SECRET"
+      ]
+    }
+  },
+
+  "imports": {
+    "hono": "jsr:@hono/hono@^4.11.5",
+    "hono/deno": "jsr:@hono/hono@^4.11.5/deno"
+  }
+}

@@ -1671,3 +1671,141 @@ Deno.test('integration: secure by default tests', async (t) => {
   // Cleanup
   await client.close();
 });
+
+// ============================================================================
+// Plugin Integration Tests
+// ============================================================================
+
+Deno.test('integration: plugin afterRead transform', async (t) => {
+  // Create fresh PGlite instance for plugin tests
+  const client = new PGlite();
+  const db = drizzle(client, { schema });
+
+  // Create tables
+  await db.execute(sql`
+    CREATE TABLE users (
+      id SERIAL PRIMARY KEY,
+      email VARCHAR(255) NOT NULL UNIQUE,
+      name VARCHAR(100) NOT NULL,
+      bio TEXT,
+      is_admin BOOLEAN NOT NULL DEFAULT false,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.execute(sql`
+    CREATE TABLE posts (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      body TEXT,
+      author_id INTEGER NOT NULL REFERENCES users(id),
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  // Helper to reset tables
+  async function resetDb() {
+    await db.execute(sql`TRUNCATE TABLE posts, users RESTART IDENTITY CASCADE`);
+  }
+
+  // Track which hooks were called
+  const hookCalls: string[] = [];
+
+  // In-process plugin with afterRead transform
+  const testPlugin = {
+    name: 'test-afterread',
+    filter: () => true,
+    hooks: {
+      transform: {
+        afterRead: (_ctx: unknown, data: Record<string, unknown>) => {
+          hookCalls.push('afterRead');
+          // Mark the data as transformed
+          return { ...data, _transformed: true };
+        },
+      },
+    },
+  };
+
+  await t.step('afterRead runs on list view', async () => {
+    await resetDb();
+    hookCalls.length = 0;
+
+    await db.insert(users).values({
+      email: 'test@example.com',
+      name: 'Test User',
+    });
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      db,
+      schema,
+      basePath: '/admin',
+      plugins: [testPlugin],
+    });
+
+    const request = new Request('http://localhost/admin/users');
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    assertEquals(hookCalls.includes('afterRead'), true);
+  });
+
+  await t.step('afterRead runs on read/view page', async () => {
+    await resetDb();
+    hookCalls.length = 0;
+
+    await db.insert(users).values({
+      email: 'test@example.com',
+      name: 'Test User',
+    });
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      db,
+      schema,
+      basePath: '/admin',
+      plugins: [testPlugin],
+    });
+
+    const request = new Request('http://localhost/admin/users/1');
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    assertEquals(hookCalls.includes('afterRead'), true);
+  });
+
+  await t.step('afterRead runs on edit page (GET)', async () => {
+    await resetDb();
+    hookCalls.length = 0;
+
+    await db.insert(users).values({
+      email: 'test@example.com',
+      name: 'Test User',
+    });
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      db,
+      schema,
+      basePath: '/admin',
+      plugins: [testPlugin],
+    });
+
+    const request = new Request('http://localhost/admin/users/1/edit');
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    // This is the bug we fixed - afterRead should run on edit page too
+    assertEquals(
+      hookCalls.includes('afterRead'),
+      true,
+      'afterRead should be called on edit page',
+    );
+  });
+
+  // Cleanup
+  await client.close();
+});

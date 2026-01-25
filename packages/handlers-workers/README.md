@@ -77,9 +77,17 @@ const myWorker = new Worker(
     type: 'module',
     // Deno: restrict permissions
     deno: { permissions: { net: ['audit.example.com'] } },
-  }
+  },
 );
+```
 
+> **Deno:** When using `deno.permissions` in Worker constructors, you must run with `--unstable-worker-options`:
+>
+> ```bash
+> deno run --unstable-worker-options --permission-set=your-permission-set server.ts
+> ```
+
+```typescript
 // Use in plugin config
 {
   name: 'audit-log',
