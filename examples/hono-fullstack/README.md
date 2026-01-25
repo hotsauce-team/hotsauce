@@ -82,8 +82,12 @@ examples/hono-fullstack/
 │
 ├── admin/          # CMS admin (admin only)
 │   ├── admin.ts    # CMS handler configuration
-│   ├── markdown-plugin.ts # beforeSave transform
-│   └── markdown.ts # Vendored snarkdown parser
+│   └── markdown-worker.ts # Worker plugin for markdown
+│
+├── lib/            # Shared code (used by admin + site)
+│   ├── markdown.ts # Vendored snarkdown parser
+│   ├── sanitize.ts # Allowlist HTML sanitizer (XSS prevention)
+│   └── sanitize_test.ts # Sanitizer test suite
 │
 ├── site/           # Public frontend (site only)
 │   ├── routes.ts   # Hono routes for public pages
@@ -104,7 +108,8 @@ examples/hono-fullstack/
 | `schema.ts`                | Both       | Drizzle tables & relations         |
 | `admin/admin.ts`           | Admin only | CMS handler configuration          |
 | `admin/markdown-worker.ts` | Admin only | Markdown Worker plugin             |
-| `admin/markdown.ts`        | Seed only  | Vendored snarkdown parser          |
+| `lib/markdown.ts`          | Both       | Vendored snarkdown parser          |
+| `lib/sanitize.ts`          | Both       | Allowlist HTML sanitizer           |
 | `site/routes.ts`           | Site only  | Public page routes                 |
 | `site/templates.ts`        | Site only  | HTML rendering                     |
 | `site/static/styles.css`   | Site only  | Stylesheet                         |
@@ -125,10 +130,21 @@ The CSP middleware in [security.ts](security.ts) applies to all site routes but 
 
 Markdown is rendered to HTML **at save time** using a CMS Worker plugin, not at read time:
 
-1. **Vendored parser** — [admin/markdown-worker.ts](admin/markdown-worker.ts) contains a vendored copy of [snarkdown](https://github.com/developit/snarkdown) (~100 lines, zero dependencies)
-2. **Worker isolation** — Plugin runs in a Web Worker with limited permissions for security
-3. **CMS plugin** — `beforeSave` transform populates `contentHtml` column automatically
-4. **Fast reads** — Templates use pre-rendered `contentHtml` column
+1. **Vendored parser** — [lib/markdown.ts](lib/markdown.ts) contains a vendored copy of [snarkdown](https://github.com/developit/snarkdown) (~100 lines, zero dependencies)
+2. **HTML sanitizer** — [lib/sanitize.ts](lib/sanitize.ts) uses an allowlist approach (like WordPress wp_kses) to prevent XSS
+3. **Worker isolation** — Plugin runs in a Web Worker with limited permissions for security
+4. **CMS plugin** — `beforeSave` transform populates `contentHtml` column automatically
+5. **Fast reads** — Templates use pre-rendered `contentHtml` column
+
+### XSS Prevention
+
+The sanitizer uses an allowlist approach:
+
+- **Allowed elements**: Only markdown output tags (`p`, `a`, `img`, `strong`, `em`, `code`, `pre`, `ul`, `li`, `h1-h6`, etc.)
+- **Allowed attributes**: Per-element allowlist (e.g., `a` can have `href`, `title`; `img` can have `src`, `alt`)
+- **URL validation**: `href` and `src` must use safe protocols (`http:`, `https:`, `mailto:`, `tel:`, or relative paths)
+- **Event handlers**: All `on*` attributes are stripped (onclick, onerror, etc.)
+- **Dangerous elements**: `<script>`, `<iframe>`, `<svg>`, `<style>`, etc. are removed (contents preserved)
 
 This approach:
 

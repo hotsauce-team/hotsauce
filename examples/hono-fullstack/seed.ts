@@ -6,7 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import { hashPassword } from '@drizzle-cms/handlers';
-import { parseMarkdown } from './admin/markdown.ts';
+import { parseMarkdown } from './lib/markdown.ts';
 
 import {
   adminUsers,

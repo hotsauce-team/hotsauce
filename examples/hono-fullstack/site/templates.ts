@@ -1,7 +1,8 @@
 // HTML templates for the public site
 // Uses drizzle-cms/ui's html tagged template for XSS-safe rendering
 import { html, raw } from '@drizzle-cms/ui';
-import { parseMarkdown } from '../admin/markdown.ts';
+import { parseMarkdown } from '../lib/markdown.ts';
+import { sanitizeHtml } from '../lib/sanitize.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -232,7 +233,7 @@ export function postPage(post: PostDetail): string {
         </div>
       </header>
       <div class="post-content">
-        ${raw(post.contentHtml || renderMarkdown(post.content))}
+        ${raw(safeHtml(post.contentHtml, post.content))}
       </div>
       <footer class="post-footer">
         <a href="/">← Back to all posts</a>
@@ -249,7 +250,7 @@ export function staticPage(page: PageDetail): string {
     <article class="page">
       <h1>${page.title}</h1>
       <div class="page-content">
-        ${raw(page.contentHtml || renderMarkdown(page.content))}
+        ${raw(safeHtml(page.contentHtml, page.content))}
       </div>
     </article>
   `;
@@ -371,4 +372,14 @@ function formatDate(date: Date): string {
  */
 function renderMarkdown(text: string): string {
   return parseMarkdown(text);
+}
+
+/**
+ * Safely render HTML content with XSS protection.
+ * Defense in depth: sanitizes even pre-sanitized DB content.
+ * Falls back to parsing markdown if contentHtml is empty.
+ */
+function safeHtml(contentHtml: string | null, markdownFallback: string): string {
+  const html = contentHtml || renderMarkdown(markdownFallback);
+  return sanitizeHtml(html);
 }

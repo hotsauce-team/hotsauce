@@ -31,13 +31,7 @@ export function createAdminHandler(db: Database) {
   // Note: In Deno, Workers need explicit read permission to load the module
   const markdownWorker = new Worker(
     import.meta.resolve('./markdown-worker.ts'),
-    {
-      type: 'module',
-      deno: {
-        // Disallow all permissions.
-        permissions: {},
-      },
-    },
+    { type: 'module', deno: { permissions: {} } },
   );
 
   // Worker plugin config - declarative hooks, filter controls data flow
@@ -68,8 +62,8 @@ export function createAdminHandler(db: Database) {
     },
     parsers,
     plugins: [markdownPlugin],
-    // deno-lint-ignore no-console
     onError: (error, context) =>
+      // deno-lint-ignore no-console
       console.error('CMS Error:', { error, context }),
   });
 }
