@@ -1057,17 +1057,17 @@ const handler = createCmsHandler({
 
 Each column policy has three optional properties:
 
-| Property    | Type                                | Default | Purpose                              |
-| ----------- | ----------------------------------- | ------- | ------------------------------------ |
-| **read**    | `(ctx: PolicyContext) => boolean`   | `true`  | Can user see this column?            |
-| **write**   | `(ctx: PolicyContext) => boolean`   | `true`  | Can user edit this column?           |
-| **default** | `(ctx: PolicyContext) => unknown`   | —       | Value to inject when column hidden   |
+| Property    | Type                                | Default | Purpose                                        |
+| ----------- | ----------------------------------- | ------- | ---------------------------------------------- |
+| **read**    | `(ctx: PolicyContext) => boolean`   | `true`  | Can user see this column?                      |
+| **write**   | `(ctx: PolicyContext) => boolean`   | `true`  | Can user edit this column?                     |
+| **default** | `(ctx: PolicyContext) => unknown`   | —       | Value to inject for non-writable columns on create |
 
 The CMS evaluates column policies and:
 
 1. **Filters list/detail views** — Hidden columns excluded from API responses
 2. **Filters form fields** — Non-writable columns hidden from create/edit forms
-3. **Injects defaults** — Hidden required columns get their `default` value on create
+3. **Injects defaults on create** — Non-writable columns get their `default` value (required for NOT NULL columns without DB default)
 
 ### Read vs Write Permissions
 

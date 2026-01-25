@@ -281,7 +281,7 @@ type Policies = Record<string, Policy | TablePolicy>;
 2. **Columns evaluated** — `evaluateColumnPolicies()` runs `read`/`write` functions for each column
 3. **Data filtered** — `filterRecordColumns()` removes hidden columns from response data
 4. **Forms filtered** — Only writable columns shown in create/edit forms
-5. **Defaults injected** — `injectColumnDefaults()` adds values for hidden required columns on create
+5. **Defaults injected on create** — `injectColumnDefaults()` adds values for non-writable columns
 
 ### Hidden Required Column Validation
 

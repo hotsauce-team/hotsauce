@@ -511,7 +511,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     );
     let values = coerceFormValues(formData, editableColumns);
 
-    // Inject default values for hidden required columns
+    // Inject default values for non-writable columns
     values = injectColumnDefaults(values, columnResult.defaults);
 
     // Validate form data (uses custom parser if provided, else drizzle-zod)

@@ -330,7 +330,7 @@ export interface EvaluatedColumnPolicies {
   readableColumns: string[];
   /** Columns the user can edit (in create/update forms) */
   writableColumns: string[];
-  /** Default values to inject for hidden columns on create */
+  /** Default values to inject for non-writable columns on create */
   defaults: Record<string, unknown>;
 }
 
@@ -478,10 +478,11 @@ export function filterRecordsColumns(
 }
 
 /**
- * Inject default values for hidden required columns
+ * Inject default values for non-writable columns
  *
- * Used during create operations to auto-fill columns that are
- * hidden from the user but required by the database.
+ * Used during create operations to auto-fill columns that the user
+ * cannot write to. This is required for NOT NULL columns without
+ * database defaults, but also works for optional columns.
  *
  * @param formData - Data from form submission
  * @param defaults - Default values from column policies
