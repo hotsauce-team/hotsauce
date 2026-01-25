@@ -229,7 +229,7 @@ app.get('/search', async (c) => {
 
 ### Styling
 
-Edit the `styles()` function in `site/templates.ts`. CSS is inlined for simplicity but could be moved to a separate file served via Hono's static file middleware.
+Edit `site/static/styles.css` to customize the appearance. The CSS file is served via Hono's static file middleware.
 
 ### Adding HTMX
 

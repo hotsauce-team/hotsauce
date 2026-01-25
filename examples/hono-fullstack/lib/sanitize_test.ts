@@ -326,6 +326,19 @@ Deno.test('sanitize: blocks data: in img src', () => {
 // Malformed Tag Attacks (OWASP)
 // ============================================================================
 
+Deno.test('sanitize: blocks entity-encoded opening tags', () => {
+  // &#x69; = 'i', so <scr&#x69;pt> would be <script> if decoded
+  // The tag should be removed, but the content 'alert(1)' is preserved
+  const input = '<scr&#x69;pt>alert(1)</script>';
+  const output = sanitizeHtml(input);
+  // The malformed tag should be stripped, leaving just the text content
+  assertEquals(output.includes('<scr'), false);
+  assertEquals(output.includes('<script'), false);
+  assertEquals(output.includes('&#x69;'), false);
+  // Content is preserved when tags are removed
+  assertEquals(output.includes('alert(1)'), true);
+});
+
 Deno.test('sanitize: handles malformed img tag', () => {
   const input = '<IMG """><SCRIPT>alert("XSS")</SCRIPT>">';
   const output = sanitizeHtml(input);
