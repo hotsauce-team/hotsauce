@@ -1,0 +1,393 @@
+// Tests for column-level policies
+
+import { assertEquals } from '@std/assert';
+import {
+  evaluateColumnPolicies,
+  extractColumnPolicies,
+  extractRowPolicy,
+  filterRecordColumns,
+  filterRecordsColumns,
+  injectColumnDefaults,
+  isTablePolicy,
+} from '../policies/apply.ts';
+import type { ColumnPolicies, PolicyContext, Policy, TablePolicy } from '../policies/types.ts';
+import type { IntrospectedColumn } from '@drizzle-cms/core';
+
+// Helper to create test contexts
+function createTestContext(
+  user?: { sub: string; role?: string },
+): PolicyContext {
+  return {
+    user,
+    request: new Request('http://localhost/admin/users'),
+  };
+}
+
+// Helper to create mock introspected columns
+function createMockColumns(): IntrospectedColumn[] {
+  return [
+    {
+      name: 'id',
+      propertyName: 'id',
+      columnType: 'PgSerial',
+      dataType: 'number',
+      notNull: true,
+      hasDefault: true,
+      isPrimaryKey: true,
+      isUnique: true,
+    },
+    {
+      name: 'name',
+      propertyName: 'name',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+    {
+      name: 'email',
+      propertyName: 'email',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: true,
+    },
+    {
+      name: 'salary',
+      propertyName: 'salary',
+      columnType: 'PgInteger',
+      dataType: 'number',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+    {
+      name: 'ssn',
+      propertyName: 'ssn',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+    {
+      name: 'tenant_id',
+      propertyName: 'tenantId',
+      columnType: 'PgText',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+  ];
+}
+
+// ============================================================================
+// Type guards
+// ============================================================================
+
+Deno.test('isTablePolicy: returns false for undefined', () => {
+  assertEquals(isTablePolicy(undefined), false);
+});
+
+Deno.test('isTablePolicy: returns false for function (PolicyFn)', () => {
+  const policy: Policy = () => undefined;
+  assertEquals(isTablePolicy(policy), false);
+});
+
+Deno.test('isTablePolicy: returns false for ActionPolicies', () => {
+  const policy: Policy = {
+    list: () => undefined,
+    create: () => false,
+  };
+  assertEquals(isTablePolicy(policy), false);
+});
+
+Deno.test('isTablePolicy: returns true for TablePolicy with row', () => {
+  const policy: TablePolicy = {
+    row: () => undefined,
+  };
+  assertEquals(isTablePolicy(policy), true);
+});
+
+Deno.test('isTablePolicy: returns true for TablePolicy with columns', () => {
+  const policy: TablePolicy = {
+    columns: {
+      salary: { read: () => false },
+    },
+  };
+  assertEquals(isTablePolicy(policy), true);
+});
+
+Deno.test('isTablePolicy: returns true for TablePolicy with row and columns', () => {
+  const policy: TablePolicy = {
+    row: () => undefined,
+    columns: {
+      salary: { read: () => false },
+    },
+  };
+  assertEquals(isTablePolicy(policy), true);
+});
+
+// ============================================================================
+// Extract helpers
+// ============================================================================
+
+Deno.test('extractRowPolicy: returns undefined for undefined input', () => {
+  assertEquals(extractRowPolicy(undefined), undefined);
+});
+
+Deno.test('extractRowPolicy: returns policy for simple PolicyFn', () => {
+  const policy: Policy = () => undefined;
+  assertEquals(extractRowPolicy(policy), policy);
+});
+
+Deno.test('extractRowPolicy: returns row from TablePolicy', () => {
+  const rowPolicy: Policy = () => undefined;
+  const tablePolicy: TablePolicy = {
+    row: rowPolicy,
+    columns: { salary: { read: () => false } },
+  };
+  assertEquals(extractRowPolicy(tablePolicy), rowPolicy);
+});
+
+Deno.test('extractRowPolicy: returns undefined for TablePolicy without row', () => {
+  const tablePolicy: TablePolicy = {
+    columns: { salary: { read: () => false } },
+  };
+  assertEquals(extractRowPolicy(tablePolicy), undefined);
+});
+
+Deno.test('extractColumnPolicies: returns undefined for undefined input', () => {
+  assertEquals(extractColumnPolicies(undefined), undefined);
+});
+
+Deno.test('extractColumnPolicies: returns undefined for simple PolicyFn', () => {
+  const policy: Policy = () => undefined;
+  assertEquals(extractColumnPolicies(policy), undefined);
+});
+
+Deno.test('extractColumnPolicies: returns columns from TablePolicy', () => {
+  const columnPolicies: ColumnPolicies = {
+    salary: { read: () => false },
+  };
+  const tablePolicy: TablePolicy = {
+    columns: columnPolicies,
+  };
+  assertEquals(extractColumnPolicies(tablePolicy), columnPolicies);
+});
+
+// ============================================================================
+// evaluateColumnPolicies
+// ============================================================================
+
+Deno.test('evaluateColumnPolicies: no policies = all columns accessible', async () => {
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1' });
+
+  const result = await evaluateColumnPolicies(undefined, columns, ctx);
+
+  // All columns should be readable
+  assertEquals(result.readableColumns.length, columns.length);
+  // All non-auto columns should be writable
+  assertEquals(result.writableColumns.includes('name'), true);
+  assertEquals(result.writableColumns.includes('email'), true);
+  assertEquals(result.writableColumns.includes('salary'), true);
+  // Auto-generated PK should not be writable
+  assertEquals(result.writableColumns.includes('id'), false);
+  // No defaults
+  assertEquals(Object.keys(result.defaults).length, 0);
+});
+
+Deno.test('evaluateColumnPolicies: read: false hides column', async () => {
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1' });
+  const columnPolicies: ColumnPolicies = {
+    ssn: { read: () => false },
+  };
+
+  const result = await evaluateColumnPolicies(columnPolicies, columns, ctx);
+
+  assertEquals(result.readableColumns.includes('ssn'), false);
+  assertEquals(result.writableColumns.includes('ssn'), false);
+});
+
+Deno.test('evaluateColumnPolicies: primary key always readable', async () => {
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1' });
+  const columnPolicies: ColumnPolicies = {
+    id: { read: () => false }, // Try to hide PK
+  };
+
+  const result = await evaluateColumnPolicies(columnPolicies, columns, ctx);
+
+  // PK should still be readable (needed for routing)
+  assertEquals(result.readableColumns.includes('id'), true);
+});
+
+Deno.test('evaluateColumnPolicies: role-based visibility', async () => {
+  const columns = createMockColumns();
+  const adminCtx = createTestContext({ sub: 'admin-1', role: 'admin' });
+  const userCtx = createTestContext({ sub: 'user-1', role: 'editor' });
+  const columnPolicies: ColumnPolicies = {
+    salary: { read: (ctx) => ctx.user?.role === 'admin' },
+  };
+
+  const adminResult = await evaluateColumnPolicies(columnPolicies, columns, adminCtx);
+  const userResult = await evaluateColumnPolicies(columnPolicies, columns, userCtx);
+
+  // Admin can see salary
+  assertEquals(adminResult.readableColumns.includes('salary'), true);
+  // Regular user cannot
+  assertEquals(userResult.readableColumns.includes('salary'), false);
+});
+
+Deno.test('evaluateColumnPolicies: write: false makes column read-only', async () => {
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1' });
+  const columnPolicies: ColumnPolicies = {
+    email: { write: () => false },
+  };
+
+  const result = await evaluateColumnPolicies(columnPolicies, columns, ctx);
+
+  // Email is readable but not writable
+  assertEquals(result.readableColumns.includes('email'), true);
+  assertEquals(result.writableColumns.includes('email'), false);
+});
+
+Deno.test('evaluateColumnPolicies: read: false implies write: false', async () => {
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1' });
+  const columnPolicies: ColumnPolicies = {
+    ssn: { read: () => false }, // No explicit write policy
+  };
+
+  const result = await evaluateColumnPolicies(columnPolicies, columns, ctx);
+
+  // Should not be writable when not readable
+  assertEquals(result.writableColumns.includes('ssn'), false);
+});
+
+Deno.test('evaluateColumnPolicies: collects defaults for hidden columns', async () => {
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1' });
+  // deno-lint-ignore no-explicit-any
+  (ctx.user as any).tenantId = 'tenant-123'; // Add custom claim for multi-tenant test
+
+  const columnPolicies: ColumnPolicies = {
+    tenant_id: {
+      read: () => false,
+      // deno-lint-ignore no-explicit-any
+      default: (ctx) => (ctx.user as any)?.tenantId ?? 'default',
+    },
+  };
+
+  const result = await evaluateColumnPolicies(columnPolicies, columns, ctx);
+
+  assertEquals(result.defaults['tenant_id'], 'tenant-123');
+});
+
+Deno.test('evaluateColumnPolicies: async policy functions work', async () => {
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1', role: 'admin' });
+  const columnPolicies: ColumnPolicies = {
+    salary: {
+      read: async (ctx) => {
+        // Simulate async check (e.g., database lookup)
+        await Promise.resolve();
+        return ctx.user?.role === 'admin';
+      },
+    },
+  };
+
+  const result = await evaluateColumnPolicies(columnPolicies, columns, ctx);
+
+  assertEquals(result.readableColumns.includes('salary'), true);
+});
+
+// ============================================================================
+// Filter helpers
+// ============================================================================
+
+Deno.test('filterRecordColumns: keeps only readable columns', () => {
+  const record = {
+    id: 1,
+    name: 'John',
+    email: 'john@example.com',
+    salary: 100000,
+    ssn: '123-45-6789',
+  };
+
+  const filtered = filterRecordColumns(record, ['id', 'name', 'email']);
+
+  assertEquals(filtered, { id: 1, name: 'John', email: 'john@example.com' });
+  assertEquals('salary' in filtered, false);
+  assertEquals('ssn' in filtered, false);
+});
+
+Deno.test('filterRecordColumns: handles missing columns gracefully', () => {
+  const record = { id: 1, name: 'John' };
+
+  const filtered = filterRecordColumns(record, ['id', 'name', 'nonexistent']);
+
+  assertEquals(filtered, { id: 1, name: 'John' });
+});
+
+Deno.test('filterRecordsColumns: filters array of records', () => {
+  const records = [
+    { id: 1, name: 'John', ssn: '111-11-1111' },
+    { id: 2, name: 'Jane', ssn: '222-22-2222' },
+  ];
+
+  const filtered = filterRecordsColumns(records, ['id', 'name']);
+
+  assertEquals(filtered, [
+    { id: 1, name: 'John' },
+    { id: 2, name: 'Jane' },
+  ]);
+});
+
+// ============================================================================
+// Default injection
+// ============================================================================
+
+Deno.test('injectColumnDefaults: merges defaults into form data', () => {
+  const formData = { name: 'New Record', email: 'new@example.com' };
+  const defaults = { tenant_id: 'tenant-123', created_by: 'user-456' };
+
+  const result = injectColumnDefaults(formData, defaults);
+
+  assertEquals(result, {
+    name: 'New Record',
+    email: 'new@example.com',
+    tenant_id: 'tenant-123',
+    created_by: 'user-456',
+  });
+});
+
+Deno.test('injectColumnDefaults: form data takes precedence', () => {
+  const formData = { name: 'New Record', tenant_id: 'form-tenant' };
+  const defaults = { tenant_id: 'default-tenant' };
+
+  const result = injectColumnDefaults(formData, defaults);
+
+  // Form data value wins
+  assertEquals(result.tenant_id, 'form-tenant');
+});
+
+Deno.test('injectColumnDefaults: handles empty defaults', () => {
+  const formData = { name: 'New Record' };
+  const defaults = {};
+
+  const result = injectColumnDefaults(formData, defaults);
+
+  assertEquals(result, { name: 'New Record' });
+});

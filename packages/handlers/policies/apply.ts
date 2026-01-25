@@ -1,17 +1,65 @@
 // Policy application - core logic for applying policies to queries
 // This module handles the integration between policies and Drizzle queries
+// Includes both row-level filtering and column-level visibility/editability
 
 import { and, eq, sql } from 'drizzle-orm';
 import type { SQL, Table } from 'drizzle-orm';
-import type { IntrospectedTable } from '@drizzle-cms/core';
+import type { IntrospectedColumn, IntrospectedTable } from '@drizzle-cms/core';
 import type { CrudAction } from '../types.ts';
 import type {
   ActionPolicies,
+  ColumnPolicies,
   Policy,
   PolicyApplicationResult,
   PolicyContext,
   PolicyFn,
+  TablePolicy,
 } from './types.ts';
+
+// ============================================================================
+// Type guards and helpers
+// ============================================================================
+
+/**
+ * Check if a policy entry is a TablePolicy (has row or columns property)
+ * vs a simple Policy (function or ActionPolicies)
+ */
+export function isTablePolicy(
+  policy: Policy | TablePolicy | undefined,
+): policy is TablePolicy {
+  if (!policy || typeof policy === 'function') return false;
+
+  // TablePolicy has 'row' or 'columns' property
+  const asTable = policy as TablePolicy;
+  return 'row' in asTable || 'columns' in asTable;
+}
+
+/**
+ * Extract the row policy from a policy entry
+ * Works with both simple Policy and TablePolicy
+ */
+export function extractRowPolicy(
+  policyEntry: Policy | TablePolicy | undefined,
+): Policy | undefined {
+  if (!policyEntry) return undefined;
+  if (isTablePolicy(policyEntry)) return policyEntry.row;
+  return policyEntry;
+}
+
+/**
+ * Extract column policies from a policy entry
+ * Returns undefined if the entry is a simple Policy
+ */
+export function extractColumnPolicies(
+  policyEntry: Policy | TablePolicy | undefined,
+): ColumnPolicies | undefined {
+  if (!policyEntry || !isTablePolicy(policyEntry)) return undefined;
+  return policyEntry.columns;
+}
+
+// ============================================================================
+// Row policy application
+// ============================================================================
 
 /**
  * Resolve a policy to a PolicyFn based on the action
@@ -265,4 +313,192 @@ export function createPolicyContext(
       }
       : undefined,
   };
+}
+
+// ============================================================================
+// Column policy application
+// ============================================================================
+
+/**
+ * Result of evaluating column policies for a table
+ *
+ * Contains lists of readable/writable columns and any default values
+ * to inject for hidden required columns.
+ */
+export interface EvaluatedColumnPolicies {
+  /** Columns the user can see (in list, detail, and forms) */
+  readableColumns: string[];
+  /** Columns the user can edit (in create/update forms) */
+  writableColumns: string[];
+  /** Default values to inject for hidden columns on create */
+  defaults: Record<string, unknown>;
+}
+
+/**
+ * Evaluate column policies for a table
+ *
+ * Determines which columns are visible and editable for the current user.
+ * Returns lists of column names and any default values to inject.
+ *
+ * Semantics:
+ * - Columns without policies have full read/write access
+ * - `read: false` → column excluded from readableColumns
+ * - `write: false` → column excluded from writableColumns
+ * - If `read` is false and `write` is undefined, write is also false
+ * - Primary keys are always readable (needed for routing)
+ *
+ * @param columnPolicies - Column policies for the table (may be undefined)
+ * @param columns - All columns from introspected table
+ * @param ctx - Policy context with user info
+ * @returns EvaluatedColumnPolicies with readable/writable columns and defaults
+ *
+ * @example
+ * ```ts
+ * const result = await evaluateColumnPolicies(
+ *   policies.users?.columns,
+ *   usersTable.columns,
+ *   { user: { sub: 'user-1', role: 'editor' }, request }
+ * );
+ *
+ * // result.readableColumns: ['id', 'name', 'email'] (salary hidden)
+ * // result.writableColumns: ['name', 'email'] (id auto-gen, salary hidden)
+ * // result.defaults: {} (no hidden required columns)
+ * ```
+ */
+export async function evaluateColumnPolicies(
+  columnPolicies: ColumnPolicies | undefined,
+  columns: IntrospectedColumn[],
+  ctx: PolicyContext,
+): Promise<EvaluatedColumnPolicies> {
+  const readableColumns: string[] = [];
+  const writableColumns: string[] = [];
+  const defaults: Record<string, unknown> = {};
+
+  for (const col of columns) {
+    const policy = columnPolicies?.[col.name];
+
+    // No policy = full access
+    if (!policy) {
+      readableColumns.push(col.name);
+      // Writable unless it's an auto-generated PK or timestamp
+      if (!isAutoColumn(col)) {
+        writableColumns.push(col.name);
+      }
+      continue;
+    }
+
+    // Evaluate read policy (default: true)
+    const canRead = policy.read ? await policy.read(ctx) : true;
+
+    // Primary keys are always readable (needed for routing/links)
+    if (col.isPrimaryKey || canRead) {
+      readableColumns.push(col.name);
+    }
+
+    // Evaluate write policy
+    // Default: if read is explicitly false, write is also false
+    // Otherwise, write defaults to true
+    let canWrite: boolean;
+    if (policy.write) {
+      canWrite = await policy.write(ctx);
+    } else if (policy.read && !canRead) {
+      // read: false implies write: false when write is not specified
+      canWrite = false;
+    } else {
+      canWrite = true;
+    }
+
+    // Skip auto-generated columns regardless of policy
+    if (!isAutoColumn(col) && canWrite) {
+      writableColumns.push(col.name);
+    }
+
+    // Collect default value for hidden/non-writable columns
+    if (!canWrite && policy.default) {
+      defaults[col.name] = await policy.default(ctx);
+    }
+  }
+
+  return { readableColumns, writableColumns, defaults };
+}
+
+/**
+ * Check if a column is auto-generated (shouldn't be in writable list)
+ */
+function isAutoColumn(col: IntrospectedColumn): boolean {
+  // Auto-increment PK
+  if (col.isPrimaryKey && col.hasDefault) return true;
+  // Common timestamp columns
+  if (col.name === 'created_at' || col.name === 'updated_at') return true;
+  return false;
+}
+
+/**
+ * Filter record data to only include readable columns
+ *
+ * Used to strip hidden columns from query results before sending to UI.
+ * This ensures sensitive data never leaves the handler layer.
+ *
+ * @param record - Full record from database
+ * @param readableColumns - Columns the user can see
+ * @returns Record with only readable columns
+ *
+ * @example
+ * ```ts
+ * const fullRecord = { id: 1, name: 'John', salary: 100000, ssn: '123-45-6789' };
+ * const filtered = filterRecordColumns(fullRecord, ['id', 'name']);
+ * // { id: 1, name: 'John' }
+ * ```
+ */
+export function filterRecordColumns(
+  record: Record<string, unknown>,
+  readableColumns: string[],
+): Record<string, unknown> {
+  const filtered: Record<string, unknown> = {};
+  for (const col of readableColumns) {
+    if (col in record) {
+      filtered[col] = record[col];
+    }
+  }
+  return filtered;
+}
+
+/**
+ * Filter multiple records to only include readable columns
+ *
+ * @param records - Array of records from database
+ * @param readableColumns - Columns the user can see
+ * @returns Records with only readable columns
+ */
+export function filterRecordsColumns(
+  records: Record<string, unknown>[],
+  readableColumns: string[],
+): Record<string, unknown>[] {
+  return records.map((r) => filterRecordColumns(r, readableColumns));
+}
+
+/**
+ * Inject default values for hidden required columns
+ *
+ * Used during create operations to auto-fill columns that are
+ * hidden from the user but required by the database.
+ *
+ * @param formData - Data from form submission
+ * @param defaults - Default values from column policies
+ * @returns Form data with defaults merged in
+ *
+ * @example
+ * ```ts
+ * const formData = { name: 'New Post', title: 'Hello' };
+ * const defaults = { tenant_id: 'tenant-123', created_by: 'user-456' };
+ * const merged = injectColumnDefaults(formData, defaults);
+ * // { name: 'New Post', title: 'Hello', tenant_id: 'tenant-123', created_by: 'user-456' }
+ * ```
+ */
+export function injectColumnDefaults(
+  formData: Record<string, unknown>,
+  defaults: Record<string, unknown>,
+): Record<string, unknown> {
+  // Defaults are injected, but form data takes precedence if somehow present
+  return { ...defaults, ...formData };
 }

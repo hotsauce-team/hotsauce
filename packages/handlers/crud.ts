@@ -53,10 +53,17 @@ import {
   applyPolicy,
   createPolicyContext,
   deleteWithPolicy,
+  evaluateColumnPolicies,
+  extractColumnPolicies,
+  extractRowPolicy,
+  filterRecordColumns,
+  filterRecordsColumns,
   findRecordWithPolicy,
+  injectColumnDefaults,
   recordExists,
   updateWithPolicy,
 } from './policies/mod.ts';
+import type { EvaluatedColumnPolicies } from './policies/mod.ts';
 
 /**
  * Get plugin user context from RouteContext
@@ -145,18 +152,27 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   const basePath = options.basePath;
   const drizzleTable = table.table;
 
-  // Apply policy for list action
+  // Apply row policy for list action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
     return redirectWithFlash(cmsUrl(basePath), 'list_forbidden');
   }
-  const policy = options.policies?.[table.name];
+  const tablePolicy = options.policies?.[table.name];
+  const rowPolicy = extractRowPolicy(tablePolicy);
   const policyCtx = createPolicyContext(request, authUser);
-  const policyResult = await applyPolicy(policy, policyCtx, 'list');
+  const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
 
   if (!policyResult.allowed) {
     return redirectWithFlash(cmsUrl(basePath), 'list_forbidden');
   }
+
+  // Evaluate column policies to determine visible columns
+  const columnPolicies = extractColumnPolicies(tablePolicy);
+  const columnResult = await evaluateColumnPolicies(
+    columnPolicies,
+    table.columns,
+    policyCtx,
+  );
 
   // Get pagination and sort
   const { page, limit, offset } = getPagination(url);
@@ -199,6 +215,10 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
   let records = await query as Record<string, unknown>[];
 
+  // Filter records to only include readable columns (column-level security)
+  // This ensures hidden columns never leave the handler layer
+  records = filterRecordsColumns(records, columnResult.readableColumns);
+
   // Execute afterRead transform for each record
   if (ctx.pluginService) {
     records = await ctx.pluginService.afterReadMany(
@@ -221,8 +241,10 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Generate navigation
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
-  // Build columns for list
-  const listColumns = getListColumns(table);
+  // Build columns for list, filtered by readable columns
+  const listColumns = getListColumns(table).filter(
+    (col) => columnResult.readableColumns.includes(col.key),
+  );
 
   // Fetch relation data for FK columns
   const relationData = await fetchAllRelationOptions(options, table);
@@ -293,18 +315,27 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const basePath = options.basePath;
   const drizzleTable = table.table;
 
-  // Apply policy for read action
+  // Apply row policy for read action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'read_forbidden');
   }
-  const policy = options.policies?.[table.name];
+  const tablePolicy = options.policies?.[table.name];
+  const rowPolicy = extractRowPolicy(tablePolicy);
   const policyCtx = createPolicyContext(request, authUser);
-  const policyResult = await applyPolicy(policy, policyCtx, 'read');
+  const policyResult = await applyPolicy(rowPolicy, policyCtx, 'read');
 
   if (!policyResult.allowed) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'read_forbidden');
   }
+
+  // Evaluate column policies to determine visible columns
+  const columnPolicies = extractColumnPolicies(tablePolicy);
+  const columnResult = await evaluateColumnPolicies(
+    columnPolicies,
+    table.columns,
+    policyCtx,
+  );
 
   // Fetch record with policy condition
   const record = await findRecordWithPolicy(
@@ -329,13 +360,16 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     return notFound(`Record not found`);
   }
 
+  // Filter record to only include readable columns (column-level security)
+  const filteredRecord = filterRecordColumns(record, columnResult.readableColumns);
+
   // Execute afterRead transform
-  let transformedRecord = record;
+  let transformedRecord = filteredRecord;
   if (ctx.pluginService) {
     transformedRecord = await ctx.pluginService.afterRead(
       table.name,
       'read',
-      record,
+      filteredRecord,
       getPluginUser(ctx),
     );
   }
@@ -357,7 +391,12 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   }
 
   const navItems = buildNavItems(options.introspected, basePath, table.name);
-  const cmsFields = tableToCmsFields(table);
+
+  // Filter CMS fields to only include readable columns
+  const cmsFields = tableToCmsFields(table).filter(
+    (field) => columnResult.readableColumns.includes(field.column.name),
+  );
+
   const relationData = await fetchAllRelationOptions(options, table);
 
   // Fetch M2M display data for this record - use actual ID from record, not URL string
@@ -413,19 +452,28 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
   const basePath = options.basePath;
   const drizzleTable = table.table;
 
-  // Apply policy for create action
+  // Apply row policy for create action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
   }
-  const policy = options.policies?.[table.name];
+  const tablePolicy = options.policies?.[table.name];
+  const rowPolicy = extractRowPolicy(tablePolicy);
   const policyCtx = createPolicyContext(request, authUser);
-  const policyResult = await applyPolicy(policy, policyCtx, 'create');
+  const policyResult = await applyPolicy(rowPolicy, policyCtx, 'create');
 
   // For create, policy can only allow or deny (no filtering)
   if (!policyResult.allowed) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
   }
+
+  // Evaluate column policies to determine writable columns
+  const columnPolicies = extractColumnPolicies(tablePolicy);
+  const columnResult = await evaluateColumnPolicies(
+    columnPolicies,
+    table.columns,
+    policyCtx,
+  );
 
   // Handle POST - create record
   if (request.method === 'POST') {
@@ -436,13 +484,20 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
       return await renderCreateForm(
         ctx,
+        columnResult,
         recordToValues(formData),
         'Invalid or expired form. Please try again.',
       );
     }
 
-    const editableColumns = getEditableColumns(table);
-    const values = coerceFormValues(formData, editableColumns);
+    // Only process columns the user can write to
+    const editableColumns = getEditableColumns(table).filter(
+      (col) => columnResult.writableColumns.includes(col.name),
+    );
+    let values = coerceFormValues(formData, editableColumns);
+
+    // Inject default values for hidden required columns
+    values = injectColumnDefaults(values, columnResult.defaults);
 
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(
@@ -455,6 +510,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     if (!validation.success) {
       return await renderCreateForm(
         ctx,
+        columnResult,
         values,
         validation.formError,
         validation.errors,
@@ -503,12 +559,12 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     } catch (error) {
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'create');
-      return await renderCreateForm(ctx, values, safeMessage);
+      return await renderCreateForm(ctx, columnResult, values, safeMessage);
     }
   }
 
   // Handle GET - show form
-  return await renderCreateForm(ctx);
+  return await renderCreateForm(ctx, columnResult);
 }
 
 /**
@@ -521,7 +577,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   const basePath = options.basePath;
   const drizzleTable = table.table;
 
-  // Apply policy for update action
+  // Apply row policy for update action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
     return redirectWithFlash(
@@ -529,9 +585,10 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       'update_forbidden',
     );
   }
-  const policy = options.policies?.[table.name];
+  const tablePolicy = options.policies?.[table.name];
+  const rowPolicy = extractRowPolicy(tablePolicy);
   const policyCtx = createPolicyContext(request, authUser);
-  const policyResult = await applyPolicy(policy, policyCtx, 'update');
+  const policyResult = await applyPolicy(rowPolicy, policyCtx, 'update');
 
   if (!policyResult.allowed) {
     return redirectWithFlash(
@@ -539,6 +596,14 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       'update_forbidden',
     );
   }
+
+  // Evaluate column policies to determine writable columns
+  const columnPolicies = extractColumnPolicies(tablePolicy);
+  const columnResult = await evaluateColumnPolicies(
+    columnPolicies,
+    table.columns,
+    policyCtx,
+  );
 
   // Fetch record with policy condition (for GET form display)
   const record = await findRecordWithPolicy(
@@ -575,12 +640,16 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
       return await renderEditForm(
         ctx,
+        columnResult,
         recordToValues(formData),
         'Invalid or expired form. Please try again.',
       );
     }
 
-    const editableColumns = getEditableColumns(table);
+    // Only process columns the user can write to
+    const editableColumns = getEditableColumns(table).filter(
+      (col) => columnResult.writableColumns.includes(col.name),
+    );
     const values = coerceFormValues(formData, editableColumns);
 
     // Validate form data (uses custom parser if provided, else drizzle-zod)
@@ -594,6 +663,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     if (!validation.success) {
       return await renderEditForm(
         ctx,
+        columnResult,
         values,
         validation.formError,
         validation.errors,
@@ -663,12 +733,13 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     } catch (error) {
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'update');
-      return await renderEditForm(ctx, values, safeMessage);
+      return await renderEditForm(ctx, columnResult, values, safeMessage);
     }
   }
 
-  // Handle GET - show form
-  return await renderEditForm(ctx, record);
+  // Handle GET - show form with readable columns filtered
+  const filteredRecord = filterRecordColumns(record, columnResult.readableColumns);
+  return await renderEditForm(ctx, columnResult, filteredRecord);
 }
 
 /**
@@ -681,14 +752,15 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   const basePath = options.basePath;
   const drizzleTable = table.table;
 
-  // Apply policy for delete action
+  // Apply row policy for delete action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
   }
-  const policy = options.policies?.[table.name];
+  const tablePolicy = options.policies?.[table.name];
+  const rowPolicy = extractRowPolicy(tablePolicy);
   const policyCtx = createPolicyContext(request, authUser);
-  const policyResult = await applyPolicy(policy, policyCtx, 'delete');
+  const policyResult = await applyPolicy(rowPolicy, policyCtx, 'delete');
 
   if (!policyResult.allowed) {
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
@@ -776,16 +848,34 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
 
 async function renderCreateForm(
   ctx: RouteContext,
+  columnResult?: EvaluatedColumnPolicies,
   values: Record<string, unknown> = {},
   formError?: string,
   fieldErrors: Record<string, string> = {},
 ): Promise<Response> {
-  const { options, route } = ctx;
+  const { options, route, authUser, request } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
-  const cmsFields = tableToCmsFields(table, true); // editable only
+  // If no columnResult provided, evaluate now (for GET requests)
+  let colResult = columnResult;
+  if (!colResult) {
+    const tablePolicy = options.policies?.[table.name];
+    const columnPolicies = extractColumnPolicies(tablePolicy);
+    const policyCtx = createPolicyContext(request, authUser);
+    colResult = await evaluateColumnPolicies(
+      columnPolicies,
+      table.columns,
+      policyCtx,
+    );
+  }
+
+  // Filter CMS fields to only include writable columns
+  const cmsFields = tableToCmsFields(table, true).filter(
+    (field) => colResult!.writableColumns.includes(field.column.name),
+  );
+
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, undefined);
 
@@ -828,17 +918,35 @@ async function renderCreateForm(
 
 async function renderEditForm(
   ctx: RouteContext,
-  values: Record<string, unknown>,
+  columnResult?: EvaluatedColumnPolicies,
+  values: Record<string, unknown> = {},
   formError?: string,
   fieldErrors: Record<string, string> = {},
 ): Promise<Response> {
-  const { options, route } = ctx;
+  const { options, route, authUser, request } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
-  const cmsFields = tableToCmsFields(table, true); // editable only
+  // If no columnResult provided, evaluate now
+  let colResult = columnResult;
+  if (!colResult) {
+    const tablePolicy = options.policies?.[table.name];
+    const columnPolicies = extractColumnPolicies(tablePolicy);
+    const policyCtx = createPolicyContext(request, authUser);
+    colResult = await evaluateColumnPolicies(
+      columnPolicies,
+      table.columns,
+      policyCtx,
+    );
+  }
+
+  // Filter CMS fields to only include writable columns
+  const cmsFields = tableToCmsFields(table, true).filter(
+    (field) => colResult!.writableColumns.includes(field.column.name),
+  );
+
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, recordId);
 

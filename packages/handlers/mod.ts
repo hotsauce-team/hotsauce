@@ -19,7 +19,7 @@ import {
   SECURITY_HEADERS,
 } from './http.ts';
 import { generateCsrfToken, validateCsrfToken } from './csrf.ts';
-import { validateCmsOptions, validateResolvedSecrets } from './validation.ts';
+import { validateCmsOptions, validateResolvedSecrets, validateColumnPolicies } from './validation.ts';
 import { getEnv } from './runtime-compat.ts';
 import { createPluginRegistry } from './plugins/registry.ts';
 import { createPluginService } from './plugins/service.ts';
@@ -306,6 +306,14 @@ export function createCmsHandler(options: CmsOptions): Handler {
       .schema as unknown as import('@drizzle-cms/core').IntrospectedSchema
     : introspectFullSchema(options.schema);
 
+  // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
+  const resolvedPolicies: Policies | undefined =
+    options.policies === 'dangerously-open' ? {} : options.policies;
+
+  // Validate column policies against introspected schema
+  // Catches hidden required columns without defaults at startup
+  validateColumnPolicies(introspected.tables, resolvedPolicies);
+
   // Resolve auth options if provided
   const resolvedAuth: ResolvedAuthOptions | undefined = hasRealAuth
     ? {
@@ -318,10 +326,6 @@ export function createCmsHandler(options: CmsOptions): Handler {
       isRevoked: options.auth.isRevoked,
     }
     : undefined;
-
-  // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
-  const resolvedPolicies: Policies | undefined =
-    options.policies === 'dangerously-open' ? {} : options.policies;
 
   // Initialize plugin registry if plugins are configured
   const pluginRegistry = options.plugins && options.plugins.length > 0

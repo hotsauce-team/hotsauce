@@ -37,3 +37,4 @@ agent-reference/
 
 # Example data
 examples/deno-server/data/
+/examples/hono-fullstack/data

@@ -6,12 +6,19 @@
 // ─────────────────────────────────────────────────────────────
 export type {
   ActionPolicies,
+  // Column-level policies
+  ColumnPolicies,
+  ColumnPolicy,
+  ColumnPolicyFn,
+  // Row-level policies
   Policies,
   Policy,
   PolicyApplicationResult,
   PolicyContext,
   PolicyFn,
   PolicyResult,
+  // Table policy (combines row + column)
+  TablePolicy,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -38,7 +45,7 @@ export {
 } from './helpers.ts';
 
 // ─────────────────────────────────────────────────────────────
-// Application - Apply policies to queries
+// Row Policy Application - Apply row policies to queries
 // ─────────────────────────────────────────────────────────────
 export {
   applyPolicy,
@@ -48,4 +55,18 @@ export {
   findRecordWithPolicy,
   recordExists,
   updateWithPolicy,
+} from './apply.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Column Policy Application - Apply column policies to filter fields
+// ─────────────────────────────────────────────────────────────
+export type { EvaluatedColumnPolicies } from './apply.ts';
+export {
+  evaluateColumnPolicies,
+  extractColumnPolicies,
+  extractRowPolicy,
+  filterRecordColumns,
+  filterRecordsColumns,
+  injectColumnDefaults,
+  isTablePolicy,
 } from './apply.ts';

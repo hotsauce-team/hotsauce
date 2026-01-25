@@ -219,6 +219,7 @@ The CMS uses a **layered security model** for authorization. Understanding this 
    - Validates entire config when `createCmsHandler()` is called
    - Throws `CmsConfigError` with detailed messages for invalid config
    - Enforces: policies required with auth, policies forbidden with `auth: 'dangerously-open'`
+   - **Validates column policies** — hidden required columns must have defaults
 
 3. **Runtime validation** (`crud.ts` handlers)
    - If auth is enabled but policies somehow undefined, handlers return 403
@@ -228,6 +229,76 @@ The CMS uses a **layered security model** for authorization. Understanding this 
    - Low-level utility that evaluates a single policy
    - **Intentionally returns `allowed: true` when policy is undefined**
    - By this point, the caller has already validated the configuration
+
+5. **Column policy evaluation** (`evaluateColumnPolicies` in `policies/apply.ts`)
+   - Determines which columns are readable/writable for current user
+   - Returns `EvaluatedColumnPolicies` with `readableColumns`, `writableColumns`, `defaults`
+   - Data filtering happens in CRUD handlers before any response
+
+### Row vs Column Policies
+
+**Row policies** filter which records a user can access (WHERE clause injection):
+
+```typescript
+policies: {
+  posts: ownedBy(schema.posts, 'authorId'), // Row-only
+}
+```
+
+**Column policies** filter which fields within records are visible/editable:
+
+```typescript
+policies: {
+  posts: {
+    row: ownedBy(schema.posts, 'authorId'),   // Row filter
+    columns: {                                  // Column filter
+      salary: { read: adminOnly, write: adminOnly },
+      tenantId: { read: () => false, write: () => false, default: getTenant },
+    },
+  },
+}
+```
+
+The `TablePolicy` type enables either pattern:
+
+```typescript
+// Row-only policy (backward compatible)
+type Policy = PolicyFn | { [action]: PolicyFn };
+
+// Combined row + column policy
+type TablePolicy = {
+  row?: Policy;
+  columns?: ColumnPolicies;
+};
+
+// Both are valid values in Policies object
+type Policies = Record<string, Policy | TablePolicy>;
+```
+
+### Column Policy Evaluation Flow
+
+1. **Handler extracts policies** — `extractRowPolicy()` and `extractColumnPolicies()` separate concerns
+2. **Columns evaluated** — `evaluateColumnPolicies()` runs `read`/`write` functions for each column
+3. **Data filtered** — `filterRecordColumns()` removes hidden columns from response data
+4. **Forms filtered** — Only writable columns shown in create/edit forms
+5. **Defaults injected** — `injectColumnDefaults()` adds values for hidden required columns on create
+
+### Hidden Required Column Validation
+
+This is validated at startup to prevent runtime failures:
+
+```typescript
+// validation.ts → validateColumnPolicies()
+// If column is NOT NULL + no DB default + hidden (read=false OR write=false) + no policy default
+// → Throws CmsConfigError
+```
+
+Example error:
+
+```
+Hidden required column 'tenantId' in table 'posts' needs a default value.
+Add a 'default' function to the column policy or use a database default.
+```
 
 ### Why `applyPolicy(undefined, ...)` returns `allowed: true`
 
