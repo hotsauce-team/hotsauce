@@ -216,6 +216,14 @@ export function sanitizeHtml(html: string): string {
   // First, remove HTML comments (can contain sensitive info or IE conditionals)
   let result = html.replace(/<!--[\s\S]*?-->/g, '');
 
+  // Decode HTML entities within potential tag names to prevent obfuscation attacks
+  // e.g., <scr&#x69;pt> becomes <script> before processing
+  // Match anything that looks like it could be a tag with entity encoding
+  result = result.replace(/<([^>]*&#[^>]*>)/gi, (fullMatch) => {
+    // Decode the entire tag to reveal obfuscated tag names
+    return decodeHtmlEntities(fullMatch);
+  });
+
   // Remove stray < characters that could be used for obfuscation (<<SCRIPT>)
   // This handles double-bracket attacks
   result = result.replace(/<(?=[<])/g, '');
