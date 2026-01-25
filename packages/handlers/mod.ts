@@ -183,6 +183,7 @@ export type {
   FilterContext,
   // Filter types
   HookType,
+  InProcessPluginConfig,
   PluginCapabilities,
   PluginConfig,
   PluginContext,
@@ -190,6 +191,7 @@ export type {
   PluginHooks,
   Serializable,
   TransformFn,
+  WorkerPluginConfig,
 } from './plugins/types.ts';
 
 export { isWorkerPlugin } from './plugins/types.ts';

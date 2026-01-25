@@ -1,10 +1,13 @@
 {
   "cSpell.words": [
     "BYOS",
+    "HMAC",
     "Introspected",
     "nosniff",
     "pglite",
-    "vars"
+    "varchar",
+    "vars",
+    "vendored"
   ],
   "chat.tools.terminal.autoApprove": {
     "/^deno test -P$/": {

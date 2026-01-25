@@ -1214,7 +1214,15 @@ const auditWorker = new Worker(
     deno: { permissions: { net: ['audit.example.com'] } },
   },
 );
+```
 
+> **Deno:** When using `deno.permissions` in Worker constructors, you must run with `--unstable-worker-options`:
+>
+> ```bash
+> deno run --unstable-worker-options --permission-set=your-permission-set server.ts
+> ```
+
+```ts
 // Use in plugin config
 plugins: [
   {
@@ -1240,7 +1248,7 @@ export function createPlugin(config: Serializable): { hooks: PluginHooks } {
   return {
     hooks: {
       on: {
-        create: { handler: async (ctx) => { /* ... */ }, blocking: false },
+        create: { handler: async (ctx) => {/* ... */}, blocking: false },
       },
     },
   };

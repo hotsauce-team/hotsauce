@@ -16,7 +16,8 @@
     "./packages/plugins",
 
     // Examples
-    "./examples/deno-server"
+    "./examples/deno-server",
+    "./examples/hono-fullstack"
   ],
 
   // Shared import map for all packages
@@ -52,7 +53,11 @@
     "example:seed": "deno task -f example-deno-server seed",
     "example:dev": "deno task -f example-deno-server dev",
     "example:dev:watch": "deno task -f example-deno-server dev:watch",
-    "example:dev:debug": "deno task -f example-deno-server dev:debug"
+    "example:dev:debug": "deno task -f example-deno-server dev:debug",
+    "hono:seed": "deno task -f hono-fullstack-example seed",
+    "hono:dev": "deno task -f hono-fullstack-example dev",
+    "hono:dev:watch": "deno task -f hono-fullstack-example dev:watch",
+    "hono:dev:debug": "deno task -f hono-fullstack-example dev:debug"
     // "build:npm": "deno run --allow-read=. --allow-write=./npm --allow-env=HOME scripts/build_npm.ts"
   },
 
