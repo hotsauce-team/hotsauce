@@ -35,6 +35,11 @@ const cmsHandler = createCmsHandler({
   policies: {
     posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
     categories: (readOnly()), // Admins: full access, others: read-only
+    users: {
+      columns: {
+        password_hash: { read: () => false }, // Hide password hashes
+      },
+    }
   },
   // Plugins for extending CMS functionality
   plugins: [

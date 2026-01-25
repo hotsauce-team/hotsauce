@@ -308,6 +308,10 @@ export function createCmsHandler(options: CmsOptions): Handler {
       .schema as unknown as import('@drizzle-cms/core').IntrospectedSchema
     : introspectFullSchema(options.schema);
 
+  // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
+  const resolvedPolicies: Policies | undefined =
+    options.policies === 'dangerously-open' ? {} : options.policies;
+
   // Resolve auth options if provided
   const resolvedAuth: ResolvedAuthOptions | undefined = hasRealAuth
     ? {
@@ -320,10 +324,6 @@ export function createCmsHandler(options: CmsOptions): Handler {
       isRevoked: options.auth.isRevoked,
     }
     : undefined;
-
-  // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
-  const resolvedPolicies: Policies | undefined =
-    options.policies === 'dangerously-open' ? {} : options.policies;
 
   // Initialize plugin registry if plugins are configured
   const pluginRegistry = options.plugins && options.plugins.length > 0
