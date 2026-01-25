@@ -1473,7 +1473,7 @@ This constraint enables Worker isolation without API changes.
 
 ### Column Policies and Plugin Data
 
-**Important:** Transform hooks (`afterRead`, `afterReadMany`) receive **column-filtered** records, not raw database results. If a column policy hides a field from the current user, plugins cannot access that field.
+**Important:** Transform hooks (`afterRead`) receive **column-filtered** records, not raw database results. If a column policy hides a field from the current user, plugins cannot access that field.
 
 ```
 DB Query → Column Policy Filter → afterRead Plugin → Response
