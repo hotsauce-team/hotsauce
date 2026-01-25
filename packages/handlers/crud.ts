@@ -863,32 +863,19 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
 
 async function renderCreateForm(
   ctx: RouteContext,
-  columnResult?: EvaluatedColumnPolicies,
+  columnResult: EvaluatedColumnPolicies,
   values: Record<string, unknown> = {},
   formError?: string,
   fieldErrors: Record<string, string> = {},
 ): Promise<Response> {
-  const { options, route, authUser, request } = ctx;
+  const { options, route } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
-  // If no columnResult provided, evaluate now (for GET requests)
-  let colResult = columnResult;
-  if (!colResult) {
-    const tablePolicy = options.policies?.[table.name];
-    const columnPolicies = extractColumnPolicies(tablePolicy);
-    const policyCtx = createPolicyContext(request, authUser);
-    colResult = await evaluateColumnPolicies(
-      columnPolicies,
-      table.columns,
-      policyCtx,
-    );
-  }
-
   // Filter CMS fields to only include writable columns
   const cmsFields = tableToCmsFields(table, true).filter(
-    (field) => colResult!.writableColumns.includes(field.column.name),
+    (field) => columnResult.writableColumns.includes(field.column.name),
   );
 
   const relationData = await fetchAllRelationOptions(options, table);
@@ -933,33 +920,20 @@ async function renderCreateForm(
 
 async function renderEditForm(
   ctx: RouteContext,
-  columnResult?: EvaluatedColumnPolicies,
+  columnResult: EvaluatedColumnPolicies,
   values: Record<string, unknown> = {},
   formError?: string,
   fieldErrors: Record<string, string> = {},
 ): Promise<Response> {
-  const { options, route, authUser, request } = ctx;
+  const { options, route } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
-  // If no columnResult provided, evaluate now
-  let colResult = columnResult;
-  if (!colResult) {
-    const tablePolicy = options.policies?.[table.name];
-    const columnPolicies = extractColumnPolicies(tablePolicy);
-    const policyCtx = createPolicyContext(request, authUser);
-    colResult = await evaluateColumnPolicies(
-      columnPolicies,
-      table.columns,
-      policyCtx,
-    );
-  }
-
   // Filter CMS fields to only include writable columns
   const cmsFields = tableToCmsFields(table, true).filter(
-    (field) => colResult!.writableColumns.includes(field.column.name),
+    (field) => columnResult.writableColumns.includes(field.column.name),
   );
 
   const relationData = await fetchAllRelationOptions(options, table);

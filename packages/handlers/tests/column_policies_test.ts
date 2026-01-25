@@ -276,6 +276,21 @@ Deno.test('evaluateColumnPolicies: read: false implies write: false', async () =
   assertEquals(result.writableColumns.includes('ssn'), false);
 });
 
+Deno.test('evaluateColumnPolicies: primary key is always readable even with read: false', async () => {
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1' });
+  const columnPolicies: ColumnPolicies = {
+    id: { read: () => false }, // Try to hide PK
+  };
+
+  const result = await evaluateColumnPolicies(columnPolicies, columns, ctx);
+
+  // PK must remain readable (needed for routing/links)
+  assertEquals(result.readableColumns.includes('id'), true);
+  // PK should not be writable (it's auto-generated)
+  assertEquals(result.writableColumns.includes('id'), false);
+});
+
 Deno.test('evaluateColumnPolicies: collects defaults for hidden columns', async () => {
   const columns = createMockColumns();
   const ctx = createTestContext({ sub: 'user-1' });
