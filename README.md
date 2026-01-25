@@ -6,8 +6,8 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 
 - **Single source of truth**: Your Drizzle schema defines database tables, TypeScript types, validation rules, AND CMS fields
 - **Minimal dependencies**: Core stack is `drizzle-orm` + `zod` + `drizzle-zod` (all zero transitive deps)
-- **Secure by default**: CSRF protection, JWT auth, row-level policies, XSS-safe templates
-- **Flexible & extensible**: Pluggable auth, custom validation, row-level policies, plugins with Worker isolation
+- **Secure by default**: CSRF protection, JWT auth, row-level policies, column-level policies, XSS-safe templates
+- **Flexible & extensible**: Pluggable auth, custom validation, row & column policies, plugins with Worker isolation
 - **Cross-runtime**: Works in Deno and Node.js — Web Standard `Request`/`Response` everywhere
 - **Database-agnostic**: Works with any Drizzle-supported database (Postgres, MySQL, SQLite)
 
@@ -245,7 +245,7 @@ interface TableParsers {
 | Option     | Purpose                                                                                     |
 | ---------- | ------------------------------------------------------------------------------------------- |
 | `auth`     | Authentication: `'open-to-anyone'`, `{ provider }` (JWT), or `{ external }` (reverse proxy) |
-| `policies` | Row-level security with SQL conditions (atomic authorization)                               |
+| `policies` | Row-level security with SQL conditions + column-level read/write control                    |
 | `parsers`  | Custom validation (Zod, Valibot, Arktype, or any library)                                   |
 | `onError`  | Error logging integration (Sentry, Datadog, etc.)                                           |
 
@@ -266,11 +266,11 @@ interface TableParsers {
 - [x] JWT authentication (cookie-based tokens)
 - [x] External authentication (reverse proxy / OAuth integration)
 - [x] Row-level security policies (atomic authorization)
+- [x] Column-level access control (read/write policies per field)
 - [x] Multi-tenant compatibility (shared database with tenant column)
 - [x] Plugin system with Worker isolation (Deno + Node.js 20+)
 - [ ] Plugin config - timeout, worker response validation, load testing
 - [ ] Plugin data obfuscation (PII/credential redaction)
-- [ ] Column-level access control
 - [ ] File uploads (local + S3)
 - [ ] Audit logging
 - [ ] Customizable UI components
