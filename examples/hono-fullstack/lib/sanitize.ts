@@ -80,8 +80,9 @@ const URL_ATTRIBUTES = ['href', 'src'];
 function decodeHtmlEntities(str: string): string {
   return str
     // Decode hex entities: &#xNN; or &#xNN (no semicolon)
-    .replace(/&#x([0-9a-fA-F]+);?/g, (_, hex) =>
-      String.fromCharCode(parseInt(hex, 16))
+    .replace(
+      /&#x([0-9a-fA-F]+);?/g,
+      (_, hex) => String.fromCharCode(parseInt(hex, 16)),
     )
     // Decode decimal entities: &#NN; or &#NN (no semicolon)
     .replace(/&#(\d+);?/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))

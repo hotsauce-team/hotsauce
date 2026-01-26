@@ -6,11 +6,11 @@ on:
     branches: [main]
   push:
     branches: [main]
-  
+
   # Run daily to catch new Drizzle releases
   schedule:
-    - cron: '0 6 * * *'  # 6 AM UTC daily
-  
+    - cron: '0 6 * * *' # 6 AM UTC daily
+
   # Allow manual trigger
   workflow_dispatch:
     inputs:
@@ -27,25 +27,25 @@ jobs:
       fail-fast: false
       matrix:
         drizzle-version: ['0.44.0', '0.44.1', '0.45.0', '0.45.1']
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup Deno
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      
+
       - name: Update drizzle-orm to ${{ matrix.drizzle-version }}
         run: |
           # Update the import map to use the specific version
           sed -i 's/"drizzle-orm": "npm:drizzle-orm@[^"]*"/"drizzle-orm": "npm:drizzle-orm@${{ matrix.drizzle-version }}"/' deno.jsonc
           cat deno.jsonc | grep drizzle-orm
-      
+
       - name: Clear Deno cache
         run: deno cache --reload packages/core/tests/drizzle_compat_test.ts
-      
+
       - name: Run compatibility tests
         run: deno test -P packages/core/tests/drizzle_compat_test.ts
         env:
@@ -54,31 +54,31 @@ jobs:
   # Test against latest release
   test-latest:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup Deno
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      
+
       - name: Get latest drizzle-orm version
         id: latest
         run: |
           LATEST=$(npm view drizzle-orm version)
           echo "version=$LATEST" >> $GITHUB_OUTPUT
           echo "Latest drizzle-orm version: $LATEST"
-      
+
       - name: Update to latest drizzle-orm
         run: |
           sed -i 's/"drizzle-orm": "npm:drizzle-orm@[^"]*"/"drizzle-orm": "npm:drizzle-orm@${{ steps.latest.outputs.version }}"/' deno.jsonc
           cat deno.jsonc | grep drizzle-orm
-      
+
       - name: Clear Deno cache
         run: deno cache --reload packages/core/tests/drizzle_compat_test.ts
-      
+
       - name: Run compatibility tests against latest
         run: deno test -P packages/core/tests/drizzle_compat_test.ts
         env:
@@ -88,24 +88,24 @@ jobs:
   test-specific:
     runs-on: ubuntu-latest
     if: github.event.inputs.drizzle_version != ''
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Setup Deno
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      
+
       - name: Update to drizzle-orm@${{ github.event.inputs.drizzle_version }}
         run: |
           sed -i 's/"drizzle-orm": "npm:drizzle-orm@[^"]*"/"drizzle-orm": "npm:drizzle-orm@${{ github.event.inputs.drizzle_version }}"/' deno.jsonc
           cat deno.jsonc | grep drizzle-orm
-      
+
       - name: Clear Deno cache
         run: deno cache --reload packages/core/tests/drizzle_compat_test.ts
-      
+
       - name: Run compatibility tests
         run: deno test -P packages/core/tests/drizzle_compat_test.ts
         env:
@@ -115,17 +115,17 @@ jobs:
   check-new-release:
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule'
-    
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
+
       - name: Get latest drizzle-orm version
         id: latest
         run: |
           LATEST=$(npm view drizzle-orm version)
           echo "version=$LATEST" >> $GITHUB_OUTPUT
-      
+
       - name: Check if version is in our matrix
         id: check
         run: |
@@ -137,7 +137,7 @@ jobs:
             echo "status=new" >> $GITHUB_OUTPUT
             echo "⚠ Version $LATEST is NOT in our test matrix"
           fi
-      
+
       - name: Create issue for new version
         if: steps.check.outputs.status == 'new'
         uses: actions/github-script@v7
@@ -145,7 +145,7 @@ jobs:
           script: |
             const version = '${{ steps.latest.outputs.version }}';
             const title = `🔄 New Drizzle release: drizzle-orm@${version}`;
-            
+
             // Check if issue already exists
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -153,13 +153,13 @@ jobs:
               state: 'open',
               labels: 'drizzle-compat'
             });
-            
+
             const existingIssue = issues.data.find(i => i.title.includes(version));
             if (existingIssue) {
               console.log(`Issue already exists: #${existingIssue.number}`);
               return;
             }
-            
+
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -176,5 +176,5 @@ jobs:
                     `[View drizzle-orm changelog](https://github.com/drizzle-team/drizzle-orm/releases)`,
               labels: ['drizzle-compat', 'dependencies']
             });
-            
+
             console.log(`Created issue for drizzle-orm@${version}`);

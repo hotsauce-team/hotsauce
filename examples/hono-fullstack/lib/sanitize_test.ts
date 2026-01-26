@@ -141,7 +141,10 @@ Deno.test('sanitize: preserves p tags', () => {
 
 Deno.test('sanitize: preserves strong/em', () => {
   const input = '<strong>bold</strong> and <em>italic</em>';
-  assertEquals(sanitizeHtml(input), '<strong>bold</strong> and <em>italic</em>');
+  assertEquals(
+    sanitizeHtml(input),
+    '<strong>bold</strong> and <em>italic</em>',
+  );
 });
 
 Deno.test('sanitize: preserves headings', () => {
@@ -161,17 +164,26 @@ Deno.test('sanitize: preserves blockquote', () => {
 
 Deno.test('sanitize: preserves code blocks', () => {
   const input = '<pre class="code js"><code>let x = 1;</code></pre>';
-  assertEquals(sanitizeHtml(input), '<pre class="code js"><code>let x = 1;</code></pre>');
+  assertEquals(
+    sanitizeHtml(input),
+    '<pre class="code js"><code>let x = 1;</code></pre>',
+  );
 });
 
 Deno.test('sanitize: preserves img with safe src', () => {
   const input = '<img src="/images/photo.jpg" alt="A photo">';
-  assertEquals(sanitizeHtml(input), '<img src="/images/photo.jpg" alt="A photo" />');
+  assertEquals(
+    sanitizeHtml(input),
+    '<img src="/images/photo.jpg" alt="A photo" />',
+  );
 });
 
 Deno.test('sanitize: preserves a with safe href', () => {
   const input = '<a href="https://example.com" title="Example">link</a>';
-  assertEquals(sanitizeHtml(input), '<a href="https://example.com" title="Example">link</a>');
+  assertEquals(
+    sanitizeHtml(input),
+    '<a href="https://example.com" title="Example">link</a>',
+  );
 });
 
 // ============================================================================
@@ -251,7 +263,8 @@ Deno.test('sanitize: blocks &#x6A;avascript: hex entities', () => {
 
 Deno.test('sanitize: blocks full entity-encoded javascript:', () => {
   // Fully encoded "javascript:alert('XSS')"
-  const input = '<a href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">click</a>';
+  const input =
+    '<a href="&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)">click</a>';
   const output = sanitizeHtml(input);
   assertEquals(output.includes('href='), false);
 });
@@ -302,7 +315,8 @@ Deno.test('sanitize: blocks leading spaces before javascript:', () => {
 
 Deno.test('sanitize: blocks data:text/html base64', () => {
   // Base64 encoded <script>alert('XSS')</script>
-  const input = '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=">click</a>';
+  const input =
+    '<a href="data:text/html;base64,PHNjcmlwdD5hbGVydCgnWFNTJyk8L3NjcmlwdD4=">click</a>';
   const output = sanitizeHtml(input);
   assertEquals(output.includes('data:'), false);
 });
@@ -428,7 +442,8 @@ Deno.test('sanitize: removes base tag', () => {
 });
 
 Deno.test('sanitize: removes meta refresh', () => {
-  const input = '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">';
+  const input =
+    '<meta http-equiv="refresh" content="0;url=javascript:alert(1)">';
   const output = sanitizeHtml(input);
   assertEquals(output.includes('<meta'), false);
 });
@@ -440,7 +455,8 @@ Deno.test('sanitize: removes link tag', () => {
 });
 
 Deno.test('sanitize: removes math tags', () => {
-  const input = '<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>';
+  const input =
+    '<math><mtext><table><mglyph><style><img src=x onerror=alert(1)>';
   const output = sanitizeHtml(input);
   assertEquals(output.includes('<math'), false);
   assertEquals(output.includes('onerror'), false);

@@ -379,7 +379,10 @@ function renderMarkdown(text: string): string {
  * Defense in depth: sanitizes even pre-sanitized DB content.
  * Falls back to parsing markdown if contentHtml is empty.
  */
-function safeHtml(contentHtml: string | null, markdownFallback: string): string {
+function safeHtml(
+  contentHtml: string | null,
+  markdownFallback: string,
+): string {
   const html = contentHtml || renderMarkdown(markdownFallback);
   return sanitizeHtml(html);
 }

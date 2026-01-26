@@ -362,7 +362,10 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   }
 
   // Filter record to only include readable columns (column-level security)
-  const filteredRecord = filterRecordColumns(record, columnResult.readableColumns);
+  const filteredRecord = filterRecordColumns(
+    record,
+    columnResult.readableColumns,
+  );
 
   // Execute afterRead transform
   let transformedRecord = filteredRecord;
@@ -478,7 +481,10 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
 
   // Validate that all required columns are writable or have defaults
   // This catches policy misconfigurations at runtime when we have user context
-  const hiddenErrors = validateHiddenRequiredColumns(table.columns, columnResult);
+  const hiddenErrors = validateHiddenRequiredColumns(
+    table.columns,
+    columnResult,
+  );
   if (hiddenErrors.length > 0) {
     // Configuration error - return 500 with clear message for debugging
     const errorMessages = hiddenErrors.map((e) => e.message).join(' ');
@@ -753,7 +759,10 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   }
 
   // Handle GET - show form with readable columns filtered
-  const filteredRecord = filterRecordColumns(record, columnResult.readableColumns);
+  const filteredRecord = filterRecordColumns(
+    record,
+    columnResult.readableColumns,
+  );
 
   // Execute afterRead transform before displaying form
   let transformedRecord = filteredRecord;

@@ -1295,7 +1295,11 @@ Deno.test('integration: column policy tests', async (t) => {
     const adminHtml = await adminResponse.text();
 
     assertEquals(adminResponse.status, 200);
-    assertStringIncludes(adminHtml, 'user@example.com', 'Admin should see email');
+    assertStringIncludes(
+      adminHtml,
+      'user@example.com',
+      'Admin should see email',
+    );
 
     // Editor cannot see email
     const editorPayload = createJwtPayload('2', 'editor');
@@ -1382,123 +1386,129 @@ Deno.test('integration: column policy tests', async (t) => {
     );
   });
 
-  await t.step('write: false on required column during create needs default', async () => {
-    await resetDb();
+  await t.step(
+    'write: false on required column during create needs default',
+    async () => {
+      await resetDb();
 
-    // Create admin user for auth
-    const passwordHash = await hashPassword('password');
-    await db.insert(adminUsers).values({
-      email: 'admin@example.com',
-      passwordHash,
-    });
+      // Create admin user for auth
+      const passwordHash = await hashPassword('password');
+      await db.insert(adminUsers).values({
+        email: 'admin@example.com',
+        passwordHash,
+      });
 
-    // Handler where email is hidden from writing but has no default
-    // This should show an error when trying to create (email is required)
-    const handler = createCmsHandler({
-      csrfSecret: TEST_CSRF_SECRET,
-      db,
-      schema: schemaWithAuth,
-      basePath: '/admin',
-      auth: {
-        secret: AUTH_SECRET,
-        provider: new PasswordProvider({ db, usersTable: adminUsers }),
-      },
-      policies: {
-        users: {
-          columns: {
-            // Email is hidden from writing with NO default
-            email: { write: () => false },
-          },
+      // Handler where email is hidden from writing but has no default
+      // This should show an error when trying to create (email is required)
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithAuth,
+        basePath: '/admin',
+        auth: {
+          secret: AUTH_SECRET,
+          provider: new PasswordProvider({ db, usersTable: adminUsers }),
         },
-      },
-    });
-
-    const payload = createJwtPayload('1');
-    const token = await signJwt(payload, AUTH_SECRET);
-
-    // Just GET the create form - it should show a configuration error
-    const request = new Request('http://localhost/admin/users/new', {
-      headers: { Cookie: `cms_token=${token}` },
-    });
-    const response = await handler(request);
-
-    assertEquals(response.status, 200);
-    const html = await response.text();
-
-    // Should show configuration error about missing default
-    assertStringIncludes(
-      html,
-      'Configuration error',
-      'Should show config error for hidden required column without default',
-    );
-    assertStringIncludes(
-      html,
-      'email',
-      'Error should mention the problematic column',
-    );
-  });
-
-  await t.step('write: false with default injects value on create', async () => {
-    await resetDb();
-
-    // Create admin user for auth
-    const passwordHash = await hashPassword('password');
-    await db.insert(adminUsers).values({
-      email: 'admin@example.com',
-      passwordHash,
-    });
-
-    // Handler where email is hidden but has a default
-    const handler = createCmsHandler({
-      csrfSecret: TEST_CSRF_SECRET,
-      db,
-      schema: schemaWithAuth,
-      basePath: '/admin',
-      auth: {
-        secret: AUTH_SECRET,
-        provider: new PasswordProvider({ db, usersTable: adminUsers }),
-      },
-      policies: {
-        users: {
-          columns: {
-            email: {
-              write: () => false,
-              default: () => 'auto-generated@example.com',
+        policies: {
+          users: {
+            columns: {
+              // Email is hidden from writing with NO default
+              email: { write: () => false },
             },
           },
         },
-      },
-    });
+      });
 
-    const payload = createJwtPayload('1');
-    const token = await signJwt(payload, AUTH_SECRET);
-    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
 
-    // Create user without email (it should be auto-filled)
-    const formData = createFormData({
-      name: 'New User',
-      _csrf: csrfToken,
-    });
+      // Just GET the create form - it should show a configuration error
+      const request = new Request('http://localhost/admin/users/new', {
+        headers: { Cookie: `cms_token=${token}` },
+      });
+      const response = await handler(request);
 
-    const request = new Request('http://localhost/admin/users/new', {
-      method: 'POST',
-      headers: { Cookie: `cms_token=${token}` },
-      body: formData,
-    });
-    const response = await handler(request);
+      assertEquals(response.status, 200);
+      const html = await response.text();
 
-    // Should redirect on success
-    assertEquals(response.status, 303);
+      // Should show configuration error about missing default
+      assertStringIncludes(
+        html,
+        'Configuration error',
+        'Should show config error for hidden required column without default',
+      );
+      assertStringIncludes(
+        html,
+        'email',
+        'Error should mention the problematic column',
+      );
+    },
+  );
 
-    // Verify: email was auto-filled with the default
-    const [user] = await db.select().from(users).where(sql`id = 1`);
-    assertEquals(user?.name, 'New User');
-    assertEquals(
-      user?.email,
-      'auto-generated@example.com',
-      'Email should be auto-filled from policy default',
-    );
-  });
+  await t.step(
+    'write: false with default injects value on create',
+    async () => {
+      await resetDb();
+
+      // Create admin user for auth
+      const passwordHash = await hashPassword('password');
+      await db.insert(adminUsers).values({
+        email: 'admin@example.com',
+        passwordHash,
+      });
+
+      // Handler where email is hidden but has a default
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithAuth,
+        basePath: '/admin',
+        auth: {
+          secret: AUTH_SECRET,
+          provider: new PasswordProvider({ db, usersTable: adminUsers }),
+        },
+        policies: {
+          users: {
+            columns: {
+              email: {
+                write: () => false,
+                default: () => 'auto-generated@example.com',
+              },
+            },
+          },
+        },
+      });
+
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+      // Create user without email (it should be auto-filled)
+      const formData = createFormData({
+        name: 'New User',
+        _csrf: csrfToken,
+      });
+
+      const request = new Request('http://localhost/admin/users/new', {
+        method: 'POST',
+        headers: { Cookie: `cms_token=${token}` },
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Should redirect on success
+      assertEquals(response.status, 303);
+
+      // Verify: email was auto-filled with the default
+      const [user] = await db.select().from(users).where(sql`id = 1`);
+      assertEquals(user?.name, 'New User');
+      assertEquals(
+        user?.email,
+        'auto-generated@example.com',
+        'Email should be auto-filled from policy default',
+      );
+    },
+  );
 
   // Cleanup
   await client.close();

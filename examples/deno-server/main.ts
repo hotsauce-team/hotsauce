@@ -39,7 +39,7 @@ const cmsHandler = createCmsHandler({
       columns: {
         password_hash: { read: () => false }, // Hide password hashes
       },
-    }
+    },
   },
   // Plugins for extending CMS functionality
   plugins: [

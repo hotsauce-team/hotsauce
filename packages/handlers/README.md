@@ -1057,11 +1057,11 @@ const handler = createCmsHandler({
 
 Each column policy has three optional properties:
 
-| Property    | Type                                | Default | Purpose                                        |
-| ----------- | ----------------------------------- | ------- | ---------------------------------------------- |
-| **read**    | `(ctx: PolicyContext) => boolean`   | `true`  | Can user see this column?                      |
-| **write**   | `(ctx: PolicyContext) => boolean`   | `true`  | Can user edit this column?                     |
-| **default** | `(ctx: PolicyContext) => unknown`   | —       | Value to inject for non-writable columns on create |
+| Property    | Type                              | Default | Purpose                                            |
+| ----------- | --------------------------------- | ------- | -------------------------------------------------- |
+| **read**    | `(ctx: PolicyContext) => boolean` | `true`  | Can user see this column?                          |
+| **write**   | `(ctx: PolicyContext) => boolean` | `true`  | Can user edit this column?                         |
+| **default** | `(ctx: PolicyContext) => unknown` | —       | Value to inject for non-writable columns on create |
 
 The CMS evaluates column policies and:
 
@@ -1167,7 +1167,7 @@ The `TablePolicy` type supports both:
 
 ```ts
 type TablePolicy = {
-  row?: Policy;           // Row-level filtering (WHERE clause)
+  row?: Policy; // Row-level filtering (WHERE clause)
   columns?: ColumnPolicies; // Column-level permissions
 };
 
