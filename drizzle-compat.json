@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "Drizzle ORM compatibility matrix for @drizzle-cms",
+  
+  "_why": "The CMS extends Drizzle column builders with $cmsOptions() via prototype patching. This relies on undocumented internals (the config property on builders). These tests ensure those internals remain stable across Drizzle versions. See AGENTS.md for details.",
+  
+  "current": "0.45.1",
+  "minimum": "0.44.0",
+  
+  "tested": [
+    "0.44.0",
+    "0.44.1",
+    "0.45.0",
+    "0.45.1"
+  ],
+  
+  "known_broken": []
+}
