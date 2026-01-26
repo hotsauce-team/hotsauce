@@ -46,7 +46,7 @@ Deno.test('drizzle-compat: column builder has config property', async () => {
   const col = jsonb('test');
 
   // The config object should exist on the builder
-  // This is critical for our $cmsOptions extension
+  // This is critical for our $cms() extension
   assertExists(
     (col as any).config,
     'Column builder should have config property',
