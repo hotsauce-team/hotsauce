@@ -220,14 +220,88 @@ The CMS uses a **layered security model** for authorization. Understanding this 
    - Throws `CmsConfigError` with detailed messages for invalid config
    - Enforces: policies required with auth, policies forbidden with `auth: 'dangerously-open'`
 
-3. **Runtime validation** (`crud.ts` handlers)
+3. **Runtime column policy column policy validation** (`crud.ts` handlers)
    - If auth is enabled but policies somehow undefined, handlers return 403
-   - Belt-and-suspenders check in case types are bypassed
+   - **Validates hidden required columns** — checks if required columns missing from `writableColumns` have policy defaults
+   - Returns clear error message if misconfigured (catches issues that depend on user context)
 
 4. **Policy application** (`applyPolicy` in `policies/apply.ts`)
    - Low-level utility that evaluates a single policy
    - **Intentionally returns `allowed: true` when policy is undefined**
    - By this point, the caller has already validated the configuration
+
+5. **Column policy evaluation** (`evaluateColumnPolicies` in `policies/apply.ts`)
+   - Determines which columns are readable/writable for current user
+   - Returns `EvaluatedColumnPolicies` with `readableColumns`, `writableColumns`, `defaults`
+   - Data filtering happens in CRUD handlers before any response
+
+### Row vs Column Policies
+
+**Row policies** filter which records a user can access (WHERE clause injection):
+
+```typescript
+policies: {
+  posts: ownedBy(schema.posts, 'authorId'), // Row-only
+}
+```
+
+**Column policies** filter which fields within records are visible/editable:
+
+```typescript
+policies: {
+  posts: {
+    row: ownedBy(schema.posts, 'authorId'),   // Row filter
+    columns: {                                  // Column filter
+      salary: { read: adminOnly, write: adminOnly },
+      tenantId: { read: () => false, write: () => false, default: getTenant },
+    },
+  },
+}
+```
+
+The `TablePolicy` type enables either pattern:
+
+```typescript
+// Row-only policy (backward compatible)
+type Policy = PolicyFn | { [action]: PolicyFn };
+
+// Combined row + column policy
+type TablePolicy = {
+  row?: Policy;
+  columns?: ColumnPolicies;
+};
+
+// Both are valid values in Policies object
+type Policies = Record<string, Policy | TablePolicy>;
+```
+
+### Column Policy Evaluation Flow
+
+1. **Handler extracts policies** — `extractRowPolicy()` and `extractColumnPolicies()` separate concerns
+2. **Columns evaluated** — `evaluateColumnPolicies()` runs `read`/`write` functions for each column
+3. **Data filtered** — `filterRecordColumns()` removes hidden columns from response data
+4. **Forms filtered** — Only writable columns shown in create/edit forms
+5. **Defaults injected on create** — `injectColumnDefaults()` adds values for non-writable columns
+
+### Hidden Required Column Validation
+
+This is validated **at runtime** during create operations when we have user context:
+
+```typescript
+// crud.ts → handleCreate()
+// After evaluating column policies with actual user context:
+// If column is NOT NULL + no DB default + not in writableColumns + no policy default
+// → Returns error message in form
+```
+
+Example error:
+
+```
+Configuration error: Column 'tenantId' is required (NOT NULL) but hidden from this user without a default.
+Either provide a 'default' function in the column policy, add a database default, or make the column nullable.
+```
+
+> **Why runtime?** Column policies are functions that depend on user context (e.g., `write: (ctx) => ctx.user?.role === 'admin'`). We can't know at startup whether a column will be writable for every possible user.
 
 ### Why `applyPolicy(undefined, ...)` returns `allowed: true`
 
@@ -375,6 +449,10 @@ filter: 'dangerously-open';
 
 - **Transform hooks** (`beforeSave`, `afterRead`): Modify data, always block
 - **Action hooks** (`on.create`, `on.update`, etc.): Side effects, optionally fire-and-forget
+
+**Column Policy Interaction**
+
+Transform hooks (`afterRead`) receive **column-filtered** records. Hidden columns are removed *before* plugins see the data. This is intentional for security — plugins cannot access or leak column-policy-hidden data.
 
 **Declarative vs Function Hooks**
 
