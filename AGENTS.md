@@ -83,14 +83,16 @@ const name = (table as any)[TABLE_NAME]; // loses type safety
 
 ### Drizzle Compatibility Testing
 
-The CMS extends Drizzle column builders with a `$cmsOptions()` method (e.g., for file upload fields). This requires patching Drizzle's `PgColumnBuilder`, `SQLiteColumnBuilder`, and `MySqlColumnBuilder` prototypes and relies on the internal `config` property flowing from builder to built column.
+The CMS extends Drizzle column builders with a `$cms()` method (e.g., to mark JSON columns as file fields). This requires patching Drizzle's `PgColumnBuilder`, `SQLiteColumnBuilder`, and `MySqlColumnBuilder` prototypes and relies on the internal `config` property flowing from builder to built column.
 
 **Why we test Drizzle internals:**
+
 - The `config` property is `protected`, not part of Drizzle's public API
 - Class names like `PgColumnBuilder` could be renamed or restructured
 - The config flow from builder → column is undocumented behavior
 
 **What the tests verify:**
+
 - Column builder classes exist and are accessible
 - The `config` property exists and accepts custom properties
 - Custom properties survive method chaining (`.notNull().default()`)
@@ -98,11 +100,15 @@ The CMS extends Drizzle column builders with a `$cmsOptions()` method (e.g., for
 - Works across Postgres, SQLite, and MySQL
 
 **Files:**
+
 - `drizzle-compat.json` — Version matrix (tested, minimum, known_broken)
 - `packages/core/tests/drizzle_compat_test.ts` — 16 compatibility tests
+- `packages/core/extend/mod.ts` — Prototype patch that adds `$cms()`
+- `packages/core/tests/extend_cms_test.ts` — Ensures `$cms()` metadata is visible via introspection
 - `.github/workflows/drizzle-compat.yml` — CI workflow (matrix, latest, daily checks)
 
 **When tests fail after a Drizzle upgrade:**
+
 1. Check if the internal API changed
 2. Update our prototype patch if needed
 3. Add the broken version to `known_broken` in drizzle-compat.json
@@ -479,7 +485,7 @@ filter: 'dangerously-open';
 
 **Column Policy Interaction**
 
-Transform hooks (`afterRead`) receive **column-filtered** records. Hidden columns are removed *before* plugins see the data. This is intentional for security — plugins cannot access or leak column-policy-hidden data.
+Transform hooks (`afterRead`) receive **column-filtered** records. Hidden columns are removed _before_ plugins see the data. This is intentional for security — plugins cannot access or leak column-policy-hidden data.
 
 **Declarative vs Function Hooks**
 

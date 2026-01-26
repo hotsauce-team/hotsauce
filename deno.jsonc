@@ -29,6 +29,7 @@
 
     // Local packages (for cross-package imports)
     "@drizzle-cms/core": "./packages/core/mod.ts",
+    "@drizzle-cms/core/extend": "./packages/core/extend/mod.ts",
     "@drizzle-cms/ui": "./packages/ui/mod.ts",
     "@drizzle-cms/handlers": "./packages/handlers/mod.ts",
     "@drizzle-cms/handlers-workers": "./packages/handlers-workers/mod.ts",

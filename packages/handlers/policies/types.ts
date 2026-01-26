@@ -31,7 +31,9 @@ export type ColumnPolicyResult = boolean;
  * const canReadSsn: ColumnPolicyFn = () => false;
  * ```
  */
-export type ColumnPolicyFn = (ctx: PolicyContext) => ColumnPolicyResult | Promise<ColumnPolicyResult>;
+export type ColumnPolicyFn = (
+  ctx: PolicyContext,
+) => ColumnPolicyResult | Promise<ColumnPolicyResult>;
 
 /**
  * Column policy definition

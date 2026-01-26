@@ -1,5 +1,7 @@
 // Core types for schema introspection
 
+import type { CmsColumnOptions } from '../extend/types.ts';
+
 // Re-export Drizzle's types for use in introspection
 export { Table } from 'drizzle-orm';
 export type { AnyColumn as Column } from 'drizzle-orm';
@@ -49,6 +51,9 @@ export interface IntrospectedColumn {
     table: string;
     column: string;
   };
+
+  /** Optional CMS-specific metadata attached via column builder `$cms()` */
+  cmsOptions?: CmsColumnOptions;
 }
 
 /**

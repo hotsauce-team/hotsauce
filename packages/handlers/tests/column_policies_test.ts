@@ -10,7 +10,12 @@ import {
   injectColumnDefaults,
   isTablePolicy,
 } from '../policies/apply.ts';
-import type { ColumnPolicies, PolicyContext, Policy, TablePolicy } from '../policies/types.ts';
+import type {
+  ColumnPolicies,
+  Policy,
+  PolicyContext,
+  TablePolicy,
+} from '../policies/types.ts';
 import type { IntrospectedColumn } from '@drizzle-cms/core';
 
 // Helper to create test contexts
@@ -240,8 +245,16 @@ Deno.test('evaluateColumnPolicies: role-based visibility', async () => {
     salary: { read: (ctx) => ctx.user?.role === 'admin' },
   };
 
-  const adminResult = await evaluateColumnPolicies(columnPolicies, columns, adminCtx);
-  const userResult = await evaluateColumnPolicies(columnPolicies, columns, userCtx);
+  const adminResult = await evaluateColumnPolicies(
+    columnPolicies,
+    columns,
+    adminCtx,
+  );
+  const userResult = await evaluateColumnPolicies(
+    columnPolicies,
+    columns,
+    userCtx,
+  );
 
   // Admin can see salary
   assertEquals(adminResult.readableColumns.includes('salary'), true);
