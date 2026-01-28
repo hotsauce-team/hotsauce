@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   serial,
@@ -8,6 +9,8 @@ import {
   timestamp,
   varchar,
 } from 'drizzle-orm/pg-core';
+
+import '@drizzle-cms/core/extend';
 
 import { z } from 'zod/v4';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
@@ -26,6 +29,7 @@ const users = pgTable('users', {
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash'), // required for cms password login only
   role: varchar('role', { length: 50 }), // 'admin', 'editor', etc.
+  avatar: jsonb('avatar').$cms({ file: true }),
   bio: text('bio'),
   createdAt: timestamp('created_at').defaultNow(),
 });

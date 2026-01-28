@@ -263,6 +263,7 @@ interface TableParsers {
 - [x] Web Standard Request/Response handlers
 - [x] Relation field pickers (FK → select dropdown with display labels)
 - [x] Many-to-many relationships (junction table detection, checkbox UI)
+- [x] Column metadata hints via `$cms()` (e.g. file fields)
 - [x] JWT authentication (cookie-based tokens)
 - [x] External authentication (reverse proxy / OAuth integration)
 - [x] Row-level security policies (atomic authorization)
@@ -271,9 +272,20 @@ interface TableParsers {
 - [x] Plugin system with Worker isolation (Deno + Node.js 20+)
 - [ ] Plugin config - timeout, worker response validation, load testing
 - [ ] Plugin data obfuscation (PII/credential redaction)
-- [ ] File uploads (local + S3)
+- [ ] File uploads (local + S3) (upload pipeline + storage)
 - [ ] Audit logging
 - [ ] Customizable UI components
+
+Schema hints example:
+
+```ts
+import '@drizzle-cms/core/extend';
+import { jsonb, pgTable } from 'drizzle-orm/pg-core';
+
+export const users = pgTable('users', {
+  avatar: jsonb('avatar').$cms({ file: true }),
+});
+```
 
 ## Database Support
 

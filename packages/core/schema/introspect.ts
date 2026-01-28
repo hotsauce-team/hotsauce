@@ -17,6 +17,8 @@ import type {
   JunctionTable,
 } from './types.ts';
 
+import type { CmsColumnOptions } from '../extend/types.ts';
+
 /** Symbols used by Drizzle to store inline foreign keys (database-specific, no helper exported) */
 const TABLE_FOREIGN_KEY_SYMBOLS = [
   Symbol.for('drizzle:PgInlineForeignKeys'),
@@ -150,6 +152,15 @@ function introspectColumn(
     isPrimaryKey: column.primary ?? false,
     isUnique: column.isUnique,
   };
+
+  // Optional CMS metadata stored by our `$cms()` builder extension.
+  // Drizzle carries `config` from builder → built column.
+  const anyWithConfig = column as unknown as {
+    config?: { cmsOptions?: CmsColumnOptions };
+  };
+  if (anyWithConfig.config?.cmsOptions) {
+    result.cmsOptions = anyWithConfig.config.cmsOptions;
+  }
 
   // Detect array columns - use dataType which is database-agnostic
   if (column.dataType === 'array') {

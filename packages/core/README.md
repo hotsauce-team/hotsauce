@@ -95,6 +95,27 @@ console.log(field.label); // 'Email'
 console.log(field.column); // Original column metadata
 ```
 
+### `extend/` - Column Metadata (`$cms()`)
+
+Optionally patch Drizzle column builders to attach CMS-specific metadata to columns.
+This enables schema-authored hints (like file fields) to flow into introspection and field mapping.
+
+**Usage:**
+
+```ts
+import '@drizzle-cms/core/extend';
+import { jsonb, pgTable } from 'drizzle-orm/pg-core';
+
+const users = pgTable('users', {
+  avatar: jsonb('avatar').$cms({ file: true }),
+});
+```
+
+Notes:
+
+- Importing `@drizzle-cms/core/extend` patches Drizzle builder prototypes (a global side effect).
+- Metadata is stored on the Drizzle column config and is available as `IntrospectedColumn.cmsOptions`.
+
 ### `validation/` - Zod Schema Generation
 
 Re-exports from `drizzle-zod` for form validation.

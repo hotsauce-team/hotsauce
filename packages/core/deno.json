@@ -1,10 +1,14 @@
 {
   "name": "@drizzle-cms/core",
   "version": "0.0.1",
-  "exports": "./mod.ts",
+  "exports": {
+    ".": "./mod.ts",
+    "./extend": "./extend/mod.ts"
+  },
   "publish": {
     "include": [
       "mod.ts",
+      "extend/",
       "schema/",
       "fields/",
       "validation/",

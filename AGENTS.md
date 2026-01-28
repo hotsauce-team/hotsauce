@@ -83,7 +83,7 @@ const name = (table as any)[TABLE_NAME]; // loses type safety
 
 ### Drizzle Compatibility Testing
 
-The CMS extends Drizzle column builders with a `$cmsOptions()` method (e.g., for file upload fields). This requires patching Drizzle's `PgColumnBuilder`, `SQLiteColumnBuilder`, and `MySqlColumnBuilder` prototypes and relies on the internal `config` property flowing from builder to built column.
+The CMS extends Drizzle column builders with a `$cms()` method (e.g., to mark JSON columns as file fields). This requires patching Drizzle's `PgColumnBuilder`, `SQLiteColumnBuilder`, and `MySqlColumnBuilder` prototypes and relies on the internal `config` property flowing from builder to built column.
 
 **Why we test Drizzle internals:**
 
@@ -103,6 +103,8 @@ The CMS extends Drizzle column builders with a `$cmsOptions()` method (e.g., for
 
 - `drizzle-compat.json` — Version matrix (tested, minimum, known_broken)
 - `packages/core/tests/drizzle_compat_test.ts` — 16 compatibility tests
+- `packages/core/extend/mod.ts` — Prototype patch that adds `$cms()`
+- `packages/core/tests/extend_cms_test.ts` — Ensures `$cms()` metadata is visible via introspection
 - `.github/workflows/drizzle-compat.yml` — CI workflow (matrix, latest, daily checks)
 
 **When tests fail after a Drizzle upgrade:**

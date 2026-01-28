@@ -61,6 +61,11 @@ export function propertyNameToLabel(propertyName: string): string {
  * Map a Drizzle column type to a CMS field type
  */
 export function mapColumnToFieldType(column: IntrospectedColumn): CMSFieldType {
+  // Allow schema authors to override via `$cms()` metadata.
+  if (column.cmsOptions?.file) {
+    return 'file';
+  }
+
   // Check for array first
   if (column.isArray) {
     return 'array';

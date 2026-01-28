@@ -50,6 +50,14 @@ Deno.test('mapColumnToFieldType: string dataType maps to text', () => {
   assertEquals(mapColumnToFieldType(column), 'text');
 });
 
+Deno.test('mapColumnToFieldType: cmsOptions.file overrides to file', () => {
+  const column = createMockColumn({
+    dataType: 'json',
+    cmsOptions: { file: true },
+  });
+  assertEquals(mapColumnToFieldType(column), 'file');
+});
+
 Deno.test('mapColumnToFieldType: number dataType maps to number', () => {
   const column = createMockColumn({ dataType: 'number' });
   assertEquals(mapColumnToFieldType(column), 'number');

@@ -18,6 +18,7 @@ await client.exec(`
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash TEXT,
     role VARCHAR(50),
+    avatar JSONB,
     bio TEXT,
     created_at TIMESTAMP DEFAULT NOW()
   );
@@ -55,15 +56,37 @@ await db.insert(users).values([
     email: 'admin@example.com',
     passwordHash: adminPasswordHash,
     role: 'admin',
+    avatar: {
+      filename: 'admin.png',
+      contentType: 'image/png',
+      size: 12345,
+      url: '/uploads/avatars/admin.png',
+    },
     bio: 'Site administrator',
   },
   {
     name: 'Alice Johnson',
     email: 'alice@example.com',
     role: 'editor',
+    avatar: {
+      filename: 'alice.jpg',
+      contentType: 'image/jpeg',
+      size: 23456,
+      url: '/uploads/avatars/alice.jpg',
+    },
     bio: 'Writer and editor',
   },
-  { name: 'Bob Smith', email: 'bob@example.com', bio: 'Developer' },
+  {
+    name: 'Bob Smith',
+    email: 'bob@example.com',
+    avatar: {
+      filename: 'bob.svg',
+      contentType: 'image/svg+xml',
+      size: 3456,
+      url: '/uploads/avatars/bob.svg',
+    },
+    bio: 'Developer',
+  },
   { name: 'Carol White', email: 'carol@example.com' },
 ]).onConflictDoNothing();
 console.log('👤 Admin user created: admin@example.com / admin123');
