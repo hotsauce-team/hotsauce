@@ -2,6 +2,7 @@
 
 import { attrs, escapeHtml, html, raw } from '../html.ts';
 import type { CMSField } from '@drizzle-cms/core';
+import { isValidFileReference } from '@drizzle-cms/core';
 import type { RelationOption } from '../forms/inputs.ts';
 import type { ManyToManyDisplayData } from './list.ts';
 
@@ -32,6 +33,7 @@ function formatValue(
   value: unknown,
   field: CMSField,
   relationOptions?: RelationOption[],
+  fileUrl?: string,
 ): string {
   if (value === null || value === undefined) {
     return '<span class="cms-null">—</span>';
@@ -45,6 +47,40 @@ function formatValue(
     if (option) {
       return escapeHtml(`${String(value)} (${option.label})`);
     }
+  }
+
+  // For file fields, show file info with optional link
+  if (field.fieldType === 'file' && isValidFileReference(value)) {
+    const sizeStr = formatFileSize(value.size);
+    const isImage = value.contentType.startsWith('image/');
+    // Determine image source: fileUrl (served endpoint), url (external), or data (base64)
+    const imgSrc = fileUrl ?? value.url ??
+      (value.data ? `data:${value.contentType};base64,${value.data}` : null);
+    const downloadUrl = fileUrl ?? value.url;
+    const link = downloadUrl
+      ? `<a href="${
+        escapeHtml(downloadUrl)
+      }" target="_blank" class="cms-file-link">Download</a>`
+      : '';
+    // Show image preview for image files
+    const imagePreview = isImage && imgSrc
+      ? `<img src="${escapeHtml(imgSrc)}" alt="${
+        escapeHtml(value.filename)
+      }" class="cms-file-preview" />`
+      : '';
+    return `
+      <div class="cms-file-display">
+        ${imagePreview}
+        <div class="cms-file-info">
+          <span class="cms-file-icon">${isImage ? '🖼️' : '📄'}</span>
+          <span class="cms-file-name">${escapeHtml(value.filename)}</span>
+          <span class="cms-file-meta">(${
+      escapeHtml(value.contentType)
+    }, ${sizeStr})</span>
+          ${link}
+        </div>
+      </div>
+    `;
   }
 
   if (value instanceof Date) {
@@ -73,6 +109,15 @@ function formatValue(
   }
 
   return escapeHtml(String(value));
+}
+
+/**
+ * Format file size for display
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**

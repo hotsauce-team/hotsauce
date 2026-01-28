@@ -11,7 +11,6 @@
  * ```
  */
 declare global {
-  // deno-lint-ignore no-var
   var __CMS_MAIN_PROCESS__: boolean | undefined;
 }
 

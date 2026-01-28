@@ -87,7 +87,18 @@ await db.insert(users).values([
     },
     bio: 'Developer',
   },
-  { name: 'Carol White', email: 'carol@example.com' },
+  {
+    name: 'Carol White',
+    email: 'carol@example.com',
+    avatar: {
+      // Inline base64 image (1x1 purple pixel PNG) - served from /admin/files/users/avatar/{id}
+      filename: 'carol-avatar.png',
+      contentType: 'image/png',
+      size: 70,
+      data:
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==',
+    },
+  },
 ]).onConflictDoNothing();
 console.log('👤 Admin user created: admin@example.com / admin123');
 

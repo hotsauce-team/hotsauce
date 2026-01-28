@@ -8,7 +8,7 @@ const TOKEN_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
 /**
  * Import a secret string as an HMAC key for signing
  */
-async function importKey(secret: string): Promise<CryptoKey> {
+function importKey(secret: string): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   return crypto.subtle.importKey(
     'raw',

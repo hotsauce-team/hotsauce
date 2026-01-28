@@ -50,3 +50,13 @@ export {
   createSelectSchema,
   createUpdateSchema,
 } from './validation/zod.ts';
+
+// ─────────────────────────────────────────────────────────────
+// File Upload Types - Standard file reference shape for JSON columns
+// ─────────────────────────────────────────────────────────────
+export type { CmsColumnOptions, FileReference } from './extend/types.ts';
+export {
+  FILE_DEFAULT_ACCEPT,
+  FILE_DEFAULT_MAX_SIZE,
+  isValidFileReference,
+} from './extend/types.ts';

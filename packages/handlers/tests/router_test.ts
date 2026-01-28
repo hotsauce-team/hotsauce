@@ -1,6 +1,6 @@
 // Tests for router utilities
 
-import { assertEquals, assertExists } from 'jsr:@std/assert';
+import { assertEquals, assertExists } from '@std/assert';
 import {
   cmsUrl,
   formatColumnName,

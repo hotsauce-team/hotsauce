@@ -2,6 +2,11 @@
 
 import { attrs, html, raw } from '../html.ts';
 import type { CMSField } from '@drizzle-cms/core';
+import {
+  FILE_DEFAULT_ACCEPT,
+  FILE_DEFAULT_MAX_SIZE,
+  isValidFileReference,
+} from '@drizzle-cms/core';
 
 /**
  * An option for a relation select field
@@ -403,6 +408,103 @@ export function checkboxListInput(
 }
 
 /**
+ * Render a file upload input
+ *
+ * Shows:
+ * - Current file info if a file is already uploaded
+ * - File input for uploading a new file
+ *
+ * Note: Form must use enctype="multipart/form-data" for file uploads.
+ * TODO: Add "remove file" checkbox in future version.
+ */
+export function fileInput(
+  field: CMSField,
+  options: FieldInputOptions = {},
+): string {
+  const cmsOptions = field.column.cmsOptions ?? {};
+  const accept = cmsOptions.accept ?? FILE_DEFAULT_ACCEPT;
+  const maxSize = cmsOptions.maxSize ?? FILE_DEFAULT_MAX_SIZE;
+  const maxSizeKb = Math.round(maxSize / 1000);
+  const propertyName = field.column.propertyName;
+
+  // Check if there's an existing file
+  const existingFile = options.value;
+  const hasExistingFile = isValidFileReference(existingFile);
+
+  // Show current file if exists (with image preview for images)
+  let currentFileDisplay = '';
+  if (hasExistingFile) {
+    const isImage = existingFile.contentType.startsWith('image/');
+    // For images with url or data, show preview
+    const imagePreview = isImage && (existingFile.url || existingFile.data)
+      ? html`
+        <img src="${existingFile.url ??
+          `data:${existingFile.contentType};base64,${existingFile.data}`}" alt="${existingFile
+          .filename}" class="cms-file-preview" />
+      `
+      : '';
+    // Delete button - sets hidden field that signals file removal
+    const deleteButton = !field.column.notNull
+      ? html`
+        <button
+          type="submit"
+          name="_clear_${propertyName}"
+          value="1"
+          class="cms-btn cms-btn-danger cms-btn-small"
+        >
+          Delete
+        </button>
+      `
+      : '';
+    currentFileDisplay = html`
+      <div class="cms-file-current">
+        ${raw(imagePreview)}
+        <div class="cms-file-info">
+          <span class="cms-file-icon">${isImage ? '🖼️' : '📄'}</span>
+          <span class="cms-file-name">${existingFile.filename}</span>
+          <span class="cms-file-size">(${formatFileSize(
+            existingFile.size,
+          )})</span>
+          ${raw(deleteButton)}
+        </div>
+      </div>
+    `;
+  }
+
+  const isRequired = field.column.notNull && !field.column.hasDefault &&
+    !hasExistingFile;
+
+  return html`
+    <div class="cms-file-input-wrapper">
+      ${raw(currentFileDisplay)}
+      <input ${attrs({
+        type: 'file',
+        name: propertyName,
+        id: options.id ?? propertyName,
+        class: `cms-input cms-input-file ${options.class ?? ''}`.trim(),
+        disabled: options.disabled,
+        accept,
+        required: isRequired,
+      })} />
+      <p class="cms-file-help">
+        ${hasExistingFile
+          ? 'Upload new file to replace. '
+          : ''}Max size: ${maxSizeKb}KB. Accepted: ${accept}
+      </p>
+    </div>
+  `;
+}
+
+/**
+ * Format file size for display
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
  * Render the appropriate input for a CMS field
  */
 export function renderFieldInput(
@@ -444,7 +546,7 @@ export function renderFieldInput(
     case 'array':
       return jsonInput(field, options); // Arrays as JSON for now
     case 'file':
-      return textInput(field, options); // File fields need upload handling
+      return fileInput(field, options);
     default:
       return textInput(field, options);
   }

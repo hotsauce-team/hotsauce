@@ -221,3 +221,102 @@ Deno.test('CmsConfigError: includes ZodError details', () => {
     assertEquals(configError.details !== undefined, true);
   }
 });
+
+// =============================================================================
+// validateFileColumns tests
+// =============================================================================
+
+import { validateFileColumns } from '../validation.ts';
+
+Deno.test('validateFileColumns: accepts file columns with json dataType', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'users',
+        columns: [
+          { name: 'avatar', dataType: 'json', cmsOptions: { file: true } },
+        ],
+      },
+    ],
+  };
+  // Should not throw
+  validateFileColumns(introspected);
+});
+
+Deno.test('validateFileColumns: accepts tables without file columns', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'users',
+        columns: [
+          { name: 'name', dataType: 'string' },
+          { name: 'email', dataType: 'string' },
+        ],
+      },
+    ],
+  };
+  // Should not throw
+  validateFileColumns(introspected);
+});
+
+Deno.test('validateFileColumns: rejects file column with string dataType', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'users',
+        columns: [
+          { name: 'avatar', dataType: 'string', cmsOptions: { file: true } },
+        ],
+      },
+    ],
+  };
+  assertThrows(
+    () => validateFileColumns(introspected),
+    CmsConfigError,
+    'users.avatar',
+  );
+});
+
+Deno.test('validateFileColumns: rejects file column with number dataType', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'posts',
+        columns: [
+          { name: 'image', dataType: 'number', cmsOptions: { file: true } },
+        ],
+      },
+    ],
+  };
+  assertThrows(
+    () => validateFileColumns(introspected),
+    CmsConfigError,
+    'posts.image',
+  );
+});
+
+Deno.test('validateFileColumns: reports multiple errors', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'users',
+        columns: [
+          { name: 'avatar', dataType: 'string', cmsOptions: { file: true } },
+        ],
+      },
+      {
+        name: 'posts',
+        columns: [
+          { name: 'image', dataType: 'string', cmsOptions: { file: true } },
+        ],
+      },
+    ],
+  };
+  try {
+    validateFileColumns(introspected);
+  } catch (error) {
+    const message = (error as CmsConfigError).message;
+    assertEquals(message.includes('users.avatar'), true);
+    assertEquals(message.includes('posts.image'), true);
+  }
+});

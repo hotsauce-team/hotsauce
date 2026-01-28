@@ -93,7 +93,7 @@ export function createSiteRoutes(db: Database): Hono {
   /**
    * Homepage - list recent published posts
    */
-  app.get('/', async (c) => {
+  app.get('/', async (_c) => {
     const postList = await db.query.posts.findMany({
       where: eq(posts.published, true),
       orderBy: desc(posts.createdAt),
@@ -244,7 +244,7 @@ export function createSiteRoutes(db: Database): Hono {
   /**
    * Categories index page
    */
-  app.get('/categories', async (c) => {
+  app.get('/categories', async (_c) => {
     const categoryList = await db
       .select({
         id: categories.id,

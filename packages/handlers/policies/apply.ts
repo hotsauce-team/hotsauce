@@ -141,8 +141,8 @@ export function buildPolicyWhere(
     throw new Error(`Table ${tableInfo.name} has no primary key`);
   }
 
-  // deno-lint-ignore no-explicit-any
   const pkField =
+    // deno-lint-ignore no-explicit-any
     (table as unknown as Record<string, any>)[pkColumn.name] as SQL;
   const idCondition = eq(pkField as never, recordId as never);
 

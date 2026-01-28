@@ -1,6 +1,6 @@
 // Tests for HTML utilities
 
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals } from '@std/assert';
 import { attrs, escapeHtml, html, join, raw, SafeHtml, when } from '../html.ts';
 
 // escapeHtml tests

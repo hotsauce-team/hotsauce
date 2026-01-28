@@ -17,6 +17,7 @@ import {
   notFound,
   parseFlashFromUrl,
   parseFormData,
+  parseMultipartFormData,
   redirect,
   redirectWithFlash,
 } from './http.ts';
@@ -498,7 +499,24 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
 
   // Handle POST - create record
   if (request.method === 'POST') {
-    const formData = await parseFormData(request);
+    // Determine if we have file columns that need multipart parsing
+    const fileColumns = table.columns.filter((col) => col.cmsOptions?.file);
+    const hasFileColumns = fileColumns.length > 0;
+
+    let formData: Record<string, string | string[]>;
+    let fileData: Record<string, unknown> = {};
+    let fileErrors: Record<string, string> = {};
+
+    if (hasFileColumns) {
+      // Use multipart parsing for tables with file columns
+      const multipart = await parseMultipartFormData(request, fileColumns);
+      formData = multipart.fields;
+      fileData = multipart.files;
+      fileErrors = multipart.errors;
+    } else {
+      // Standard form parsing
+      formData = await parseFormData(request);
+    }
 
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
@@ -511,11 +529,36 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       );
     }
 
+    // Check for file upload errors
+    if (Object.keys(fileErrors).length > 0) {
+      return await renderCreateForm(
+        ctx,
+        columnResult,
+        { ...recordToValues(formData), ...fileData },
+        undefined,
+        fileErrors,
+      );
+    }
+
     // Only process columns the user can write to
     const editableColumns = getEditableColumns(table).filter(
       (col) => columnResult.writableColumns.includes(col.name),
     );
     let values = coerceFormValues(formData, editableColumns);
+
+    // Merge in file data for file columns
+    for (const [fieldName, fileRef] of Object.entries(fileData)) {
+      if (
+        columnResult.writableColumns.includes(
+          table.columns.find((c) => c.propertyName === fieldName)?.name ?? '',
+        )
+      ) {
+        values[fieldName] = fileRef;
+      }
+    }
+
+    // Inject default values for non-writable columns
+    values = injectColumnDefaults(values, columnResult.defaults);
 
     // Inject default values for non-writable columns
     values = injectColumnDefaults(values, columnResult.defaults);
@@ -654,7 +697,24 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
 
   // Handle POST - update record
   if (request.method === 'POST') {
-    const formData = await parseFormData(request);
+    // Determine if we have file columns that need multipart parsing
+    const fileColumns = table.columns.filter((col) => col.cmsOptions?.file);
+    const hasFileColumns = fileColumns.length > 0;
+
+    let formData: Record<string, string | string[]>;
+    let fileData: Record<string, unknown> = {};
+    let fileErrors: Record<string, string> = {};
+
+    if (hasFileColumns) {
+      // Use multipart parsing for tables with file columns
+      const multipart = await parseMultipartFormData(request, fileColumns);
+      formData = multipart.fields;
+      fileData = multipart.files;
+      fileErrors = multipart.errors;
+    } else {
+      // Standard form parsing
+      formData = await parseFormData(request);
+    }
 
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
@@ -667,11 +727,44 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       );
     }
 
+    // Check for file upload errors
+    if (Object.keys(fileErrors).length > 0) {
+      return await renderEditForm(
+        ctx,
+        columnResult,
+        { ...recordToValues(formData), ...fileData },
+        undefined,
+        fileErrors,
+      );
+    }
+
     // Only process columns the user can write to
     const editableColumns = getEditableColumns(table).filter(
       (col) => columnResult.writableColumns.includes(col.name),
     );
     const values = coerceFormValues(formData, editableColumns);
+
+    // Handle file clearing (_clear_{column} fields)
+    for (const fileCol of fileColumns) {
+      const clearField = `_clear_${fileCol.propertyName}`;
+      if (formData[clearField] === '1') {
+        // User clicked delete - set to null
+        values[fileCol.propertyName] = null;
+        // Remove from fileData so it doesn't override
+        delete fileData[fileCol.propertyName];
+      }
+    }
+
+    // Merge in file data for file columns (only if a new file was uploaded)
+    for (const [fieldName, fileRef] of Object.entries(fileData)) {
+      if (
+        columnResult.writableColumns.includes(
+          table.columns.find((c) => c.propertyName === fieldName)?.name ?? '',
+        )
+      ) {
+        values[fieldName] = fileRef;
+      }
+    }
 
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(
@@ -905,10 +998,14 @@ async function renderCreateForm(
   // Generate CSRF token
   const csrfToken = await generateCsrfToken(options.csrfSecret);
 
+  // Check if any writable fields are file fields
+  const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
+
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     action: cmsUrl(basePath, table.name) + '/new',
     csrfToken,
+    multipart: hasFileFields,
   };
 
   // Merge form-level and field-level errors
@@ -963,10 +1060,14 @@ async function renderEditForm(
   // Generate CSRF token
   const csrfToken = await generateCsrfToken(options.csrfSecret);
 
+  // Check if any writable fields are file fields
+  const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
+
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
     csrfToken,
+    multipart: hasFileFields,
   };
 
   // Merge form-level and field-level errors

@@ -1,6 +1,6 @@
 // Tests for form input components
 
-import { assertEquals, assertStringIncludes } from 'jsr:@std/assert';
+import { assertEquals, assertStringIncludes } from '@std/assert';
 import {
   booleanInput,
   checkboxListInput,

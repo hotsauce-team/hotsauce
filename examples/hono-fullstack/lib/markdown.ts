@@ -1,4 +1,5 @@
-// @ts-nocheck
+// deno-lint-ignore-file no-regex-spaces
+// @ts-nocheck: Vendored library - minimal modifications preferred
 /**
  * Snarkdown - A minimal Markdown parser
  * Vendored from https://github.com/developit/snarkdown (v2.0.0)

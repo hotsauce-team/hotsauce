@@ -1,6 +1,6 @@
 // Tests for view components
 
-import { assertEquals, assertStringIncludes } from 'jsr:@std/assert';
+import { assertEquals, assertStringIncludes } from '@std/assert';
 import { fieldsToListColumns, listTable, listView } from '../views/list.ts';
 import { detailField, detailView } from '../views/detail.ts';
 import { createView, editView } from '../views/edit.ts';

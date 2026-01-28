@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 // Worker executor
 // Manages Worker instances for plugin isolation
 // Compatible with Deno and Node.js 20+

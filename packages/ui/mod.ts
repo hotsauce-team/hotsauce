@@ -22,6 +22,7 @@ export {
   checkboxListInput,
   dateInput,
   datetimeInput,
+  fileInput,
   hiddenInput,
   jsonInput,
   numberInput,

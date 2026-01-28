@@ -57,7 +57,7 @@ Deno.test('$cms(): calling twice merges options (shallow merge)', async () => {
   const avatar = meta.columns.find((c) => c.propertyName === 'avatar');
   assertExists(avatar);
   // deno-lint-ignore no-explicit-any
-  assertEquals((avatar.cmsOptions as any), {
+  assertEquals(avatar.cmsOptions as any, {
     file: true,
     customFlag: 'test',
   });

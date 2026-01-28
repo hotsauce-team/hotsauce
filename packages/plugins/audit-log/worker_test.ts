@@ -1,3 +1,4 @@
+// deno-lint-ignore-file require-await
 // Tests for the audit-log worker logic
 
 import { assertEquals } from '@std/assert';

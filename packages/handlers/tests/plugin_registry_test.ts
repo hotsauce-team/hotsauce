@@ -1,6 +1,7 @@
+// deno-lint-ignore-file require-await
 // Plugin registry tests
 
-import { assertEquals, assertThrows } from 'jsr:@std/assert';
+import { assertEquals, assertThrows } from '@std/assert';
 import {
   createPluginRegistry,
   PluginRegistry,

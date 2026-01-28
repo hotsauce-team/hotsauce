@@ -223,3 +223,42 @@ export function validateResolvedSecrets(secrets: {
 
   return result.data as { csrfSecret: string; authSecret: string | undefined };
 }
+
+/**
+ * Validate that file columns are on JSON-compatible column types.
+ * File columns (marked with `$cms({ file: true })`) must be on jsonb/json columns.
+ *
+ * @throws {CmsConfigError} When file: true is used on a non-JSON column
+ */
+export function validateFileColumns(
+  introspected: {
+    tables: Array<
+      {
+        name: string;
+        columns: Array<
+          { name: string; dataType: string; cmsOptions?: { file?: boolean } }
+        >;
+      }
+    >;
+  },
+): void {
+  const errors: string[] = [];
+
+  for (const table of introspected.tables) {
+    for (const column of table.columns) {
+      if (column.cmsOptions?.file && column.dataType !== 'json') {
+        errors.push(
+          `  - ${table.name}.${column.name}: { file: true } requires a JSON column (jsonb/json), ` +
+            `but column has dataType '${column.dataType}'. ` +
+            `Use jsonb() (Postgres), json() (MySQL), or text({ mode: 'json' }) (SQLite).`,
+        );
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new CmsConfigError(
+      `Invalid file column configuration:\n${errors.join('\n')}`,
+    );
+  }
+}

@@ -110,7 +110,7 @@ export function layout(content: string, options: LayoutOptions): string {
         <div class="cms-user">
           ${options.user.name}
           <form method="POST" action="${options.user
-            .logoutUrl}" style="display:inline">
+            .logoutUrl}" class="cms-inline-form">
             <button type="submit" class="cms-btn cms-btn-secondary">Logout</button>
           </form>
         </div>
