@@ -14,8 +14,9 @@
   "permissions": {
     "hono-fullstack": {
       "read": [
-        "./data",
         "./admin",
+        "./data",
+        "./lib",
         "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
         "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm",
         "./site/static"
@@ -35,6 +36,7 @@
 
   "imports": {
     "hono": "jsr:@hono/hono@^4.11.5",
-    "hono/deno": "jsr:@hono/hono@^4.11.5/deno"
+    "hono/deno": "jsr:@hono/hono@^4.11.5/deno",
+    "micromark": "npm:micromark@4.0.2"
   }
 }

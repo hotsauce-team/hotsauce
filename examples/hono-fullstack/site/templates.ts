@@ -367,8 +367,8 @@ function formatDate(date: Date): string {
 }
 
 /**
- * Render Markdown to HTML using vendored snarkdown parser.
- * See ./markdown.ts for the vendored source.
+ * Render Markdown to HTML using micromark.
+ * See ../lib/markdown.ts.
  */
 function renderMarkdown(text: string): string {
   return parseMarkdown(text);

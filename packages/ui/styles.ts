@@ -126,6 +126,10 @@ body {
   color: white;
 }
 .cms-btn-danger:hover { background: var(--cms-danger-hover); }
+.cms-btn-small {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+}
 
 /* Forms */
 .cms-form { max-width: 640px; }
@@ -172,6 +176,77 @@ body {
 }
 
 .cms-json { font-family: monospace; font-size: 0.875rem; }
+
+/* File Upload */
+.cms-file-input-wrapper { display: flex; flex-direction: column; gap: 0.5rem; }
+.cms-file-current {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--cms-gray-50);
+  border: 1px solid var(--cms-gray-200);
+  border-radius: var(--cms-radius);
+}
+.cms-file-icon { font-size: 1.25rem; }
+.cms-file-name { font-weight: 500; }
+.cms-file-size { color: var(--cms-gray-500); font-size: 0.875rem; }
+.cms-file-help { color: var(--cms-gray-500); font-size: 0.75rem; margin: 0; }
+.cms-input-file { padding: 0.5rem; }
+
+/* File Display (list/detail views) */
+.cms-file-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  background: var(--cms-gray-100);
+  border-radius: var(--cms-radius);
+  font-size: 0.875rem;
+}
+.cms-file-display {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.cms-file-display .cms-file-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cms-file-display .cms-file-meta { color: var(--cms-gray-500); font-size: 0.875rem; }
+.cms-file-preview {
+  max-width: 100px;
+  max-height: 100px;
+  border-radius: var(--cms-radius);
+  border: 1px solid var(--cms-gray-200);
+  object-fit: contain;
+}
+.cms-file-current {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: var(--cms-gray-50);
+  border-radius: var(--cms-radius);
+  margin-bottom: 0.5rem;
+}
+.cms-file-current .cms-file-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cms-file-current .cms-file-preview {
+  max-width: 100px;
+  max-height: 100px;
+}
+.cms-file-link {
+  color: var(--cms-primary);
+  text-decoration: none;
+  font-size: 0.875rem;
+}
+.cms-file-link:hover { text-decoration: underline; }
+.cms-inline-form { display: inline; }
 
 .cms-error { color: var(--cms-danger); font-size: 0.875rem; margin: 0.25rem 0 0; }
 .cms-help { color: var(--cms-gray-500); font-size: 0.875rem; margin: 0.25rem 0 0; }

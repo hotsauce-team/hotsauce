@@ -100,6 +100,8 @@ export function getListColumns(table: IntrospectedTable): ListColumn[] {
     .map((c) => ({
       // Use propertyName for key to match relationData keys and record property access
       key: c.propertyName,
+      // Also include column name for policy filtering
+      name: c.name,
       label: formatColumnName(c.name),
     }));
 }

@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-console
 // Simple test Worker for executor tests
 // Echoes back data for transform hooks, logs actions
 

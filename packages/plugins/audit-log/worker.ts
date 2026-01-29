@@ -1,5 +1,6 @@
 // Audit log plugin - Worker module version
 // This file is loaded directly by a Worker and handles all messages
+// deno-lint-ignore-file no-console
 
 /// <reference lib="webworker" />
 /// <reference types="@drizzle-cms/handlers-workers" />

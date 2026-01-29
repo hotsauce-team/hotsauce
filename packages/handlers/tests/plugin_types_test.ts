@@ -1,6 +1,7 @@
+// deno-lint-ignore-file require-await no-console
 // Plugin types tests - validates type constraints and helpers
 
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals } from '@std/assert';
 import type {
   ActionContext,
   ActionHook,

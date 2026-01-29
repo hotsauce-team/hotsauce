@@ -2,6 +2,7 @@
 
 import { attrs, escapeHtml, html, raw } from '../html.ts';
 import type { CMSField } from '@drizzle-cms/core';
+import { isValidFileReference } from '@drizzle-cms/core';
 import type { RelationOption } from '../forms/inputs.ts';
 
 /**
@@ -20,8 +21,10 @@ export interface ManyToManyDisplayData {
  * Column configuration for list view
  */
 export interface ListColumn {
-  /** Column key (property name) */
+  /** Column key (property name for accessing record values) */
   key: string;
+  /** Column name (database column name for policy checks) */
+  name?: string;
   /** Display label */
   label: string;
   /** Format function for cell value */
@@ -76,6 +79,12 @@ function defaultFormat(
     return value ? '✓' : '✗';
   }
   if (typeof value === 'object') {
+    // Check if this is a file reference
+    if (isValidFileReference(value)) {
+      return `<span class="cms-file-badge" title="${
+        escapeHtml(value.contentType)
+      }">📄 ${escapeHtml(value.filename)}</span>`;
+    }
     return '<span class="cms-json">[JSON]</span>';
   }
   return escapeHtml(String(value));

@@ -6,12 +6,15 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import { hashPassword } from '@drizzle-cms/handlers';
+import type { FileReference } from '@drizzle-cms/core';
 import { parseMarkdown } from './lib/markdown.ts';
+import { sanitizeHtml } from './lib/sanitize.ts';
 
 import {
   adminUsers,
   authors,
   categories,
+  media,
   pages,
   posts,
   schema,
@@ -28,6 +31,21 @@ const client = new PGlite('./data');
 const db = drizzle(client, { schema });
 
 // ─────────────────────────────────────────────────────────────
+// Clear Existing Data
+// ─────────────────────────────────────────────────────────────
+
+console.log('🧹 Clearing existing data...');
+
+// Drop tables in reverse dependency order to avoid foreign key conflicts
+await db.execute(sql`DROP TABLE IF EXISTS posts CASCADE`);
+await db.execute(sql`DROP TABLE IF EXISTS pages CASCADE`);
+await db.execute(sql`DROP TABLE IF EXISTS settings CASCADE`);
+await db.execute(sql`DROP TABLE IF EXISTS admin_users CASCADE`);
+await db.execute(sql`DROP TABLE IF EXISTS categories CASCADE`);
+await db.execute(sql`DROP TABLE IF EXISTS media CASCADE`);
+await db.execute(sql`DROP TABLE IF EXISTS authors CASCADE`);
+
+// ─────────────────────────────────────────────────────────────
 // Create Tables
 // ─────────────────────────────────────────────────────────────
 
@@ -40,6 +58,16 @@ await db.execute(sql`
     slug VARCHAR(100) NOT NULL UNIQUE,
     email VARCHAR(255) NOT NULL UNIQUE,
     bio TEXT,
+    created_at TIMESTAMP DEFAULT NOW() NOT NULL
+  )
+`);
+
+await db.execute(sql`
+  CREATE TABLE IF NOT EXISTS media (
+    id SERIAL PRIMARY KEY,
+    file JSONB,
+    alt TEXT,
+    caption TEXT,
     created_at TIMESTAMP DEFAULT NOW() NOT NULL
   )
 `);
@@ -160,6 +188,55 @@ const authorJane = author1 ??
   authorList.find((a) => a.slug === 'jane-developer');
 const authorAlex = author2 ?? authorList.find((a) => a.slug === 'alex-writer');
 
+// Media items
+const [media1] = await db.insert(media).values({
+  file: {
+    key: 'demo/hono-logo.png',
+    filename: 'hono-logo.png',
+    contentType: 'image/png',
+    size: 87,
+    // 20x20 orange PNG placeholder - base64 encoded
+    data:
+      'iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAHklEQVR42mP438Dwn5qYYdTAUQNHDRw1cNTAkWogAE/x5Q5+gLGvAAAAAElFTkSuQmCC',
+  },
+  alt: 'Hono framework logo',
+  caption: 'The lightweight web framework that works everywhere',
+}).onConflictDoNothing().returning();
+
+const [media2] = await db.insert(media).values({
+  file: {
+    key: 'demo/drizzle-logo.png',
+    filename: 'drizzle-logo.png',
+    contentType: 'image/png',
+    size: 86,
+    // 20x20 blue PNG placeholder - base64 encoded
+    data:
+      'iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAHUlEQVR42mNgqPj/n6p41MBRA0cNHDVw1MCRaiAAnUzYjujdTh0AAAAASUVORK5CYII=',
+  },
+  alt: 'Drizzle ORM logo',
+  caption: 'TypeScript ORM that feels like magic',
+}).onConflictDoNothing().returning();
+
+const [media3] = await db.insert(media).values({
+  file: {
+    key: 'demo/deno-logo.svg',
+    filename: 'deno-logo.svg',
+    contentType: 'image/svg+xml',
+    size: 387,
+    // Base64 blob stored in 'data' field - will be served via /admin/files/media/file/:id
+    data:
+      'PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NSIgZmlsbD0iIzAwMDAwMCIvPgogIDxjaXJjbGUgY3g9IjM1IiBjeT0iNDAiIHI9IjUiIGZpbGw9IiNmZmZmZmYiLz4KICA8Y2lyY2xlIGN4PSI2NSIgY3k9IjQwIiByPSI1IiBmaWxsPSIjZmZmZmZmIi8+CiAgPHBhdGggZD0iTSAzMCA3MCBRIDU0IDg1IDc4IDcwIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIvPgo8L3N2Zz4=',
+  },
+  alt: 'Deno runtime logo',
+  caption: 'A modern runtime for JavaScript and TypeScript',
+}).onConflictDoNothing().returning();
+
+// Use existing media if insert was skipped
+const mediaList = await db.select().from(media);
+const honoLogo = media1 ?? mediaList[0];
+const drizzleLogo = media2 ?? mediaList[1];
+const denoLogo = media3 ?? mediaList[2];
+
 // Categories
 const [catTutorials] = await db.insert(categories).values({
   name: 'Tutorials',
@@ -201,8 +278,16 @@ function postData(data: {
 }) {
   return {
     ...data,
-    contentHtml: parseMarkdown(data.content),
+    contentHtml: sanitizeHtml(parseMarkdown(data.content)),
   };
+}
+
+/** Helper to get media URL - uses public file serving for database-stored files */
+function getMediaUrl(mediaItem: typeof media.$inferSelect): string {
+  const file: FileReference | null = mediaItem.file;
+  if (!file) return '';
+  if (file.data) return `/files/media/${mediaItem.id}`;
+  return file.url || '';
 }
 
 /** Helper to create page data with pre-rendered HTML */
@@ -215,12 +300,12 @@ function pageData(data: {
 }) {
   return {
     ...data,
-    contentHtml: parseMarkdown(data.content),
+    contentHtml: sanitizeHtml(parseMarkdown(data.content)),
   };
 }
 
 // Posts
-if (authorJane && tutorials) {
+if (authorJane && tutorials && honoLogo && drizzleLogo) {
   await db.insert(posts).values(postData({
     title: 'Getting Started with Hono and Drizzle',
     slug: 'getting-started-hono-drizzle',
@@ -229,6 +314,8 @@ if (authorJane && tutorials) {
     content:
       `Hono is a lightweight web framework that works everywhere - Deno, Node.js, Cloudflare Workers, and more. Combined with Drizzle ORM, you get a powerful stack for building modern web applications.
 
+![Hono Framework](${getMediaUrl(honoLogo)})
+
 In this tutorial, we'll walk through setting up a basic application with:
 
 - Hono for HTTP routing and middleware
@@ -236,6 +323,8 @@ In this tutorial, we'll walk through setting up a basic application with:
 - PGlite for a zero-config PostgreSQL database
 
 The beauty of this stack is its simplicity. Hono has zero dependencies, and Drizzle gives you full TypeScript support for your database operations.
+
+![Drizzle ORM](${getMediaUrl(drizzleLogo)})
 
 Let's start by creating a new project and installing our dependencies. With Deno, it's as simple as adding imports to your deno.json file.
 
@@ -278,7 +367,7 @@ Check out the documentation to get started, and let us know what you think.`,
   })).onConflictDoNothing();
 }
 
-if (authorJane && opinion) {
+if (authorJane && opinion && denoLogo) {
   await db.insert(posts).values(postData({
     title: 'Why I Chose Deno for My Next Project',
     slug: 'why-i-chose-deno',
@@ -286,6 +375,8 @@ if (authorJane && opinion) {
       'A personal reflection on choosing Deno over Node.js for a new web application.',
     content:
       `When starting a new project, one of the first decisions is choosing your runtime. For my latest project, I chose Deno, and I couldn't be happier.
+
+![Deno Runtime](${getMediaUrl(denoLogo)})
 
 Here's why Deno stood out:
 
@@ -433,7 +524,8 @@ console.log('');
 console.log('📊 Created:');
 console.log('   - 3 categories (Tutorials, News, Opinion)');
 console.log('   - 2 authors (Jane Developer, Alex Writer)');
-console.log('   - 4 published posts + 1 draft');
+console.log('   - 3 media items (Hono, Drizzle, Deno logos)');
+console.log('   - 4 published posts + 1 draft (some with media references)');
 console.log('   - 2 pages (About, Contact)');
 console.log('   - 3 site settings');
 console.log('   - 1 admin user');

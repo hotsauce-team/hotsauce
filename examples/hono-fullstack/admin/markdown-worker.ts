@@ -4,7 +4,7 @@
  * Converts markdown `content` to HTML `contentHtml` at save time.
  * Runs in an isolated Web Worker for demonstration purposes.
  *
- * Uses vendored snarkdown parser (inline) - zero dependencies.
+ * Uses a small markdown parser (micromark) + an allowlist sanitizer.
  */
 
 /// <reference lib="webworker" />
@@ -64,12 +64,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
 
         // Always sync contentHtml when content field exists
         if (typeof data.content === 'string') {
-          const trimmed = data.content.trim();
-          // Parse markdown then sanitize to prevent XSS
-          const unsafeHtml = trimmed ? parseMarkdown(data.content) : '';
           result = {
             ...data,
-            contentHtml: sanitizeHtml(unsafeHtml),
+            contentHtml: sanitizeHtml(parseMarkdown(data.content)),
           } as Serializable;
         } else {
           result = data as Serializable;

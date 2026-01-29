@@ -7,7 +7,7 @@ A complete blog site with a server-rendered public frontend (Hono) and a headles
 - **Public Blog** - Server-rendered pages using Hono and template literals
 - **CMS Admin** - Full admin interface powered by drizzle-cms
 - **Shared Database** - Both frontend and admin use the same Drizzle schema
-- **Zero Extra Dependencies** - Hono has no dependencies, templates use `@drizzle-cms/ui`
+- **Minimal Dependencies** - Hono via JSR + a small markdown parser for the example plugin
 
 ## Architecture
 
@@ -85,7 +85,7 @@ examples/hono-fullstack/
 │   └── markdown-worker.ts # Worker plugin for markdown
 │
 ├── lib/            # Shared code (used by admin + site)
-│   ├── markdown.ts # Vendored snarkdown parser
+│   ├── markdown.ts # Markdown parser wrapper (micromark)
 │   ├── sanitize.ts # Allowlist HTML sanitizer (XSS prevention)
 │   └── sanitize_test.ts # Sanitizer test suite
 │
@@ -100,20 +100,20 @@ examples/hono-fullstack/
 
 ### File Responsibilities
 
-| File                       | Used By    | Purpose                            |
-| -------------------------- | ---------- | ---------------------------------- |
-| `server.ts`                | Both       | Entry point, combines site + admin |
-| `security.ts`              | Server     | CSP middleware                     |
-| `db.ts`                    | Both       | Database connection                |
-| `schema.ts`                | Both       | Drizzle tables & relations         |
-| `admin/admin.ts`           | Admin only | CMS handler configuration          |
-| `admin/markdown-worker.ts` | Admin only | Markdown Worker plugin             |
-| `lib/markdown.ts`          | Both       | Vendored snarkdown parser          |
-| `lib/sanitize.ts`          | Both       | Allowlist HTML sanitizer           |
-| `site/routes.ts`           | Site only  | Public page routes                 |
-| `site/templates.ts`        | Site only  | HTML rendering                     |
-| `site/static/styles.css`   | Site only  | Stylesheet                         |
-| `seed.ts`                  | Setup      | Initial data population            |
+| File                       | Used By    | Purpose                             |
+| -------------------------- | ---------- | ----------------------------------- |
+| `server.ts`                | Both       | Entry point, combines site + admin  |
+| `security.ts`              | Server     | CSP middleware                      |
+| `db.ts`                    | Both       | Database connection                 |
+| `schema.ts`                | Both       | Drizzle tables & relations          |
+| `admin/admin.ts`           | Admin only | CMS handler configuration           |
+| `admin/markdown-worker.ts` | Admin only | Markdown Worker plugin              |
+| `lib/markdown.ts`          | Both       | Markdown parser wrapper (micromark) |
+| `lib/sanitize.ts`          | Both       | Allowlist HTML sanitizer            |
+| `site/routes.ts`           | Site only  | Public page routes                  |
+| `site/templates.ts`        | Site only  | HTML rendering                      |
+| `site/static/styles.css`   | Site only  | Stylesheet                          |
+| `seed.ts`                  | Setup      | Initial data population             |
 
 ## Security
 
@@ -124,13 +124,16 @@ The site uses a strict Content Security Policy (CSP) that:
 - **Same-origin forms** — Form submissions restricted to same origin
 - **No iframes** — Cannot be embedded in other sites
 
-The CSP middleware in [security.ts](security.ts) applies to all site routes but **skips `/admin/*`** since drizzle-cms uses inline styles.
+The CSP middleware in [security.ts](security.ts) applies to all public site routes but **skips `/admin/*`** to avoid overriding drizzle-cms response headers.
+
+This example also includes a **public** media route (`GET /files/media/:id`) for rendering images/files on the public site.
+It’s separate from drizzle-cms’s protected file route (`GET {basePath}/files/{table}/{column}/{id}`), which enforces auth + row/column policies.
 
 ## Markdown Rendering
 
 Markdown is rendered to HTML **at save time** using a CMS Worker plugin, not at read time:
 
-1. **Vendored parser** — [lib/markdown.ts](lib/markdown.ts) contains a vendored copy of [snarkdown](https://github.com/developit/snarkdown) (~100 lines, zero dependencies)
+1. **Markdown parser** — [lib/markdown.ts](lib/markdown.ts) wraps `micromark` to render markdown to HTML
 2. **HTML sanitizer** — [lib/sanitize.ts](lib/sanitize.ts) uses an allowlist approach (like WordPress wp_kses) to prevent XSS
 3. **Worker isolation** — Plugin runs in a Web Worker with limited permissions for security
 4. **CMS plugin** — `beforeSave` transform populates `contentHtml` column automatically
@@ -149,8 +152,7 @@ The sanitizer uses an allowlist approach:
 This approach:
 
 - Parses markdown once (not on every page view)
-- Avoids supply chain risk (no npm dependencies)
-- Keeps the parser auditable (~100 lines of code)
+- Keeps the rendering logic easy to audit (simple wrapper + sanitizer)
 - Demonstrates Worker plugin pattern for isolation
 
 ## Schema
@@ -234,6 +236,8 @@ Edit `site/static/styles.css` to customize the appearance. The CSS file is serve
 ### Adding HTMX
 
 For interactive features without a full SPA, add HTMX:
+
+> Note: This example's default CSP uses `script-src 'none'`, so enabling HTMX (or any client-side JS) requires relaxing the CSP in `security.ts`.
 
 ```typescript
 // In site/templates.ts layout()

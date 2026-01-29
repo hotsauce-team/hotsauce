@@ -1,6 +1,6 @@
 // Tests for the main handler
 
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals } from '@std/assert';
 import { createCmsHandler } from '../mod.ts';
 import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
 

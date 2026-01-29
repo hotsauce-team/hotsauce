@@ -1,3 +1,4 @@
+// deno-lint-ignore-file no-control-regex
 /**
  * HTML Sanitizer - Allowlist-based XSS prevention
  *

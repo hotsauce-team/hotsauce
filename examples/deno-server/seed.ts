@@ -10,6 +10,15 @@ const db = drizzle(client);
 
 console.log('🌱 Seeding database...');
 
+// Clear existing data - drop tables in reverse dependency order
+console.log('🧹 Clearing existing data...');
+await client.exec(`
+  DROP TABLE IF EXISTS post_categories CASCADE;
+  DROP TABLE IF EXISTS posts CASCADE;
+  DROP TABLE IF EXISTS categories CASCADE;
+  DROP TABLE IF EXISTS users CASCADE;
+`);
+
 // Create tables (simple DDL)
 await client.exec(`
   CREATE TABLE IF NOT EXISTS users (
@@ -87,7 +96,18 @@ await db.insert(users).values([
     },
     bio: 'Developer',
   },
-  { name: 'Carol White', email: 'carol@example.com' },
+  {
+    name: 'Carol White',
+    email: 'carol@example.com',
+    avatar: {
+      // Inline base64 image (1x1 purple pixel PNG) - served from /admin/files/users/avatar/{id}
+      filename: 'carol-avatar.png',
+      contentType: 'image/png',
+      size: 70,
+      data:
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==',
+    },
+  },
 ]).onConflictDoNothing();
 console.log('👤 Admin user created: admin@example.com / admin123');
 

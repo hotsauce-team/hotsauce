@@ -107,6 +107,7 @@ Individual input components for different field types.
 | `checkboxListInput(opts)`              | Many-to-many checkboxes      |
 | `uuidInput(opts)`                      | UUID with pattern validation |
 | `jsonInput(opts)`                      | JSON textarea                |
+| `fileInput(opts)`                      | File upload input + preview  |
 | `hiddenInput(opts)`                    | Hidden field                 |
 | `renderFieldInput(field, value, opts)` | Auto-routes to correct input |
 | `formField(field, value, opts)`        | Field with label and wrapper |
@@ -133,6 +134,14 @@ selectInput({
 // Full field with label
 formField(cmsField, record.title, { relationOptions });
 ```
+
+#### File inputs
+
+For fields marked as file fields (via `@drizzle-cms/core` `$cms({ file: true })` metadata), the UI renders:
+
+- An `<input type="file">` with an `accept` attribute (when available)
+- A preview for existing values (data URL or external `url`)
+- A “Clear” button that submits a `_clear_<propertyName>` flag so the handlers can remove the file reference on update
 
 ### `views/` - Page Templates
 

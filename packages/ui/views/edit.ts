@@ -17,6 +17,8 @@ export interface EditViewOptions {
   action?: string;
   /** CSRF token to embed in form */
   csrfToken?: string;
+  /** Enable multipart form data (for file uploads) */
+  multipart?: boolean;
   /** Additional CSS classes */
   class?: string;
 }
@@ -75,6 +77,7 @@ export function editView(
           cancelUrl: options.baseUrl,
           class: 'cms-edit-form',
           csrfToken: options.csrfToken,
+          multipart: options.multipart,
         },
         values,
         errors,

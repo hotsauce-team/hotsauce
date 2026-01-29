@@ -4,7 +4,14 @@ import { Hono } from 'hono';
 import { and, desc, eq, sql } from 'drizzle-orm';
 
 import type { Database } from '../db.ts';
-import { authors, categories, pages, posts, settings } from '../schema.ts';
+import {
+  authors,
+  categories,
+  media,
+  pages,
+  posts,
+  settings,
+} from '../schema.ts';
 
 import {
   type AuthorDetail,
@@ -93,7 +100,7 @@ export function createSiteRoutes(db: Database): Hono {
   /**
    * Homepage - list recent published posts
    */
-  app.get('/', async (c) => {
+  app.get('/', async (_c) => {
     const postList = await db.query.posts.findMany({
       where: eq(posts.published, true),
       orderBy: desc(posts.createdAt),
@@ -244,7 +251,7 @@ export function createSiteRoutes(db: Database): Hono {
   /**
    * Categories index page
    */
-  app.get('/categories', async (c) => {
+  app.get('/categories', async (_c) => {
     const categoryList = await db
       .select({
         id: categories.id,
@@ -272,6 +279,41 @@ export function createSiteRoutes(db: Database): Hono {
     const content = categoriesPage(categoriesWithCount);
     const html = await renderPage(db, content, 'Categories');
     return htmlResponse(html);
+  });
+
+  /**
+   * Public file serving for media
+   */
+  app.get('/files/media/:id', async (c) => {
+    const [item] = await db.select().from(media).where(
+      eq(media.id, parseInt(c.req.param('id'))),
+    ).limit(1);
+    if (!item?.file?.data) return c.notFound();
+
+    const bytes = Uint8Array.from(atob(item.file.data), (c) => c.charCodeAt(0));
+    const contentType = (item.file.contentType || 'application/octet-stream')
+      .toLowerCase();
+    const filename = item.file.filename || 'file';
+
+    // Serve images inline except SVG, which can be scriptable when opened directly.
+    const isImage = contentType.startsWith('image/');
+    const isSvg = contentType === 'image/svg+xml' ||
+      contentType.endsWith('+svg');
+    const disposition = isImage && !isSvg ? 'inline' : 'attachment';
+
+    return new Response(bytes, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': `${disposition}; filename="${
+          encodeURIComponent(filename)
+        }"`,
+        'Content-Security-Policy':
+          "default-src 'none'; img-src 'self' data:; style-src 'none'; script-src 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+      },
+    });
   });
 
   /**

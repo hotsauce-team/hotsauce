@@ -1,6 +1,11 @@
 // Response helpers and form parsing utilities
 
 import type { IntrospectedColumn } from '@drizzle-cms/core';
+import {
+  FILE_DEFAULT_ACCEPT,
+  FILE_DEFAULT_MAX_SIZE,
+  type FileReference,
+} from '@drizzle-cms/core';
 import { escapeHtml } from '@drizzle-cms/ui';
 
 /**
@@ -244,6 +249,153 @@ export async function parseFormData(
   }
 
   return result;
+}
+
+/**
+ * Result of parsing multipart form data with file columns
+ */
+export interface ParsedMultipartData {
+  /** String form fields (same as parseFormData) */
+  fields: Record<string, string | string[]>;
+  /** Parsed file references keyed by field name */
+  files: Record<string, FileReference>;
+  /** Validation errors keyed by field name */
+  errors: Record<string, string>;
+}
+
+/**
+ * Parse multipart form data including file uploads.
+ * Converts uploaded files to FileReference objects with base64 data.
+ *
+ * @param request The incoming request
+ * @param fileColumns Columns that are file fields (have cmsOptions.file: true)
+ */
+export async function parseMultipartFormData(
+  request: Request,
+  fileColumns: IntrospectedColumn[],
+): Promise<ParsedMultipartData> {
+  const formData = await request.formData();
+  const fields: Record<string, string | string[]> = {};
+  const files: Record<string, FileReference> = {};
+  const errors: Record<string, string> = {};
+
+  // Build lookup for file columns by property name
+  const fileColumnMap = new Map(
+    fileColumns.map((col) => [col.propertyName, col]),
+  );
+
+  for (const [key, value] of formData.entries()) {
+    if (value instanceof File) {
+      // Check if this is a file column
+      const column = fileColumnMap.get(key);
+      if (!column) {
+        // Not a known file column, skip
+        continue;
+      }
+
+      // Skip empty file inputs (user didn't select a file)
+      if (!value.name || value.size === 0) {
+        continue;
+      }
+
+      // Get column options
+      const cmsOptions = column.cmsOptions ?? {};
+      const maxSize = cmsOptions.maxSize ?? FILE_DEFAULT_MAX_SIZE;
+      const accept = cmsOptions.accept ?? FILE_DEFAULT_ACCEPT;
+
+      // Validate file size
+      if (value.size > maxSize) {
+        const maxSizeKb = Math.round(maxSize / 1000);
+        errors[key] = `File too large. Maximum size is ${maxSizeKb}KB.`;
+        continue;
+      }
+
+      // Validate content type against accept pattern
+      if (!matchesAcceptPattern(value.type, accept)) {
+        errors[key] = `Invalid file type. Accepted: ${accept}`;
+        continue;
+      }
+
+      // Read file and convert to base64
+      try {
+        const arrayBuffer = await value.arrayBuffer();
+        const base64 = arrayBufferToBase64(arrayBuffer);
+
+        files[key] = {
+          filename: value.name,
+          contentType: value.type || 'application/octet-stream',
+          size: value.size,
+          data: base64,
+        };
+      } catch {
+        errors[key] = 'Failed to read file.';
+      }
+    } else {
+      // Regular form field
+      const existing = fields[key];
+      if (existing !== undefined) {
+        if (Array.isArray(existing)) {
+          existing.push(value);
+        } else {
+          fields[key] = [existing, value];
+        }
+      } else {
+        fields[key] = value;
+      }
+    }
+  }
+
+  return { fields, files, errors };
+}
+
+/**
+ * Check if a MIME type matches an accept pattern
+ * Supports wildcards like 'image/*' and exact matches
+ */
+export function matchesAcceptPattern(
+  mimeType: string,
+  accept: string,
+): boolean {
+  if (accept === '*/*') return true;
+
+  const patterns = accept.split(',').map((p) => p.trim().toLowerCase());
+  const type = mimeType.toLowerCase();
+
+  for (const pattern of patterns) {
+    if (pattern === type) return true;
+    if (pattern.endsWith('/*')) {
+      const prefix = pattern.slice(0, -1); // 'image/' from 'image/*'
+      if (type.startsWith(prefix)) return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Convert ArrayBuffer to base64 string.
+ * Thin wrapper around btoa() for ArrayBuffer input.
+ */
+export function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i]!);
+  }
+  return btoa(binary);
+}
+
+/**
+ * Decode base64 to Uint8Array.
+ * Thin wrapper around atob() returning Uint8Array.
+ */
+export function base64ToUint8Array(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 /**

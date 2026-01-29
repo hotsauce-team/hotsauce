@@ -2,6 +2,8 @@
 // CRUD route handlers using Web Standard Request/Response
 // Works with Deno, Node 20+, Bun, Cloudflare Workers
 
+import { eq, sql, type Table } from 'drizzle-orm';
+
 import type {
   CmsOptions,
   Handler,
@@ -10,16 +12,21 @@ import type {
   RouteContext,
 } from './types.ts';
 import type { Policies } from './policies/types.ts';
-import { introspectFullSchema } from '@drizzle-cms/core';
+import { introspectFullSchema, isValidFileReference } from '@drizzle-cms/core';
 import { parseRoute, resolveAction } from './router.ts';
 import {
+  base64ToUint8Array,
   forbidden,
   methodNotAllowed,
   notFound,
   SECURITY_HEADERS,
 } from './http.ts';
 import { generateCsrfToken, validateCsrfToken } from './csrf.ts';
-import { validateCmsOptions, validateResolvedSecrets } from './validation.ts';
+import {
+  validateCmsOptions,
+  validateFileColumns,
+  validateResolvedSecrets,
+} from './validation.ts';
 import { getEnv } from './runtime-compat.ts';
 import { createPluginRegistry } from './plugins/registry.ts';
 import { createPluginService } from './plugins/service.ts';
@@ -40,6 +47,13 @@ import {
   getTokenFromCookies,
   isSecureRequest,
 } from './auth/cookies.ts';
+import {
+  applyPolicy,
+  createPolicyContext,
+  evaluateColumnPolicies,
+  extractColumnPolicies,
+  extractRowPolicy,
+} from './policies/mod.ts';
 import type { JwtPayload } from './auth/jwt.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -70,6 +84,7 @@ export {
   CmsOptionsSchema,
   ResolvedSecretsSchema,
   validateCmsOptions,
+  validateFileColumns,
   validateResolvedSecrets,
 } from './validation.ts';
 
@@ -108,9 +123,10 @@ export {
 // ─────────────────────────────────────────────────────────────
 // Utils - Response helpers and form parsing
 // ─────────────────────────────────────────────────────────────
-export type { FlashCode } from './http.ts';
+export type { FlashCode, ParsedMultipartData } from './http.ts';
 
 export {
+  base64ToUint8Array,
   buildUrl,
   coerceFormValues,
   coerceValue,
@@ -123,6 +139,7 @@ export {
   notFound,
   parseFlashFromUrl,
   parseFormData,
+  parseMultipartFormData,
   redirect,
   redirectWithFlash,
 } from './http.ts';
@@ -273,7 +290,6 @@ export {
  * Plugin authors: `if (globalThis.__CMS_MAIN_PROCESS__) throw new Error('Worker only');`
  */
 declare global {
-  // deno-lint-ignore no-var
   var __CMS_MAIN_PROCESS__: boolean | undefined;
 }
 
@@ -307,6 +323,9 @@ export function createCmsHandler(options: CmsOptions): Handler {
     ? options
       .schema as unknown as import('@drizzle-cms/core').IntrospectedSchema
     : introspectFullSchema(options.schema);
+
+  // Validate file column configurations (file: true must be on JSON columns)
+  validateFileColumns(introspected);
 
   // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
   const resolvedPolicies: Policies | undefined =
@@ -579,6 +598,29 @@ export function createCmsHandler(options: CmsOptions): Handler {
     // Regular CMS routes
     // ─────────────────────────────────────────────────────────────
 
+    // Handle file serving at {basePath}/files/{table}/{column}/{id}
+    const filesPrefix = `${opts.basePath}/files/`;
+    if (pathname.startsWith(filesPrefix) && request.method === 'GET') {
+      const filePath = pathname.slice(filesPrefix.length);
+      const parts = filePath.split('/');
+
+      if (parts.length === 3) {
+        const [tableName, columnName, recordId] = parts as [
+          string,
+          string,
+          string,
+        ];
+        return handleFileServing(
+          opts,
+          tableName,
+          columnName,
+          recordId,
+          request,
+          jwtPayload,
+        );
+      }
+    }
+
     // Parse the route
     const route = parseRoute(url, opts.basePath, opts.introspected.tables);
 
@@ -662,4 +704,165 @@ export function createCmsHandler(options: CmsOptions): Handler {
       });
     }
   };
+}
+
+/**
+ * Serve a file stored in a JSON column
+ *
+ * Route: GET {basePath}/files/{table}/{column}/{id}
+ *
+ * Respects row and column policies - only serves files the user can read.
+ */
+async function handleFileServing(
+  options: ResolvedCmsOptions,
+  tableName: string,
+  columnName: string,
+  recordId: string,
+  request: Request,
+  jwtPayload: JwtPayload | null,
+): Promise<Response> {
+  // Find the table
+  const table = options.introspected.tables.find((t) => t.name === tableName);
+  if (!table) {
+    return notFound('Table not found');
+  }
+
+  // Find the column
+  const column = table.columns.find((c) => c.propertyName === columnName);
+  if (!column) {
+    return notFound('Column not found');
+  }
+
+  // Verify this is a file column
+  if (!column.cmsOptions?.file) {
+    return notFound('Not a file column');
+  }
+
+  // Apply policies
+  const tablePolicy = options.policies?.[table.name];
+  const rowPolicy = extractRowPolicy(tablePolicy);
+  const columnPolicies = extractColumnPolicies(tablePolicy);
+
+  const authUser = jwtPayload
+    ? { id: jwtPayload.sub, role: jwtPayload.role }
+    : undefined;
+  const policyCtx = createPolicyContext(request, authUser);
+
+  // Check row read policy
+  const policyResult = await applyPolicy(rowPolicy, policyCtx, 'read');
+  if (!policyResult.allowed) {
+    return forbidden('Access denied');
+  }
+
+  // Check column read policy
+  const columnResult = await evaluateColumnPolicies(
+    columnPolicies,
+    table.columns,
+    policyCtx,
+  );
+  if (!columnResult.readableColumns.includes(column.name)) {
+    return forbidden('Access denied to this column');
+  }
+
+  // Fetch the record
+  const drizzleTable = table.table as Table;
+  const pkColumn = table.columns.find((c) => c.isPrimaryKey);
+  if (!pkColumn) {
+    return notFound('Table has no primary key');
+  }
+
+  // deno-lint-ignore no-explicit-any
+  const pkField = (drizzleTable as any)[pkColumn.propertyName];
+  const coercedId = pkColumn.dataType === 'number'
+    ? parseInt(recordId, 10)
+    : recordId;
+
+  const result = await options.db
+    .select()
+    .from(drizzleTable)
+    .where(
+      policyResult.condition
+        ? sql`${policyResult.condition} AND ${eq(pkField, coercedId)}`
+        : eq(pkField, coercedId),
+    )
+    .limit(1);
+
+  if (result.length === 0) {
+    return notFound('Record not found');
+  }
+
+  const record = result[0] as Record<string, unknown>;
+  const fileData = record[columnName];
+
+  // Validate file reference
+  if (!isValidFileReference(fileData)) {
+    return notFound('No file found');
+  }
+
+  // If file has a URL (e.g., from S3 plugin), redirect to it
+  if (fileData.url) {
+    // Avoid open redirects / unsafe protocols (e.g., javascript:)
+    try {
+      const redirectUrl = new URL(fileData.url);
+      if (
+        redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:'
+      ) {
+        return forbidden('Invalid file URL');
+      }
+    } catch {
+      return forbidden('Invalid file URL');
+    }
+
+    return new Response(null, {
+      status: 302,
+      headers: {
+        'Location': fileData.url,
+        ...SECURITY_HEADERS,
+        'Cache-Control': 'private, max-age=3600',
+      },
+    });
+  }
+
+  // If file has base64 data, serve it directly
+  if (fileData.data) {
+    const bytes = base64ToUint8Array(fileData.data);
+    // Ensure we have an ArrayBuffer-backed view (not SharedArrayBuffer)
+    // to satisfy Deno's lib type expectations for BlobPart.
+    const safeBytes = new Uint8Array(bytes);
+
+    const contentType = (fileData.contentType || 'application/octet-stream')
+      .toLowerCase();
+    // Serve images inline except SVG, which can be scriptable when opened directly.
+    const isImage = contentType.startsWith('image/');
+    const isSvg = contentType === 'image/svg+xml' ||
+      contentType.endsWith('+svg');
+    const disposition = isImage && !isSvg ? 'inline' : 'attachment';
+
+    // Much stricter CSP for file responses to mitigate scriptable content
+    // if a browser decides to treat it as a document.
+    const fileSecurityHeaders: Record<string, string> = {
+      'Content-Security-Policy':
+        "default-src 'none'; img-src 'self' data:; style-src 'none'; script-src 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    };
+
+    const body = new Blob([safeBytes], { type: contentType });
+    return new Response(body, {
+      status: 200,
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': String(safeBytes.length),
+        'Content-Disposition': `${disposition}; filename="${
+          encodeURIComponent(fileData.filename)
+        }"`,
+        ...fileSecurityHeaders,
+        'Cache-Control': 'private, max-age=3600',
+      },
+    });
+  }
+
+  // File has no data or URL
+  return notFound('File data not available');
 }

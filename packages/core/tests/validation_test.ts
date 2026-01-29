@@ -1,6 +1,6 @@
 // Tests for Zod validation schema generation (via drizzle-zod)
 
-import { assertEquals } from 'jsr:@std/assert';
+import { assertEquals } from '@std/assert';
 import { z } from 'zod/v4';
 import { createInsertSchema, createSelectSchema } from '../validation/zod.ts';
 import * as pgSchema from './fixtures/schema-pg.ts';

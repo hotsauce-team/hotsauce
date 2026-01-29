@@ -226,6 +226,43 @@ const values = coerceFormValues(formData, table.columns);
 // { title: 'Hello', published: true, authorId: 1 }
 ```
 
+### File uploads (MVP)
+
+File uploads are supported by storing a JSON `FileReference` object in a column that is marked as a file field via `$cms({ file: true })`.
+
+- Storage: uploaded bytes are converted to base64 and stored in the JSON field (as `data`).
+- Validation: controlled per-column via `$cms({ accept, maxSize })` (with sensible defaults).
+- Forms: the admin automatically switches to `multipart/form-data` when a table has file columns.
+- Clearing: file inputs can be cleared on update via a `_clear_<propertyName>` field.
+
+**Schema example (Postgres):**
+
+```ts
+import '@drizzle-cms/core/extend';
+import { jsonb, pgTable, text } from 'drizzle-orm/pg-core';
+import type { FileReference } from '@drizzle-cms/core';
+
+export const users = pgTable('users', {
+  id: text('id').primaryKey(),
+  avatar: jsonb('avatar')
+    .$type<FileReference>()
+    .$cms({ file: true, accept: 'image/*', maxSize: 200_000 }),
+});
+```
+
+**File serving route:**
+
+The handler exposes a read-only route that serves file fields:
+
+- `GET {basePath}/files/{table}/{column}/{id}`
+
+Access is still filtered through auth + row/column policies.
+
+Notes:
+
+- If the stored `FileReference` includes a `url`, the handler redirects (only to safe URL protocols).
+- If the stored `FileReference` includes `data` (base64), the handler serves the bytes with security headers (including `X-Content-Type-Options: nosniff`).
+
 ### `csrf.ts` - CSRF Protection
 
 | Export                             | Purpose                                           |

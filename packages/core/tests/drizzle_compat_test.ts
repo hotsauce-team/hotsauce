@@ -1,8 +1,9 @@
+// deno-lint-ignore-file no-explicit-any no-console
 // Test: Drizzle ORM Compatibility
 // These tests verify our assumptions about Drizzle internals remain valid.
 // If these fail after a Drizzle upgrade, our prototype extensions may be broken.
 
-import { assertEquals, assertExists } from 'jsr:@std/assert';
+import { assertEquals, assertExists } from '@std/assert';
 import { getTableColumns, getTableName, is, Table } from 'drizzle-orm';
 
 // ============================================================================
