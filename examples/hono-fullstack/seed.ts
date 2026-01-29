@@ -194,10 +194,10 @@ const [media1] = await db.insert(media).values({
     key: 'demo/hono-logo.png',
     filename: 'hono-logo.png',
     contentType: 'image/png',
-    size: 85,
-    // 1x1 orange PNG placeholder - base64 encoded
+    size: 87,
+    // 20x20 orange PNG placeholder - base64 encoded
     data:
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFBQIB6RNjjQAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAHklEQVR42mP438Dwn5qYYdTAUQNHDRw1cNTAkWogAE/x5Q5+gLGvAAAAAElFTkSuQmCC',
   },
   alt: 'Hono framework logo',
   caption: 'The lightweight web framework that works everywhere',
@@ -208,10 +208,10 @@ const [media2] = await db.insert(media).values({
     key: 'demo/drizzle-logo.png',
     filename: 'drizzle-logo.png',
     contentType: 'image/png',
-    size: 85,
-    // 1x1 blue PNG placeholder - base64 encoded
+    size: 86,
+    // 20x20 blue PNG placeholder - base64 encoded
     data:
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABBAEAW9JJQQAAAABJRU5ErkJggg==',
+      'iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAHUlEQVR42mNgqPj/n6p41MBRA0cNHDVw1MCRaiAAnUzYjujdTh0AAAAASUVORK5CYII=',
   },
   alt: 'Drizzle ORM logo',
   caption: 'TypeScript ORM that feels like magic',
