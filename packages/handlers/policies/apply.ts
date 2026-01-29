@@ -376,7 +376,9 @@ export async function evaluateColumnPolicies(
   const defaults: Record<string, unknown> = {};
 
   for (const col of columns) {
-    const policy = columnPolicies?.[col.name];
+    // Policy keys use propertyName (camelCase) for developer ergonomics
+    // e.g., policies are defined as { authorId: {...} } not { author_id: {...} }
+    const policy = columnPolicies?.[col.propertyName];
 
     // No policy = full access
     if (!policy) {
@@ -415,8 +417,9 @@ export async function evaluateColumnPolicies(
     }
 
     // Collect default value for hidden/non-writable columns
+    // Use propertyName as key since defaults are merged with form data (which uses property names)
     if (!canWrite && policy.default) {
-      defaults[col.name] = await policy.default(ctx);
+      defaults[col.propertyName] = await policy.default(ctx);
     }
   }
 
@@ -429,25 +432,40 @@ export async function evaluateColumnPolicies(
  * Used to strip hidden columns from query results before sending to UI.
  * This ensures sensitive data never leaves the handler layer.
  *
- * @param record - Full record from database
- * @param readableColumns - Columns the user can see
+ * @param record - Full record from database (with camelCase properties from Drizzle)
+ * @param readableColumns - Column names (snake_case DB column names)
+ * @param columns - Column metadata to map column names to property names
  * @returns Record with only readable columns
  *
  * @example
  * ```ts
- * const fullRecord = { id: 1, name: 'John', salary: 100000, ssn: '123-45-6789' };
- * const filtered = filterRecordColumns(fullRecord, ['id', 'name']);
- * // { id: 1, name: 'John' }
+ * const fullRecord = { id: 1, userName: 'John', salary: 100000, ssn: '123-45-6789' };
+ * const columns = [
+ *   { name: 'id', propertyName: 'id' },
+ *   { name: 'user_name', propertyName: 'userName' },
+ *   { name: 'salary', propertyName: 'salary' },
+ *   { name: 'ssn', propertyName: 'ssn' },
+ * ];
+ * const filtered = filterRecordColumns(fullRecord, ['id', 'user_name'], columns);
+ * // { id: 1, userName: 'John' }
  * ```
  */
 export function filterRecordColumns(
   record: Record<string, unknown>,
   readableColumns: string[],
+  columns: IntrospectedColumn[],
 ): Record<string, unknown> {
   const filtered: Record<string, unknown> = {};
-  for (const col of readableColumns) {
-    if (col in record) {
-      filtered[col] = record[col];
+
+  // Build map from column name to property name
+  const nameToProperty = new Map(
+    columns.map((col) => [col.name, col.propertyName]),
+  );
+
+  for (const colName of readableColumns) {
+    const propertyName = nameToProperty.get(colName);
+    if (propertyName && propertyName in record) {
+      filtered[propertyName] = record[propertyName];
     }
   }
   return filtered;
@@ -458,13 +476,15 @@ export function filterRecordColumns(
  *
  * @param records - Array of records from database
  * @param readableColumns - Columns the user can see
+ * @param columns - Column metadata to map column names to property names
  * @returns Records with only readable columns
  */
 export function filterRecordsColumns(
   records: Record<string, unknown>[],
   readableColumns: string[],
+  columns: IntrospectedColumn[],
 ): Record<string, unknown>[] {
-  return records.map((r) => filterRecordColumns(r, readableColumns));
+  return records.map((r) => filterRecordColumns(r, readableColumns, columns));
 }
 
 /**
@@ -481,9 +501,9 @@ export function filterRecordsColumns(
  * @example
  * ```ts
  * const formData = { name: 'New Post', title: 'Hello' };
- * const defaults = { tenant_id: 'tenant-123', created_by: 'user-456' };
+ * const defaults = { tenantId: 'tenant-123', createdBy: 'user-456' };
  * const merged = injectColumnDefaults(formData, defaults);
- * // { name: 'New Post', title: 'Hello', tenant_id: 'tenant-123', created_by: 'user-456' }
+ * // { name: 'New Post', title: 'Hello', tenantId: 'tenant-123', createdBy: 'user-456' }
  * ```
  */
 export function injectColumnDefaults(
@@ -548,8 +568,8 @@ export function validateHiddenRequiredColumns(
     const isWritable = columnResult.writableColumns.includes(col.name);
     if (isWritable) continue;
 
-    // Check if column has a policy default
-    const hasDefault = col.name in columnResult.defaults;
+    // Check if column has a policy default (defaults use propertyName as key)
+    const hasDefault = col.propertyName in columnResult.defaults;
     if (hasDefault) continue;
 
     // Required column is hidden without a default - this will fail on insert

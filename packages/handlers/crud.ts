@@ -219,7 +219,11 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
   // Filter records to only include readable columns (column-level security)
   // This ensures hidden columns never leave the handler layer
-  records = filterRecordsColumns(records, columnResult.readableColumns);
+  records = filterRecordsColumns(
+    records,
+    columnResult.readableColumns,
+    table.columns,
+  );
 
   // Execute afterRead transform for each record
   if (ctx.pluginService) {
@@ -245,7 +249,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
   // Build columns for list, filtered by readable columns
   const listColumns = getListColumns(table).filter(
-    (col) => columnResult.readableColumns.includes(col.key),
+    (col) => columnResult.readableColumns.includes(col.name ?? col.key),
   );
 
   // Fetch relation data for FK columns
@@ -366,6 +370,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const filteredRecord = filterRecordColumns(
     record,
     columnResult.readableColumns,
+    table.columns,
   );
 
   // Execute afterRead transform
@@ -855,6 +860,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   const filteredRecord = filterRecordColumns(
     record,
     columnResult.readableColumns,
+    table.columns,
   );
 
   // Execute afterRead transform before displaying form

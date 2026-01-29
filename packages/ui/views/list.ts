@@ -21,8 +21,10 @@ export interface ManyToManyDisplayData {
  * Column configuration for list view
  */
 export interface ListColumn {
-  /** Column key (property name) */
+  /** Column key (property name for accessing record values) */
   key: string;
+  /** Column name (database column name for policy checks) */
+  name?: string;
   /** Display label */
   label: string;
   /** Format function for cell value */

@@ -310,8 +310,9 @@ Deno.test('evaluateColumnPolicies: collects defaults for hidden columns', async 
   // deno-lint-ignore no-explicit-any
   (ctx.user as any).tenantId = 'tenant-123'; // Add custom claim for multi-tenant test
 
+  // Policy key uses propertyName (camelCase), not column name (snake_case)
   const columnPolicies: ColumnPolicies = {
-    tenant_id: {
+    tenantId: {
       read: () => false,
       // deno-lint-ignore no-explicit-any
       default: (ctx) => (ctx.user as any)?.tenantId ?? 'default',
@@ -320,7 +321,8 @@ Deno.test('evaluateColumnPolicies: collects defaults for hidden columns', async 
 
   const result = await evaluateColumnPolicies(columnPolicies, columns, ctx);
 
-  assertEquals(result.defaults['tenant_id'], 'tenant-123');
+  // Defaults also use propertyName as key (for form data merge compatibility)
+  assertEquals(result.defaults['tenantId'], 'tenant-123');
 });
 
 Deno.test('evaluateColumnPolicies: async policy functions work', async () => {
@@ -341,6 +343,48 @@ Deno.test('evaluateColumnPolicies: async policy functions work', async () => {
   assertEquals(result.readableColumns.includes('salary'), true);
 });
 
+Deno.test('evaluateColumnPolicies: uses propertyName NOT column name for policy lookup', async () => {
+  // This test explicitly verifies that policies are keyed by Drizzle's propertyName
+  // (camelCase) not the database column name (snake_case).
+  //
+  // The mock columns have: name='tenant_id', propertyName='tenantId'
+  // Policy should be keyed by 'tenantId' (propertyName), not 'tenant_id' (column name)
+
+  const columns = createMockColumns();
+  const ctx = createTestContext({ sub: 'user-1' });
+
+  // CORRECT: Policy keyed by propertyName
+  const correctPolicy: ColumnPolicies = {
+    tenantId: { read: () => false }, // propertyName
+  };
+
+  // WRONG: Policy keyed by column name (should have no effect)
+  const wrongPolicy: ColumnPolicies = {
+    tenant_id: { read: () => false }, // column name - won't match!
+  };
+
+  const correctResult = await evaluateColumnPolicies(
+    correctPolicy,
+    columns,
+    ctx,
+  );
+  const wrongResult = await evaluateColumnPolicies(wrongPolicy, columns, ctx);
+
+  // Using propertyName correctly hides the column
+  assertEquals(
+    correctResult.readableColumns.includes('tenant_id'),
+    false,
+    'Policy by propertyName should hide the column',
+  );
+
+  // Using column name does NOT hide the column (policy is ignored)
+  assertEquals(
+    wrongResult.readableColumns.includes('tenant_id'),
+    true,
+    'Policy by column name should be ignored (column stays visible)',
+  );
+});
+
 // ============================================================================
 // Filter helpers
 // ============================================================================
@@ -354,17 +398,62 @@ Deno.test('filterRecordColumns: keeps only readable columns', () => {
     ssn: '123-45-6789',
   };
 
-  const filtered = filterRecordColumns(record, ['id', 'name', 'email']);
+  // Mock column metadata (all columns use same name as propertyName for simplicity)
+  const columns: IntrospectedColumn[] = [
+    { name: 'id', propertyName: 'id' } as IntrospectedColumn,
+    { name: 'name', propertyName: 'name' } as IntrospectedColumn,
+    { name: 'email', propertyName: 'email' } as IntrospectedColumn,
+    { name: 'salary', propertyName: 'salary' } as IntrospectedColumn,
+    { name: 'ssn', propertyName: 'ssn' } as IntrospectedColumn,
+  ];
+
+  const filtered = filterRecordColumns(
+    record,
+    ['id', 'name', 'email'],
+    columns,
+  );
 
   assertEquals(filtered, { id: 1, name: 'John', email: 'john@example.com' });
   assertEquals('salary' in filtered, false);
   assertEquals('ssn' in filtered, false);
 });
 
+Deno.test('filterRecordColumns: handles snake_case columns with camelCase properties', () => {
+  const record = {
+    id: 1,
+    userName: 'John', // camelCase property from Drizzle
+    emailAddress: 'john@example.com',
+  };
+
+  // Mock column metadata with snake_case DB names
+  const columns: IntrospectedColumn[] = [
+    { name: 'id', propertyName: 'id' } as IntrospectedColumn,
+    { name: 'user_name', propertyName: 'userName' } as IntrospectedColumn,
+    {
+      name: 'email_address',
+      propertyName: 'emailAddress',
+    } as IntrospectedColumn,
+  ];
+
+  const filtered = filterRecordColumns(record, ['id', 'user_name'], columns);
+
+  assertEquals(filtered, { id: 1, userName: 'John' });
+  assertEquals('emailAddress' in filtered, false);
+});
+
 Deno.test('filterRecordColumns: handles missing columns gracefully', () => {
   const record = { id: 1, name: 'John' };
 
-  const filtered = filterRecordColumns(record, ['id', 'name', 'nonexistent']);
+  const columns: IntrospectedColumn[] = [
+    { name: 'id', propertyName: 'id' } as IntrospectedColumn,
+    { name: 'name', propertyName: 'name' } as IntrospectedColumn,
+  ];
+
+  const filtered = filterRecordColumns(
+    record,
+    ['id', 'name', 'nonexistent'],
+    columns,
+  );
 
   assertEquals(filtered, { id: 1, name: 'John' });
 });
@@ -375,7 +464,13 @@ Deno.test('filterRecordsColumns: filters array of records', () => {
     { id: 2, name: 'Jane', ssn: '222-22-2222' },
   ];
 
-  const filtered = filterRecordsColumns(records, ['id', 'name']);
+  const columns: IntrospectedColumn[] = [
+    { name: 'id', propertyName: 'id' } as IntrospectedColumn,
+    { name: 'name', propertyName: 'name' } as IntrospectedColumn,
+    { name: 'ssn', propertyName: 'ssn' } as IntrospectedColumn,
+  ];
+
+  const filtered = filterRecordsColumns(records, ['id', 'name'], columns);
 
   assertEquals(filtered, [
     { id: 1, name: 'John' },
@@ -389,26 +484,26 @@ Deno.test('filterRecordsColumns: filters array of records', () => {
 
 Deno.test('injectColumnDefaults: merges defaults into form data', () => {
   const formData = { name: 'New Record', email: 'new@example.com' };
-  const defaults = { tenant_id: 'tenant-123', created_by: 'user-456' };
+  const defaults = { tenantId: 'tenant-123', createdBy: 'user-456' };
 
   const result = injectColumnDefaults(formData, defaults);
 
   assertEquals(result, {
     name: 'New Record',
     email: 'new@example.com',
-    tenant_id: 'tenant-123',
-    created_by: 'user-456',
+    tenantId: 'tenant-123',
+    createdBy: 'user-456',
   });
 });
 
 Deno.test('injectColumnDefaults: form data takes precedence', () => {
-  const formData = { name: 'New Record', tenant_id: 'form-tenant' };
-  const defaults = { tenant_id: 'default-tenant' };
+  const formData = { name: 'New Record', tenantId: 'form-tenant' };
+  const defaults = { tenantId: 'default-tenant' };
 
   const result = injectColumnDefaults(formData, defaults);
 
   // Form data value wins
-  assertEquals(result.tenant_id, 'form-tenant');
+  assertEquals(result.tenantId, 'form-tenant');
 });
 
 Deno.test('injectColumnDefaults: handles empty defaults', () => {
