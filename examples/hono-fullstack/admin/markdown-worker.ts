@@ -15,7 +15,6 @@ import type {
   Serializable,
 } from '@drizzle-cms/handlers-workers';
 import { parseMarkdown } from '../lib/markdown.ts';
-import { sanitizeHtml } from '../lib/sanitize.ts';
 
 // Declare Worker globals for TypeScript
 declare const self: DedicatedWorkerGlobalScope;
@@ -64,12 +63,9 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
 
         // Always sync contentHtml when content field exists
         if (typeof data.content === 'string') {
-          const trimmed = data.content.trim();
-          // Parse markdown then sanitize to prevent XSS
-          const unsafeHtml = trimmed ? parseMarkdown(data.content) : '';
           result = {
             ...data,
-            contentHtml: sanitizeHtml(unsafeHtml),
+            contentHtml: parseMarkdown(data.content),
           } as Serializable;
         } else {
           result = data as Serializable;

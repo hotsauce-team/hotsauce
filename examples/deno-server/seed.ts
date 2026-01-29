@@ -10,6 +10,15 @@ const db = drizzle(client);
 
 console.log('🌱 Seeding database...');
 
+// Clear existing data - drop tables in reverse dependency order
+console.log('🧹 Clearing existing data...');
+await client.exec(`
+  DROP TABLE IF EXISTS post_categories CASCADE;
+  DROP TABLE IF EXISTS posts CASCADE;
+  DROP TABLE IF EXISTS categories CASCADE;
+  DROP TABLE IF EXISTS users CASCADE;
+`);
+
 // Create tables (simple DDL)
 await client.exec(`
   CREATE TABLE IF NOT EXISTS users (

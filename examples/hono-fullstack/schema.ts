@@ -2,6 +2,7 @@
 import {
   boolean,
   integer,
+  jsonb,
   pgTable,
   serial,
   text,
@@ -10,6 +11,9 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
+
+import '@drizzle-cms/core/extend';
+import type { FileReference } from '@drizzle-cms/core';
 import type { Parsers } from '@drizzle-cms/handlers';
 
 // ─────────────────────────────────────────────────────────────
@@ -25,6 +29,17 @@ export const authors = pgTable('authors', {
   slug: varchar('slug', { length: 100 }).notNull().unique(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   bio: text('bio'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+/**
+ * Media table - uploaded files (images, documents, etc.)
+ */
+export const media = pgTable('media', {
+  id: serial('id').primaryKey(),
+  file: jsonb('file').$type<FileReference>().$cms({ file: true }),
+  alt: text('alt'),
+  caption: text('caption'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -124,6 +139,7 @@ export const postsRelations = relations(posts, ({ one }) => ({
 
 export const schema = {
   authors,
+  media,
   categories,
   posts,
   pages,
@@ -140,6 +156,7 @@ export const schema = {
 // ─────────────────────────────────────────────────────────────
 
 const authorsInsertSchema = createInsertSchema(authors);
+const mediaInsertSchema = createInsertSchema(media);
 const categoriesInsertSchema = createInsertSchema(categories);
 const postsInsertSchema = createInsertSchema(posts);
 const pagesInsertSchema = createInsertSchema(pages);
@@ -147,6 +164,7 @@ const settingsInsertSchema = createInsertSchema(settings);
 const adminUsersInsertSchema = createInsertSchema(adminUsers);
 
 const authorsUpdateSchema = createUpdateSchema(authors);
+const mediaUpdateSchema = createUpdateSchema(media);
 const categoriesUpdateSchema = createUpdateSchema(categories);
 const postsUpdateSchema = createUpdateSchema(posts);
 const pagesUpdateSchema = createUpdateSchema(pages);
@@ -160,6 +178,10 @@ export const parsers: Parsers = {
   authors: {
     insert: (data: unknown) => authorsInsertSchema.parse(data),
     update: (data: unknown) => authorsUpdateSchema.parse(data),
+  },
+  media: {
+    insert: (data: unknown) => mediaInsertSchema.parse(data),
+    update: (data: unknown) => mediaUpdateSchema.parse(data),
   },
   categories: {
     insert: (data: unknown) => categoriesInsertSchema.parse(data),

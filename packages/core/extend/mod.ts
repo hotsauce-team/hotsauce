@@ -58,4 +58,4 @@ defineCmsMethod(PgColumnBuilder.prototype);
 defineCmsMethod(SQLiteColumnBuilder.prototype);
 defineCmsMethod(MySqlColumnBuilder.prototype);
 
-export type { CmsColumnOptions } from './types.ts';
+export type { CmsColumnOptions, FileReference } from './types.ts';

@@ -4,7 +4,14 @@ import { Hono } from 'hono';
 import { and, desc, eq, sql } from 'drizzle-orm';
 
 import type { Database } from '../db.ts';
-import { authors, categories, pages, posts, settings } from '../schema.ts';
+import {
+  authors,
+  categories,
+  media,
+  pages,
+  posts,
+  settings,
+} from '../schema.ts';
 
 import {
   type AuthorDetail,
@@ -272,6 +279,20 @@ export function createSiteRoutes(db: Database): Hono {
     const content = categoriesPage(categoriesWithCount);
     const html = await renderPage(db, content, 'Categories');
     return htmlResponse(html);
+  });
+
+  /**
+   * Public file serving for media
+   */
+  app.get('/files/media/:id', async (c) => {
+    const [item] = await db.select().from(media).where(
+      eq(media.id, parseInt(c.req.param('id'))),
+    ).limit(1);
+    if (!item?.file?.data) return c.notFound();
+    const bytes = Uint8Array.from(atob(item.file.data), (c) => c.charCodeAt(0));
+    return new Response(bytes, {
+      headers: { 'Content-Type': item.file.contentType },
+    });
   });
 
   /**
