@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm';
 import { hashPassword } from '@drizzle-cms/handlers';
 import type { FileReference } from '@drizzle-cms/core';
 import { parseMarkdown } from './lib/markdown.ts';
+import { sanitizeHtml } from './lib/sanitize.ts';
 
 import {
   adminUsers,
@@ -277,7 +278,7 @@ function postData(data: {
 }) {
   return {
     ...data,
-    contentHtml: parseMarkdown(data.content),
+    contentHtml: sanitizeHtml(parseMarkdown(data.content)),
   };
 }
 
@@ -299,7 +300,7 @@ function pageData(data: {
 }) {
   return {
     ...data,
-    contentHtml: parseMarkdown(data.content),
+    contentHtml: sanitizeHtml(parseMarkdown(data.content)),
   };
 }
 

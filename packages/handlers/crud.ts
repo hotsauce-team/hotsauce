@@ -565,9 +565,6 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     // Inject default values for non-writable columns
     values = injectColumnDefaults(values, columnResult.defaults);
 
-    // Inject default values for non-writable columns
-    values = injectColumnDefaults(values, columnResult.defaults);
-
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(
       options,

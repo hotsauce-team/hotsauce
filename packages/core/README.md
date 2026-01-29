@@ -116,6 +116,35 @@ Notes:
 - Importing `@drizzle-cms/core/extend` patches Drizzle builder prototypes (a global side effect).
 - Metadata is stored on the Drizzle column config and is available as `IntrospectedColumn.cmsOptions`.
 
+#### File fields
+
+To model file uploads, mark a JSON/JSONB column with `$cms({ file: true })`.
+
+`CmsColumnOptions` supports:
+
+- `file?: boolean` — marks the column as a file field
+- `accept?: string` — MIME accept pattern(s) (e.g. `image/*`, `image/*,application/pdf`)
+- `maxSize?: number` — maximum size in bytes
+
+The default constraints are:
+
+- `accept`: `image/*`
+- `maxSize`: `200_000` (200KB)
+
+File values are stored as a JSON object:
+
+```ts
+export type FileReference = {
+  filename: string;
+  contentType: string;
+  size: number;
+  data?: string; // base64
+  url?: string; // external URL
+};
+```
+
+For runtime checks, `isValidFileReference(value)` is exported from `@drizzle-cms/core`.
+
 ### `validation/` - Zod Schema Generation
 
 Re-exports from `drizzle-zod` for form validation.

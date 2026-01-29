@@ -4,7 +4,7 @@
  * Converts markdown `content` to HTML `contentHtml` at save time.
  * Runs in an isolated Web Worker for demonstration purposes.
  *
- * Uses vendored snarkdown parser (inline) - zero dependencies.
+ * Uses a small markdown parser (micromark) + an allowlist sanitizer.
  */
 
 /// <reference lib="webworker" />
@@ -15,6 +15,7 @@ import type {
   Serializable,
 } from '@drizzle-cms/handlers-workers';
 import { parseMarkdown } from '../lib/markdown.ts';
+import { sanitizeHtml } from '../lib/sanitize.ts';
 
 // Declare Worker globals for TypeScript
 declare const self: DedicatedWorkerGlobalScope;
@@ -65,7 +66,7 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
         if (typeof data.content === 'string') {
           result = {
             ...data,
-            contentHtml: parseMarkdown(data.content),
+            contentHtml: sanitizeHtml(parseMarkdown(data.content)),
           } as Serializable;
         } else {
           result = data as Serializable;

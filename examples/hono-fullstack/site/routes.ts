@@ -289,9 +289,30 @@ export function createSiteRoutes(db: Database): Hono {
       eq(media.id, parseInt(c.req.param('id'))),
     ).limit(1);
     if (!item?.file?.data) return c.notFound();
+
     const bytes = Uint8Array.from(atob(item.file.data), (c) => c.charCodeAt(0));
+    const contentType = (item.file.contentType || 'application/octet-stream')
+      .toLowerCase();
+    const filename = item.file.filename || 'file';
+
+    // Serve images inline except SVG, which can be scriptable when opened directly.
+    const isImage = contentType.startsWith('image/');
+    const isSvg = contentType === 'image/svg+xml' ||
+      contentType.endsWith('+svg');
+    const disposition = isImage && !isSvg ? 'inline' : 'attachment';
+
     return new Response(bytes, {
-      headers: { 'Content-Type': item.file.contentType },
+      headers: {
+        'Content-Type': contentType,
+        'Content-Disposition': `${disposition}; filename="${
+          encodeURIComponent(filename)
+        }"`,
+        'Content-Security-Policy':
+          "default-src 'none'; img-src 'self' data:; style-src 'none'; script-src 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
+        'Referrer-Policy': 'strict-origin-when-cross-origin',
+      },
     });
   });
 

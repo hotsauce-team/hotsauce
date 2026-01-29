@@ -801,10 +801,23 @@ async function handleFileServing(
 
   // If file has a URL (e.g., from S3 plugin), redirect to it
   if (fileData.url) {
+    // Avoid open redirects / unsafe protocols (e.g., javascript:)
+    try {
+      const redirectUrl = new URL(fileData.url);
+      if (
+        redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:'
+      ) {
+        return forbidden('Invalid file URL');
+      }
+    } catch {
+      return forbidden('Invalid file URL');
+    }
+
     return new Response(null, {
       status: 302,
       headers: {
         'Location': fileData.url,
+        ...SECURITY_HEADERS,
         'Cache-Control': 'private, max-age=3600',
       },
     });
@@ -813,17 +826,38 @@ async function handleFileServing(
   // If file has base64 data, serve it directly
   if (fileData.data) {
     const bytes = base64ToUint8Array(fileData.data);
-    // Create a proper ArrayBuffer that Response accepts
-    const buffer = new ArrayBuffer(bytes.length);
-    new Uint8Array(buffer).set(bytes);
-    return new Response(buffer, {
+    // Ensure we have an ArrayBuffer-backed view (not SharedArrayBuffer)
+    // to satisfy Deno's lib type expectations for BlobPart.
+    const safeBytes = new Uint8Array(bytes);
+
+    const contentType = (fileData.contentType || 'application/octet-stream')
+      .toLowerCase();
+    // Serve images inline except SVG, which can be scriptable when opened directly.
+    const isImage = contentType.startsWith('image/');
+    const isSvg = contentType === 'image/svg+xml' ||
+      contentType.endsWith('+svg');
+    const disposition = isImage && !isSvg ? 'inline' : 'attachment';
+
+    // Much stricter CSP for file responses to mitigate scriptable content
+    // if a browser decides to treat it as a document.
+    const fileSecurityHeaders: Record<string, string> = {
+      'Content-Security-Policy':
+        "default-src 'none'; img-src 'self' data:; style-src 'none'; script-src 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+    };
+
+    const body = new Blob([safeBytes], { type: contentType });
+    return new Response(body, {
       status: 200,
       headers: {
-        'Content-Type': fileData.contentType,
-        'Content-Length': String(bytes.length),
-        'Content-Disposition': `inline; filename="${
+        'Content-Type': contentType,
+        'Content-Length': String(safeBytes.length),
+        'Content-Disposition': `${disposition}; filename="${
           encodeURIComponent(fileData.filename)
         }"`,
+        ...fileSecurityHeaders,
         'Cache-Control': 'private, max-age=3600',
       },
     });

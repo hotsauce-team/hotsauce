@@ -143,19 +143,19 @@ app.use('/admin', expressAdapter(handler));
 
 ## Column → Field Mapping
 
-| Drizzle Type        | CMS Field  | Notes                           |
-| ------------------- | ---------- | ------------------------------- |
-| `varchar`           | `text`     | With maxLength from column def  |
-| `text`              | `textarea` | Override to `richtext` via hint |
-| `boolean`           | `checkbox` |                                 |
-| `integer` / `real`  | `number`   |                                 |
-| `timestamp`         | `datetime` |                                 |
-| `date`              | `date`     |                                 |
-| `json` / `jsonb`    | `object`   | Requires sub-schema hint        |
-| `text[]` / arrays   | `list`     | Postgres-only                   |
-| `pgEnum`            | `select`   | Postgres-only                   |
-| Foreign key         | `relation` | Auto-detected from references   |
-| `uuid` + upload ref | `file`     | Convention-based                |
+| Drizzle Type                          | CMS Field  | Notes                                 |
+| ------------------------------------- | ---------- | ------------------------------------- |
+| `varchar`                             | `text`     | With maxLength from column def        |
+| `text`                                | `textarea` | Override to `richtext` via hint       |
+| `boolean`                             | `checkbox` |                                       |
+| `integer` / `real`                    | `number`   |                                       |
+| `timestamp`                           | `datetime` |                                       |
+| `date`                                | `date`     |                                       |
+| `json` / `jsonb`                      | `object`   | Requires sub-schema hint              |
+| `text[]` / arrays                     | `list`     | Postgres-only                         |
+| `pgEnum`                              | `select`   | Postgres-only                         |
+| Foreign key                           | `relation` | Auto-detected from references         |
+| `json/jsonb` + `$cms({ file: true })` | `file`     | Multipart upload + file serving route |
 
 ## Relationships
 
