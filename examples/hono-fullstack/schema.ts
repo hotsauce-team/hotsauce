@@ -63,7 +63,7 @@ export const posts = pgTable('posts', {
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   excerpt: text('excerpt'),
   content: text('content').notNull(),
-  contentHtml: text('content_html'), // Rendered markdown (populated by plugin)
+  contentHtml: text('content_html').$cms({ hidden: true }), // Rendered markdown (populated by plugin)
   published: boolean('published').default(false).notNull(),
   authorId: integer('author_id')
     .notNull()

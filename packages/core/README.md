@@ -131,6 +131,24 @@ The default constraints are:
 - `accept`: `image/*`
 - `maxSize`: `200_000` (200KB)
 
+#### UI Visibility
+
+Control how fields appear in the CMS UI:
+
+```ts
+const posts = pgTable('posts', {
+  contentHtml: text('content_html').$cms({ hidden: true }),  // Hide from all views
+  score: integer('score').$cms({ readOnly: true }),         // Show but not editable
+});
+```
+
+- `hidden?: boolean` — hide from all CMS views (forms, lists, detail). Still saved to DB.
+- `readOnly?: boolean` — show the field but prevent editing
+
+> **Note:** `hidden` and `readOnly` are UI hints only. A crafted POST request could still submit values for these columns. To enforce write protection server-side, use column policies with `write: () => false`.
+
+#### FileReference Type
+
 File values are stored as a JSON object:
 
 ```ts

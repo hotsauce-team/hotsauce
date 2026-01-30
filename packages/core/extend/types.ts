@@ -7,6 +7,10 @@ export type CmsColumnOptions = {
   accept?: string;
   /** Maximum file size in bytes (default: 200000 = 200KB). Only used when file: true. */
   maxSize?: number;
+  /** Hide this field from all CMS views (forms, lists, detail). Still saved to DB. */
+  hidden?: boolean;
+  /** Show this field but prevent editing. */
+  readOnly?: boolean;
 };
 
 /** Default accept filter for file inputs */
