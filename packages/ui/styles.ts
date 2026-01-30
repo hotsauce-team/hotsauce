@@ -181,15 +181,6 @@ body {
 
 /* File Upload */
 .cms-file-input-wrapper { display: flex; flex-direction: column; gap: 0.5rem; }
-.cms-file-current {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  background: var(--cms-gray-50);
-  border: 1px solid var(--cms-gray-200);
-  border-radius: var(--cms-radius);
-}
 .cms-file-icon { font-size: 1.25rem; }
 .cms-file-name { font-weight: 500; }
 .cms-file-size { color: var(--cms-gray-500); font-size: 0.875rem; }
@@ -230,6 +221,7 @@ body {
   gap: 0.5rem;
   padding: 0.75rem;
   background: var(--cms-gray-50);
+  border: 1px solid var(--cms-gray-200);
   border-radius: var(--cms-radius);
   margin-bottom: 0.5rem;
 }
