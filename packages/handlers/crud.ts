@@ -100,6 +100,28 @@ function buildLayoutOptions(
   };
 }
 
+import type { IntrospectedTable } from '@drizzle-cms/core';
+
+/**
+ * Get frontend URL for a record using table's $cms({ frontendUrl }) config.
+ * Returns null if no frontendUrl is configured or if the function returns null/undefined.
+ */
+function getFrontendUrl(
+  table: IntrospectedTable,
+  record: Record<string, unknown>,
+): string | null {
+  const frontendUrlFn = table.cmsOptions?.frontendUrl;
+  if (!frontendUrlFn) return null;
+
+  try {
+    const url = frontendUrlFn(record);
+    return url ?? null;
+  } catch {
+    // Silently ignore errors in user-provided function
+    return null;
+  }
+}
+
 /**
  * Render the dashboard page
  */
@@ -418,6 +440,9 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   // Generate CSRF token for delete form
   const csrfToken = await generateCsrfToken(options.csrfSecret);
 
+  // Compute frontend URL from table's $cms() config
+  const frontendUrl = getFrontendUrl(table, transformedRecord);
+
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
@@ -425,6 +450,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     showDelete: true,
     showBack: true,
     csrfToken,
+    frontendUrl,
   };
 
   // Build content with optional flash message
@@ -871,7 +897,14 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  return await renderEditForm(ctx, columnResult, transformedRecord);
+  return await renderEditForm(
+    ctx,
+    columnResult,
+    transformedRecord,
+    undefined, // formError
+    {}, // fieldErrors
+    transformedRecord, // record for frontendUrl
+  );
 }
 
 /**
@@ -1045,6 +1078,8 @@ async function renderEditForm(
   values: Record<string, unknown> = {},
   formError?: string,
   fieldErrors: Record<string, string> = {},
+  /** Original record for computing frontendUrl (optional - uses values if not provided) */
+  record?: Record<string, unknown>,
 ): Promise<Response> {
   const { options, route } = ctx;
   const table = route.table!;
@@ -1066,11 +1101,16 @@ async function renderEditForm(
   // Check if any writable fields are file fields
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
 
+  // Compute frontend URL from table's $cms() config
+  // Use provided record if available, fall back to values (which may be form data or record)
+  const frontendUrl = getFrontendUrl(table, record ?? values);
+
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
     csrfToken,
     multipart: hasFileFields,
+    frontendUrl,
   };
 
   // Merge form-level and field-level errors

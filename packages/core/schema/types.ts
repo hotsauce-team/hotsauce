@@ -1,6 +1,6 @@
 // Core types for schema introspection
 
-import type { CmsColumnOptions } from '../extend/types.ts';
+import type { CmsColumnOptions, CmsTableOptions } from '../extend/types.ts';
 
 // Re-export Drizzle's types for use in introspection
 export { Table } from 'drizzle-orm';
@@ -74,6 +74,9 @@ export interface IntrospectedTable {
 
   /** Whether this table is a junction table for many-to-many relations */
   isJunction?: boolean;
+
+  /** Optional CMS-specific metadata attached via table `$cms()` */
+  cmsOptions?: CmsTableOptions;
 }
 
 /**
