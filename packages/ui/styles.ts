@@ -107,6 +107,8 @@ body {
   border: none;
   cursor: pointer;
   transition: background 0.15s;
+  line-height: 1.25;
+  box-sizing: border-box;
 }
 
 .cms-btn-primary {
@@ -246,7 +248,6 @@ body {
   font-size: 0.875rem;
 }
 .cms-file-link:hover { text-decoration: underline; }
-.cms-inline-form { display: inline; }
 
 .cms-error { color: var(--cms-danger); font-size: 0.875rem; margin: 0.25rem 0 0; }
 .cms-help { color: var(--cms-gray-500); font-size: 0.875rem; margin: 0.25rem 0 0; }
@@ -319,8 +320,8 @@ body {
   font-size: 1.5rem;
 }
 
-.cms-detail-actions { display: flex; gap: 0.5rem; }
-.cms-inline-form { display: inline; }
+.cms-detail-actions { display: flex; gap: 0.5rem; align-items: stretch; }
+.cms-inline-form { display: contents; }
 
 .cms-detail-list {
   background: white;
