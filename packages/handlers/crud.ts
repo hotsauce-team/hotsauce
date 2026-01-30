@@ -3,6 +3,8 @@
 import { asc, desc, sql } from 'drizzle-orm';
 import type { Table } from 'drizzle-orm';
 
+import type { IntrospectedTable } from '@drizzle-cms/core';
+
 import { alert, layout, pagination } from '@drizzle-cms/ui';
 import { listView } from '@drizzle-cms/ui';
 import { detailView } from '@drizzle-cms/ui';
@@ -100,24 +102,97 @@ function buildLayoutOptions(
   };
 }
 
-import type { IntrospectedTable } from '@drizzle-cms/core';
+function isAllowedFrontendHref(href: string): boolean {
+  const trimmed = href.trim();
+  if (trimmed.length === 0) return false;
+
+  // Disallow control chars (can be used for obfuscation)
+  if (/[^\u0020-\u007E\u00A0-\uFFFF]/.test(trimmed)) return false;
+
+  // Disallow protocol-relative URLs ("//evil.com")
+  if (trimmed.startsWith('//')) return false;
+
+  // If it looks like it has a scheme, only allow http(s)
+  const schemeMatch = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.exec(trimmed);
+  if (schemeMatch) {
+    const scheme = schemeMatch[0].slice(0, -1).toLowerCase();
+    return scheme === 'http' || scheme === 'https';
+  }
+
+  // Otherwise treat as relative ("/path", "path", "./path", "?q=1", "#hash", etc.)
+  return true;
+}
 
 /**
  * Get frontend URL for a record using table's $cms({ frontendUrl }) config.
  * Returns null if no frontendUrl is configured or if the function returns null/undefined.
  */
 function getFrontendUrl(
+  ctx: Pick<RouteContext, 'options' | 'request' | 'url' | 'route'>,
   table: IntrospectedTable,
   record: Record<string, unknown>,
+  action: 'read' | 'update',
 ): string | null {
   const frontendUrlFn = table.cmsOptions?.frontendUrl;
   if (!frontendUrlFn) return null;
 
   try {
     const url = frontendUrlFn(record);
-    return url ?? null;
-  } catch {
-    // Silently ignore errors in user-provided function
+    if (url === null || url === undefined) return null;
+
+    // Defensive: user function might return non-string.
+    if (typeof url !== 'string') {
+      if (ctx.options.onError) {
+        ctx.options.onError(
+          new Error(
+            `frontendUrl for table '${table.name}' returned a non-string (${typeof url})`,
+          ),
+          {
+            request: ctx.request,
+            url: ctx.url,
+            route: ctx.route ?? null,
+            table,
+            action,
+          },
+        );
+      }
+      return null;
+    }
+
+    const trimmed = url.trim();
+    if (!isAllowedFrontendHref(trimmed)) {
+      if (ctx.options.onError) {
+        ctx.options.onError(
+          new Error(
+            `frontendUrl for table '${table.name}' returned a disallowed URL`,
+          ),
+          {
+            request: ctx.request,
+            url: ctx.url,
+            route: ctx.route ?? null,
+            table,
+            action,
+          },
+        );
+      }
+      return null;
+    }
+
+    return trimmed;
+  } catch (error) {
+    // User-provided function threw: report via onError but don't break the CMS.
+    if (ctx.options.onError) {
+      ctx.options.onError(
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          request: ctx.request,
+          url: ctx.url,
+          route: ctx.route ?? null,
+          table,
+          action,
+        },
+      );
+    }
     return null;
   }
 }
@@ -441,7 +516,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const csrfToken = await generateCsrfToken(options.csrfSecret);
 
   // Compute frontend URL from table's $cms() config
-  const frontendUrl = getFrontendUrl(table, transformedRecord);
+  const frontendUrl = getFrontendUrl(ctx, table, transformedRecord, 'read');
 
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -1103,7 +1178,7 @@ async function renderEditForm(
 
   // Compute frontend URL from table's $cms() config
   // Use provided record if available, fall back to values (which may be form data or record)
-  const frontendUrl = getFrontendUrl(table, record ?? values);
+  const frontendUrl = getFrontendUrl(ctx, table, record ?? values, 'update');
 
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),

@@ -150,6 +150,11 @@ The `frontendUrl` function receives the full record and should return:
 - A URL string to show a "View on site ↗" link
 - `null` or `undefined` to hide the link (e.g., for draft content)
 
+For security, prefer returning either:
+
+- A relative URL (e.g. `/blog/my-post`)
+- An absolute `https://...` (or `http://...`) URL
+
 #### File fields
 
 To model file uploads, mark a JSON/JSONB column with `$cms({ file: true })`.
@@ -234,6 +239,7 @@ interface IntrospectedColumn {
   enumValues?: readonly string[];
   isArray?: boolean;
   references?: { table: string; column: string };
+  cmsOptions?: CmsColumnOptions; // Optional CMS metadata from column $cms()
 }
 ```
 
@@ -246,6 +252,7 @@ interface IntrospectedTable {
   primaryKey: string[];
   table: unknown; // Original Drizzle table reference
   isJunction?: boolean; // True for many-to-many link tables
+  cmsOptions?: CmsTableOptions; // Optional CMS metadata from table $cms()
 }
 ```
 
