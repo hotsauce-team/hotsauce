@@ -52,10 +52,16 @@ export {
 } from './validation/zod.ts';
 
 // ─────────────────────────────────────────────────────────────
-// File Upload Types - Standard file reference shape for JSON columns
+// CMS Extension Types - Column and table metadata via $cms()
 // ─────────────────────────────────────────────────────────────
-export type { CmsColumnOptions, FileReference } from './extend/types.ts';
+export type {
+  CmsColumnOptions,
+  CmsTableOptions,
+  FileReference,
+  FrontendUrlFn,
+} from './extend/types.ts';
 export {
+  CMS_TABLE_OPTIONS,
   FILE_DEFAULT_ACCEPT,
   FILE_DEFAULT_MAX_SIZE,
   isValidFileReference,

@@ -104,7 +104,7 @@ This enables schema-authored hints (like file fields) to flow into introspection
 
 ```ts
 import '@drizzle-cms/core/extend';
-import { jsonb, pgTable } from 'drizzle-orm/pg-core';
+import { jsonb, pgTable, text } from 'drizzle-orm/pg-core';
 
 const users = pgTable('users', {
   avatar: jsonb('avatar').$cms({ file: true }),
@@ -115,6 +115,45 @@ Notes:
 
 - Importing `@drizzle-cms/core/extend` patches Drizzle builder prototypes (a global side effect).
 - Metadata is stored on the Drizzle column config and is available as `IntrospectedColumn.cmsOptions`.
+
+#### Table-level `$cms()`
+
+You can also call `$cms()` on entire tables to configure table-level CMS options:
+
+```ts
+import '@drizzle-cms/core/extend';
+import { boolean, pgTable, text } from 'drizzle-orm/pg-core';
+
+const posts = pgTable('posts', {
+  slug: text('slug').notNull(),
+  published: boolean('published').default(false),
+}).$cms({
+  // Generate a "View on site" link for published posts
+  frontendUrl: (post) => post.published ? `/blog/${post.slug}` : null,
+  label: 'Blog Post', // Singular label (default: table name)
+  labelPlural: 'Blog Posts', // Plural label (default: table name + 's')
+});
+```
+
+**`CmsTableOptions`:**
+
+| Option        | Type                                                | Description                                         |
+| ------------- | --------------------------------------------------- | --------------------------------------------------- |
+| `frontendUrl` | `(record: Record<string, unknown>) => string\|null` | Generate a "View on site" link on detail/edit views |
+| `label`       | `string`                                            | Singular label for the table (e.g., "Blog Post")    |
+| `labelPlural` | `string`                                            | Plural label for lists (e.g., "Blog Posts")         |
+| `hidden`      | `boolean`                                           | Hide the table from the CMS sidebar                 |
+| `icon`        | `string`                                            | Icon identifier for the sidebar                     |
+
+The `frontendUrl` function receives the full record and should return:
+
+- A URL string to show a "View on site ↗" link
+- `null` or `undefined` to hide the link (e.g., for draft content)
+
+For security, prefer returning either:
+
+- A relative URL (e.g. `/blog/my-post`)
+- An absolute `https://...` (or `http://...`) URL
 
 #### File fields
 
@@ -137,8 +176,8 @@ Control how fields appear in the CMS UI:
 
 ```ts
 const posts = pgTable('posts', {
-  contentHtml: text('content_html').$cms({ hidden: true }),  // Hide from all views
-  score: integer('score').$cms({ readOnly: true }),         // Show but not editable
+  contentHtml: text('content_html').$cms({ hidden: true }), // Hide from all views
+  score: integer('score').$cms({ readOnly: true }), // Show but not editable
 });
 ```
 
@@ -200,6 +239,7 @@ interface IntrospectedColumn {
   enumValues?: readonly string[];
   isArray?: boolean;
   references?: { table: string; column: string };
+  cmsOptions?: CmsColumnOptions; // Optional CMS metadata from column $cms()
 }
 ```
 
@@ -212,6 +252,7 @@ interface IntrospectedTable {
   primaryKey: string[];
   table: unknown; // Original Drizzle table reference
   isJunction?: boolean; // True for many-to-many link tables
+  cmsOptions?: CmsTableOptions; // Optional CMS metadata from table $cms()
 }
 ```
 

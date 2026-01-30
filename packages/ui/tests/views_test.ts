@@ -249,6 +249,30 @@ Deno.test('detailView: shows edit button when enabled', () => {
   assertStringIncludes(result, 'Edit');
 });
 
+Deno.test('detailView: shows frontend URL link when provided', () => {
+  const fields = [createMockField()];
+  const result = detailView('Details', fields, {}, {
+    baseUrl: '/admin/users',
+    id: 1,
+    frontendUrl: '/users/john',
+  });
+
+  assertStringIncludes(result, 'View on site');
+  assertStringIncludes(result, 'href="/users/john"');
+  assertStringIncludes(result, 'target="_blank"');
+});
+
+Deno.test('detailView: hides frontend URL link when null', () => {
+  const fields = [createMockField()];
+  const result = detailView('Details', fields, {}, {
+    baseUrl: '/admin/users',
+    id: 1,
+    frontendUrl: null,
+  });
+
+  assertEquals(result.includes('View on site'), false);
+});
+
 // editView tests
 Deno.test('editView: renders form for editing', () => {
   const fields = [
@@ -264,6 +288,36 @@ Deno.test('editView: renders form for editing', () => {
   assertStringIncludes(result, 'action="/admin/users/1"');
   assertStringIncludes(result, 'value="John"');
   assertStringIncludes(result, 'Update');
+});
+
+Deno.test('editView: shows frontend URL link when provided', () => {
+  const fields = [
+    createMockField({ column: { propertyName: 'name' } as IntrospectedColumn }),
+  ];
+
+  const result = editView('Edit User', fields, {
+    baseUrl: '/admin/users',
+    id: 1,
+    frontendUrl: '/users/john',
+  }, { name: 'John' });
+
+  assertStringIncludes(result, 'View on site');
+  assertStringIncludes(result, 'href="/users/john"');
+  assertStringIncludes(result, 'target="_blank"');
+});
+
+Deno.test('editView: hides frontend URL link when null', () => {
+  const fields = [
+    createMockField({ column: { propertyName: 'name' } as IntrospectedColumn }),
+  ];
+
+  const result = editView('Edit User', fields, {
+    baseUrl: '/admin/users',
+    id: 1,
+    frontendUrl: null,
+  }, { name: 'John' });
+
+  assertEquals(result.includes('View on site'), false);
 });
 
 Deno.test('createView: renders form for creating', () => {

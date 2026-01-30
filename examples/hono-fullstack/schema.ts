@@ -71,6 +71,8 @@ export const posts = pgTable('posts', {
   categoryId: integer('category_id').references(() => categories.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}).$cms({
+  frontendUrl: (post) => post.published ? `/post/${post.slug}` : null,
 });
 
 /**
@@ -86,6 +88,8 @@ export const pages = pgTable('pages', {
   sortOrder: integer('sort_order').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}).$cms({
+  frontendUrl: (page) => page.published ? `/page/${page.slug}` : null,
 });
 
 /**

@@ -22,6 +22,8 @@ export interface DetailViewOptions {
   showBack?: boolean;
   /** CSRF token for delete form */
   csrfToken?: string;
+  /** Frontend URL for "View on site" link (null = hide link) */
+  frontendUrl?: string | null;
   /** Additional CSS classes */
   class?: string;
 }
@@ -178,6 +180,19 @@ export function detailView(
   }).join('\n  ');
 
   const actions: string[] = [];
+
+  // Frontend "View on site" link (external)
+  if (options.frontendUrl) {
+    actions.push(html`
+      <a
+        href="${options
+          .frontendUrl}"
+        target="_blank"
+        rel="noopener"
+        class="cms-btn cms-btn-secondary"
+      >View on site ↗</a>
+    `);
+  }
 
   if (options.showEdit) {
     actions.push(html`

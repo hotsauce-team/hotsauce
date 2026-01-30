@@ -3,6 +3,8 @@
 import { asc, desc, sql } from 'drizzle-orm';
 import type { Table } from 'drizzle-orm';
 
+import type { IntrospectedTable } from '@drizzle-cms/core';
+
 import { alert, layout, pagination } from '@drizzle-cms/ui';
 import { listView } from '@drizzle-cms/ui';
 import { detailView } from '@drizzle-cms/ui';
@@ -98,6 +100,101 @@ function buildLayoutOptions(
       ? { name: `User ${authUser.id}`, logoutUrl: `${basePath}/logout` }
       : undefined,
   };
+}
+
+function isAllowedFrontendHref(href: string): boolean {
+  const trimmed = href.trim();
+  if (trimmed.length === 0) return false;
+
+  // Disallow control chars (can be used for obfuscation)
+  if (/[^\u0020-\u007E\u00A0-\uFFFF]/.test(trimmed)) return false;
+
+  // Disallow protocol-relative URLs ("//evil.com")
+  if (trimmed.startsWith('//')) return false;
+
+  // If it looks like it has a scheme, only allow http(s)
+  const schemeMatch = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.exec(trimmed);
+  if (schemeMatch) {
+    const scheme = schemeMatch[0].slice(0, -1).toLowerCase();
+    return scheme === 'http' || scheme === 'https';
+  }
+
+  // Otherwise treat as relative ("/path", "path", "./path", "?q=1", "#hash", etc.)
+  return true;
+}
+
+/**
+ * Get frontend URL for a record using table's $cms({ frontendUrl }) config.
+ * Returns null if no frontendUrl is configured or if the function returns null/undefined.
+ */
+function getFrontendUrl(
+  ctx: Pick<RouteContext, 'options' | 'request' | 'url' | 'route'>,
+  table: IntrospectedTable,
+  record: Record<string, unknown>,
+  action: 'read' | 'update',
+): string | null {
+  const frontendUrlFn = table.cmsOptions?.frontendUrl;
+  if (!frontendUrlFn) return null;
+
+  try {
+    const url = frontendUrlFn(record);
+    if (url === null || url === undefined) return null;
+
+    // Defensive: user function might return non-string.
+    if (typeof url !== 'string') {
+      if (ctx.options.onError) {
+        ctx.options.onError(
+          new Error(
+            `frontendUrl for table '${table.name}' returned a non-string (${typeof url})`,
+          ),
+          {
+            request: ctx.request,
+            url: ctx.url,
+            route: ctx.route ?? null,
+            table,
+            action,
+          },
+        );
+      }
+      return null;
+    }
+
+    const trimmed = url.trim();
+    if (!isAllowedFrontendHref(trimmed)) {
+      if (ctx.options.onError) {
+        ctx.options.onError(
+          new Error(
+            `frontendUrl for table '${table.name}' returned a disallowed URL`,
+          ),
+          {
+            request: ctx.request,
+            url: ctx.url,
+            route: ctx.route ?? null,
+            table,
+            action,
+          },
+        );
+      }
+      return null;
+    }
+
+    return trimmed;
+  } catch (error) {
+    // User-provided function threw: report via onError but don't break the CMS.
+    if (ctx.options.onError) {
+      ctx.options.onError(
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          request: ctx.request,
+          url: ctx.url,
+          route: ctx.route ?? null,
+          table,
+          action,
+        },
+      );
+    }
+    return null;
+  }
 }
 
 /**
@@ -418,6 +515,9 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   // Generate CSRF token for delete form
   const csrfToken = await generateCsrfToken(options.csrfSecret);
 
+  // Compute frontend URL from table's $cms() config
+  const frontendUrl = getFrontendUrl(ctx, table, transformedRecord, 'read');
+
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
@@ -425,6 +525,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     showDelete: true,
     showBack: true,
     csrfToken,
+    frontendUrl,
   };
 
   // Build content with optional flash message
@@ -871,7 +972,14 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  return await renderEditForm(ctx, columnResult, transformedRecord);
+  return await renderEditForm(
+    ctx,
+    columnResult,
+    transformedRecord,
+    undefined, // formError
+    {}, // fieldErrors
+    transformedRecord, // record for frontendUrl
+  );
 }
 
 /**
@@ -1045,6 +1153,8 @@ async function renderEditForm(
   values: Record<string, unknown> = {},
   formError?: string,
   fieldErrors: Record<string, string> = {},
+  /** Original record for computing frontendUrl (optional - uses values if not provided) */
+  record?: Record<string, unknown>,
 ): Promise<Response> {
   const { options, route } = ctx;
   const table = route.table!;
@@ -1066,11 +1176,16 @@ async function renderEditForm(
   // Check if any writable fields are file fields
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
 
+  // Compute frontend URL from table's $cms() config
+  // Use provided record if available, fall back to values (which may be form data or record)
+  const frontendUrl = getFrontendUrl(ctx, table, record ?? values, 'update');
+
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
     csrfToken,
     multipart: hasFileFields,
+    frontendUrl,
   };
 
   // Merge form-level and field-level errors

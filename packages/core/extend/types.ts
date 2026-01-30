@@ -1,4 +1,8 @@
-// Types for CMS-specific column metadata stored on Drizzle column builders/columns.
+// Types for CMS-specific metadata stored on Drizzle column builders/columns and tables.
+
+// ─────────────────────────────────────────────────────────────
+// Column-level CMS options
+// ─────────────────────────────────────────────────────────────
 
 export type CmsColumnOptions = {
   /** Treat this column as a file reference (UI: file input). */
@@ -51,3 +55,57 @@ export function isValidFileReference(value: unknown): value is FileReference {
     typeof obj.size === 'number'
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// Table-level CMS options
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Function type for generating frontend URLs from a record.
+ * Return null/undefined to hide the "View on site" link.
+ */
+export type FrontendUrlFn = (
+  record: Record<string, unknown>,
+) => string | null | undefined;
+
+export type CmsTableOptions = {
+  /**
+   * Generate a frontend URL for viewing this record on the site.
+   * Can be a function that receives the record and returns a URL string,
+   * or null/undefined to hide the link.
+   *
+   * @example
+   * ```ts
+   * pgTable('posts', { ... }).$cms({
+   *   frontendUrl: (post) => `/blog/${post.slug}`
+   * });
+   * ```
+   */
+  frontendUrl?: FrontendUrlFn;
+
+  /**
+   * Display label for this table in the CMS sidebar (singular).
+   * Defaults to the table name with basic formatting.
+   */
+  label?: string;
+
+  /**
+   * Plural display label for this table.
+   * Defaults to `${label}s` or table name.
+   */
+  labelPlural?: string;
+
+  /**
+   * Hide this table from the CMS sidebar.
+   * Records can still be accessed via direct URL if needed.
+   */
+  hidden?: boolean;
+
+  /**
+   * Icon identifier for the sidebar (future use).
+   */
+  icon?: string;
+};
+
+/** Symbol used to store CMS table options */
+export const CMS_TABLE_OPTIONS = Symbol.for('drizzle-cms:tableOptions');
