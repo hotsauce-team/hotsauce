@@ -20,6 +20,7 @@ const db = drizzle(client, { schema });
 
 // Create CMS handler with authentication
 // Secrets can be passed directly or via environment variables:
+//   CMS_2FA_SECRET - for 2FA challenge token signing
 //   CMS_CSRF_SECRET - for CSRF token signing
 //   CMS_JWT_SECRET - for JWT signing (when auth enabled)
 const cmsHandler = createCmsHandler({
@@ -29,6 +30,7 @@ const cmsHandler = createCmsHandler({
   // JWT authentication with 2FA - enables /login and /logout routes
   auth: {
     // TwoFactorPasswordProvider: password + TOTP (if user has totpSecret)
+    // Uses CMS_CHALLENGE_SECRET env var for challenge token signing
     provider: new TwoFactorPasswordProvider({
       db,
       usersTable: users,

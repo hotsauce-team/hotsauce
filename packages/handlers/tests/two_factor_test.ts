@@ -79,6 +79,7 @@ Deno.test('integration: two-factor auth tests', async (t) => {
           roleColumn: 'role',
           totpSecretColumn: 'totpSecret',
           issuer: 'Test CMS',
+          challengeSecret: AUTH_SECRET, // Use same secret for simplicity in tests
         }),
       },
       policies: 'dangerously-open',
@@ -184,7 +185,7 @@ Deno.test('integration: two-factor auth tests', async (t) => {
 
       const html = await passwordRes.text();
       assertStringIncludes(html, 'totp_code');
-      assertStringIncludes(html, 'pending_user_id');
+      assertStringIncludes(html, 'challenge_token');
       assertStringIncludes(html, 'Verification Code');
 
       // Should NOT have a cookie yet
@@ -224,13 +225,13 @@ Deno.test('integration: two-factor auth tests', async (t) => {
       }),
     );
 
-    // Extract pending_user_id from TOTP form
+    // Extract challenge_token from TOTP form
     const totpFormHtml = await passwordRes.text();
-    const userIdMatch = totpFormHtml.match(
-      /name="pending_user_id" value="([^"]+)"/,
+    const challengeMatch = totpFormHtml.match(
+      /name="challenge_token" value="([^"]+)"/,
     );
-    assertExists(userIdMatch, 'pending_user_id should be in form');
-    const pendingUserId = userIdMatch[1]!;
+    assertExists(challengeMatch, 'challenge_token should be in form');
+    const challengeToken = challengeMatch[1]!;
 
     // Extract CSRF token from TOTP form
     const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
@@ -245,7 +246,7 @@ Deno.test('integration: two-factor auth tests', async (t) => {
         method: 'POST',
         body: createFormData({
           totp_code: validTotp,
-          pending_user_id: pendingUserId,
+          challenge_token: challengeToken,
           _csrf: csrfToken2,
         }),
       }),
@@ -292,10 +293,10 @@ Deno.test('integration: two-factor auth tests', async (t) => {
     );
 
     const totpFormHtml = await passwordRes.text();
-    const userIdMatch = totpFormHtml.match(
-      /name="pending_user_id" value="([^"]+)"/,
+    const challengeMatch = totpFormHtml.match(
+      /name="challenge_token" value="([^"]+)"/,
     );
-    const pendingUserId = userIdMatch![1]!;
+    const challengeToken = challengeMatch![1]!;
     const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
     const csrfToken2 = csrfMatch![1]!;
 
@@ -305,7 +306,7 @@ Deno.test('integration: two-factor auth tests', async (t) => {
         method: 'POST',
         body: createFormData({
           totp_code: '000000', // Invalid code
-          pending_user_id: pendingUserId,
+          challenge_token: challengeToken,
           _csrf: csrfToken2,
         }),
       }),
@@ -314,8 +315,9 @@ Deno.test('integration: two-factor auth tests', async (t) => {
     assertEquals(totpRes.status, 401);
 
     const html = await totpRes.text();
-    assertStringIncludes(html, 'Invalid verification code');
-    assertStringIncludes(html, 'totp_code'); // Should show form again
+    assertStringIncludes(html, 'Invalid or expired verification code');
+    // When challenge expires or TOTP fails, user is sent back to login
+    assertStringIncludes(html, 'identity'); // Should show login form
   });
 
   await t.step(
@@ -392,10 +394,10 @@ Deno.test('integration: two-factor auth tests', async (t) => {
     );
 
     const totpFormHtml = await passwordRes.text();
-    const userIdMatch = totpFormHtml.match(
-      /name="pending_user_id" value="([^"]+)"/,
+    const challengeMatch = totpFormHtml.match(
+      /name="challenge_token" value="([^"]+)"/,
     );
-    const pendingUserId = userIdMatch![1]!;
+    const challengeToken = challengeMatch![1]!;
     const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
     const csrfToken2 = csrfMatch![1]!;
 
@@ -409,7 +411,7 @@ Deno.test('integration: two-factor auth tests', async (t) => {
         method: 'POST',
         body: createFormData({
           totp_code: codeWithSpaces,
-          pending_user_id: pendingUserId,
+          challenge_token: challengeToken,
           _csrf: csrfToken2,
         }),
       }),
@@ -437,6 +439,7 @@ Deno.test('TwoFactorPasswordProvider: authenticate returns null for missing cred
     usersTable: adminUsers2fa,
     identityColumn: 'email',
     passwordColumn: 'passwordHash',
+    challengeSecret: AUTH_SECRET,
   });
 
   const result = await provider.authenticate({
@@ -459,6 +462,7 @@ Deno.test('TwoFactorPasswordProvider: authenticate returns null for non-existent
     usersTable: adminUsers2fa,
     identityColumn: 'email',
     passwordColumn: 'passwordHash',
+    challengeSecret: AUTH_SECRET,
   });
 
   const result = await provider.authenticate({
@@ -490,6 +494,7 @@ Deno.test('TwoFactorPasswordProvider: user without 2FA gets full auth immediatel
     identityColumn: 'email',
     passwordColumn: 'passwordHash',
     roleColumn: 'role',
+    challengeSecret: AUTH_SECRET,
   });
 
   const result = await provider.authenticate({
@@ -498,7 +503,10 @@ Deno.test('TwoFactorPasswordProvider: user without 2FA gets full auth immediatel
   });
 
   assertExists(result);
-  assertEquals(result.role, 'editor'); // Full role, not __pending_2fa__
+  assertEquals(result.status, 'authenticated');
+  if (result.status === 'authenticated') {
+    assertEquals(result.user.role, 'editor');
+  }
 
   await client.close();
 });
@@ -524,6 +532,7 @@ Deno.test('TwoFactorPasswordProvider: user with 2FA returns pending state', asyn
     passwordColumn: 'passwordHash',
     roleColumn: 'role',
     totpSecretColumn: 'totpSecret',
+    challengeSecret: AUTH_SECRET,
   });
 
   const result = await provider.authenticate({
@@ -532,7 +541,10 @@ Deno.test('TwoFactorPasswordProvider: user with 2FA returns pending state', asyn
   });
 
   assertExists(result);
-  assertEquals(result.role, '__pending_2fa__');
+  assertEquals(result.status, 'pending_2fa');
+  if (result.status === 'pending_2fa') {
+    assertExists(result.challenge);
+  }
 
   await client.close();
 });
@@ -561,19 +573,32 @@ Deno.test('TwoFactorPasswordProvider: TOTP phase returns full auth', async () =>
     passwordColumn: 'passwordHash',
     roleColumn: 'role',
     totpSecretColumn: 'totpSecret',
+    challengeSecret: AUTH_SECRET,
   });
+
+  // First get challenge token from phase 1
+  const phase1Result = await provider.authenticate({
+    identity: 'secure@example.com',
+    password: 'test123',
+  });
+  assertExists(phase1Result);
+  assertEquals(phase1Result.status, 'pending_2fa');
+  const challengeToken = (phase1Result as { challenge: string }).challenge;
 
   // Generate valid TOTP
   const validCode = await generateTOTP(totpSecret);
 
   const result = await provider.authenticate({
     totpCode: validCode,
-    pendingUserId: inserted!.id,
+    challengeToken,
   });
 
   assertExists(result);
-  assertEquals(result.role, 'admin'); // Full role after TOTP
-  assertEquals(result.id, inserted!.id);
+  assertEquals(result.status, 'authenticated');
+  if (result.status === 'authenticated') {
+    assertEquals(result.user.role, 'admin');
+    assertEquals(result.user.id, inserted!.id);
+  }
 
   await client.close();
 });
@@ -585,15 +610,12 @@ Deno.test('TwoFactorPasswordProvider: invalid TOTP returns null', async () => {
 
   const passwordHash = await hashPassword('test123');
   const totpSecret = generateTOTPSecret();
-  const [inserted] = await db
-    .insert(adminUsers2fa)
-    .values({
-      email: 'secure@example.com',
-      passwordHash,
-      role: 'admin',
-      totpSecret,
-    })
-    .returning();
+  await db.insert(adminUsers2fa).values({
+    email: 'secure@example.com',
+    passwordHash,
+    role: 'admin',
+    totpSecret,
+  });
 
   const provider = new TwoFactorPasswordProvider({
     db,
@@ -602,11 +624,19 @@ Deno.test('TwoFactorPasswordProvider: invalid TOTP returns null', async () => {
     passwordColumn: 'passwordHash',
     roleColumn: 'role',
     totpSecretColumn: 'totpSecret',
+    challengeSecret: AUTH_SECRET,
   });
+
+  // First get challenge token from phase 1
+  const phase1Result = await provider.authenticate({
+    identity: 'secure@example.com',
+    password: 'test123',
+  });
+  const challengeToken = (phase1Result as { challenge: string }).challenge;
 
   const result = await provider.authenticate({
     totpCode: '000000', // Invalid
-    pendingUserId: inserted!.id,
+    challengeToken,
   });
 
   assertEquals(result, null);
@@ -625,18 +655,19 @@ Deno.test('TwoFactorPasswordProvider: renderTotpForm produces valid HTML', async
     identityColumn: 'email',
     passwordColumn: 'passwordHash',
     issuer: 'Test App',
+    challengeSecret: AUTH_SECRET,
   });
 
   const html = provider.renderTotpForm({
     basePath: '/admin',
     title: 'Login',
-    pendingUserId: 123,
+    challengeToken: 'test-challenge-token',
     csrfToken: 'test-csrf-token',
   });
 
   assertStringIncludes(html, 'totp_code');
-  assertStringIncludes(html, 'pending_user_id');
-  assertStringIncludes(html, 'value="123"');
+  assertStringIncludes(html, 'challenge_token');
+  assertStringIncludes(html, 'test-challenge-token');
   assertStringIncludes(html, '_csrf');
   assertStringIncludes(html, 'test-csrf-token');
   assertStringIncludes(html, 'Verification Code');
@@ -654,18 +685,51 @@ Deno.test('TwoFactorPasswordProvider: renderTotpForm shows error when provided',
     usersTable: adminUsers2fa,
     identityColumn: 'email',
     passwordColumn: 'passwordHash',
+    challengeSecret: AUTH_SECRET,
   });
 
   const html = provider.renderTotpForm({
     basePath: '/admin',
     title: 'Login',
-    pendingUserId: 1,
+    challengeToken: 'token',
     csrfToken: 'token',
     error: 'Invalid code',
   });
 
   assertStringIncludes(html, 'Invalid code');
   assertStringIncludes(html, 'alert'); // Error styling
+
+  await client.close();
+});
+
+Deno.test('TwoFactorPasswordProvider: throws error when no challengeSecret provided and env var not set', async () => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWith2fa });
+  await createAdminUsers2faTable(db);
+
+  let errorThrown = false;
+  try {
+    // Note: CMS_CHALLENGE_SECRET env var is not set in tests
+    new TwoFactorPasswordProvider({
+      db,
+      usersTable: adminUsers2fa,
+      identityColumn: 'email',
+      passwordColumn: 'passwordHash',
+      // No challengeSecret provided
+    });
+  } catch (error) {
+    errorThrown = true;
+    assertStringIncludes(
+      (error as Error).message,
+      'challengeSecret must be at least 32 characters',
+    );
+    assertStringIncludes(
+      (error as Error).message,
+      'CMS_2FA_SECRET',
+    );
+  }
+
+  assertEquals(errorThrown, true, 'Should throw when no challengeSecret');
 
   await client.close();
 });

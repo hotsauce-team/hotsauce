@@ -23,10 +23,16 @@ export {
 } from './totp.ts';
 
 // ─────────────────────────────────────────────────────────────
+// Challenge tokens - Signed tokens for 2FA verification
+// ─────────────────────────────────────────────────────────────
+export { createChallengeToken, verifyChallengeToken } from './challenge.ts';
+
+// ─────────────────────────────────────────────────────────────
 // Providers - Authentication backends
 // ─────────────────────────────────────────────────────────────
 export type {
   AuthProvider,
+  AuthResult,
   AuthUser,
   PasswordCredentials,
   PasswordProviderOptions,

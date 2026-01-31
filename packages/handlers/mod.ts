@@ -466,51 +466,33 @@ export function createCmsHandler(options: CmsOptions): Handler {
 
           // Check if this is a TOTP verification (phase 2 of 2FA)
           const totpCode = formData.get('totp_code') as string | null;
-          const pendingUserId = formData.get('pending_user_id') as
+          const challengeToken = formData.get('challenge_token') as
             | string
             | null;
 
-          if (totpCode && pendingUserId) {
-            // Phase 2: Verify TOTP code
-            const user = await resolvedAuth.provider.authenticate({
+          if (totpCode && challengeToken) {
+            // Phase 2: Verify TOTP code with signed challenge
+            const result = await resolvedAuth.provider.authenticate({
               totpCode: totpCode.replace(/\s/g, ''),
-              pendingUserId,
+              challengeToken,
             });
 
-            if (!user) {
-              // Invalid TOTP - show TOTP form again with error
-              const provider = resolvedAuth.provider as {
-                renderTotpForm?: (options: {
-                  basePath: string;
-                  title: string;
-                  error?: string;
-                  pendingUserId: string | number;
-                  csrfToken: string;
-                }) => string;
-              };
-
-              if (provider.renderTotpForm) {
-                const newCsrfToken = await generateCsrfToken(csrfSecret);
-                const html = provider.renderTotpForm({
-                  basePath: opts.basePath,
-                  title: resolvedAuth.loginTitle,
-                  pendingUserId,
-                  csrfToken: newCsrfToken,
-                  error: 'Invalid verification code. Please try again.',
-                });
-                return new Response(html, {
-                  status: 401,
-                  headers: {
-                    'Content-Type': 'text/html; charset=utf-8',
-                    ...SECURITY_HEADERS,
-                  },
-                });
-              }
-              // Fallback: redirect to login
-              return new Response(null, {
-                status: 302,
+            if (!result || result.status !== 'authenticated') {
+              // Invalid TOTP or expired challenge - show TOTP form again with error
+              // Note: We don't have the original challenge anymore, so user must re-enter password
+              const newCsrfToken = await generateCsrfToken(csrfSecret);
+              const html = renderLoginPage({
+                basePath: opts.basePath,
+                title: resolvedAuth.loginTitle,
+                identityLabel: resolvedAuth.identityLabel,
+                csrfToken: newCsrfToken,
+                error:
+                  'Invalid or expired verification code. Please log in again.',
+              });
+              return new Response(html, {
+                status: 401,
                 headers: {
-                  'Location': loginPath,
+                  'Content-Type': 'text/html; charset=utf-8',
                   ...SECURITY_HEADERS,
                 },
               });
@@ -518,8 +500,8 @@ export function createCmsHandler(options: CmsOptions): Handler {
 
             // TOTP verified - create JWT and set cookie
             const payload = createJwtPayload(
-              user.id,
-              user.role,
+              result.user.id,
+              result.user.role,
               resolvedAuth.maxAge,
             );
             const token = await signJwt(payload, resolvedAuth.secret);
@@ -565,12 +547,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
           }
 
           // Authenticate
-          const user = await resolvedAuth.provider.authenticate({
+          const result = await resolvedAuth.provider.authenticate({
             identity,
             password,
           });
 
-          if (!user) {
+          if (!result) {
             const newCsrfToken = await generateCsrfToken(csrfSecret);
             const html = renderLoginPage({
               basePath: opts.basePath,
@@ -590,13 +572,13 @@ export function createCmsHandler(options: CmsOptions): Handler {
           }
 
           // Check if 2FA verification is needed
-          if (user.role === '__pending_2fa__') {
+          if (result.status === 'pending_2fa') {
             const provider = resolvedAuth.provider as {
               renderTotpForm?: (options: {
                 basePath: string;
                 title: string;
                 error?: string;
-                pendingUserId: string | number;
+                challengeToken: string;
                 csrfToken: string;
               }) => string;
             };
@@ -606,7 +588,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               const html = provider.renderTotpForm({
                 basePath: opts.basePath,
                 title: resolvedAuth.loginTitle,
-                pendingUserId: user.id,
+                challengeToken: result.challenge,
                 csrfToken: newCsrfToken,
               });
               return new Response(html, {
@@ -636,7 +618,8 @@ export function createCmsHandler(options: CmsOptions): Handler {
             });
           }
 
-          // Create JWT and set auth cookie
+          // Fully authenticated - create JWT and set auth cookie
+          const user = result.user;
           const payload = createJwtPayload(
             user.id,
             user.role,

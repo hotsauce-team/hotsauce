@@ -248,10 +248,11 @@ packages/plugins/
 
 The CMS uses these environment variables for secrets (can also be passed directly):
 
-| Variable          | Purpose                          |
-| ----------------- | -------------------------------- |
-| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)   |
-| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars) |
+| Variable          | Purpose                                 |
+| ----------------- | --------------------------------------- |
+| `CMS_2FA_SECRET`  | 2FA challenge token signing (32+ chars) |
+| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)          |
+| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars)        |
 
 ## Authorization & Policy Model
 

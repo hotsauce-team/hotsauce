@@ -15,6 +15,18 @@ export interface AuthUser {
 }
 
 /**
+ * Authentication result - tagged union for different outcomes
+ *
+ * - `authenticated`: User is fully authenticated, ready for JWT
+ * - `pending_2fa`: Password verified, awaiting TOTP code
+ * - `null`: Authentication failed (invalid credentials)
+ */
+export type AuthResult =
+  | { status: 'authenticated'; user: AuthUser }
+  | { status: 'pending_2fa'; userId: string | number; challenge: string }
+  | null;
+
+/**
  * Auth provider interface
  *
  * Implement this to support different authentication methods:
@@ -25,11 +37,11 @@ export interface AuthUser {
  */
 export interface AuthProvider {
   /**
-   * Authenticate credentials and return user info
+   * Authenticate credentials and return result
    * @param credentials - Provider-specific credentials
-   * @returns User info if valid, null if invalid
+   * @returns AuthResult: authenticated user, pending 2FA, or null if invalid
    */
-  authenticate(credentials: unknown): Promise<AuthUser | null>;
+  authenticate(credentials: unknown): Promise<AuthResult>;
 
   /**
    * Optional: Render custom login form HTML
@@ -142,7 +154,7 @@ export class PasswordProvider implements AuthProvider {
     }
   }
 
-  async authenticate(credentials: unknown): Promise<AuthUser | null> {
+  async authenticate(credentials: unknown): Promise<AuthResult> {
     const { identity, password } = credentials as PasswordCredentials;
 
     if (!identity || !password) {
@@ -180,12 +192,15 @@ export class PasswordProvider implements AuthProvider {
         return null;
       }
 
-      // Return user info for JWT
+      // Return authenticated result for JWT
       return {
-        id: user[this.idColumn] as string | number,
-        role: this.roleColumn
-          ? (user[this.roleColumn] as string | undefined)
-          : undefined,
+        status: 'authenticated',
+        user: {
+          id: user[this.idColumn] as string | number,
+          role: this.roleColumn
+            ? (user[this.roleColumn] as string | undefined)
+            : undefined,
+        },
       };
     } catch {
       // Don't expose database errors

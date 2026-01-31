@@ -187,14 +187,15 @@ openssl rand -base64 32
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-| Variable          | Purpose            | Min Length |
-| ----------------- | ------------------ | ---------- |
-| `CMS_CSRF_SECRET` | CSRF token signing | 32 chars   |
-| `CMS_JWT_SECRET`  | JWT token signing  | 32 chars   |
+| Variable          | Purpose                     | Min Length |
+| ----------------- | --------------------------- | ---------- |
+| `CMS_2FA_SECRET`  | 2FA challenge token signing | 32 chars   |
+| `CMS_CSRF_SECRET` | CSRF token signing          | 32 chars   |
+| `CMS_JWT_SECRET`  | JWT token signing           | 32 chars   |
 
 **Best Practices:**
 
-- Use different secrets for CSRF and JWT
+- Use different secrets for CSRF, JWT, and challenge tokens
 - Store secrets in environment variables, not in code
 - Use secret management services in production (AWS Secrets Manager, etc.)
 - Rotate secrets periodically
@@ -203,6 +204,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ### .env.example
 
 ```bash
+# 2FA Challenge Tokens (required if using TwoFactorPasswordProvider)
+CMS_2FA_SECRET=yet-another-random-32-character-secret
+
 # CSRF Protection (required)
 CMS_CSRF_SECRET=your-random-32-character-secret-here
 

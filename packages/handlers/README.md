@@ -73,10 +73,11 @@ Deno.serve(handler);
 
 ## Environment Variables
 
-| Variable          | Purpose                          | Required                                       |
-| ----------------- | -------------------------------- | ---------------------------------------------- |
-| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)   | Yes, if not passed in options                  |
-| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars) | Yes, if auth enabled and not passed in options |
+| Variable          | Purpose                                 | Required                                       |
+| ----------------- | --------------------------------------- | ---------------------------------------------- |
+| `CMS_2FA_SECRET`  | 2FA challenge token signing (32+ chars) | Yes, if using TwoFactorPasswordProvider        |
+| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)          | Yes, if not passed in options                  |
+| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars)        | Yes, if auth enabled and not passed in options |
 
 Generate secrets with:
 
@@ -789,6 +790,7 @@ const handler = createCmsHandler({
       usersTable: users,
       totpSecretColumn: 'totpSecret', // default
       issuer: 'My App', // shown in authenticator apps
+      // challengeSecret reads from CMS_CHALLENGE_SECRET env var if not provided
     }),
   },
 });
@@ -797,11 +799,18 @@ const handler = createCmsHandler({
 **How it works:**
 
 1. User enters email/password
-2. If password valid AND user has `totpSecret` → show TOTP form
+2. If password valid AND user has `totpSecret` → show TOTP form with signed challenge
 3. User enters 6-digit code from authenticator app
-4. If TOTP valid → login complete
+4. If TOTP valid AND challenge signature valid → login complete
 
 Users without a `totpSecret` skip step 2-3 (2FA is optional per-user).
+
+**Security:** The challenge token is HMAC-signed with a 5-minute expiry to prevent:
+
+- Unlimited TOTP guessing (challenge expires, forcing password re-entry)
+- User ID tampering (signature verification fails if modified)
+
+Rate limiting should be implemented at the server level (e.g., fail2ban, middleware).
 
 **Setting up 2FA for a user:**
 
@@ -833,11 +842,12 @@ await db.update(users)
 
 **TwoFactorPasswordProvider Options:**
 
-| Option                           | Default        | Description                       |
-| -------------------------------- | -------------- | --------------------------------- |
-| `totpSecretColumn`               | `'totpSecret'` | Column storing base32 TOTP secret |
-| `issuer`                         | `'CMS'`        | App name shown in authenticator   |
-| (+ all PasswordProvider options) |                |                                   |
+| Option                           | Default              | Description                                     |
+| -------------------------------- | -------------------- | ----------------------------------------------- |
+| `totpSecretColumn`               | `'totpSecret'`       | Column storing base32 TOTP secret               |
+| `issuer`                         | `'CMS'`              | App name shown in authenticator                 |
+| `challengeSecret`                | `CMS_2FA_SECRET` env | Secret for signing challenge tokens (32+ chars) |
+| (+ all PasswordProvider options) |                      |                                                 |
 
 **TOTP Utilities:**
 
@@ -868,15 +878,15 @@ const uri = generateTOTPUri(secret, 'user@example.com', 'My App');
 Implement `AuthProvider` for custom authentication (OAuth, LDAP, etc.):
 
 ```ts
-import type { AuthProvider, AuthUser } from '@drizzle-cms/handlers';
+import type { AuthProvider, AuthResult } from '@drizzle-cms/handlers';
 
 class MyCustomProvider implements AuthProvider {
-  async authenticate(credentials: unknown): Promise<AuthUser | null> {
+  async authenticate(credentials: unknown): Promise<AuthResult> {
     const { token } = credentials as { token: string };
     // Your custom auth logic here
     const user = await verifyOAuthToken(token);
     if (!user) return null;
-    return { id: user.id, role: user.role };
+    return { status: 'authenticated', user: { id: user.id, role: user.role } };
   }
 }
 ```

@@ -6,12 +6,14 @@ import { attrs, html, raw } from '@drizzle-cms/ui';
 import { layout } from '@drizzle-cms/ui';
 import {
   type AuthProvider,
-  type AuthUser,
+  type AuthResult,
   type PasswordCredentials,
   PasswordProvider,
   type PasswordProviderOptions,
 } from './provider.ts';
 import { verifyTOTP } from './totp.ts';
+import { createChallengeToken, verifyChallengeToken } from './challenge.ts';
+import { getEnv } from '../runtime-compat.ts';
 
 /**
  * Credentials for two-factor authentication
@@ -19,8 +21,8 @@ import { verifyTOTP } from './totp.ts';
 export interface TwoFactorCredentials extends PasswordCredentials {
   /** TOTP code (6 digits) - present in phase 2 */
   totpCode?: string;
-  /** Pending user ID from phase 1 */
-  pendingUserId?: string | number;
+  /** Signed challenge token from phase 1 */
+  challengeToken?: string;
 }
 
 /**
@@ -31,36 +33,49 @@ export interface TwoFactorPasswordProviderOptions
   /** Column name for TOTP secret. Default: 'totpSecret' */
   totpSecretColumn?: string;
 
-  /** Column name for backup codes (JSON array). Default: 'totpBackupCodes' */
-  backupCodesColumn?: string;
-
   /** Application name shown in authenticator apps */
   issuer?: string;
+
+  /**
+   * Secret for signing challenge tokens (32+ chars).
+   * If not provided, falls back to CMS_2FA_SECRET environment variable.
+   * Prevents unlimited TOTP guessing attacks.
+   */
+  challengeSecret?: string;
 }
 
 /**
  * Password + TOTP two-factor authentication provider
  *
  * Two-phase authentication flow:
- * 1. User submits email/password → if valid and 2FA enabled, shows TOTP form
- * 2. User submits TOTP code → if valid, returns AuthUser
+ * 1. User submits email/password → if valid and 2FA enabled, returns pending_2fa with signed challenge
+ * 2. User submits TOTP code + challenge token → if valid, returns authenticated user
  *
  * Users without a TOTP secret configured skip phase 2.
  *
+ * Security features:
+ * - Challenge token is signed and time-limited (5 minutes)
+ * - Token binds to specific user ID, preventing reuse
+ * - Rate limiting should be implemented by the server (e.g., fail2ban, middleware)
+ *
+ * Environment variables:
+ * - CMS_2FA_SECRET: Fallback for challengeSecret option (32+ chars)
+ *
  * @example
  * ```ts
- * // Minimal config (uses defaults)
+ * // Minimal config - uses CMS_CHALLENGE_SECRET from environment
  * const provider = new TwoFactorPasswordProvider({
  *   db,
  *   usersTable: schema.admins,
  * });
  *
- * // Custom column names
+ * // Explicit secret (overrides environment variable)
  * const provider = new TwoFactorPasswordProvider({
  *   db,
  *   usersTable: schema.admins,
  *   totpSecretColumn: 'two_factor_secret',
  *   issuer: 'My CMS',
+ *   challengeSecret: 'my-explicit-secret-at-least-32-chars',
  * });
  * ```
  */
@@ -72,10 +87,22 @@ export class TwoFactorPasswordProvider implements AuthProvider {
   private usersTable: any;
   private idColumn: string;
   private totpSecretColumn: string;
+  private challengeSecret: string;
   /** Application name for authenticator apps (used in setup flow) */
   readonly issuer: string;
 
   constructor(options: TwoFactorPasswordProviderOptions) {
+    // Resolve challenge secret: option > env var
+    const challengeSecret = options.challengeSecret ??
+      getEnv('CMS_2FA_SECRET');
+
+    if (!challengeSecret || challengeSecret.length < 32) {
+      throw new Error(
+        'TwoFactorPasswordProvider: challengeSecret must be at least 32 characters. ' +
+          'Either pass challengeSecret option or set CMS_2FA_SECRET environment variable.',
+      );
+    }
+
     // Delegate password checking to PasswordProvider
     this.passwordProvider = new PasswordProvider(options);
 
@@ -84,16 +111,28 @@ export class TwoFactorPasswordProvider implements AuthProvider {
     this.idColumn = options.idColumn ?? 'id';
     this.totpSecretColumn = options.totpSecretColumn ?? 'totpSecret';
     this.issuer = options.issuer ?? 'CMS';
+    this.challengeSecret = challengeSecret;
 
     // Note: totpSecretColumn is optional - users without it skip 2FA
   }
 
-  async authenticate(credentials: unknown): Promise<AuthUser | null> {
+  async authenticate(credentials: unknown): Promise<AuthResult> {
     const creds = credentials as TwoFactorCredentials;
 
-    // Phase 2: TOTP verification
-    if (creds.totpCode && creds.pendingUserId) {
-      return this.verifyTotpPhase(creds.pendingUserId, creds.totpCode);
+    // Phase 2: TOTP verification with signed challenge
+    if (creds.totpCode && creds.challengeToken) {
+      // Verify the challenge token and extract user ID
+      const userId = await verifyChallengeToken(
+        creds.challengeToken,
+        this.challengeSecret,
+      );
+
+      if (!userId) {
+        // Invalid or expired challenge token
+        return null;
+      }
+
+      return this.verifyTotpPhase(userId, creds.totpCode);
     }
 
     // Phase 1: Password verification
@@ -108,19 +147,27 @@ export class TwoFactorPasswordProvider implements AuthProvider {
       password,
     });
 
-    if (!passwordResult) {
+    if (!passwordResult || passwordResult.status !== 'authenticated') {
       return null;
     }
 
+    const user = passwordResult.user;
+
     // Check if user has 2FA enabled
-    const totpSecret = await this.getUserTotpSecret(passwordResult.id);
+    const totpSecret = await this.getUserTotpSecret(user.id);
 
     if (totpSecret) {
-      // Return pending state - handler will show TOTP form
-      // Use a special marker that the handler recognizes
+      // Create signed challenge token for phase 2
+      const challenge = await createChallengeToken(
+        user.id,
+        this.challengeSecret,
+      );
+
+      // Return pending state with challenge
       return {
-        id: passwordResult.id,
-        role: '__pending_2fa__',
+        status: 'pending_2fa',
+        userId: user.id,
+        challenge,
       };
     }
 
@@ -136,14 +183,14 @@ export class TwoFactorPasswordProvider implements AuthProvider {
 
       // Check if this is phase 2 (TOTP submission)
       const totpCode = formData.get('totp_code') as string | null;
-      const pendingUserId = formData.get('pending_user_id') as string | null;
+      const challengeToken = formData.get('challenge_token') as string | null;
 
-      if (totpCode && pendingUserId) {
+      if (totpCode && challengeToken) {
         return {
           identity: '', // Not needed for phase 2
           password: '', // Not needed for phase 2
           totpCode: totpCode.replace(/\s/g, ''), // Strip spaces
-          pendingUserId,
+          challengeToken,
         };
       }
 
@@ -175,10 +222,10 @@ export class TwoFactorPasswordProvider implements AuthProvider {
     basePath: string;
     title: string;
     error?: string;
-    pendingUserId: string | number;
+    challengeToken: string;
     csrfToken: string;
   }): string {
-    const { basePath, title, error, pendingUserId, csrfToken } = options;
+    const { basePath, title, error, challengeToken, csrfToken } = options;
 
     const formContent = html`
       <div class="cms-login-container">
@@ -198,9 +245,7 @@ export class TwoFactorPasswordProvider implements AuthProvider {
 
           <form method="POST" action="${basePath}/login" class="cms-login-form">
             <input type="hidden" name="_csrf" value="${csrfToken}" />
-            <input type="hidden" name="pending_user_id" value="${String(
-              pendingUserId,
-            )}" />
+            <input type="hidden" name="challenge_token" value="${challengeToken}" />
 
             <div class="cms-form-field">
               <label for="totp_code" class="cms-label">Verification Code</label>
@@ -279,7 +324,7 @@ export class TwoFactorPasswordProvider implements AuthProvider {
   private async verifyTotpPhase(
     userId: string | number,
     code: string,
-  ): Promise<AuthUser | null> {
+  ): Promise<AuthResult> {
     try {
       const idCol = this.usersTable[this.idColumn];
 
@@ -314,13 +359,16 @@ export class TwoFactorPasswordProvider implements AuthProvider {
       const valid = await verifyTOTP(code, user.totpSecret);
 
       if (!valid) {
-        // TODO: Check backup codes if TOTP fails
+        // TODO: Check backup codes if TOTP fails (see README for planned feature)
         return null;
       }
 
       return {
-        id: user.id,
-        role: user.role,
+        status: 'authenticated',
+        user: {
+          id: user.id,
+          role: user.role,
+        },
       };
     } catch {
       return null;
