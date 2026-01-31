@@ -37,6 +37,7 @@
     "@hotsauce/auth": "./packages/auth/mod.ts",
     "@hotsauce/cms": "./packages/cms/mod.ts",
     "@hotsauce/workers": "./packages/workers/mod.ts",
+    "jsr:@hotsauce/workers@0.1.0": "./packages/workers/mod.ts",
     "@hotsauce/plugins": "./packages/plugins/mod.ts",
     "@hotsauce/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
     "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
