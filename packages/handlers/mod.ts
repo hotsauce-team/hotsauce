@@ -747,13 +747,15 @@ export function createCmsHandler(options: CmsOptions): Handler {
       const provider = resolvedAuth.provider as PasswordProvider;
 
       // Create account route context
+      // Note: challengeSecret is guaranteed ≥32 chars when twoFactorEnabled is true
+      // (provider constructor throws otherwise). The ?? '' fallback is for when 2FA
+      // is disabled - account routes guard on twoFactorEnabled before using it.
       const accountCtx: AccountRouteContext = {
         basePath: opts.basePath,
         title: opts.title,
         jwtPayload,
         provider,
         csrfSecret,
-        // Use provider's challengeSecret (validated at construction time)
         challengeSecret: provider.challengeSecret ?? '',
         generateCsrfToken,
         validateCsrfToken,
