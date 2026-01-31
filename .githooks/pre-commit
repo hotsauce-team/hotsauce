@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+
+# Optional escape hatch
+if [ "${SKIP_DENO_CHECKS:-}" != "" ]; then
+  echo "⏭️  Skipping pre-commit checks (SKIP_DENO_CHECKS set)"
+  exit 0
+fi
+
+echo "🔍 Running pre-commit checks..."
+
+# Run fmt and lint in parallel (both fast, independent)
+echo "   Checking format & lint..."
+deno fmt --check &
+FMT_PID=$!
+deno lint &
+LINT_PID=$!
+
+# Wait for both and capture exit codes
+FMT_EXIT=0
+LINT_EXIT=0
+wait $FMT_PID || FMT_EXIT=$?
+wait $LINT_PID || LINT_EXIT=$?
+
+if [ $FMT_EXIT -ne 0 ]; then
+  echo "❌ Format check failed. Run: deno fmt"
+  exit 1
+fi
+
+if [ $LINT_EXIT -ne 0 ]; then
+  echo "❌ Lint check failed. Run: deno lint"
+  exit 1
+fi
+
+# Type check last (slowest)
+echo "   Type checking..."
+if ! deno task check; then
+  echo "❌ Type check failed."
+  exit 1
+fi
+
+echo "✅ All checks passed!"
