@@ -464,7 +464,84 @@ export function createCmsHandler(options: CmsOptions): Handler {
             });
           }
 
-          // Parse credentials from form data (identity already extracted above for CSRF error case)
+          // Check if this is a TOTP verification (phase 2 of 2FA)
+          const totpCode = formData.get('totp_code') as string | null;
+          const pendingUserId = formData.get('pending_user_id') as
+            | string
+            | null;
+
+          if (totpCode && pendingUserId) {
+            // Phase 2: Verify TOTP code
+            const user = await resolvedAuth.provider.authenticate({
+              totpCode: totpCode.replace(/\s/g, ''),
+              pendingUserId,
+            });
+
+            if (!user) {
+              // Invalid TOTP - show TOTP form again with error
+              const provider = resolvedAuth.provider as {
+                renderTotpForm?: (options: {
+                  basePath: string;
+                  title: string;
+                  error?: string;
+                  pendingUserId: string | number;
+                  csrfToken: string;
+                }) => string;
+              };
+
+              if (provider.renderTotpForm) {
+                const newCsrfToken = await generateCsrfToken(csrfSecret);
+                const html = provider.renderTotpForm({
+                  basePath: opts.basePath,
+                  title: resolvedAuth.loginTitle,
+                  pendingUserId,
+                  csrfToken: newCsrfToken,
+                  error: 'Invalid verification code. Please try again.',
+                });
+                return new Response(html, {
+                  status: 401,
+                  headers: {
+                    'Content-Type': 'text/html; charset=utf-8',
+                    ...SECURITY_HEADERS,
+                  },
+                });
+              }
+              // Fallback: redirect to login
+              return new Response(null, {
+                status: 302,
+                headers: {
+                  'Location': loginPath,
+                  ...SECURITY_HEADERS,
+                },
+              });
+            }
+
+            // TOTP verified - create JWT and set cookie
+            const payload = createJwtPayload(
+              user.id,
+              user.role,
+              resolvedAuth.maxAge,
+            );
+            const token = await signJwt(payload, resolvedAuth.secret);
+            const cookie = createAuthCookie(
+              resolvedAuth.cookieName,
+              token,
+              resolvedAuth.maxAge,
+              opts.basePath,
+              isSecureRequest(request),
+            );
+
+            return new Response(null, {
+              status: 302,
+              headers: {
+                'Location': opts.basePath,
+                'Set-Cookie': cookie,
+                ...SECURITY_HEADERS,
+              },
+            });
+          }
+
+          // Phase 1: Parse credentials from form data
           const password = formData.get('password') as string | null;
 
           // Validate required fields
@@ -505,6 +582,53 @@ export function createCmsHandler(options: CmsOptions): Handler {
             });
             return new Response(html, {
               status: 401,
+              headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+                ...SECURITY_HEADERS,
+              },
+            });
+          }
+
+          // Check if 2FA verification is needed
+          if (user.role === '__pending_2fa__') {
+            const provider = resolvedAuth.provider as {
+              renderTotpForm?: (options: {
+                basePath: string;
+                title: string;
+                error?: string;
+                pendingUserId: string | number;
+                csrfToken: string;
+              }) => string;
+            };
+
+            if (provider.renderTotpForm) {
+              const newCsrfToken = await generateCsrfToken(csrfSecret);
+              const html = provider.renderTotpForm({
+                basePath: opts.basePath,
+                title: resolvedAuth.loginTitle,
+                pendingUserId: user.id,
+                csrfToken: newCsrfToken,
+              });
+              return new Response(html, {
+                status: 200,
+                headers: {
+                  'Content-Type': 'text/html; charset=utf-8',
+                  ...SECURITY_HEADERS,
+                },
+              });
+            }
+            // Provider doesn't support 2FA form - treat as auth failure
+            const newCsrfToken = await generateCsrfToken(csrfSecret);
+            const html = renderLoginPage({
+              basePath: opts.basePath,
+              title: resolvedAuth.loginTitle,
+              identityLabel: resolvedAuth.identityLabel,
+              identityValue: identity ?? '',
+              csrfToken: newCsrfToken,
+              error: '2FA is required but not configured properly.',
+            });
+            return new Response(html, {
+              status: 500,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
                 ...SECURITY_HEADERS,
