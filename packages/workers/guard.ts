@@ -2,16 +2,17 @@
 // Ensures exported worker functions only run in appropriate contexts
 
 /**
- * Global marker that drizzle-cms sets on the main thread.
+ * Type for the CMS main process marker on globalThis.
+ * Set to `true` by createCmsHandler on the main thread.
  * Workers don't inherit this, so its absence indicates Worker context.
  *
  * Plugin authors: use this one-liner at the start of exported functions:
  * ```typescript
- * if (globalThis.__CMS_MAIN_PROCESS__) throw new Error('Worker only');
+ * if ((globalThis as CmsGlobalThis).__CMS_MAIN_PROCESS__) throw new Error('Worker only');
  * ```
  */
-declare global {
-  var __CMS_MAIN_PROCESS__: boolean | undefined;
+export interface CmsGlobalThis {
+  __CMS_MAIN_PROCESS__?: boolean;
 }
 
 /**
@@ -33,7 +34,7 @@ declare global {
 export function isWorkerContext(): boolean {
   // If the main thread marker is set, we're on the main thread
   // Workers don't inherit globals, so this will be undefined in Workers
-  return globalThis.__CMS_MAIN_PROCESS__ !== true;
+  return (globalThis as CmsGlobalThis).__CMS_MAIN_PROCESS__ !== true;
 }
 
 /**

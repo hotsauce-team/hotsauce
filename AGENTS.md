@@ -28,21 +28,16 @@ Guidelines for AI coding assistants working on this project.
 - Do NOT suggest adding any other production packages
 - All four packages have zero transitive dependencies — keep it that way
 
-### Vendored Dependencies
+### Optional Peer Dependencies
 
-Some functionality requires complex algorithms that would be impractical to implement from scratch. These are **vendored** (copied into the repo) rather than added as npm dependencies:
+Some features require external packages that users install only if needed:
 
-- **`packages/vendor/`** — Contains vendored third-party code with typed wrappers
-- **qrcode-generator** — QR code generation for 2FA setup (MIT license, ~50KB, zero deps)
-
-Vendored code must be:
-
-- MIT, Apache 2.0, or BSD licensed (compatible with our MIT license)
-- Zero dependencies (self-contained)
-- Small footprint (under 100KB)
-- Stable and battle-tested
-
-See [`packages/vendor/README.md`](packages/vendor/README.md) for details.
+- **qrcode-generator** — QR code generation for 2FA setup
+  - Only required if using built-in password auth with 2FA enabled
+  - Not needed for external auth providers (OAuth, SAML, etc.)
+  - **Supply chain risk:** This is an npm package outside our control
+  - **Recommendation:** Pin to a specific version you have audited
+  - Install with: `npm install qrcode-generator@2.0.4`
 
 ### Dev Dependencies (testing only)
 

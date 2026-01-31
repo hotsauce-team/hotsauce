@@ -15,7 +15,6 @@
     "./packages/cms",
     "./packages/workers",
     "./packages/plugins",
-    "./packages/vendor",
 
     // Examples
     "./examples/deno-server",
@@ -40,7 +39,8 @@
     "@hotsauce/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
     "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
 
-    "@hotsauce/vendor": "./packages/vendor/mod.ts",
+    // Optional peer dependency for 2FA QR code generation
+    "qrcode-generator": "npm:qrcode-generator@^2.0.4",
 
     // Dev dependencies (not shipped to users)
     "@std/assert": "jsr:@std/assert@*",
@@ -99,8 +99,7 @@
   "fmt": {
     "indentWidth": 2,
     "singleQuote": true,
-    "proseWrap": "preserve",
-    "exclude": ["packages/vendor/qrcode-generator/"]
+    "proseWrap": "preserve"
   },
 
   // Linting
@@ -108,8 +107,7 @@
     "rules": {
       "tags": ["recommended"],
       "include": ["no-console"]
-    },
-    "exclude": ["packages/vendor/qrcode-generator/"]
+    }
   },
 
   // Exclude build artifacts

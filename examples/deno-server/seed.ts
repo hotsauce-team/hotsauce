@@ -7,7 +7,7 @@ import {
   generateTOTPUri,
   hashPassword,
 } from '../../packages/handlers/mod.ts';
-import { qrcode } from '../../packages/vendor/mod.ts';
+import qrcode from 'qrcode-generator';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');

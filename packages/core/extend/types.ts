@@ -4,6 +4,10 @@
 // Column-level CMS options
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Options for customizing how a column appears in the CMS.
+ * Applied via `column.$cms({ ... })` method.
+ */
 export type CmsColumnOptions = {
   /** Treat this column as a file reference (UI: file input). */
   file?: boolean;
@@ -68,6 +72,10 @@ export type FrontendUrlFn = (
   record: Record<string, unknown>,
 ) => string | null | undefined;
 
+/**
+ * Options for customizing how a table appears in the CMS.
+ * Applied via `table.$cms({ ... })` method.
+ */
 export type CmsTableOptions = {
   /**
    * Generate a frontend URL for viewing this record on the site.
@@ -107,5 +115,7 @@ export type CmsTableOptions = {
   icon?: string;
 };
 
-/** Symbol used to store CMS table options */
-export const CMS_TABLE_OPTIONS = Symbol.for('drizzle-cms:tableOptions');
+/** Symbol used to store CMS table options on Drizzle table objects. */
+export const CMS_TABLE_OPTIONS: unique symbol = Symbol.for(
+  'drizzle-cms:tableOptions',
+);

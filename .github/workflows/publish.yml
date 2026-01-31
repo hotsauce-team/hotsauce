@@ -1,0 +1,95 @@
+name: Publish to JSR
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Require write permissions for JSR provenance attestation
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Only publish from main branch
+    if: github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify tag is on main branch
+        run: |
+          # Check if the tagged commit is on main
+          if ! git branch -r --contains "$GITHUB_SHA" | grep -q 'origin/main'; then
+            echo "❌ Tag must be on main branch"
+            echo "   Tagged commit: $GITHUB_SHA"
+            echo "   Branches containing this commit:"
+            git branch -r --contains "$GITHUB_SHA"
+            exit 1
+          fi
+          echo "✅ Tag is on main branch"
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Verify version consistency
+        run: |
+          # Extract version from git tag (strip 'v' prefix)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Tag version: $TAG_VERSION"
+
+          # Check each package has the correct version
+          PACKAGES=(core ui workers auth plugins cms)
+          for pkg in "${PACKAGES[@]}"; do
+            PKG_VERSION=$(grep -o '"version": "[^"]*"' "packages/$pkg/deno.json" | cut -d'"' -f4)
+            if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+              echo "❌ Version mismatch in packages/$pkg/deno.json"
+              echo "   Expected: $TAG_VERSION"
+              echo "   Found: $PKG_VERSION"
+              exit 1
+            fi
+            echo "✓ packages/$pkg/deno.json: $PKG_VERSION"
+          done
+          echo "✅ All package versions match tag $TAG_VERSION"
+
+      - name: Run tests
+        run: deno task test
+
+      # Publish packages in dependency order:
+      # 1. core (no internal deps)
+      # 2. ui (no internal deps)
+      # 3. workers (no internal deps)
+      # 4. auth (depends on nothing internal)
+      # 5. plugins (depends on workers)
+      # 6. cms (depends on core, ui, workers, auth, plugins)
+
+      - name: Publish @hotsauce/core
+        run: deno publish --allow-slow-types
+        working-directory: packages/core
+
+      - name: Publish @hotsauce/ui
+        run: deno publish
+        working-directory: packages/ui
+
+      - name: Publish @hotsauce/workers
+        run: deno publish
+        working-directory: packages/workers
+
+      - name: Publish @hotsauce/auth
+        run: deno publish
+        working-directory: packages/auth
+
+      - name: Publish @hotsauce/plugins
+        run: deno publish
+        working-directory: packages/plugins
+
+      - name: Publish @hotsauce/cms
+        run: deno publish
+        working-directory: packages/cms

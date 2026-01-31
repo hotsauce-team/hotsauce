@@ -14,6 +14,7 @@
     "npm:micromark@4": "4.0.2",
     "npm:micromark@4.0.2": "4.0.2",
     "npm:postgres@^3.4.8": "3.4.8",
+    "npm:qrcode-generator@^2.0.4": "2.0.4",
     "npm:sql.js@^1.13.0": "1.13.0",
     "npm:zod@^4.3.5": "4.3.5"
   },
@@ -332,6 +333,9 @@
     "postgres@3.4.8": {
       "integrity": "sha512-d+JFcLM17njZaOLkv6SCev7uoLaBtfK86vMUXhW1Z4glPWh4jozno9APvW/XKFJ3CCxVoC7OL38BqRydtu5nGg=="
     },
+    "qrcode-generator@2.0.4": {
+      "integrity": "sha512-mZSiP6RnbHl4xL2Ap5HfkjLnmxfKcPWpWe/c+5XxCuetEenqmNFf1FH/ftXPCtFG5/TDobjsjz6sSNL0Sr8Z9g=="
+    },
     "sql.js@1.13.0": {
       "integrity": "sha512-RJbVP1HRDlUUXahJ7VMTcu9Rm1Nzw+EBpoPr94vnbD4LwR715F3CcxE2G2k45PewcaZ57pjetYa+LoSJLAASgA=="
     },
@@ -349,6 +353,7 @@
       "npm:drizzle-orm@~0.45.1",
       "npm:drizzle-zod@~0.8.3",
       "npm:postgres@^3.4.8",
+      "npm:qrcode-generator@^2.0.4",
       "npm:sql.js@^1.13.0",
       "npm:zod@^4.3.5"
     ],

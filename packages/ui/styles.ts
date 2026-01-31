@@ -7,7 +7,7 @@
  * All CSS is served from a single external file to enable
  * strict Content Security Policy (style-src 'self') without nonces.
  */
-export const cmsStylesheet = `
+export const cmsStylesheet: string = `
 :root {
   --cms-primary: #2563eb;
   --cms-primary-hover: #1d4ed8;

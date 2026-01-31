@@ -422,7 +422,7 @@ export function render2FADisablePage(options: {
 /**
  * Additional CSS for account pages
  */
-export const accountStyles = `
+export const accountStyles: string = `
 /* Account Pages */
 .cms-account-container {
   max-width: 600px;

@@ -111,7 +111,7 @@ const AuthenticatedSchema = BaseOptionsSchema.extend({
  * Uses check() to route to the correct schema based on auth value,
  * providing better error messages than a plain union.
  */
-export const CmsOptionsSchema = z.any().check((ctx) => {
+export const CmsOptionsSchema: z.ZodType<unknown> = z.any().check((ctx) => {
   const data = ctx.value;
 
   if (data == null || typeof data !== 'object') {
@@ -145,10 +145,18 @@ export const CmsOptionsSchema = z.any().check((ctx) => {
 });
 
 /**
+ * Type for resolved secrets after env var fallback
+ */
+export interface ResolvedSecrets {
+  csrfSecret: string;
+  authSecret?: string;
+}
+
+/**
  * Schema for resolved secrets (after env var fallback).
  * Used internally after resolving CMS_JWT_SECRET and CMS_CSRF_SECRET.
  */
-export const ResolvedSecretsSchema = z.object({
+export const ResolvedSecretsSchema: z.ZodType<ResolvedSecrets> = z.object({
   csrfSecret: z.string().min(32, {
     message: 'csrfSecret must be at least 32 characters. ' +
       'Either pass csrfSecret directly or set CMS_CSRF_SECRET environment variable. ' +

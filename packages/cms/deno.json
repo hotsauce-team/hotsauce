@@ -1,5 +1,16 @@
 {
   "name": "@hotsauce/cms",
-  "version": "0.0.1",
-  "exports": "./mod.ts"
+  "version": "0.1.0",
+  "exports": "./mod.ts",
+  "publish": {
+    "include": [
+      "mod.ts",
+      "*.ts",
+      "plugins/",
+      "policies/",
+      "README.md",
+      "LICENSE"
+    ],
+    "exclude": ["tests/"]
+  }
 }
