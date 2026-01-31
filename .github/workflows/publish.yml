@@ -59,8 +59,8 @@ jobs:
           done
           echo "✅ All package versions match tag $TAG_VERSION"
 
-      # - name: Run tests
-      #   run: deno task test
+      - name: Run tests
+        run: deno task test
 
       # Publish packages in dependency order:
       # 1. core (no internal deps)
