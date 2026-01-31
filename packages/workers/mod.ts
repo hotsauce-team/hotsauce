@@ -1,4 +1,4 @@
-// @hotsauce/handlers-workers
+// @hotsauce/workers
 // Worker sandbox execution for CMS plugins
 // Compatible with Deno and Node.js 20+
 

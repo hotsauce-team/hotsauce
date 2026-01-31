@@ -5,7 +5,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
-import { hashPassword } from '@hotsauce/handlers';
+import { hashPassword } from '@hotsauce/cms';
 import type { FileReference } from '@hotsauce/core';
 import { parseMarkdown } from './lib/markdown.ts';
 import { sanitizeHtml } from './lib/sanitize.ts';

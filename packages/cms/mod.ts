@@ -1,4 +1,4 @@
-// @hotsauce/handlers
+// @hotsauce/cms
 // CRUD route handlers using Web Standard Request/Response
 // Works with Deno, Node 20+, Bun, Cloudflare Workers
 
@@ -292,7 +292,7 @@ export {
  *
  * @example
  * ```ts
- * import { createCmsHandler } from '@hotsauce/handlers';
+ * import { createCmsHandler } from '@hotsauce/cms';
  * import * as schema from './schema.ts';
  *
  * const handler = createCmsHandler({
@@ -306,7 +306,7 @@ export {
  *
  * @example With authentication
  * ```ts
- * import { createCmsHandler, PasswordProvider } from '@hotsauce/handlers';
+ * import { createCmsHandler, PasswordProvider } from '@hotsauce/cms';
  *
  * const handler = createCmsHandler({
  *   db,

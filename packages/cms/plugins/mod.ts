@@ -36,9 +36,6 @@ export {
   type RegisteredPlugin,
 } from './registry.ts';
 
-export {
-  createWorkerExecutor,
-  WorkerExecutor,
-} from '@hotsauce/handlers-workers';
+export { createWorkerExecutor, WorkerExecutor } from '@hotsauce/workers';
 
 export { createPluginService, PluginService } from './service.ts';

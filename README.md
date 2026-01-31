@@ -15,16 +15,16 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 
 ```bash
 # Deno
-deno add jsr:@hotsauce/core jsr:@hotsauce/ui jsr:@hotsauce/handlers
+deno add jsr:@hotsauce/core jsr:@hotsauce/ui jsr:@hotsauce/cms
 
 # Node
-npx jsr add @hotsauce/core @hotsauce/ui @hotsauce/handlers
+npx jsr add @hotsauce/core @hotsauce/ui @hotsauce/cms
 ```
 
 ## Quick Start
 
 ```typescript
-import { createCmsHandler } from '@hotsauce/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.ts';
@@ -47,13 +47,13 @@ Deno.serve(handler);
 
 Each package has its own README with detailed API documentation:
 
-| Package                                                    | Purpose                                         | Docs                                          |
-| ---------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------- |
-| [`@hotsauce/core`](packages/core/)                         | Schema introspection, field mapping, validation | [README](packages/core/README.md)             |
-| [`@hotsauce/ui`](packages/ui/)                             | HTML generation, form rendering, views          | [README](packages/ui/README.md)               |
-| [`@hotsauce/handlers`](packages/handlers/)                 | CRUD route handlers (Request → Response)        | [README](packages/handlers/README.md)         |
-| [`@hotsauce/handlers-workers`](packages/handlers-workers/) | Worker sandbox for plugin isolation             | [README](packages/handlers-workers/README.md) |
-| [`@hotsauce/plugins`](packages/plugins/)                   | Official plugins (audit-log, etc.)              | [README](packages/plugins/README.md)          |
+| Package                                  | Purpose                                         | Docs                                 |
+| ---------------------------------------- | ----------------------------------------------- | ------------------------------------ |
+| [`@hotsauce/core`](packages/core/)       | Schema introspection, field mapping, validation | [README](packages/core/README.md)    |
+| [`@hotsauce/ui`](packages/ui/)           | HTML generation, form rendering, views          | [README](packages/ui/README.md)      |
+| [`@hotsauce/cms`](packages/cms/)         | CRUD route handlers (Request → Response)        | [README](packages/cms/README.md)     |
+| [`@hotsauce/workers`](packages/workers/) | Worker sandbox for plugin isolation             | [README](packages/workers/README.md) |
+| [`@hotsauce/plugins`](packages/plugins/) | Official plugins (audit-log, etc.)              | [README](packages/plugins/README.md) |
 
 ```
 packages/
@@ -70,14 +70,14 @@ packages/
 │   ├── views/         # List, detail, edit views
 │   └── components/    # Layout, pagination, alerts
 │
-├── handlers/          # CRUD route handlers (Web Standard Request/Response)
+├── cms/               # CRUD route handlers (Web Standard Request/Response)
 │   │                  # Bring Your Own Server - works with any framework
 │   ├── router.ts      # URL routing and handler dispatch
 │   ├── crud.ts        # List, create, read, update, delete handlers
 │   ├── auth/          # JWT authentication module
-│   └── plugins/       # Plugin registry and service (uses handlers-workers)
+│   └── plugins/       # Plugin registry and service (uses workers)
 │
-├── handlers-workers/  # Worker sandbox for plugin isolation
+├── workers/           # Worker sandbox for plugin isolation
 │   │                  # Compatible with Deno and Node.js 20+
 │   ├── executor.ts    # Manages Worker instances
 │   └── sandbox/       # Worker script that runs plugin code
@@ -91,7 +91,7 @@ packages/
 The handlers package exports a single function that returns a Web Standard `Request → Response` handler. Wire it up to any server:
 
 ```typescript
-import { createCmsHandler } from '@hotsauce/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 import * as schema from './schema.ts';
 
 const handler = createCmsHandler({
@@ -204,7 +204,7 @@ By default, the CMS auto-generates validation schemas from your Drizzle tables u
 ```typescript
 import { z } from 'zod';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
-import type { Parsers } from '@hotsauce/handlers';
+import type { Parsers } from '@hotsauce/cms';
 
 // Extend drizzle-zod schemas with custom rules
 const usersInsertSchema = createInsertSchema(users, {

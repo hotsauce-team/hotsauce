@@ -1,5 +1,5 @@
 // Plugin system types
-// Re-exports from @hotsauce/handlers-workers with CMS-specific additions
+// Re-exports from @hotsauce/workers with CMS-specific additions
 
 // Re-export all types from handlers-workers
 export type {
@@ -19,7 +19,7 @@ export type {
   SerializableValue,
   TransformFn,
   TransformHooks,
-} from '@hotsauce/handlers-workers';
+} from '@hotsauce/workers';
 
 // Import for use in local type definitions
 import type {
@@ -28,7 +28,7 @@ import type {
   PluginHooks,
   PluginRoute,
   TransformHooks,
-} from '@hotsauce/handlers-workers';
+} from '@hotsauce/workers';
 
 // ─────────────────────────────────────────────────────────────
 // Plugin capabilities - declared permissions
@@ -64,10 +64,7 @@ export interface PluginCapabilities {
 }
 
 // Re-export error context from handlers-workers
-export type {
-  PluginErrorContext,
-  PluginErrorHandler,
-} from '@hotsauce/handlers-workers';
+export type { PluginErrorContext, PluginErrorHandler } from '@hotsauce/workers';
 
 // ─────────────────────────────────────────────────────────────
 // Plugin filter context - for deciding whether to invoke hooks

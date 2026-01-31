@@ -198,7 +198,7 @@ export interface CmsOptionsWithAuth extends CmsOptionsBase {
    *
    * @example
    * ```ts
-   * import { ownedBy, adminOr, readOnly } from '@hotsauce/handlers';
+   * import { ownedBy, adminOr, readOnly } from '@hotsauce/cms';
    *
    * policies: {
    *   // Users can only edit their own posts

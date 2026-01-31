@@ -7,7 +7,7 @@ import {
   ownedBy,
   PasswordProvider,
   readOnly,
-} from '@hotsauce/handlers';
+} from '@hotsauce/cms';
 import {
   inProcessFormatNamesPlugin,
   isolatedAuditLogPlugin,

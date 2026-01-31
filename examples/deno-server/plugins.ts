@@ -1,6 +1,6 @@
 // Type-only import - no plugin code runs, just compile-time type checking
 import type { AuditLogConfig } from '@hotsauce/plugins/audit-log';
-import type { PluginConfig } from '@hotsauce/handlers';
+import type { PluginConfig } from '@hotsauce/cms';
 
 // Create Worker for the audit log plugin
 // The plugin code is loaded ONLY in the Worker - no plugin code runs in main thread

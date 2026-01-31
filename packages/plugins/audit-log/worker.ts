@@ -3,13 +3,13 @@
 // deno-lint-ignore-file no-console
 
 /// <reference lib="webworker" />
-/// <reference types="@hotsauce/handlers-workers" />
+/// <reference types="@hotsauce/workers" />
 
 import type {
   ActionContext,
   CrudAction,
   Serializable,
-} from '@hotsauce/handlers-workers';
+} from '@hotsauce/workers';
 
 // Declare Worker globals for TypeScript
 declare const self: DedicatedWorkerGlobalScope;

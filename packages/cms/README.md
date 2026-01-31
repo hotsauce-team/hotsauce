@@ -1,18 +1,18 @@
-# @hotsauce/handlers
+# @hotsauce/cms
 
 CRUD route handlers for the CMS admin interface using Web Standard Request/Response.
 
 ## Installation
 
 ```ts
-import { createCmsHandler } from '@hotsauce/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 ```
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────────┐
-│                              @hotsauce/handlers                                   │
+│                              @hotsauce/cms                                   │
 ├──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬────────────────────┤
 │  mod.ts  │router.ts │ crud.ts  │ http.ts  │ csrf.ts  │styles.ts │   validation.ts    │
 │          │          │          │          │          │          │                    │
@@ -35,7 +35,7 @@ import { createCmsHandler } from '@hotsauce/handlers';
 ## Quick Start
 
 ```ts
-import { createCmsHandler } from '@hotsauce/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.ts';
@@ -111,7 +111,7 @@ openssl rand -base64 32
 **Example:**
 
 ```ts
-import { createCmsHandler } from '@hotsauce/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 
 const handler = createCmsHandler({
   db,
@@ -136,7 +136,7 @@ const handler = createCmsHandler({
 **Example:**
 
 ```ts
-import { getEnv, requireEnv } from '@hotsauce/handlers';
+import { getEnv, requireEnv } from '@hotsauce/cms';
 
 // Optional: returns undefined if not set
 const debugMode = getEnv('DEBUG');
@@ -171,7 +171,7 @@ const secret = requireEnv('JWT_SECRET', 'JWT signing secret');
 **Example:**
 
 ```ts
-import { cmsUrl } from '@hotsauce/handlers';
+import { cmsUrl } from '@hotsauce/cms';
 
 cmsUrl('/admin'); // '/admin'
 cmsUrl('/admin', 'posts'); // '/admin/posts'
@@ -218,7 +218,7 @@ import {
   htmlResponse,
   parseFormData,
   redirect,
-} from '@hotsauce/handlers';
+} from '@hotsauce/cms';
 
 // Create responses
 htmlResponse('<h1>Hello</h1>'); // 200 HTML
@@ -283,7 +283,7 @@ Tokens are signed with HMAC-SHA256 using `crypto.subtle` (Web Crypto API). They 
 **Example:**
 
 ```ts
-import { generateCsrfToken, validateCsrfToken } from '@hotsauce/handlers';
+import { generateCsrfToken, validateCsrfToken } from '@hotsauce/cms';
 
 // Load secret from environment
 const secret = Deno.env.get('CSRF_SECRET')!;
@@ -352,7 +352,7 @@ Forms include CSRF tokens validated on POST. See `csrf.ts` exports.
 By default, form data is validated using auto-generated Zod schemas from `drizzle-zod`. For custom validation (e.g., email format, min/max length), provide custom parsers:
 
 ```ts
-import { createCmsHandler, type Parsers } from '@hotsauce/handlers';
+import { createCmsHandler, type Parsers } from '@hotsauce/cms';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
 import { z } from 'zod';
 import { users } from './schema';
@@ -423,7 +423,7 @@ The library distinguishes between **configuration errors** (programming mistakes
 Invalid configuration throws `CmsConfigError` at startup:
 
 ```ts
-import { CmsConfigError, createCmsHandler } from '@hotsauce/handlers';
+import { CmsConfigError, createCmsHandler } from '@hotsauce/cms';
 
 try {
   const handler = createCmsHandler({
@@ -468,7 +468,7 @@ Expected failures return appropriate HTTP responses:
 Unexpected errors (database failures, etc.) return a generic 500 to users. Use `onError` to log details to your monitoring service:
 
 ```ts
-import { createCmsHandler, ErrorContext } from '@hotsauce/handlers';
+import { createCmsHandler, ErrorContext } from '@hotsauce/cms';
 
 const handler = createCmsHandler({
   db,
@@ -512,7 +512,7 @@ interface ErrorContext {
 You can use the Zod schema directly for custom validation:
 
 ```ts
-import { CmsOptionsSchema } from '@hotsauce/handlers';
+import { CmsOptionsSchema } from '@hotsauce/cms';
 
 // Validate options before creating handler
 const result = CmsOptionsSchema.safeParse(myOptions);
@@ -617,7 +617,7 @@ The handlers package includes JWT-based authentication that can be configured di
 ### Quick Setup
 
 ```ts
-import { createCmsHandler, PasswordProvider } from '@hotsauce/handlers';
+import { createCmsHandler, PasswordProvider } from '@hotsauce/cms';
 
 const handler = createCmsHandler({
   db,
@@ -762,7 +762,7 @@ These routes allow users to:
 Store passwords securely using PBKDF2-SHA256:
 
 ```ts
-import { hashPassword, verifyPassword } from '@hotsauce/handlers';
+import { hashPassword, verifyPassword } from '@hotsauce/cms';
 
 // When creating a user
 const passwordHash = await hashPassword('user-password');
@@ -781,7 +781,7 @@ Hash format: `$pbkdf2-sha256$iterations$base64salt$base64hash`
 Add TOTP-based two-factor authentication by adding a `totpSecret` column to your users table and configuring `PasswordProvider`:
 
 ```ts
-import { createCmsHandler, PasswordProvider } from '@hotsauce/handlers';
+import { createCmsHandler, PasswordProvider } from '@hotsauce/cms';
 
 // Schema: users table needs a totpSecret column for 2FA
 const users = pgTable('users', {
@@ -841,7 +841,7 @@ No manual setup code is needed — the CMS handles everything automatically.
 **Manual 2FA Setup (for custom flows):**
 
 ```ts
-import { generateTOTPSecret, generateTOTPUri } from '@hotsauce/handlers';
+import { generateTOTPSecret, generateTOTPUri } from '@hotsauce/cms';
 
 // Generate secret and QR code URI
 const totpSecret = generateTOTPSecret();
@@ -883,7 +883,7 @@ import {
   generateTOTPSecret,
   generateTOTPUri,
   verifyTOTP,
-} from '@hotsauce/handlers';
+} from '@hotsauce/cms';
 
 // Generate a random secret (32-char base32 string)
 const secret = generateTOTPSecret();
@@ -904,7 +904,7 @@ const uri = generateTOTPUri(secret, 'user@example.com', 'My App');
 Implement `AuthProvider` for custom authentication (OAuth, LDAP, etc.):
 
 ```ts
-import type { AuthProvider, AuthResult } from '@hotsauce/handlers';
+import type { AuthProvider, AuthResult } from '@hotsauce/cms';
 
 class MyCustomProvider implements AuthProvider {
   async authenticate(credentials: unknown): Promise<AuthResult> {
@@ -943,7 +943,7 @@ import {
   createCmsHandler,
   ownedBy,
   PasswordProvider,
-} from '@hotsauce/handlers';
+} from '@hotsauce/cms';
 import * as schema from './schema';
 
 const handler = createCmsHandler({
@@ -1000,7 +1000,7 @@ This is **atomic** — there's no window between checking permission and executi
 Apply different rules for different CRUD operations:
 
 ```ts
-import { forActions, always, authenticated, ownedBy, roleIs } from '@hotsauce/handlers';
+import { forActions, always, authenticated, ownedBy, roleIs } from '@hotsauce/cms';
 
 policies: {
   posts: forActions({
@@ -1040,7 +1040,7 @@ policies: {
 Check if user is in a contributors array:
 
 ```ts
-import { ownedByOrContributor } from '@hotsauce/handlers';
+import { ownedByOrContributor } from '@hotsauce/cms';
 
 // Schema: posts.contributors is text[] containing user IDs
 policies: {
@@ -1060,7 +1060,7 @@ Write custom policy functions for complex logic:
 
 ```ts
 import { and, eq, or, sql } from 'drizzle-orm';
-import type { PolicyFn } from '@hotsauce/handlers';
+import type { PolicyFn } from '@hotsauce/cms';
 
 const postsPolicy: PolicyFn = (ctx, action) => {
   // Admins bypass all checks
@@ -1153,7 +1153,7 @@ For multi-tenant applications using a shared database with a `tenant_id` column,
 ```ts
 import { eq } from 'drizzle-orm';
 import type { Table, Column } from 'drizzle-orm';
-import type { PolicyFn } from '@hotsauce/handlers';
+import type { PolicyFn } from '@hotsauce/cms';
 
 // Filter all queries by tenant
 function tenantScoped<T extends Table>(
@@ -1314,7 +1314,7 @@ Column policies are ideal for multi-tenancy where `tenantId` should be:
 
 ```ts
 import { eq, type Column, type Table } from 'drizzle-orm';
-import type { PolicyFn, TablePolicy } from '@hotsauce/handlers';
+import type { PolicyFn, TablePolicy } from '@hotsauce/cms';
 
 function multiTenant<T extends Table>(
   table: T,
@@ -1397,12 +1397,12 @@ policies: {
 
 Plugins extend CMS functionality with custom hooks that run during CRUD operations. Plugins are isolated in Web Workers for security, ensuring untrusted code cannot access your database or server internals.
 
-> **See also:** [`@hotsauce/plugins`](../plugins/README.md) for official plugins and [`@hotsauce/handlers-workers`](../handlers-workers/README.md) for the Worker execution layer.
+> **See also:** [`@hotsauce/plugins`](../plugins/README.md) for official plugins and [`@hotsauce/workers`](../handlers-workers/README.md) for the Worker execution layer.
 
 ### Quick Start
 
 ```ts
-import { createCmsHandler } from '@hotsauce/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 import type { AuditLogConfig } from '@hotsauce/plugins/audit-log';
 import * as schema from './schema';
 

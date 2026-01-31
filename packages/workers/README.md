@@ -1,4 +1,4 @@
-# @hotsauce/handlers-workers
+# @hotsauce/workers
 
 Worker sandbox execution for CMS plugins. Provides isolated execution environment for untrusted plugin code.
 
@@ -15,19 +15,19 @@ This package handles the Worker-based isolation layer for plugins:
 
 ```bash
 # Deno
-deno add jsr:@hotsauce/handlers-workers
+deno add jsr:@hotsauce/workers
 
 # Node
-npx jsr add @hotsauce/handlers-workers
+npx jsr add @hotsauce/workers
 ```
 
 ## Usage
 
-This package is primarily used internally by `@hotsauce/handlers`. For direct usage:
+This package is primarily used internally by `@hotsauce/cms`. For direct usage:
 
 ```typescript
-import { WorkerExecutor } from '@hotsauce/handlers-workers';
-import type { RegisteredPlugin } from '@hotsauce/handlers-workers';
+import { WorkerExecutor } from '@hotsauce/workers';
+import type { RegisteredPlugin } from '@hotsauce/workers';
 
 // Create executor
 const executor = new WorkerExecutor();
@@ -109,7 +109,7 @@ Plugin modules loaded by Workers must export a `createPlugin` factory:
 
 ```typescript
 // my-plugin.worker.ts
-import type { PluginHooks, Serializable } from '@hotsauce/handlers-workers';
+import type { PluginHooks, Serializable } from '@hotsauce/workers';
 
 export function createPlugin(config: Serializable): { hooks: PluginHooks } {
   return {

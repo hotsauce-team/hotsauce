@@ -20,7 +20,7 @@ Logs all CRUD operations for compliance and debugging.
 
 ```typescript
 import type { AuditLogConfig } from '@hotsauce/plugins/audit-log';
-import { createCmsHandler } from '@hotsauce/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 
 // Create Worker for plugin isolation (you control permissions)
 const auditWorker = new Worker(

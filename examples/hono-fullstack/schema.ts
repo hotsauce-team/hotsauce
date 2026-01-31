@@ -14,7 +14,7 @@ import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
 
 import '@hotsauce/core/extend';
 import type { FileReference } from '@hotsauce/core';
-import type { Parsers } from '@hotsauce/handlers';
+import type { Parsers } from '@hotsauce/cms';
 
 // ─────────────────────────────────────────────────────────────
 // Tables

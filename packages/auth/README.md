@@ -161,7 +161,7 @@ The main authentication provider class. Supports password authentication with op
 
 ```ts
 import { PasswordProvider } from '@hotsauce/auth';
-import { createCmsHandler } from '@hotsauce/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 
 const handler = createCmsHandler({
   db,
@@ -244,7 +244,7 @@ The 2FA challenge includes a signed token (5-minute expiry) to prevent unlimited
 
 ## Account Management
 
-The PasswordProvider includes methods for self-service account management. These are automatically integrated into the CMS when using `@hotsauce/handlers`.
+The PasswordProvider includes methods for self-service account management. These are automatically integrated into the CMS when using `@hotsauce/cms`.
 
 ### Account Routes
 
@@ -378,18 +378,18 @@ interface TwoFactorCredentials {
 
 ## Integration with Handlers
 
-The `@hotsauce/handlers` package re-exports everything from `@hotsauce/auth` for convenience:
+The `@hotsauce/cms` package re-exports everything from `@hotsauce/auth` for convenience:
 
 ```ts
 // These are equivalent:
 import { PasswordProvider } from '@hotsauce/auth';
-import { PasswordProvider } from '@hotsauce/handlers';
+import { PasswordProvider } from '@hotsauce/cms';
 ```
 
 When using `createCmsHandler`, the auth integration is automatic:
 
 ```ts
-import { createCmsHandler, PasswordProvider } from '@hotsauce/handlers';
+import { createCmsHandler, PasswordProvider } from '@hotsauce/cms';
 
 const handler = createCmsHandler({
   db,

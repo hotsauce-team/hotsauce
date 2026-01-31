@@ -8,9 +8,9 @@
  */
 
 /// <reference lib="webworker" />
-/// <reference types="@hotsauce/handlers-workers" />
+/// <reference types="@hotsauce/workers" />
 
-import type { PluginContext, Serializable } from '@hotsauce/handlers-workers';
+import type { PluginContext, Serializable } from '@hotsauce/workers';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
 
