@@ -1,4 +1,4 @@
-# Security Guide
+# Security Guide 
 
 This document outlines security best practices and considerations when using Drizzle CMS.
 
