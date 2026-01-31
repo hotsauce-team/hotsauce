@@ -91,6 +91,17 @@ body {
   align-items: center;
 }
 
+.cms-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cms-user-name {
+  color: var(--cms-gray-600);
+  font-size: 0.875rem;
+}
+
 .cms-content {
   padding: 1.5rem;
   flex: 1;
@@ -128,6 +139,14 @@ body {
   color: white;
 }
 .cms-btn-danger:hover { background: var(--cms-danger-hover); }
+
+.cms-btn-text {
+  background: transparent;
+  color: var(--cms-primary);
+  padding: 0.5rem 0.75rem;
+}
+.cms-btn-text:hover { background: var(--cms-gray-100); }
+
 .cms-btn-small {
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;

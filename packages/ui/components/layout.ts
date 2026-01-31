@@ -1,6 +1,6 @@
 // Page layout component
 
-import { html, raw } from '../html.ts';
+import { escapeHtml, html, raw } from '../html.ts';
 
 /**
  * Navigation item
@@ -27,7 +27,7 @@ export interface LayoutOptions {
   /** Navigation items */
   nav?: NavItem[];
   /** User info for header */
-  user?: { name: string; logoutUrl: string };
+  user?: { name: string; logoutUrl: string; accountUrl?: string };
   /** URL to the stylesheet (default: 'styles.css') */
   stylesheetUrl?: string;
   /** Additional head content (CSS, meta tags) */
@@ -108,7 +108,14 @@ export function layout(content: string, options: LayoutOptions): string {
     options.user
       ? html`
         <div class="cms-user">
-          ${options.user.name}
+          <span class="cms-user-name">${options.user.name}</span>
+          ${raw(
+            options.user.accountUrl
+              ? `<a href="${
+                escapeHtml(options.user.accountUrl)
+              }" class="cms-btn cms-btn-secondary">Account</a>`
+              : '',
+          )}
           <form method="POST" action="${options.user
             .logoutUrl}" class="cms-inline-form">
             <button type="submit" class="cms-btn cms-btn-secondary">Logout</button>

@@ -73,10 +73,11 @@ Deno.serve(handler);
 
 ## Environment Variables
 
-| Variable          | Purpose                          | Required                                       |
-| ----------------- | -------------------------------- | ---------------------------------------------- |
-| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)   | Yes, if not passed in options                  |
-| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars) | Yes, if auth enabled and not passed in options |
+| Variable          | Purpose                                 | Required                                       |
+| ----------------- | --------------------------------------- | ---------------------------------------------- |
+| `CMS_2FA_SECRET`  | 2FA challenge token signing (32+ chars) | Yes, if using PasswordProvider with 2FA        |
+| `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)          | Yes, if not passed in options                  |
+| `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars)        | Yes, if auth enabled and not passed in options |
 
 Generate secrets with:
 
@@ -99,9 +100,13 @@ openssl rand -base64 32
 | `validateCsrfToken(token)`       | Validate CSRF token (signature + expiry)               |
 | `getEnv(key)`                    | Get environment variable (cross-runtime)               |
 | `requireEnv(key, desc)`          | Get required env var or throw                          |
-| `PasswordProvider`               | Password-based auth provider class                     |
+| `PasswordProvider`               | Password-based auth with optional 2FA                  |
 | `hashPassword(password)`         | Hash password with PBKDF2-SHA256                       |
 | `verifyPassword(password, hash)` | Verify password against hash                           |
+| `generateTOTP(secret)`           | Generate a 6-digit TOTP code                           |
+| `verifyTOTP(token, secret)`      | Verify a TOTP code (with ±30s tolerance)               |
+| `generateTOTPSecret()`           | Generate a random TOTP secret (base32)                 |
+| `generateTOTPUri(...)`           | Generate otpauth:// URI for QR codes                   |
 
 **Example:**
 
@@ -633,12 +638,12 @@ That's it! The handler now includes `/admin/login` and `/admin/logout` routes au
 
 `PasswordProvider` uses sensible defaults that work with common schema patterns:
 
-| Option          | Default                  | Description                                |
-| --------------- | ------------------------ | ------------------------------------------ |
-| `identityField` | `'email'`                | Column for login identity (email/username) |
-| `passwordField` | `'passwordHash'`         | Column for hashed password                 |
-| `idField`       | `'id'`                   | Column for primary key                     |
-| `roleField`     | `'role'` (auto-detected) | Column for user role (if exists)           |
+| Option           | Default                  | Description                                |
+| ---------------- | ------------------------ | ------------------------------------------ |
+| `identityColumn` | `'email'`                | Column for login identity (email/username) |
+| `passwordColumn` | `'passwordHash'`         | Column for hashed password                 |
+| `idColumn`       | `'id'`                   | Column for primary key                     |
+| `roleColumn`     | `'role'` (auto-detected) | Column for user role (if exists)           |
 
 Override these only if your schema uses different column names:
 
@@ -646,8 +651,8 @@ Override these only if your schema uses different column names:
 new PasswordProvider({
   db,
   usersTable: schema.users,
-  identityField: 'username', // custom identity column
-  passwordField: 'password_hash', // custom password column
+  identityColumn: 'username', // custom identity column
+  passwordColumn: 'password_hash', // custom password column
 });
 ```
 
@@ -709,18 +714,18 @@ auth: {
 
 ### Auth Exports
 
-| Export                                 | Purpose                             |
-| -------------------------------------- | ----------------------------------- |
-| `PasswordProvider`                     | Password-based auth provider class  |
-| `hashPassword(password)`               | Hash password with PBKDF2-SHA256    |
-| `verifyPassword(password, hash)`       | Verify password against hash        |
-| `signJwt(payload, secret)`             | Sign a JWT token                    |
-| `verifyJwt(token, secret)`             | Verify and decode JWT               |
-| `createJwtPayload(id, role?, maxAge?)` | Create JWT payload with expiry      |
-| `AuthProvider`                         | Interface for custom auth providers |
-| `getTokenFromCookies(req, name)`       | Parse JWT from cookie header        |
-| `createAuthCookie(...)`                | Create Set-Cookie header for JWT    |
-| `createClearCookie(name, path)`        | Create Set-Cookie to clear JWT      |
+| Export                                  | Purpose                             |
+| --------------------------------------- | ----------------------------------- |
+| `PasswordProvider`                      | Password + optional TOTP auth       |
+| `hashPassword(password)`                | Hash password with PBKDF2-SHA256    |
+| `verifyPassword(password, hash)`        | Verify password against hash        |
+| `signJwt(payload, secret)`              | Sign a JWT token                    |
+| `verifyJwt(token, secret)`              | Verify and decode JWT               |
+| `createJwtPayload(id, role?, maxAge?)`  | Create JWT payload with expiry      |
+| `AuthProvider`                          | Interface for custom auth providers |
+| `getTokenFromCookies(req, name)`        | Parse JWT from cookie header        |
+| `createAuthCookie(...)`                 | Create Set-Cookie header for JWT    |
+| `createClearCookie(name, path, secure)` | Create Set-Cookie to clear JWT      |
 
 ### Auth Routes
 
@@ -731,6 +736,26 @@ When `auth` is configured, these routes are automatically added:
 | `/admin/login`  | GET    | Login form         |
 | `/admin/login`  | POST   | Submit credentials |
 | `/admin/logout` | POST   | Clear auth cookie  |
+
+### Account Routes
+
+When using `PasswordProvider`, self-service account management routes are also added:
+
+| URL                          | Method | Description            |
+| ---------------------------- | ------ | ---------------------- |
+| `/admin/account`             | GET    | Account overview page  |
+| `/admin/account/password`    | GET    | Password change form   |
+| `/admin/account/password`    | POST   | Submit password change |
+| `/admin/account/2fa`         | GET    | 2FA management page    |
+| `/admin/account/2fa/enable`  | GET    | 2FA setup form (QR)    |
+| `/admin/account/2fa/enable`  | POST   | Verify & enable 2FA    |
+| `/admin/account/2fa/disable` | POST   | Disable 2FA            |
+
+These routes allow users to:
+
+- Change their own password
+- Enable 2FA by scanning a QR code with their authenticator app
+- Disable 2FA (with password confirmation)
 
 ### Password Hashing
 
@@ -751,20 +776,143 @@ await db.insert(adminUsers).values({
 
 Hash format: `$pbkdf2-sha256$iterations$base64salt$base64hash`
 
+### Two-Factor Authentication (TOTP)
+
+Add TOTP-based two-factor authentication by adding a `totpSecret` column to your users table and configuring `PasswordProvider`:
+
+```ts
+import { createCmsHandler, PasswordProvider } from '@drizzle-cms/handlers';
+
+// Schema: users table needs a totpSecret column for 2FA
+const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  totpSecret: text('totp_secret'), // null = 2FA not enabled
+  role: varchar('role', { length: 50 }),
+});
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  auth: {
+    secret: process.env.JWT_SECRET!,
+    provider: new PasswordProvider({
+      db,
+      usersTable: users,
+      totpSecretColumn: 'totpSecret', // default
+      issuer: 'My App', // shown in authenticator apps
+      // challengeSecret reads from CMS_2FA_SECRET env var if not provided
+    }),
+  },
+  policies: {},
+});
+```
+
+**How it works:**
+
+1. User enters email/password
+2. If password valid AND user has `totpSecret` → show TOTP form with signed challenge
+3. User enters 6-digit code from authenticator app
+4. If TOTP valid AND challenge signature valid → login complete
+
+Users without a `totpSecret` skip step 2-3 (2FA is optional per-user).
+
+**Security:** The challenge token is HMAC-signed with a 5-minute expiry to prevent:
+
+- Unlimited TOTP guessing (challenge expires, forcing password re-entry)
+- User ID tampering (signature verification fails if modified)
+
+Rate limiting should be implemented at the server level (e.g., fail2ban, middleware).
+
+**Self-Service 2FA Setup:**
+
+When using `PasswordProvider`, users can enable/disable 2FA themselves via the account pages at `/admin/account/2fa`. The setup flow is stateless:
+
+1. User visits `/admin/account/2fa/enable`
+2. A new TOTP secret is generated and embedded in a signed challenge token
+3. QR code is displayed (using `@drizzle-cms/vendor` qrcode library)
+4. User scans with authenticator app and enters the 6-digit code
+5. Code is verified, secret is saved to database
+
+No manual setup code is needed — the CMS handles everything automatically.
+
+**Manual 2FA Setup (for custom flows):**
+
+```ts
+import { generateTOTPSecret, generateTOTPUri } from '@drizzle-cms/handlers';
+
+// Generate secret and QR code URI
+const totpSecret = generateTOTPSecret();
+const qrUri = generateTOTPUri(totpSecret, 'user@example.com', 'My App');
+
+// Display QR code (use any QR library, or the vendored one)
+import { qrcode } from '@drizzle-cms/vendor';
+const qr = qrcode(0, 'M');
+qr.addData(qrUri);
+qr.make();
+console.log(qr.createASCII()); // Terminal output
+// Or: qr.createDataURL() for <img src>
+// Or: qr.createSvgTag() for inline SVG
+
+// Save to database after user verifies a code
+await db.update(users)
+  .set({ totpSecret })
+  .where(eq(users.id, userId));
+```
+
+**PasswordProvider Options:**
+
+| Option             | Default          | Description                                     |
+| ------------------ | ---------------- | ----------------------------------------------- |
+| `db`               | (required)       | Drizzle database instance                       |
+| `usersTable`       | (required)       | Drizzle table for users                         |
+| `identityColumn`   | `'email'`        | Column for login identity                       |
+| `passwordColumn`   | `'passwordHash'` | Column storing password hash                    |
+| `roleColumn`       | `'role'`         | Column for user role                            |
+| `totpSecretColumn` | `'totpSecret'`   | Column for TOTP secret (null = 2FA disabled)    |
+| `issuer`           | `'CMS'`          | App name shown in authenticator                 |
+| `challengeSecret`  | `CMS_2FA_SECRET` | Secret for signing challenge tokens (32+ chars) |
+
+**TOTP Utilities:**
+
+```ts
+import {
+  generateTOTP,
+  generateTOTPSecret,
+  generateTOTPUri,
+  verifyTOTP,
+} from '@drizzle-cms/handlers';
+
+// Generate a random secret (32-char base32 string)
+const secret = generateTOTPSecret();
+
+// Generate current 6-digit code (for testing)
+const code = await generateTOTP(secret);
+
+// Verify a code (allows ±30 second window for clock drift)
+const isValid = await verifyTOTP(userInput, secret);
+
+// Generate URI for QR code
+const uri = generateTOTPUri(secret, 'user@example.com', 'My App');
+// => otpauth://totp/My%20App:user%40example.com?secret=...&issuer=My%20App&...
+```
+
 ### Custom Auth Provider
 
 Implement `AuthProvider` for custom authentication (OAuth, LDAP, etc.):
 
 ```ts
-import type { AuthProvider, AuthUser } from '@drizzle-cms/handlers';
+import type { AuthProvider, AuthResult } from '@drizzle-cms/handlers';
 
 class MyCustomProvider implements AuthProvider {
-  async authenticate(credentials: unknown): Promise<AuthUser | null> {
+  async authenticate(credentials: unknown): Promise<AuthResult> {
     const { token } = credentials as { token: string };
     // Your custom auth logic here
     const user = await verifyOAuthToken(token);
     if (!user) return null;
-    return { id: user.id, role: user.role };
+    return { status: 'authenticated', user: { id: user.id, role: user.role } };
   }
 }
 ```

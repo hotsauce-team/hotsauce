@@ -2,7 +2,12 @@
 import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import { categories, postCategories, posts, users } from './schema.ts';
-import { hashPassword } from '../../packages/handlers/mod.ts';
+import {
+  generateTOTPSecret,
+  generateTOTPUri,
+  hashPassword,
+} from '../../packages/handlers/mod.ts';
+import { qrcode } from '../../packages/vendor/mod.ts';
 
 // Database connection (persisted to ./data)
 const client = new PGlite('./data');
@@ -26,6 +31,7 @@ await client.exec(`
     name VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash TEXT,
+    totp_secret TEXT,
     role VARCHAR(50),
     avatar JSONB,
     bio TEXT,
@@ -59,6 +65,29 @@ await client.exec(`
 
 // Seed users (admin user has passwordHash for CMS login)
 const adminPasswordHash = await hashPassword('admin123');
+
+// Generate a TOTP secret for the 2FA test user
+const totpSecret = generateTOTPSecret();
+const totpUri = generateTOTPUri(
+  totpSecret,
+  'secure@example.com',
+  'Drizzle CMS Demo',
+);
+
+console.log('\n🔐 2FA Test Account Created:');
+console.log('   Email: secure@example.com');
+console.log('   Password: admin123');
+console.log(`   TOTP Secret: ${totpSecret}`);
+console.log('\n   Scan this QR code with your authenticator app:\n');
+
+// Generate QR code for terminal
+const qr = qrcode(0, 'M');
+qr.addData(totpUri);
+qr.make();
+console.log(qr.createASCII(1, 1));
+
+console.log(`\n   Or manually enter the secret: ${totpSecret}\n`);
+
 await db.insert(users).values([
   {
     name: 'Admin User',
@@ -71,7 +100,15 @@ await db.insert(users).values([
       size: 12345,
       url: '/uploads/avatars/admin.png',
     },
-    bio: 'Site administrator',
+    bio: 'Site administrator (no 2FA)',
+  },
+  {
+    name: 'Secure Admin',
+    email: 'secure@example.com',
+    passwordHash: adminPasswordHash,
+    totpSecret: totpSecret, // 2FA enabled!
+    role: 'admin',
+    bio: 'Admin with 2FA enabled',
   },
   {
     name: 'Alice Johnson',

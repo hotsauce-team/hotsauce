@@ -152,3 +152,36 @@ export const loginStyles = `
   color: #16a34a;
 }
 `;
+
+/**
+ * Additional CSS for TOTP input
+ */
+export const twoFactorStyles = `
+/* TOTP-specific styles */
+.cms-input-totp {
+  font-family: monospace;
+  font-size: 1.5rem;
+  letter-spacing: 0.5em;
+  text-align: center;
+}
+
+.cms-login-subtitle {
+  color: var(--cms-text-secondary, #6b7280);
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.cms-login-footer {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.cms-login-footer .cms-link {
+  color: var(--cms-text-secondary, #6b7280);
+  text-decoration: none;
+}
+
+.cms-login-footer .cms-link:hover {
+  color: var(--cms-primary, #2563eb);
+}
+`;

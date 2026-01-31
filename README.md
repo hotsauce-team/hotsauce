@@ -265,6 +265,7 @@ interface TableParsers {
 - [x] Many-to-many relationships (junction table detection, checkbox UI)
 - [x] Column metadata hints via `$cms()` (e.g. file fields)
 - [x] JWT authentication (cookie-based tokens)
+- [x] Two-factor authentication (TOTP)
 - [x] External authentication (reverse proxy / OAuth integration)
 - [x] Row-level security policies (atomic authorization)
 - [x] Column-level access control (read/write policies per field)
@@ -274,6 +275,7 @@ interface TableParsers {
 - [ ] Plugin data obfuscation (PII/credential redaction)
 - [ ] File uploads (local + S3) (upload pipeline + storage)
 - [ ] Audit logging
+- [ ] 2FA backup codes (recovery codes for lost authenticator)
 - [ ] Customizable UI components
 
 Schema hints example:

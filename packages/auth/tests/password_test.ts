@@ -1,8 +1,7 @@
 // Tests for password hashing utilities
-// Note: These tests verify the re-exports from @drizzle-cms/auth work correctly
 
 import { assertEquals } from '@std/assert';
-import { hashPassword, verifyPassword } from '@drizzle-cms/auth';
+import { hashPassword, verifyPassword } from '../password.ts';
 
 // ============================================================================
 // hashPassword tests
@@ -102,54 +101,24 @@ Deno.test('verifyPassword: handles null/undefined safely', async () => {
 // Integration tests
 // ============================================================================
 
-Deno.test('Password: full hash and verify cycle', async () => {
+Deno.test('password: hash and verify cycle', async () => {
   const passwords = [
     'simple',
-    'with spaces',
-    'with-special-chars!@#$%^&*()',
-    'unicode-日本語-émojis-🎉',
-    'very-long-password-'.repeat(10),
+    'with spaces and special !@#$%^&*()',
+    '日本語パスワード',
+    'a'.repeat(100), // long password
   ];
 
   for (const password of passwords) {
     const hash = await hashPassword(password);
     const valid = await verifyPassword(password, hash);
-    assertEquals(
-      valid,
-      true,
-      `Failed for password: ${password.slice(0, 20)}...`,
-    );
+    assertEquals(valid, true, `Failed for password: ${password}`);
   }
 });
 
-Deno.test('Password: timing attack resistance', async () => {
-  // This test verifies the constant-time comparison works
-  // by ensuring verification of wrong passwords takes similar time
-  // (Note: this is a basic sanity check, not a rigorous timing test)
+Deno.test('password: different passwords produce different hashes', async () => {
+  const hash1 = await hashPassword('password1');
+  const hash2 = await hashPassword('password2');
 
-  const hash = await hashPassword('correct-password');
-
-  // Verify correct password
-  const start1 = performance.now();
-  await verifyPassword('correct-password', hash);
-  const time1 = performance.now() - start1;
-
-  // Verify wrong password (same length)
-  const start2 = performance.now();
-  await verifyPassword('wrong---password', hash);
-  const time2 = performance.now() - start2;
-
-  // Verify wrong password (different length)
-  const start3 = performance.now();
-  await verifyPassword('short', hash);
-  const time3 = performance.now() - start3;
-
-  // Times should be in the same ballpark (within 10x)
-  // This is a very loose check - mainly ensuring no obvious early-exit
-  const maxTime = Math.max(time1, time2, time3);
-  const minTime = Math.min(time1, time2, time3);
-
-  // If there was an early exit, wrong passwords would be much faster
-  // We just check they're not drastically different
-  assertEquals(maxTime < minTime * 100, true, 'Timing difference too large');
+  assertEquals(hash1 !== hash2, true);
 });

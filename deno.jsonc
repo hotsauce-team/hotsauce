@@ -11,9 +11,11 @@
   "workspace": [
     "./packages/core",
     "./packages/ui",
+    "./packages/auth",
     "./packages/handlers",
     "./packages/handlers-workers",
     "./packages/plugins",
+    "./packages/vendor",
 
     // Examples
     "./examples/deno-server",
@@ -31,11 +33,14 @@
     "@drizzle-cms/core": "./packages/core/mod.ts",
     "@drizzle-cms/core/extend": "./packages/core/extend/mod.ts",
     "@drizzle-cms/ui": "./packages/ui/mod.ts",
+    "@drizzle-cms/auth": "./packages/auth/mod.ts",
     "@drizzle-cms/handlers": "./packages/handlers/mod.ts",
     "@drizzle-cms/handlers-workers": "./packages/handlers-workers/mod.ts",
     "@drizzle-cms/plugins": "./packages/plugins/mod.ts",
     "@drizzle-cms/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
     "@drizzle-cms/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
+
+    "@drizzle-cms/vendor": "./packages/vendor/mod.ts",
 
     // Dev dependencies (not shipped to users)
     "@std/assert": "jsr:@std/assert@*",
@@ -75,9 +80,10 @@
         "./node_modules/.deno/sql.js@1.13.0/node_modules/sql.js/dist/sql-wasm.wasm"
       ],
       "env": [
-        "CMS_TESTING",
+        "CMS_2FA_SECRET",
         "CMS_CSRF_SECRET",
-        "CMS_JWT_SECRET"
+        "CMS_JWT_SECRET",
+        "CMS_TESTING"
       ]
     }
   },
@@ -93,7 +99,8 @@
   "fmt": {
     "indentWidth": 2,
     "singleQuote": true,
-    "proseWrap": "preserve"
+    "proseWrap": "preserve",
+    "exclude": ["packages/vendor/qrcode-generator/"]
   },
 
   // Linting
@@ -101,7 +108,8 @@
     "rules": {
       "tags": ["recommended"],
       "include": ["no-console"]
-    }
+    },
+    "exclude": ["packages/vendor/qrcode-generator/"]
   },
 
   // Exclude build artifacts

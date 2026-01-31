@@ -39,14 +39,28 @@ import {
   handleUpdate,
 } from './crud.ts';
 import { handleStylesheet } from './styles.ts';
-import { createJwtPayload, signJwt, verifyJwt } from './auth/jwt.ts';
-import { renderLoginPage } from './auth/login.ts';
+
+// Auth imports from @drizzle-cms/auth
 import {
+  type AccountRouteContext,
   createAuthCookie,
   createClearCookie,
+  createJwtPayload,
   getTokenFromCookies,
+  handle2FADisable,
+  handle2FAEnable,
+  handle2FASetupForm,
+  handleAccountPage,
+  handlePasswordChange,
+  handlePasswordChangeForm,
   isSecureRequest,
-} from './auth/cookies.ts';
+  type JwtPayload,
+  type PasswordProvider,
+  renderLoginPage,
+  signJwt,
+  verifyJwt,
+} from '@drizzle-cms/auth';
+
 import {
   applyPolicy,
   createPolicyContext,
@@ -54,7 +68,6 @@ import {
   extractColumnPolicies,
   extractRowPolicy,
 } from './policies/mod.ts';
-import type { JwtPayload } from './auth/jwt.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Types - Handler configuration and request context
@@ -214,32 +227,59 @@ export type {
 export { isWorkerPlugin } from './plugins/types.ts';
 
 // ─────────────────────────────────────────────────────────────
-// Auth - JWT authentication (optional)
+// Auth - JWT authentication (re-exported from @drizzle-cms/auth)
 // ─────────────────────────────────────────────────────────────
 export type {
+  AccountRouteContext,
+  AccountRouteContextWith2FA,
   AuthProvider,
+  AuthResult,
   AuthUser,
   JwtPayload,
   PasswordCredentials,
   PasswordProviderOptions,
-} from './auth/mod.ts';
+  TwoFactorCredentials,
+} from '@drizzle-cms/auth';
 
 export {
+  accountStyles,
   createAuthCookie,
+  createChallengeToken,
   createClearCookie,
   createJwtPayload,
+  // TOTP utilities
+  generateTOTP,
+  generateTOTPSecret,
+  generateTOTPUri,
   // Cookie utilities
   getTokenFromCookies,
+  handle2FADisable,
+  handle2FAEnable,
+  handle2FASetupForm,
+  handleAccountPage,
+  handlePasswordChange,
+  handlePasswordChangeForm,
+  // Type guard for 2FA context
+  has2FAEnabled,
   // Password hashing
   hashPassword,
   isSecureRequest,
-  // Auth provider
+  loginStyles,
+  // Auth providers
   PasswordProvider,
+  render2FADisablePage,
+  render2FASetupPage,
+  renderAccountPage,
+  renderLoginPage,
+  renderPasswordChangePage,
   // JWT utilities
   signJwt,
+  twoFactorStyles,
+  verifyChallengeToken,
   verifyJwt,
   verifyPassword,
-} from './auth/mod.ts';
+  verifyTOTP,
+} from '@drizzle-cms/auth';
 
 /**
  * Create a CMS handler function
@@ -404,6 +444,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             'Set-Cookie': createClearCookie(
               resolvedAuth.cookieName,
               opts.basePath,
+              isSecureRequest(request),
             ),
             ...SECURITY_HEADERS,
           },
@@ -455,7 +496,67 @@ export function createCmsHandler(options: CmsOptions): Handler {
             });
           }
 
-          // Parse credentials from form data (identity already extracted above for CSRF error case)
+          // Check if this is a TOTP verification (phase 2 of 2FA)
+          const totpCode = formData.get('totp_code') as string | null;
+          const challengeToken = formData.get('challenge_token') as
+            | string
+            | null;
+
+          if (totpCode && challengeToken) {
+            // Phase 2: Verify TOTP code with signed challenge
+            const result = await resolvedAuth.provider.authenticate({
+              totpCode: totpCode.replace(/\s/g, ''),
+              challengeToken,
+            });
+
+            if (!result || result.status !== 'authenticated') {
+              // Invalid TOTP or expired challenge - show TOTP form again with error
+              // Note: We don't have the original challenge anymore, so user must re-enter password
+              const newCsrfToken = await generateCsrfToken(csrfSecret);
+              const html = renderLoginPage({
+                basePath: opts.basePath,
+                title: resolvedAuth.loginTitle,
+                identityLabel: resolvedAuth.identityLabel,
+                csrfToken: newCsrfToken,
+                error:
+                  'Invalid or expired verification code. Please log in again.',
+              });
+              return new Response(html, {
+                status: 401,
+                headers: {
+                  'Content-Type': 'text/html; charset=utf-8',
+                  ...SECURITY_HEADERS,
+                },
+              });
+            }
+
+            // TOTP verified - create JWT and set cookie
+            const payload = createJwtPayload(
+              result.user.id,
+              result.user.identity,
+              result.user.role,
+              resolvedAuth.maxAge,
+            );
+            const token = await signJwt(payload, resolvedAuth.secret);
+            const cookie = createAuthCookie(
+              resolvedAuth.cookieName,
+              token,
+              resolvedAuth.maxAge,
+              opts.basePath,
+              isSecureRequest(request),
+            );
+
+            return new Response(null, {
+              status: 302,
+              headers: {
+                'Location': opts.basePath,
+                'Set-Cookie': cookie,
+                ...SECURITY_HEADERS,
+              },
+            });
+          }
+
+          // Phase 1: Parse credentials from form data
           const password = formData.get('password') as string | null;
 
           // Validate required fields
@@ -479,12 +580,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
           }
 
           // Authenticate
-          const user = await resolvedAuth.provider.authenticate({
+          const result = await resolvedAuth.provider.authenticate({
             identity,
             password,
           });
 
-          if (!user) {
+          if (!result) {
             const newCsrfToken = await generateCsrfToken(csrfSecret);
             const html = renderLoginPage({
               basePath: opts.basePath,
@@ -503,9 +604,58 @@ export function createCmsHandler(options: CmsOptions): Handler {
             });
           }
 
-          // Create JWT and set auth cookie
+          // Check if 2FA verification is needed
+          if (result.status === 'pending_2fa') {
+            const provider = resolvedAuth.provider as {
+              renderTotpForm?: (options: {
+                basePath: string;
+                title: string;
+                error?: string;
+                challengeToken: string;
+                csrfToken: string;
+              }) => string;
+            };
+
+            if (provider.renderTotpForm) {
+              const newCsrfToken = await generateCsrfToken(csrfSecret);
+              const html = provider.renderTotpForm({
+                basePath: opts.basePath,
+                title: resolvedAuth.loginTitle,
+                challengeToken: result.challenge,
+                csrfToken: newCsrfToken,
+              });
+              return new Response(html, {
+                status: 200,
+                headers: {
+                  'Content-Type': 'text/html; charset=utf-8',
+                  ...SECURITY_HEADERS,
+                },
+              });
+            }
+            // Provider doesn't support 2FA form - treat as auth failure
+            const newCsrfToken = await generateCsrfToken(csrfSecret);
+            const html = renderLoginPage({
+              basePath: opts.basePath,
+              title: resolvedAuth.loginTitle,
+              identityLabel: resolvedAuth.identityLabel,
+              identityValue: identity ?? '',
+              csrfToken: newCsrfToken,
+              error: '2FA is required but not configured properly.',
+            });
+            return new Response(html, {
+              status: 500,
+              headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+                ...SECURITY_HEADERS,
+              },
+            });
+          }
+
+          // Fully authenticated - create JWT and set auth cookie
+          const user = result.user;
           const payload = createJwtPayload(
             user.id,
+            user.identity,
             user.role,
             resolvedAuth.maxAge,
           );
@@ -592,6 +742,60 @@ export function createCmsHandler(options: CmsOptions): Handler {
           },
         });
       }
+
+      // ─────────────────────────────────────────────────────────────
+      // Account routes (when authenticated)
+      // ─────────────────────────────────────────────────────────────
+      const accountPath = `${opts.basePath}/account`;
+      const provider = resolvedAuth.provider as PasswordProvider;
+
+      // Create account route context
+      // challengeSecret is undefined when 2FA is disabled. When twoFactorEnabled
+      // is true, provider constructor guarantees it's ≥32 chars.
+      const accountCtx: AccountRouteContext = {
+        basePath: opts.basePath,
+        title: opts.title,
+        jwtPayload,
+        provider,
+        csrfSecret,
+        challengeSecret: provider.challengeSecret,
+        generateCsrfToken,
+        validateCsrfToken,
+      };
+
+      // GET /account - Account settings page
+      if (pathname === accountPath && request.method === 'GET') {
+        return handleAccountPage(request, accountCtx);
+      }
+
+      // GET /account/password - Password change form
+      if (pathname === `${accountPath}/password` && request.method === 'GET') {
+        return handlePasswordChangeForm(request, accountCtx);
+      }
+
+      // POST /account/password - Process password change
+      if (pathname === `${accountPath}/password` && request.method === 'POST') {
+        return handlePasswordChange(request, accountCtx);
+      }
+
+      // GET /account/2fa - 2FA setup page
+      if (pathname === `${accountPath}/2fa` && request.method === 'GET') {
+        return handle2FASetupForm(request, accountCtx);
+      }
+
+      // POST /account/2fa/enable - Enable 2FA
+      if (
+        pathname === `${accountPath}/2fa/enable` && request.method === 'POST'
+      ) {
+        return handle2FAEnable(request, accountCtx);
+      }
+
+      // POST /account/2fa/disable - Disable 2FA
+      if (
+        pathname === `${accountPath}/2fa/disable` && request.method === 'POST'
+      ) {
+        return handle2FADisable(request, accountCtx);
+      }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -660,7 +864,13 @@ export function createCmsHandler(options: CmsOptions): Handler {
       url,
       // Include auth user if authenticated via JWT
       authUser: jwtPayload
-        ? { id: jwtPayload.sub, role: jwtPayload.role }
+        ? {
+          id: jwtPayload.sub,
+          identity: typeof jwtPayload.identity === 'string'
+            ? jwtPayload.identity
+            : undefined,
+          role: jwtPayload.role,
+        }
         : undefined,
       // Plugin service for executing hooks
       pluginService: pluginService ?? undefined,

@@ -15,7 +15,7 @@ import {
   TEST_CSRF_SECRET,
 } from './integration_helpers.ts';
 import { createCmsHandler } from '../mod.ts';
-import { hashPassword, PasswordProvider } from '../auth/mod.ts';
+import { hashPassword, PasswordProvider } from '@drizzle-cms/auth';
 
 Deno.test('integration: JWT auth tests', async (t) => {
   // Create single PGlite instance for all auth tests
@@ -45,9 +45,9 @@ Deno.test('integration: JWT auth tests', async (t) => {
         provider: new PasswordProvider({
           db,
           usersTable: adminUsers,
-          identityField: 'email',
-          passwordField: 'passwordHash',
-          roleField: 'role',
+          identityColumn: 'email',
+          passwordColumn: 'passwordHash',
+          roleColumn: 'role',
         }),
       },
       policies: 'dangerously-open',

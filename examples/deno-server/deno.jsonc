@@ -25,6 +25,7 @@
         "127.0.0.1:3000"
       ],
       "env": [
+        "CMS_2FA_SECRET",
         "CMS_CSRF_SECRET",
         "CMS_JWT_SECRET"
       ]
