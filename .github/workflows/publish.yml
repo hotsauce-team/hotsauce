@@ -78,25 +78,25 @@ jobs:
           deno task update-jsr-paths --version "$TAG_VERSION"
 
       - name: Publish @hotsauce/core
-        run: deno publish --allow-slow-types
+        run: deno publish --allow-dirty
         working-directory: packages/core
 
       - name: Publish @hotsauce/workers
-        run: deno publish
+        run: deno publish --allow-dirty
         working-directory: packages/workers
 
       - name: Publish @hotsauce/plugins
-        run: deno publish
+        run: deno publish --allow-dirty
         working-directory: packages/plugins
 
       - name: Publish @hotsauce/ui
-        run: deno publish
+        run: deno publish --allow-dirty
         working-directory: packages/ui
 
       - name: Publish @hotsauce/auth
-        run: deno publish
+        run: deno publish --allow-dirty
         working-directory: packages/auth
 
       - name: Publish @hotsauce/cms
-        run: deno publish
+        run: deno publish --allow-dirty
         working-directory: packages/cms
