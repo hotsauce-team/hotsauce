@@ -24,7 +24,7 @@ import {
   signJwt,
 } from '../mod.ts';
 import { generateCsrfToken } from '../csrf.ts';
-import { hashPassword, PasswordProvider } from '../auth/mod.ts';
+import { hashPassword, PasswordProvider } from '@drizzle-cms/auth';
 
 // ============================================================================
 // Row Policy Tests
@@ -139,7 +139,7 @@ Deno.test('integration: row policy tests', async (t) => {
     });
 
     // Create JWT for admin with admin role
-    const adminPayload = createJwtPayload('1', 'admin');
+    const adminPayload = createJwtPayload('1', undefined, 'admin');
     const adminToken = await signJwt(adminPayload, AUTH_SECRET);
 
     const request = new Request('http://localhost/admin/posts', {
@@ -514,7 +514,7 @@ Deno.test('integration: column policy tests', async (t) => {
     });
 
     // Admin can see email
-    const adminPayload = createJwtPayload('1', 'admin');
+    const adminPayload = createJwtPayload('1', undefined, 'admin');
     const adminToken = await signJwt(adminPayload, AUTH_SECRET);
 
     const adminRequest = new Request('http://localhost/admin/users/1', {
@@ -531,7 +531,7 @@ Deno.test('integration: column policy tests', async (t) => {
     );
 
     // Editor cannot see email
-    const editorPayload = createJwtPayload('2', 'editor');
+    const editorPayload = createJwtPayload('2', undefined, 'editor');
     const editorToken = await signJwt(editorPayload, AUTH_SECRET);
 
     const editorRequest = new Request('http://localhost/admin/users/1', {

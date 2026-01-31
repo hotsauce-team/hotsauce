@@ -1,102 +1,90 @@
 // Tests for JWT utilities
-// Note: These tests verify the re-exports from @drizzle-cms/auth work correctly
 
-import { assertEquals, assertNotEquals } from '@std/assert';
-import { createJwtPayload, signJwt, verifyJwt } from '@drizzle-cms/auth';
-import type { JwtPayload } from '@drizzle-cms/auth';
+import { assertEquals, assertExists } from '@std/assert';
+import { createJwtPayload, signJwt, verifyJwt } from '../jwt.ts';
 
-const TEST_SECRET = 'test-secret-must-be-at-least-32-characters-long';
+const TEST_SECRET = 'test-secret-that-is-at-least-32-characters-long';
 
 // ============================================================================
 // signJwt tests
 // ============================================================================
 
-Deno.test('signJwt: creates valid JWT format', async () => {
-  const payload: JwtPayload = {
-    sub: '123',
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 3600,
-  };
-
+Deno.test('signJwt: creates a valid JWT token', async () => {
+  const payload = { sub: '123', iat: 1000, exp: 2000 };
   const token = await signJwt(payload, TEST_SECRET);
 
-  // JWT has 3 parts separated by dots
+  // JWT should have 3 parts separated by dots
   const parts = token.split('.');
   assertEquals(parts.length, 3);
+
+  // Header should be base64url encoded JSON with alg: HS256
+  const header = JSON.parse(
+    atob(parts[0]!.replace(/-/g, '+').replace(/_/g, '/')),
+  );
+  assertEquals(header.alg, 'HS256');
+  assertEquals(header.typ, 'JWT');
 });
 
-Deno.test('signJwt: requires secret of at least 32 chars', async () => {
-  const payload = createJwtPayload('123');
+Deno.test('signJwt: payload is preserved in token', async () => {
+  const payload = { sub: 'user-42', iat: 1234567890, exp: 1234571490 };
+  const token = await signJwt(payload, TEST_SECRET);
 
-  try {
-    await signJwt(payload, 'short');
-    throw new Error('Should have thrown');
-  } catch (e) {
-    assertEquals(
-      (e as Error).message,
-      'JWT secret must be at least 32 characters',
-    );
-  }
-});
+  const parts = token.split('.');
+  const decoded = JSON.parse(
+    atob(parts[1]!.replace(/-/g, '+').replace(/_/g, '/')),
+  );
 
-Deno.test('signJwt: produces unique tokens', async () => {
-  const payload1 = createJwtPayload('123');
-  const payload2 = createJwtPayload('456');
-
-  const token1 = await signJwt(payload1, TEST_SECRET);
-  const token2 = await signJwt(payload2, TEST_SECRET);
-
-  assertNotEquals(token1, token2);
+  assertEquals(decoded.sub, 'user-42');
+  assertEquals(decoded.iat, 1234567890);
+  assertEquals(decoded.exp, 1234571490);
 });
 
 // ============================================================================
 // verifyJwt tests
 // ============================================================================
 
-Deno.test('verifyJwt: verifies valid token', async () => {
-  const payload: JwtPayload = {
+Deno.test('verifyJwt: verifies a valid token', async () => {
+  const payload = {
     sub: '123',
-    role: 'admin',
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
-
   const token = await signJwt(payload, TEST_SECRET);
+
   const verified = await verifyJwt(token, TEST_SECRET);
 
-  assertEquals(verified?.sub, '123');
-  assertEquals(verified?.role, 'admin');
+  assertExists(verified);
+  assertEquals(verified.sub, '123');
 });
 
-Deno.test('verifyJwt: returns null for invalid signature', async () => {
-  const payload = createJwtPayload('123');
+Deno.test('verifyJwt: returns null for wrong secret', async () => {
+  const payload = {
+    sub: '123',
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  };
   const token = await signJwt(payload, TEST_SECRET);
 
-  // Try with different secret
-  const verified = await verifyJwt(
-    token,
-    'different-secret-that-is-32-chars-long',
-  );
-
+  const verified = await verifyJwt(token, 'wrong-secret-1234567890123456');
   assertEquals(verified, null);
 });
 
 Deno.test('verifyJwt: returns null for expired token', async () => {
-  const payload: JwtPayload = {
+  // Create a token that expired 1 hour ago
+  const expiredPayload = {
     sub: '123',
-    iat: Math.floor(Date.now() / 1000) - 7200, // 2 hours ago
-    exp: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago (expired)
+    iat: Math.floor(Date.now() / 1000) - 7200,
+    exp: Math.floor(Date.now() / 1000) - 3600,
   };
+  const token = await signJwt(expiredPayload, TEST_SECRET);
 
-  const token = await signJwt(payload, TEST_SECRET);
   const verified = await verifyJwt(token, TEST_SECRET);
-
   assertEquals(verified, null);
 });
 
 Deno.test('verifyJwt: returns null for malformed token', async () => {
-  const verified = await verifyJwt('not.a.valid.jwt', TEST_SECRET);
-  assertEquals(verified, null);
+  const verified1 = await verifyJwt('not-a-jwt', TEST_SECRET);
+  assertEquals(verified1, null);
 
   const verified2 = await verifyJwt('', TEST_SECRET);
   assertEquals(verified2, null);

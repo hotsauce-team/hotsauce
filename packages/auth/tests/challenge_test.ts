@@ -1,7 +1,6 @@
 // Challenge token tests
-// Note: These tests verify the re-exports from @drizzle-cms/auth work correctly
 import { assertEquals, assertExists } from '@std/assert';
-import { createChallengeToken, verifyChallengeToken } from '@drizzle-cms/auth';
+import { createChallengeToken, verifyChallengeToken } from '../challenge.ts';
 
 const TEST_SECRET = 'test-secret-that-is-at-least-32-characters-long';
 

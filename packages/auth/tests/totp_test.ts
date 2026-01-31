@@ -1,103 +1,100 @@
-// TOTP utilities tests
-// Note: These tests verify the re-exports from @drizzle-cms/auth work correctly
+// Tests for TOTP utilities (RFC 6238)
 
-import { assertEquals, assertMatch } from '@std/assert';
+import { assertEquals } from '@std/assert';
 import {
   generateTOTP,
   generateTOTPSecret,
   generateTOTPUri,
   verifyTOTP,
-} from '@drizzle-cms/auth';
+} from '../totp.ts';
+
+// RFC 6238 test vectors for SHA1
+// Time: 59 seconds (step 1), Secret: "12345678901234567890" (base32: GEZDGNBVGY3TQOJQ)
+// Expected: 287082
 
 // ─────────────────────────────────────────────────────────────
 // generateTOTPSecret tests
 // ─────────────────────────────────────────────────────────────
 
-Deno.test('generateTOTPSecret: generates valid base32 string', () => {
+Deno.test('generateTOTPSecret: generates a valid base32 secret', () => {
   const secret = generateTOTPSecret();
 
-  // Base32 alphabet: A-Z and 2-7
-  assertMatch(secret, /^[A-Z2-7]+$/);
-});
-
-Deno.test('generateTOTPSecret: default length produces 32-char secret', () => {
-  const secret = generateTOTPSecret();
-
-  // 20 bytes * 8 bits / 5 bits per base32 char = 32 chars
+  // Should be 32 characters (160 bits / 5 bits per char)
   assertEquals(secret.length, 32);
-});
 
-Deno.test('generateTOTPSecret: custom length produces expected size', () => {
-  const secret = generateTOTPSecret(10);
-
-  // 10 bytes * 8 bits / 5 bits per base32 char = 16 chars
-  assertEquals(secret.length, 16);
+  // Should only contain valid base32 characters (no padding)
+  const base32Regex = /^[A-Z2-7]+$/;
+  assertEquals(base32Regex.test(secret), true);
 });
 
 Deno.test('generateTOTPSecret: generates unique secrets', () => {
   const secrets = new Set<string>();
-
   for (let i = 0; i < 100; i++) {
     secrets.add(generateTOTPSecret());
   }
-
-  // All 100 secrets should be unique
+  // All should be unique
   assertEquals(secrets.size, 100);
 });
 
 // ─────────────────────────────────────────────────────────────
-// generateTOTP tests (RFC 6238 test vectors)
+// generateTOTP tests
 // ─────────────────────────────────────────────────────────────
 
-// RFC 6238 test vector secret (ASCII "12345678901234567890" in base32)
-const RFC_TEST_SECRET = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+Deno.test('generateTOTP: generates a 6-digit code', async () => {
+  const secret = generateTOTPSecret();
+  const code = await generateTOTP(secret);
 
-Deno.test('generateTOTP: produces 6-digit code', async () => {
-  const code = await generateTOTP(RFC_TEST_SECRET);
-
+  // Should be exactly 6 digits
   assertEquals(code.length, 6);
-  assertMatch(code, /^\d{6}$/);
+  assertEquals(/^\d{6}$/.test(code), true);
 });
 
-Deno.test('generateTOTP: deterministic for same time', async () => {
+Deno.test('generateTOTP: same secret and time produces same code', async () => {
+  const secret = 'JBSWY3DPEHPK3PXP';
   const time = 1234567890;
 
-  const code1 = await generateTOTP(RFC_TEST_SECRET, time);
-  const code2 = await generateTOTP(RFC_TEST_SECRET, time);
+  const code1 = await generateTOTP(secret, time);
+  const code2 = await generateTOTP(secret, time);
 
   assertEquals(code1, code2);
 });
 
-Deno.test('generateTOTP: different codes for different times', async () => {
-  const code1 = await generateTOTP(RFC_TEST_SECRET, 1234567890);
-  const code2 = await generateTOTP(RFC_TEST_SECRET, 1234567920); // 30 seconds later
+Deno.test('generateTOTP: different times produce different codes', async () => {
+  const secret = generateTOTPSecret();
+  const time1 = 1234567890;
+  const time2 = 1234567890 + 30; // Next period
 
-  // Should be different (different time periods)
+  const code1 = await generateTOTP(secret, time1);
+  const code2 = await generateTOTP(secret, time2);
+
   assertEquals(code1 !== code2, true);
 });
 
-Deno.test('generateTOTP: same code within 30-second window', async () => {
-  const code1 = await generateTOTP(RFC_TEST_SECRET, 1234567890);
-  const code2 = await generateTOTP(RFC_TEST_SECRET, 1234567900); // 10 seconds later
+Deno.test('generateTOTP: RFC test vector at t=59', async () => {
+  // RFC 6238 test case
+  // Secret: "12345678901234567890" = base32 "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+  const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  const time = 59;
 
-  // Should be same (same time period)
-  assertEquals(code1, code2);
+  const code = await generateTOTP(secret, time);
+
+  assertEquals(code, '287082');
 });
 
-Deno.test('generateTOTP: pads with leading zeros', async () => {
-  // Use a time that produces a code starting with 0
-  // We'll just verify the format is correct
-  const code = await generateTOTP(RFC_TEST_SECRET, 0);
+Deno.test('generateTOTP: RFC test vector at t=1111111109', async () => {
+  const secret = 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ';
+  const time = 1111111109;
 
-  assertEquals(code.length, 6);
-  assertMatch(code, /^\d{6}$/);
+  const code = await generateTOTP(secret, time);
+
+  assertEquals(code, '081804');
 });
 
 // ─────────────────────────────────────────────────────────────
 // verifyTOTP tests
 // ─────────────────────────────────────────────────────────────
 
-Deno.test('verifyTOTP: accepts valid current code', async () => {
+Deno.test('verifyTOTP: accepts current valid code', async () => {
   const secret = generateTOTPSecret();
   const code = await generateTOTP(secret);
 

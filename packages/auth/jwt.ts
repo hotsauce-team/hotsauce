@@ -1,21 +1,7 @@
 // JWT utilities using Web Crypto API
 // Implements HS256 (HMAC-SHA256) signing
 
-/**
- * JWT payload claims
- */
-export interface JwtPayload {
-  /** Subject - typically user ID */
-  sub: string;
-  /** User role (optional) */
-  role?: string;
-  /** Issued at (unix timestamp in seconds) */
-  iat: number;
-  /** Expires at (unix timestamp in seconds) */
-  exp: number;
-  /** Custom claims */
-  [key: string]: unknown;
-}
+import type { JwtPayload } from './types.ts';
 
 /**
  * Base64url encode (URL-safe base64 without padding)
@@ -171,20 +157,26 @@ export async function verifyJwt(
  * Create a JWT payload with standard claims
  *
  * @param userId - User identifier
+ * @param identity - User identity (email/username)
  * @param role - Optional user role
  * @param maxAge - Token lifetime in seconds (default: 8 hours)
  * @returns JWT payload ready for signing
  */
 export function createJwtPayload(
   userId: string | number,
+  identity?: string,
   role?: string,
   maxAge: number = 8 * 60 * 60,
 ): JwtPayload {
   const now = Math.floor(Date.now() / 1000);
   return {
     sub: String(userId),
+    identity,
     role,
     iat: now,
     exp: now + maxAge,
   };
 }
+
+// Re-export JwtPayload type for convenience
+export type { JwtPayload };

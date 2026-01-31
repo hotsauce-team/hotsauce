@@ -1,10 +1,27 @@
-// Auth module exports
-// JWT-based authentication for the CMS
+// @drizzle-cms/auth
+// Authentication package for the CMS
+// Includes JWT, password hashing, TOTP 2FA, and account management
+
+// ─────────────────────────────────────────────────────────────
+// Types - Core auth types and interfaces
+// ─────────────────────────────────────────────────────────────
+export type {
+  AuthProvider,
+  AuthResult,
+  AuthUser,
+  JwtPayload,
+  PasswordCredentials,
+  TwoFactorCredentials,
+} from './types.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Provider - Password authentication with optional 2FA
+// ─────────────────────────────────────────────────────────────
+export { PasswordProvider, type PasswordProviderOptions } from './provider.ts';
 
 // ─────────────────────────────────────────────────────────────
 // JWT - Token signing and verification
 // ─────────────────────────────────────────────────────────────
-export type { JwtPayload } from './jwt.ts';
 export { createJwtPayload, signJwt, verifyJwt } from './jwt.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -28,29 +45,6 @@ export {
 export { createChallengeToken, verifyChallengeToken } from './challenge.ts';
 
 // ─────────────────────────────────────────────────────────────
-// Providers - Authentication backends
-// ─────────────────────────────────────────────────────────────
-export type {
-  AuthProvider,
-  AuthResult,
-  AuthUser,
-  PasswordCredentials,
-  PasswordProviderOptions,
-} from './provider.ts';
-export { PasswordProvider } from './provider.ts';
-
-export type {
-  TwoFactorCredentials,
-  TwoFactorPasswordProviderOptions,
-} from './two-factor.ts';
-export { TwoFactorPasswordProvider, twoFactorStyles } from './two-factor.ts';
-
-// ─────────────────────────────────────────────────────────────
-// Login UI - Login page rendering and styles
-// ─────────────────────────────────────────────────────────────
-export { loginStyles, renderLoginPage } from './login.ts';
-
-// ─────────────────────────────────────────────────────────────
 // Cookies - JWT cookie utilities
 // ─────────────────────────────────────────────────────────────
 export {
@@ -59,3 +53,26 @@ export {
   getTokenFromCookies,
   isSecureRequest,
 } from './cookies.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Login UI - Login page rendering and styles
+// ─────────────────────────────────────────────────────────────
+export { loginStyles, renderLoginPage, twoFactorStyles } from './login.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Account - Self-service account management
+// ─────────────────────────────────────────────────────────────
+export {
+  type AccountRouteContext,
+  accountStyles,
+  handle2FADisable,
+  handle2FAEnable,
+  handle2FASetupForm,
+  handleAccountPage,
+  handlePasswordChange,
+  handlePasswordChangeForm,
+  render2FADisablePage,
+  render2FASetupPage,
+  renderAccountPage,
+  renderPasswordChangePage,
+} from './account/mod.ts';

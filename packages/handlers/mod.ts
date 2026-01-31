@@ -39,14 +39,28 @@ import {
   handleUpdate,
 } from './crud.ts';
 import { handleStylesheet } from './styles.ts';
-import { createJwtPayload, signJwt, verifyJwt } from './auth/jwt.ts';
-import { renderLoginPage } from './auth/login.ts';
+
+// Auth imports from @drizzle-cms/auth
 import {
+  type AccountRouteContext,
   createAuthCookie,
   createClearCookie,
+  createJwtPayload,
   getTokenFromCookies,
+  handle2FADisable,
+  handle2FAEnable,
+  handle2FASetupForm,
+  handleAccountPage,
+  handlePasswordChange,
+  handlePasswordChangeForm,
   isSecureRequest,
-} from './auth/cookies.ts';
+  type JwtPayload,
+  type PasswordProvider,
+  renderLoginPage,
+  signJwt,
+  verifyJwt,
+} from '@drizzle-cms/auth';
+
 import {
   applyPolicy,
   createPolicyContext,
@@ -54,7 +68,6 @@ import {
   extractColumnPolicies,
   extractRowPolicy,
 } from './policies/mod.ts';
-import type { JwtPayload } from './auth/jwt.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Types - Handler configuration and request context
@@ -214,20 +227,23 @@ export type {
 export { isWorkerPlugin } from './plugins/types.ts';
 
 // ─────────────────────────────────────────────────────────────
-// Auth - JWT authentication (optional)
+// Auth - JWT authentication (re-exported from @drizzle-cms/auth)
 // ─────────────────────────────────────────────────────────────
 export type {
+  AccountRouteContext,
   AuthProvider,
+  AuthResult,
   AuthUser,
   JwtPayload,
   PasswordCredentials,
   PasswordProviderOptions,
   TwoFactorCredentials,
-  TwoFactorPasswordProviderOptions,
-} from './auth/mod.ts';
+} from '@drizzle-cms/auth';
 
 export {
+  accountStyles,
   createAuthCookie,
+  createChallengeToken,
   createClearCookie,
   createJwtPayload,
   // TOTP utilities
@@ -236,19 +252,31 @@ export {
   generateTOTPUri,
   // Cookie utilities
   getTokenFromCookies,
+  handle2FADisable,
+  handle2FAEnable,
+  handle2FASetupForm,
+  handleAccountPage,
+  handlePasswordChange,
+  handlePasswordChangeForm,
   // Password hashing
   hashPassword,
   isSecureRequest,
+  loginStyles,
   // Auth providers
   PasswordProvider,
+  render2FADisablePage,
+  render2FASetupPage,
+  renderAccountPage,
+  renderLoginPage,
+  renderPasswordChangePage,
   // JWT utilities
   signJwt,
-  TwoFactorPasswordProvider,
   twoFactorStyles,
+  verifyChallengeToken,
   verifyJwt,
   verifyPassword,
   verifyTOTP,
-} from './auth/mod.ts';
+} from '@drizzle-cms/auth';
 
 /**
  * Create a CMS handler function
@@ -501,6 +529,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             // TOTP verified - create JWT and set cookie
             const payload = createJwtPayload(
               result.user.id,
+              result.user.identity,
               result.user.role,
               resolvedAuth.maxAge,
             );
@@ -622,6 +651,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           const user = result.user;
           const payload = createJwtPayload(
             user.id,
+            user.identity,
             user.role,
             resolvedAuth.maxAge,
           );
@@ -708,6 +738,57 @@ export function createCmsHandler(options: CmsOptions): Handler {
           },
         });
       }
+
+      // ─────────────────────────────────────────────────────────────
+      // Account routes (when authenticated)
+      // ─────────────────────────────────────────────────────────────
+      const accountPath = `${opts.basePath}/account`;
+
+      // Create account route context
+      const accountCtx: AccountRouteContext = {
+        basePath: opts.basePath,
+        title: opts.title,
+        jwtPayload,
+        provider: resolvedAuth.provider as PasswordProvider,
+        csrfSecret,
+        challengeSecret: getEnv('CMS_2FA_SECRET') ?? '',
+        generateCsrfToken,
+        validateCsrfToken,
+      };
+
+      // GET /account - Account settings page
+      if (pathname === accountPath && request.method === 'GET') {
+        return handleAccountPage(request, accountCtx);
+      }
+
+      // GET /account/password - Password change form
+      if (pathname === `${accountPath}/password` && request.method === 'GET') {
+        return handlePasswordChangeForm(request, accountCtx);
+      }
+
+      // POST /account/password - Process password change
+      if (pathname === `${accountPath}/password` && request.method === 'POST') {
+        return handlePasswordChange(request, accountCtx);
+      }
+
+      // GET /account/2fa - 2FA setup page
+      if (pathname === `${accountPath}/2fa` && request.method === 'GET') {
+        return handle2FASetupForm(request, accountCtx);
+      }
+
+      // POST /account/2fa/enable - Enable 2FA
+      if (
+        pathname === `${accountPath}/2fa/enable` && request.method === 'POST'
+      ) {
+        return handle2FAEnable(request, accountCtx);
+      }
+
+      // POST /account/2fa/disable - Disable 2FA
+      if (
+        pathname === `${accountPath}/2fa/disable` && request.method === 'POST'
+      ) {
+        return handle2FADisable(request, accountCtx);
+      }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -776,7 +857,13 @@ export function createCmsHandler(options: CmsOptions): Handler {
       url,
       // Include auth user if authenticated via JWT
       authUser: jwtPayload
-        ? { id: jwtPayload.sub, role: jwtPayload.role }
+        ? {
+          id: jwtPayload.sub,
+          identity: typeof jwtPayload.identity === 'string'
+            ? jwtPayload.identity
+            : undefined,
+          role: jwtPayload.role,
+        }
         : undefined,
       // Plugin service for executing hooks
       pluginService: pluginService ?? undefined,

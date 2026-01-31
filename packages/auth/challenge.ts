@@ -12,7 +12,7 @@ const CHALLENGE_TTL_MS = 5 * 60 * 1000; // 5 minutes
  * - HMAC signature prevents tampering
  *
  * @param userId - User ID to bind to the challenge
- * @param secret - Secret key for signing (use CMS_JWT_SECRET)
+ * @param secret - Secret key for signing (use CMS_2FA_SECRET)
  * @returns Signed challenge token
  */
 export async function createChallengeToken(

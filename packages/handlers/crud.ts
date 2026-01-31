@@ -97,7 +97,11 @@ function buildLayoutOptions(
     nav: navItems,
     stylesheetUrl: `${basePath}/styles.css`,
     user: authUser
-      ? { name: `User ${authUser.id}`, logoutUrl: `${basePath}/logout` }
+      ? {
+        name: authUser.identity ?? `User ${authUser.id}`,
+        logoutUrl: `${basePath}/logout`,
+        accountUrl: `${basePath}/account`,
+      }
       : undefined,
   };
 }

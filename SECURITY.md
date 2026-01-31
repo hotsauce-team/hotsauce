@@ -204,7 +204,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ### .env.example
 
 ```bash
-# 2FA Challenge Tokens (required if using TwoFactorPasswordProvider)
+# 2FA Challenge Tokens (required if using 2FA with PasswordProvider)
 CMS_2FA_SECRET=yet-another-random-32-character-secret
 
 # CSRF Protection (required)

@@ -18,8 +18,8 @@ import {
   generateTOTP,
   generateTOTPSecret,
   hashPassword,
-  TwoFactorPasswordProvider,
-} from '../auth/mod.ts';
+  PasswordProvider,
+} from '@drizzle-cms/auth';
 
 // Admin users table with TOTP secret column
 const adminUsers2fa = pgTable('admin_users_2fa', {
@@ -71,7 +71,7 @@ Deno.test('integration: two-factor auth tests', async (t) => {
       basePath: '/admin',
       auth: {
         secret: AUTH_SECRET,
-        provider: new TwoFactorPasswordProvider({
+        provider: new PasswordProvider({
           db,
           usersTable: adminUsers2fa,
           identityColumn: 'email',
@@ -426,15 +426,15 @@ Deno.test('integration: two-factor auth tests', async (t) => {
 });
 
 // ─────────────────────────────────────────────────────────────
-// Unit tests for TwoFactorPasswordProvider (without full handler)
+// Unit tests for PasswordProvider (without full handler)
 // ─────────────────────────────────────────────────────────────
 
-Deno.test('TwoFactorPasswordProvider: authenticate returns null for missing credentials', async () => {
+Deno.test('PasswordProvider: authenticate returns null for missing credentials', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
 
-  const provider = new TwoFactorPasswordProvider({
+  const provider = new PasswordProvider({
     db,
     usersTable: adminUsers2fa,
     identityColumn: 'email',
@@ -452,12 +452,12 @@ Deno.test('TwoFactorPasswordProvider: authenticate returns null for missing cred
   await client.close();
 });
 
-Deno.test('TwoFactorPasswordProvider: authenticate returns null for non-existent user', async () => {
+Deno.test('PasswordProvider: authenticate returns null for non-existent user', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
 
-  const provider = new TwoFactorPasswordProvider({
+  const provider = new PasswordProvider({
     db,
     usersTable: adminUsers2fa,
     identityColumn: 'email',
@@ -475,7 +475,7 @@ Deno.test('TwoFactorPasswordProvider: authenticate returns null for non-existent
   await client.close();
 });
 
-Deno.test('TwoFactorPasswordProvider: user without 2FA gets full auth immediately', async () => {
+Deno.test('PasswordProvider: user without 2FA gets full auth immediately', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
@@ -488,7 +488,7 @@ Deno.test('TwoFactorPasswordProvider: user without 2FA gets full auth immediatel
     totpSecret: null,
   });
 
-  const provider = new TwoFactorPasswordProvider({
+  const provider = new PasswordProvider({
     db,
     usersTable: adminUsers2fa,
     identityColumn: 'email',
@@ -511,7 +511,7 @@ Deno.test('TwoFactorPasswordProvider: user without 2FA gets full auth immediatel
   await client.close();
 });
 
-Deno.test('TwoFactorPasswordProvider: user with 2FA returns pending state', async () => {
+Deno.test('PasswordProvider: user with 2FA returns pending state', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
@@ -525,7 +525,7 @@ Deno.test('TwoFactorPasswordProvider: user with 2FA returns pending state', asyn
     totpSecret,
   });
 
-  const provider = new TwoFactorPasswordProvider({
+  const provider = new PasswordProvider({
     db,
     usersTable: adminUsers2fa,
     identityColumn: 'email',
@@ -549,7 +549,7 @@ Deno.test('TwoFactorPasswordProvider: user with 2FA returns pending state', asyn
   await client.close();
 });
 
-Deno.test('TwoFactorPasswordProvider: TOTP phase returns full auth', async () => {
+Deno.test('PasswordProvider: TOTP phase returns full auth', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
@@ -566,7 +566,7 @@ Deno.test('TwoFactorPasswordProvider: TOTP phase returns full auth', async () =>
     })
     .returning();
 
-  const provider = new TwoFactorPasswordProvider({
+  const provider = new PasswordProvider({
     db,
     usersTable: adminUsers2fa,
     identityColumn: 'email',
@@ -603,7 +603,7 @@ Deno.test('TwoFactorPasswordProvider: TOTP phase returns full auth', async () =>
   await client.close();
 });
 
-Deno.test('TwoFactorPasswordProvider: invalid TOTP returns null', async () => {
+Deno.test('PasswordProvider: invalid TOTP returns null', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
@@ -617,7 +617,7 @@ Deno.test('TwoFactorPasswordProvider: invalid TOTP returns null', async () => {
     totpSecret,
   });
 
-  const provider = new TwoFactorPasswordProvider({
+  const provider = new PasswordProvider({
     db,
     usersTable: adminUsers2fa,
     identityColumn: 'email',
@@ -644,12 +644,12 @@ Deno.test('TwoFactorPasswordProvider: invalid TOTP returns null', async () => {
   await client.close();
 });
 
-Deno.test('TwoFactorPasswordProvider: renderTotpForm produces valid HTML', async () => {
+Deno.test('PasswordProvider: renderTotpForm produces valid HTML', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
 
-  const provider = new TwoFactorPasswordProvider({
+  const provider = new PasswordProvider({
     db,
     usersTable: adminUsers2fa,
     identityColumn: 'email',
@@ -675,12 +675,12 @@ Deno.test('TwoFactorPasswordProvider: renderTotpForm produces valid HTML', async
   await client.close();
 });
 
-Deno.test('TwoFactorPasswordProvider: renderTotpForm shows error when provided', async () => {
+Deno.test('PasswordProvider: renderTotpForm shows error when provided', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
 
-  const provider = new TwoFactorPasswordProvider({
+  const provider = new PasswordProvider({
     db,
     usersTable: adminUsers2fa,
     identityColumn: 'email',
@@ -702,7 +702,7 @@ Deno.test('TwoFactorPasswordProvider: renderTotpForm shows error when provided',
   await client.close();
 });
 
-Deno.test('TwoFactorPasswordProvider: throws error when no challengeSecret provided and env var not set', async () => {
+Deno.test('PasswordProvider: throws error when no challengeSecret provided and env var not set', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWith2fa });
   await createAdminUsers2faTable(db);
@@ -710,7 +710,7 @@ Deno.test('TwoFactorPasswordProvider: throws error when no challengeSecret provi
   let errorThrown = false;
   try {
     // Note: CMS_2FA_SECRET env var is not set in tests
-    new TwoFactorPasswordProvider({
+    new PasswordProvider({
       db,
       usersTable: adminUsers2fa,
       identityColumn: 'email',

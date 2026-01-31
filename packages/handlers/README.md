@@ -75,7 +75,7 @@ Deno.serve(handler);
 
 | Variable          | Purpose                                 | Required                                       |
 | ----------------- | --------------------------------------- | ---------------------------------------------- |
-| `CMS_2FA_SECRET`  | 2FA challenge token signing (32+ chars) | Yes, if using TwoFactorPasswordProvider        |
+| `CMS_2FA_SECRET`  | 2FA challenge token signing (32+ chars) | Yes, if using PasswordProvider with 2FA        |
 | `CMS_CSRF_SECRET` | CSRF token signing (32+ chars)          | Yes, if not passed in options                  |
 | `CMS_JWT_SECRET`  | JWT signing for auth (32+ chars)        | Yes, if auth enabled and not passed in options |
 
@@ -100,8 +100,7 @@ openssl rand -base64 32
 | `validateCsrfToken(token)`       | Validate CSRF token (signature + expiry)               |
 | `getEnv(key)`                    | Get environment variable (cross-runtime)               |
 | `requireEnv(key, desc)`          | Get required env var or throw                          |
-| `PasswordProvider`               | Password-based auth provider class                     |
-| `TwoFactorPasswordProvider`      | Password + TOTP two-factor auth provider               |
+| `PasswordProvider`               | Password-based auth with optional 2FA                  |
 | `hashPassword(password)`         | Hash password with PBKDF2-SHA256                       |
 | `verifyPassword(password, hash)` | Verify password against hash                           |
 | `generateTOTP(secret)`           | Generate a 6-digit TOTP code                           |
@@ -717,8 +716,7 @@ auth: {
 
 | Export                                 | Purpose                             |
 | -------------------------------------- | ----------------------------------- |
-| `PasswordProvider`                     | Password-based auth provider class  |
-| `TwoFactorPasswordProvider`            | Password + TOTP auth provider       |
+| `PasswordProvider`                     | Password + optional TOTP auth       |
 | `hashPassword(password)`               | Hash password with PBKDF2-SHA256    |
 | `verifyPassword(password, hash)`       | Verify password against hash        |
 | `signJwt(payload, secret)`             | Sign a JWT token                    |
@@ -738,6 +736,26 @@ When `auth` is configured, these routes are automatically added:
 | `/admin/login`  | GET    | Login form         |
 | `/admin/login`  | POST   | Submit credentials |
 | `/admin/logout` | POST   | Clear auth cookie  |
+
+### Account Routes
+
+When using `PasswordProvider`, self-service account management routes are also added:
+
+| URL                          | Method | Description            |
+| ---------------------------- | ------ | ---------------------- |
+| `/admin/account`             | GET    | Account overview page  |
+| `/admin/account/password`    | GET    | Password change form   |
+| `/admin/account/password`    | POST   | Submit password change |
+| `/admin/account/2fa`         | GET    | 2FA management page    |
+| `/admin/account/2fa/enable`  | GET    | 2FA setup form (QR)    |
+| `/admin/account/2fa/enable`  | POST   | Verify & enable 2FA    |
+| `/admin/account/2fa/disable` | POST   | Disable 2FA            |
+
+These routes allow users to:
+
+- Change their own password
+- Enable 2FA by scanning a QR code with their authenticator app
+- Disable 2FA (with password confirmation)
 
 ### Password Hashing
 
@@ -760,17 +778,12 @@ Hash format: `$pbkdf2-sha256$iterations$base64salt$base64hash`
 
 ### Two-Factor Authentication (TOTP)
 
-Add TOTP-based two-factor authentication with `TwoFactorPasswordProvider`:
+Add TOTP-based two-factor authentication by adding a `totpSecret` column to your users table and configuring `PasswordProvider`:
 
 ```ts
-import {
-  createCmsHandler,
-  generateTOTPSecret,
-  generateTOTPUri,
-  TwoFactorPasswordProvider,
-} from '@drizzle-cms/handlers';
+import { createCmsHandler, PasswordProvider } from '@drizzle-cms/handlers';
 
-// Schema: users table needs a totpSecret column
+// Schema: users table needs a totpSecret column for 2FA
 const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
@@ -785,7 +798,7 @@ const handler = createCmsHandler({
   basePath: '/admin',
   auth: {
     secret: process.env.JWT_SECRET!,
-    provider: new TwoFactorPasswordProvider({
+    provider: new PasswordProvider({
       db,
       usersTable: users,
       totpSecretColumn: 'totpSecret', // default
@@ -793,6 +806,7 @@ const handler = createCmsHandler({
       // challengeSecret reads from CMS_2FA_SECRET env var if not provided
     }),
   },
+  policies: {},
 });
 ```
 
@@ -812,14 +826,22 @@ Users without a `totpSecret` skip step 2-3 (2FA is optional per-user).
 
 Rate limiting should be implemented at the server level (e.g., fail2ban, middleware).
 
-**Setting up 2FA for a user:**
+**Self-Service 2FA Setup:**
+
+When using `PasswordProvider`, users can enable/disable 2FA themselves via the account pages at `/admin/account/2fa`. The setup flow is stateless:
+
+1. User visits `/admin/account/2fa/enable`
+2. A new TOTP secret is generated and embedded in a signed challenge token
+3. QR code is displayed (using `@drizzle-cms/vendor` qrcode library)
+4. User scans with authenticator app and enters the 6-digit code
+5. Code is verified, secret is saved to database
+
+No manual setup code is needed — the CMS handles everything automatically.
+
+**Manual 2FA Setup (for custom flows):**
 
 ```ts
-import {
-  generateTOTPSecret,
-  generateTOTPUri,
-  hashPassword,
-} from '@drizzle-cms/handlers';
+import { generateTOTPSecret, generateTOTPUri } from '@drizzle-cms/handlers';
 
 // Generate secret and QR code URI
 const totpSecret = generateTOTPSecret();
@@ -840,14 +862,18 @@ await db.update(users)
   .where(eq(users.id, userId));
 ```
 
-**TwoFactorPasswordProvider Options:**
+**PasswordProvider Options:**
 
-| Option                           | Default              | Description                                     |
-| -------------------------------- | -------------------- | ----------------------------------------------- |
-| `totpSecretColumn`               | `'totpSecret'`       | Column storing base32 TOTP secret               |
-| `issuer`                         | `'CMS'`              | App name shown in authenticator                 |
-| `challengeSecret`                | `CMS_2FA_SECRET` env | Secret for signing challenge tokens (32+ chars) |
-| (+ all PasswordProvider options) |                      |                                                 |
+| Option             | Default          | Description                                     |
+| ------------------ | ---------------- | ----------------------------------------------- |
+| `db`               | (required)       | Drizzle database instance                       |
+| `usersTable`       | (required)       | Drizzle table for users                         |
+| `identityColumn`   | `'email'`        | Column for login identity                       |
+| `passwordColumn`   | `'passwordHash'` | Column storing password hash                    |
+| `roleColumn`       | `'role'`         | Column for user role                            |
+| `totpSecretColumn` | `'totpSecret'`   | Column for TOTP secret (null = 2FA disabled)    |
+| `issuer`           | `'CMS'`          | App name shown in authenticator                 |
+| `challengeSecret`  | `CMS_2FA_SECRET` | Secret for signing challenge tokens (32+ chars) |
 
 **TOTP Utilities:**
 

@@ -1,0 +1,535 @@
+// Account route handlers
+// Handles account settings, password change, and 2FA setup/disable
+
+import { qrcode } from '@drizzle-cms/vendor';
+import type { PasswordProvider } from '../provider.ts';
+import { hashPassword } from '../password.ts';
+import { generateTOTPSecret, generateTOTPUri, verifyTOTP } from '../totp.ts';
+import { createChallengeToken, verifyChallengeToken } from '../challenge.ts';
+import type { JwtPayload } from '../types.ts';
+import {
+  render2FADisablePage,
+  render2FASetupPage,
+  renderAccountPage,
+  renderPasswordChangePage,
+} from './views.ts';
+
+/** Security headers for all responses */
+const SECURITY_HEADERS = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Content-Security-Policy':
+    "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
+};
+
+/**
+ * Context passed to account route handlers
+ */
+export interface AccountRouteContext {
+  /** Base path for the CMS (e.g., '/admin') */
+  basePath: string;
+  /** CMS title */
+  title: string;
+  /** Authenticated user's JWT payload */
+  jwtPayload: JwtPayload;
+  /** Auth provider instance */
+  provider: PasswordProvider;
+  /** CSRF secret for token generation/validation */
+  csrfSecret: string;
+  /** Secret for signing 2FA setup tokens */
+  challengeSecret: string;
+  /** Function to generate CSRF token */
+  generateCsrfToken: (secret: string) => Promise<string>;
+  /** Function to validate CSRF token */
+  validateCsrfToken: (token: string | null, secret: string) => Promise<boolean>;
+}
+
+/**
+ * Handle GET /account - Account settings page
+ */
+export async function handleAccountPage(
+  _request: Request,
+  ctx: AccountRouteContext,
+): Promise<Response> {
+  const {
+    basePath,
+    title,
+    jwtPayload,
+    provider,
+    csrfSecret,
+    generateCsrfToken,
+  } = ctx;
+
+  const user = await provider.getUser(jwtPayload.sub);
+  if (!user) {
+    return redirectToLogin(basePath);
+  }
+
+  const has2FA = await provider.userHas2FA(jwtPayload.sub);
+  const csrfToken = await generateCsrfToken(csrfSecret);
+
+  const html = renderAccountPage({
+    basePath,
+    title,
+    user,
+    has2FA,
+    twoFactorEnabled: provider.twoFactorEnabled,
+    csrfToken,
+  });
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      ...SECURITY_HEADERS,
+    },
+  });
+}
+
+/**
+ * Handle GET /account/password - Change password form
+ */
+export async function handlePasswordChangeForm(
+  _request: Request,
+  ctx: AccountRouteContext,
+): Promise<Response> {
+  const { basePath, title, csrfSecret, generateCsrfToken } = ctx;
+
+  const csrfToken = await generateCsrfToken(csrfSecret);
+
+  const html = renderPasswordChangePage({
+    basePath,
+    title,
+    csrfToken,
+  });
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      ...SECURITY_HEADERS,
+    },
+  });
+}
+
+/**
+ * Handle POST /account/password - Process password change
+ */
+export async function handlePasswordChange(
+  request: Request,
+  ctx: AccountRouteContext,
+): Promise<Response> {
+  const {
+    basePath,
+    title,
+    jwtPayload,
+    provider,
+    csrfSecret,
+    generateCsrfToken,
+    validateCsrfToken,
+  } = ctx;
+
+  const formData = await request.formData();
+
+  // Validate CSRF
+  const csrfToken = formData.get('_csrf') as string | null;
+  if (!await validateCsrfToken(csrfToken, csrfSecret)) {
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      renderPasswordChangePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: 'Your session has expired. Please try again.',
+      }),
+      403,
+    );
+  }
+
+  const currentPassword = formData.get('current_password') as string | null;
+  const newPassword = formData.get('new_password') as string | null;
+  const confirmPassword = formData.get('confirm_password') as string | null;
+
+  // Validate fields
+  if (!currentPassword || !newPassword || !confirmPassword) {
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      renderPasswordChangePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: 'All fields are required.',
+      }),
+      400,
+    );
+  }
+
+  if (newPassword !== confirmPassword) {
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      renderPasswordChangePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: 'New passwords do not match.',
+      }),
+      400,
+    );
+  }
+
+  if (newPassword.length < 8) {
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      renderPasswordChangePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: 'New password must be at least 8 characters.',
+      }),
+      400,
+    );
+  }
+
+  // Verify current password
+  const user = await provider.getUser(jwtPayload.sub);
+  if (!user) {
+    return redirectToLogin(basePath);
+  }
+
+  // We need to verify the current password - authenticate with the provider
+  const authResult = await provider.authenticate({
+    identity: user.identity ?? '',
+    password: currentPassword,
+  });
+
+  // If auth returns null or pending_2fa, the current password is wrong
+  // (pending_2fa means password was correct but we're just checking here)
+  if (!authResult) {
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      renderPasswordChangePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: 'Current password is incorrect.',
+      }),
+      400,
+    );
+  }
+
+  // Update password
+  const newHash = await hashPassword(newPassword);
+  await provider.setPassword(jwtPayload.sub, newHash);
+
+  // Redirect to account page with success message
+  return redirect(`${basePath}/account?success=password_changed`);
+}
+
+/**
+ * Handle GET /account/2fa - 2FA setup page
+ */
+export async function handle2FASetupForm(
+  _request: Request,
+  ctx: AccountRouteContext,
+): Promise<Response> {
+  const {
+    basePath,
+    title,
+    jwtPayload,
+    provider,
+    csrfSecret,
+    challengeSecret,
+    generateCsrfToken,
+  } = ctx;
+
+  // Check if 2FA is already enabled
+  const has2FA = await provider.userHas2FA(jwtPayload.sub);
+  if (has2FA) {
+    return redirect(`${basePath}/account`);
+  }
+
+  const user = await provider.getUser(jwtPayload.sub);
+  if (!user) {
+    return redirectToLogin(basePath);
+  }
+
+  // Generate new TOTP secret
+  const secret = generateTOTPSecret();
+  const uri = generateTOTPUri(
+    secret,
+    user.identity ?? jwtPayload.sub,
+    provider.issuer,
+  );
+
+  // Generate QR code
+  const qr = qrcode(0, 'M');
+  qr.addData(uri);
+  qr.make();
+  const qrDataUrl = qr.createDataURL(4);
+
+  // Create setup token (signed token containing the secret)
+  const setupToken = await createChallengeToken(
+    `${jwtPayload.sub}:${secret}`,
+    challengeSecret,
+  );
+
+  const csrfToken = await generateCsrfToken(csrfSecret);
+
+  const html = render2FASetupPage({
+    basePath,
+    title,
+    csrfToken,
+    qrDataUrl,
+    secret,
+    setupToken,
+  });
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      ...SECURITY_HEADERS,
+    },
+  });
+}
+
+/**
+ * Handle POST /account/2fa/enable - Verify and enable 2FA
+ */
+export async function handle2FAEnable(
+  request: Request,
+  ctx: AccountRouteContext,
+): Promise<Response> {
+  const {
+    basePath,
+    title,
+    jwtPayload,
+    provider,
+    csrfSecret,
+    challengeSecret,
+    generateCsrfToken,
+    validateCsrfToken,
+  } = ctx;
+
+  const formData = await request.formData();
+
+  // Validate CSRF
+  const csrfToken = formData.get('_csrf') as string | null;
+  if (!await validateCsrfToken(csrfToken, csrfSecret)) {
+    return redirect(`${basePath}/account/2fa?error=session_expired`);
+  }
+
+  const totpCode = (formData.get('totp_code') as string | null)?.replace(
+    /\s/g,
+    '',
+  );
+  const setupToken = formData.get('setup_token') as string | null;
+
+  if (!totpCode || !setupToken) {
+    return redirect(`${basePath}/account/2fa?error=missing_fields`);
+  }
+
+  // Verify setup token and extract secret
+  const tokenData = await verifyChallengeToken(setupToken, challengeSecret);
+  if (!tokenData || typeof tokenData !== 'string') {
+    return redirect(`${basePath}/account/2fa?error=token_expired`);
+  }
+
+  // Parse userId:secret from token
+  const parts = String(tokenData).split(':');
+  if (parts.length !== 2) {
+    return redirect(`${basePath}/account/2fa?error=invalid_token`);
+  }
+
+  const [tokenUserId, secret] = parts;
+
+  // Verify user ID matches
+  if (tokenUserId !== String(jwtPayload.sub)) {
+    return redirect(`${basePath}/account/2fa?error=invalid_user`);
+  }
+
+  // Verify TOTP code
+  if (!secret) {
+    return redirect(`${basePath}/account/2fa?error=invalid_token`);
+  }
+
+  const valid = await verifyTOTP(totpCode, secret);
+  if (!valid) {
+    // Re-render setup page with error
+    const user = await provider.getUser(jwtPayload.sub);
+    if (!user) {
+      return redirectToLogin(basePath);
+    }
+
+    const uri = generateTOTPUri(
+      secret,
+      user.identity ?? jwtPayload.sub,
+      provider.issuer,
+    );
+    const qr = qrcode(0, 'M');
+    qr.addData(uri);
+    qr.make();
+    const qrDataUrl = qr.createDataURL(4);
+
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+
+    return htmlResponse(
+      render2FASetupPage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        qrDataUrl,
+        secret,
+        setupToken,
+        error: 'Invalid verification code. Please try again.',
+      }),
+      400,
+    );
+  }
+
+  // Enable 2FA
+  await provider.setTotpSecret(jwtPayload.sub, secret);
+
+  return redirect(`${basePath}/account?success=2fa_enabled`);
+}
+
+/**
+ * Handle POST /account/2fa/disable - Disable 2FA
+ * Requires both password AND OTP verification for security
+ */
+export async function handle2FADisable(
+  request: Request,
+  ctx: AccountRouteContext,
+): Promise<Response> {
+  const {
+    basePath,
+    title,
+    jwtPayload,
+    provider,
+    csrfSecret,
+    generateCsrfToken,
+    validateCsrfToken,
+  } = ctx;
+
+  const formData = await request.formData();
+
+  // Validate CSRF
+  const csrfToken = formData.get('_csrf') as string | null;
+  if (!await validateCsrfToken(csrfToken, csrfSecret)) {
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      render2FADisablePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: 'Your session has expired. Please try again.',
+      }),
+      403,
+    );
+  }
+
+  // Check if password and OTP are provided
+  const password = formData.get('password') as string | null;
+  const totpCode = formData.get('totp_code') as string | null;
+
+  if (!password || !totpCode) {
+    // Show confirmation page (shouldn't happen with required fields, but handle gracefully)
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      render2FADisablePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: !password
+          ? 'Password is required.'
+          : 'Authentication code is required.',
+      }),
+      400,
+    );
+  }
+
+  // Get user
+  const user = await provider.getUser(jwtPayload.sub);
+  if (!user) {
+    return redirectToLogin(basePath);
+  }
+
+  // Verify password
+  const authResult = await provider.authenticate({
+    identity: user.identity ?? '',
+    password,
+  });
+
+  // For password verification, we accept both authenticated and pending_2fa
+  // (pending_2fa means password was correct but user has 2FA enabled)
+  if (!authResult) {
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      render2FADisablePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: 'Incorrect password.',
+      }),
+      400,
+    );
+  }
+
+  // Verify OTP
+  const totpSecret = await provider.getTotpSecret(jwtPayload.sub);
+  if (!totpSecret) {
+    // User doesn't have 2FA enabled - redirect back
+    return redirect(`${basePath}/account`);
+  }
+
+  // Normalize OTP (remove spaces)
+  const normalizedCode = totpCode.replace(/\s/g, '');
+  const isValidOtp = await verifyTOTP(normalizedCode, totpSecret);
+
+  if (!isValidOtp) {
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      render2FADisablePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error: 'Incorrect authentication code. Please try again.',
+      }),
+      400,
+    );
+  }
+
+  // Both password and OTP verified - disable 2FA
+  await provider.setTotpSecret(jwtPayload.sub, null);
+
+  return redirect(`${basePath}/account?success=2fa_disabled`);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
+
+function htmlResponse(html: string, status: number): Response {
+  return new Response(html, {
+    status,
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      ...SECURITY_HEADERS,
+    },
+  });
+}
+
+function redirect(location: string): Response {
+  return new Response(null, {
+    status: 302,
+    headers: {
+      'Location': location,
+      ...SECURITY_HEADERS,
+    },
+  });
+}
+
+function redirectToLogin(basePath: string): Response {
+  return redirect(`${basePath}/login`);
+}

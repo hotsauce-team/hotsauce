@@ -1,8 +1,7 @@
 // Handler types and options
 
 import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
-import type { AuthProvider } from './auth/provider.ts';
-import type { JwtPayload } from './auth/jwt.ts';
+import type { AuthProvider, JwtPayload } from '@drizzle-cms/auth';
 import type { Policies } from './policies/types.ts';
 import type { PluginConfig } from './plugins/types.ts';
 import type { PluginRegistry } from './plugins/registry.ts';
@@ -377,7 +376,7 @@ export interface RouteContext {
   url: URL;
   flash?: FlashMessage;
   /** Authenticated user info (when auth is enabled) */
-  authUser?: { id: string; role?: string };
+  authUser?: { id: string; identity?: string; role?: string };
   /** Plugin service for executing hooks (when plugins configured) */
   pluginService?: PluginService;
 }

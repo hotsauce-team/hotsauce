@@ -2,14 +2,14 @@
 // CSS content lives in @drizzle-cms/ui, this file handles HTTP serving
 
 import { cmsStylesheet } from '@drizzle-cms/ui';
-import { loginStyles, twoFactorStyles } from './auth/mod.ts';
+import { accountStyles, loginStyles, twoFactorStyles } from '@drizzle-cms/auth';
 
 // Re-export for convenience
 export { cmsStylesheet } from '@drizzle-cms/ui';
 
-// Combined stylesheet (CMS base + auth styles)
+// Combined stylesheet (CMS base + auth styles + account styles)
 const fullStylesheet = cmsStylesheet + '\n' + loginStyles + '\n' +
-  twoFactorStyles;
+  twoFactorStyles + '\n' + accountStyles;
 
 /**
  * Create a CSS response with caching headers
