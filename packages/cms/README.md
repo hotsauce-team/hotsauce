@@ -847,8 +847,10 @@ import { generateTOTPSecret, generateTOTPUri } from '@hotsauce/cms';
 const totpSecret = generateTOTPSecret();
 const qrUri = generateTOTPUri(totpSecret, 'user@example.com', 'My App');
 
-// Display QR code (use any QR library, or the vendored one)
-import { qrcode } from '@hotsauce/vendor';
+// Display QR code
+// Pin to a version you have audited - this is a supply chain dependency
+// npm install qrcode-generator@2.0.4
+import qrcode from 'qrcode-generator';
 const qr = qrcode(0, 'M');
 qr.addData(qrUri);
 qr.make();

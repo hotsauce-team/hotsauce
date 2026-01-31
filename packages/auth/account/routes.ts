@@ -1,7 +1,6 @@
 // Account route handlers
 // Handles account settings, password change, and 2FA setup/disable
 
-import { qrcode } from '@hotsauce/vendor';
 import type { PasswordProvider } from '../provider.ts';
 import { hashPassword } from '../password.ts';
 import { generateTOTPSecret, generateTOTPUri, verifyTOTP } from '../totp.ts';
@@ -18,6 +17,53 @@ import {
   renderAccountPage,
   renderPasswordChangePage,
 } from './views.ts';
+
+// ─────────────────────────────────────────────────────────────
+// QR Code Generation (optional peer dependency)
+// ─────────────────────────────────────────────────────────────
+
+interface QRCode {
+  addData(data: string): void;
+  make(): void;
+  createDataURL(cellSize?: number): string;
+}
+
+interface QRCodeFactory {
+  (typeNumber: number, errorCorrectionLevel: string): QRCode;
+}
+
+/**
+ * Lazily load qrcode-generator (optional peer dependency).
+ * Only needed when user visits 2FA setup page.
+ */
+async function loadQRCodeGenerator(): Promise<QRCodeFactory> {
+  try {
+    // Dynamic import - only loaded when 2FA setup is accessed
+    const mod = await import('qrcode-generator');
+    return mod.default as QRCodeFactory;
+  } catch {
+    throw new Error(
+      '2FA setup requires the qrcode-generator package.\n\n' +
+        'Install with a pinned version you have audited:\n' +
+        '  npm install qrcode-generator@2.0.4\n' +
+        '  # or: deno add npm:qrcode-generator@2.0.4\n\n' +
+        'Note: This is an npm dependency and a potential supply chain attack vector.\n' +
+        'Pin to a specific version and audit before use in production.',
+    );
+  }
+}
+
+/**
+ * Generate a QR code data URL for a TOTP URI.
+ * @throws {Error} if qrcode-generator is not installed
+ */
+async function generateQRDataUrl(uri: string): Promise<string> {
+  const qrcode = await loadQRCodeGenerator();
+  const qr = qrcode(0, 'M');
+  qr.addData(uri);
+  qr.make();
+  return qr.createDataURL(4);
+}
 
 /** Security headers for all responses */
 const SECURITY_HEADERS = {
@@ -305,11 +351,8 @@ export async function handle2FASetupForm(
     provider.issuer,
   );
 
-  // Generate QR code
-  const qr = qrcode(0, 'M');
-  qr.addData(uri);
-  qr.make();
-  const qrDataUrl = qr.createDataURL(4);
+  // Generate QR code (may throw if qrcode-generator not installed)
+  const qrDataUrl = await generateQRDataUrl(uri);
 
   // Create setup token with encrypted secret (prevents leaking secret if token is logged)
   // Token binds userId for validation, encrypted payload contains the actual secret
@@ -429,10 +472,7 @@ export async function handle2FAEnable(
       user.identity ?? jwtPayload.sub,
       provider.issuer,
     );
-    const qr = qrcode(0, 'M');
-    qr.addData(uri);
-    qr.make();
-    const qrDataUrl = qr.createDataURL(4);
+    const qrDataUrl = await generateQRDataUrl(uri);
 
     // Re-encrypt for the new setup token
     const newEncryptedSecret = await encryptTokenData(secret, challengeSecret);
