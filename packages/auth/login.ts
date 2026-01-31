@@ -95,7 +95,7 @@ export function renderLoginPage(options: {
  * Additional CSS for login page
  * This is appended to the main stylesheet
  */
-export const loginStyles = `
+export const loginStyles: string = `
 /* Login Page Styles */
 .cms-login-container {
   display: flex;
@@ -156,7 +156,7 @@ export const loginStyles = `
 /**
  * Additional CSS for TOTP input
  */
-export const twoFactorStyles = `
+export const twoFactorStyles: string = `
 /* TOTP-specific styles */
 .cms-input-totp {
   font-family: monospace;
