@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+# Optional escape hatch
+if [ "${SKIP_DENO_CHECKS:-}" != "" ]; then
+  exit 0
+fi
+
+deno fmt --check
+deno lint
+deno task check

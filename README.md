@@ -318,6 +318,9 @@ deno fmt
 # Lint
 deno lint
 
+# Optional: install a pre-commit hook (runs fmt/lint/check)
+deno task hooks:install
+
 # Build npm packages (for publishing)
 deno task build:npm
 ```
