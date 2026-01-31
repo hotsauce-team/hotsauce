@@ -40,6 +40,10 @@ if (import.meta.main) {
       /@hotsauce\/ui["']:\s*["']\.\/packages\/ui\/mod\.ts["']/g,
       `@hotsauce/ui": "jsr:@hotsauce/ui@${version}"`,
     ],
+    [
+      /@hotsauce\/auth["']:\s*["']\.\/packages\/auth\/mod\.ts["']/g,
+      `@hotsauce/auth": "jsr:@hotsauce/auth@${version}"`,
+    ],
   ];
 
   for (const [pattern, replacement] of replacements) {
