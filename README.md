@@ -263,7 +263,8 @@ interface TableParsers {
 - [x] Web Standard Request/Response handlers
 - [x] Relation field pickers (FK → select dropdown with display labels)
 - [x] Many-to-many relationships (junction table detection, checkbox UI)
-- [x] Column metadata hints via `$cms()` (e.g. file fields)
+- [x] Column metadata hints via `$cms()` (file, hidden, readOnly)
+- [x] Table metadata hints via `$cms()` (frontendUrl, hidden)
 - [x] JWT authentication (cookie-based tokens)
 - [x] Two-factor authentication (TOTP)
 - [x] External authentication (reverse proxy / OAuth integration)
@@ -271,9 +272,10 @@ interface TableParsers {
 - [x] Column-level access control (read/write policies per field)
 - [x] Multi-tenant compatibility (shared database with tenant column)
 - [x] Plugin system with Worker isolation (Deno + Node.js 20+)
+- [x] File uploads (base64 in DB, validation, serving route)
+- [ ] File uploads (S3/R2 cloud storage adapter)
 - [ ] Plugin config - timeout, worker response validation, load testing
 - [ ] Plugin data obfuscation (PII/credential redaction)
-- [ ] File uploads (local + S3) (upload pipeline + storage)
 - [ ] Audit logging
 - [ ] 2FA backup codes (recovery codes for lost authenticator)
 - [ ] Customizable UI components
