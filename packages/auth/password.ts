@@ -9,6 +9,8 @@
  * - 32 byte derived key
  */
 const PBKDF2_ITERATIONS = 600_000;
+/** Maximum iterations to prevent DoS if stored hash is tampered */
+const MAX_PBKDF2_ITERATIONS = 2_000_000;
 const SALT_LENGTH = 16;
 const KEY_LENGTH = 32;
 
@@ -146,7 +148,10 @@ export async function verifyPassword(
     const salt = fromBase64(saltB64);
     const expectedHash = fromBase64(hashB64);
 
-    if (isNaN(iterations) || iterations < 1) {
+    // Reject invalid or excessive iterations (DoS protection)
+    if (
+      isNaN(iterations) || iterations < 1 || iterations > MAX_PBKDF2_ITERATIONS
+    ) {
       return false;
     }
 

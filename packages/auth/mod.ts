@@ -42,7 +42,12 @@ export {
 // ─────────────────────────────────────────────────────────────
 // Challenge tokens - Signed tokens for 2FA verification
 // ─────────────────────────────────────────────────────────────
-export { createChallengeToken, verifyChallengeToken } from './challenge.ts';
+export {
+  createChallengeToken,
+  decryptTokenData,
+  encryptTokenData,
+  verifyChallengeToken,
+} from './challenge.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Cookies - JWT cookie utilities

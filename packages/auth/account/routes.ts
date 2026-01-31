@@ -5,7 +5,12 @@ import { qrcode } from '@drizzle-cms/vendor';
 import type { PasswordProvider } from '../provider.ts';
 import { hashPassword } from '../password.ts';
 import { generateTOTPSecret, generateTOTPUri, verifyTOTP } from '../totp.ts';
-import { createChallengeToken, verifyChallengeToken } from '../challenge.ts';
+import {
+  createChallengeToken,
+  decryptTokenData,
+  encryptTokenData,
+  verifyChallengeToken,
+} from '../challenge.ts';
 import type { JwtPayload } from '../types.ts';
 import {
   render2FADisablePage,
@@ -273,9 +278,11 @@ export async function handle2FASetupForm(
   qr.make();
   const qrDataUrl = qr.createDataURL(4);
 
-  // Create setup token (signed token containing the secret)
+  // Create setup token with encrypted secret (prevents leaking secret if token is logged)
+  // Token binds userId for validation, encrypted payload contains the actual secret
+  const encryptedSecret = await encryptTokenData(secret, challengeSecret);
   const setupToken = await createChallengeToken(
-    `${jwtPayload.sub}:${secret}`,
+    `${jwtPayload.sub}:${encryptedSecret}`,
     challengeSecret,
   );
 
@@ -340,31 +347,41 @@ export async function handle2FAEnable(
     return redirect(`${basePath}/account/2fa?error=missing_fields`);
   }
 
-  // Verify setup token and extract secret
+  // Verify setup token and extract encrypted secret
   const tokenData = await verifyChallengeToken(setupToken, challengeSecret);
   if (!tokenData || typeof tokenData !== 'string') {
     return redirect(`${basePath}/account/2fa?error=token_expired`);
   }
 
-  // Parse userId:secret from token
-  const parts = String(tokenData).split(':');
-  if (parts.length !== 2) {
+  // Parse userId:encryptedSecret from token
+  const colonIndex = String(tokenData).indexOf(':');
+  if (colonIndex === -1) {
     return redirect(`${basePath}/account/2fa?error=invalid_token`);
   }
 
-  const [tokenUserId, secret] = parts;
+  const tokenUserId = String(tokenData).slice(0, colonIndex);
+  const encryptedSecret = String(tokenData).slice(colonIndex + 1);
 
   // Verify user ID matches
   if (tokenUserId !== String(jwtPayload.sub)) {
     return redirect(`${basePath}/account/2fa?error=invalid_user`);
   }
 
-  // Verify TOTP code
+  // Decrypt the TOTP secret
+  const secret = await decryptTokenData(encryptedSecret, challengeSecret);
   if (!secret) {
     return redirect(`${basePath}/account/2fa?error=invalid_token`);
   }
 
-  const valid = await verifyTOTP(totpCode, secret);
+  // Verify TOTP code (with try/catch for malformed secrets)
+  let valid = false;
+  try {
+    valid = await verifyTOTP(totpCode, secret);
+  } catch {
+    // Malformed secret - treat as invalid
+    return redirect(`${basePath}/account/2fa?error=invalid_token`);
+  }
+
   if (!valid) {
     // Re-render setup page with error
     const user = await provider.getUser(jwtPayload.sub);
@@ -382,6 +399,12 @@ export async function handle2FAEnable(
     qr.make();
     const qrDataUrl = qr.createDataURL(4);
 
+    // Re-encrypt for the new setup token
+    const newEncryptedSecret = await encryptTokenData(secret, challengeSecret);
+    const newSetupToken = await createChallengeToken(
+      `${jwtPayload.sub}:${newEncryptedSecret}`,
+      challengeSecret,
+    );
     const newCsrfToken = await generateCsrfToken(csrfSecret);
 
     return htmlResponse(
@@ -391,7 +414,7 @@ export async function handle2FAEnable(
         csrfToken: newCsrfToken,
         qrDataUrl,
         secret,
-        setupToken,
+        setupToken: newSetupToken,
         error: 'Invalid verification code. Please try again.',
       }),
       400,
@@ -498,9 +521,26 @@ export async function handle2FADisable(
     return redirect(`${basePath}/account`);
   }
 
-  // Normalize OTP (remove spaces)
+  // Normalize OTP (remove spaces) and verify (with try/catch for malformed secrets)
   const normalizedCode = totpCode.replace(/\s/g, '');
-  const isValidOtp = await verifyTOTP(normalizedCode, totpSecret);
+  let isValidOtp = false;
+  try {
+    isValidOtp = await verifyTOTP(normalizedCode, totpSecret);
+  } catch {
+    // Malformed secret in DB - log error and treat as invalid code
+    // This shouldn't happen with valid data, but protects against corruption
+    const newCsrfToken = await generateCsrfToken(csrfSecret);
+    return htmlResponse(
+      render2FADisablePage({
+        basePath,
+        title,
+        csrfToken: newCsrfToken,
+        error:
+          'Unable to verify code. Please contact support if this persists.',
+      }),
+      500,
+    );
+  }
 
   if (!isValidOtp) {
     const newCsrfToken = await generateCsrfToken(csrfSecret);
