@@ -709,7 +709,7 @@ Deno.test('TwoFactorPasswordProvider: throws error when no challengeSecret provi
 
   let errorThrown = false;
   try {
-    // Note: CMS_CHALLENGE_SECRET env var is not set in tests
+    // Note: CMS_2FA_SECRET env var is not set in tests
     new TwoFactorPasswordProvider({
       db,
       usersTable: adminUsers2fa,

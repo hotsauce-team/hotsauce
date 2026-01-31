@@ -30,7 +30,7 @@ const cmsHandler = createCmsHandler({
   // JWT authentication with 2FA - enables /login and /logout routes
   auth: {
     // TwoFactorPasswordProvider: password + TOTP (if user has totpSecret)
-    // Uses CMS_CHALLENGE_SECRET env var for challenge token signing
+    // Uses CMS_2FA_SECRET env var for challenge token signing
     provider: new TwoFactorPasswordProvider({
       db,
       usersTable: users,

@@ -63,7 +63,7 @@ export interface TwoFactorPasswordProviderOptions
  *
  * @example
  * ```ts
- * // Minimal config - uses CMS_CHALLENGE_SECRET from environment
+ * // Minimal config - uses CMS_2FA_SECRET from environment
  * const provider = new TwoFactorPasswordProvider({
  *   db,
  *   usersTable: schema.admins,

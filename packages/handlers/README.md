@@ -790,7 +790,7 @@ const handler = createCmsHandler({
       usersTable: users,
       totpSecretColumn: 'totpSecret', // default
       issuer: 'My App', // shown in authenticator apps
-      // challengeSecret reads from CMS_CHALLENGE_SECRET env var if not provided
+      // challengeSecret reads from CMS_2FA_SECRET env var if not provided
     }),
   },
 });
