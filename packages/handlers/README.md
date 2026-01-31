@@ -633,12 +633,12 @@ That's it! The handler now includes `/admin/login` and `/admin/logout` routes au
 
 `PasswordProvider` uses sensible defaults that work with common schema patterns:
 
-| Option          | Default                  | Description                                |
-| --------------- | ------------------------ | ------------------------------------------ |
-| `identityField` | `'email'`                | Column for login identity (email/username) |
-| `passwordField` | `'passwordHash'`         | Column for hashed password                 |
-| `idField`       | `'id'`                   | Column for primary key                     |
-| `roleField`     | `'role'` (auto-detected) | Column for user role (if exists)           |
+| Option           | Default                  | Description                                |
+| ---------------- | ------------------------ | ------------------------------------------ |
+| `identityColumn` | `'email'`                | Column for login identity (email/username) |
+| `passwordColumn` | `'passwordHash'`         | Column for hashed password                 |
+| `idColumn`       | `'id'`                   | Column for primary key                     |
+| `roleColumn`     | `'role'` (auto-detected) | Column for user role (if exists)           |
 
 Override these only if your schema uses different column names:
 
@@ -646,8 +646,8 @@ Override these only if your schema uses different column names:
 new PasswordProvider({
   db,
   usersTable: schema.users,
-  identityField: 'username', // custom identity column
-  passwordField: 'password_hash', // custom password column
+  identityColumn: 'username', // custom identity column
+  passwordColumn: 'password_hash', // custom password column
 });
 ```
 

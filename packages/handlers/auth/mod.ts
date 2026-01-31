@@ -13,6 +13,16 @@ export { createJwtPayload, signJwt, verifyJwt } from './jwt.ts';
 export { hashPassword, verifyPassword } from './password.ts';
 
 // ─────────────────────────────────────────────────────────────
+// TOTP - Time-based One-Time Passwords (RFC 6238)
+// ─────────────────────────────────────────────────────────────
+export {
+  generateTOTP,
+  generateTOTPSecret,
+  generateTOTPUri,
+  verifyTOTP,
+} from './totp.ts';
+
+// ─────────────────────────────────────────────────────────────
 // Providers - Authentication backends
 // ─────────────────────────────────────────────────────────────
 export type {
@@ -22,6 +32,12 @@ export type {
   PasswordProviderOptions,
 } from './provider.ts';
 export { PasswordProvider } from './provider.ts';
+
+export type {
+  TwoFactorCredentials,
+  TwoFactorPasswordProviderOptions,
+} from './two-factor.ts';
+export { TwoFactorPasswordProvider, twoFactorStyles } from './two-factor.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Login UI - Login page rendering and styles

@@ -5,8 +5,8 @@ import {
   adminOr,
   createCmsHandler,
   ownedBy,
-  PasswordProvider,
   readOnly,
+  TwoFactorPasswordProvider,
 } from '@drizzle-cms/handlers';
 import {
   inProcessFormatNamesPlugin,
@@ -26,10 +26,14 @@ const cmsHandler = createCmsHandler({
   db,
   schema,
   basePath: '/admin',
-  // JWT authentication - enables /login and /logout routes
+  // JWT authentication with 2FA - enables /login and /logout routes
   auth: {
-    // PasswordProvider defaults: id, email, passwordHash, role columns
-    provider: new PasswordProvider({ db, usersTable: users }),
+    // TwoFactorPasswordProvider: password + TOTP (if user has totpSecret)
+    provider: new TwoFactorPasswordProvider({
+      db,
+      usersTable: users,
+      issuer: 'Drizzle CMS Demo',
+    }),
   },
   // Row-level security policies (atomic authorization in WHERE clauses)
   policies: {

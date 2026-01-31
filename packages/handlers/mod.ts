@@ -222,23 +222,32 @@ export type {
   JwtPayload,
   PasswordCredentials,
   PasswordProviderOptions,
+  TwoFactorCredentials,
+  TwoFactorPasswordProviderOptions,
 } from './auth/mod.ts';
 
 export {
   createAuthCookie,
   createClearCookie,
   createJwtPayload,
+  // TOTP utilities
+  generateTOTP,
+  generateTOTPSecret,
+  generateTOTPUri,
   // Cookie utilities
   getTokenFromCookies,
   // Password hashing
   hashPassword,
   isSecureRequest,
-  // Auth provider
+  // Auth providers
   PasswordProvider,
   // JWT utilities
   signJwt,
+  TwoFactorPasswordProvider,
+  twoFactorStyles,
   verifyJwt,
   verifyPassword,
+  verifyTOTP,
 } from './auth/mod.ts';
 
 /**

@@ -65,16 +65,16 @@ export interface PasswordProviderOptions {
   usersTable: any;
 
   /** Column name for identity (email/username). Default: 'email' */
-  identityField?: string;
+  identityColumn?: string;
 
   /** Column name for password hash. Default: 'passwordHash' */
-  passwordField?: string;
+  passwordColumn?: string;
 
   /** Column name for user role (optional) */
-  roleField?: string;
+  roleColumn?: string;
 
   /** Column name for primary key. Default: 'id' */
-  idField?: string;
+  idColumn?: string;
 }
 
 /**
@@ -83,10 +83,10 @@ export interface PasswordProviderOptions {
  * Authenticates against a Drizzle users table with email/password.
  *
  * Defaults (override if your schema uses different column names):
- * - `identityField`: 'email'
- * - `passwordField`: 'passwordHash'
- * - `idField`: 'id'
- * - `roleField`: 'role' (if column exists, otherwise undefined)
+ * - `identityColumn`: 'email'
+ * - `passwordColumn`: 'passwordHash'
+ * - `idColumn`: 'id'
+ * - `roleColumn`: 'role' (if column exists, otherwise undefined)
  *
  * @example
  * ```ts
@@ -100,44 +100,44 @@ export interface PasswordProviderOptions {
  * const provider = new PasswordProvider({
  *   db,
  *   usersTable: schema.users,
- *   identityField: 'username',
- *   passwordField: 'password_hash',
- *   roleField: 'user_role',
+ *   identityColumn: 'username',
+ *   passwordColumn: 'password_hash',
+ *   roleColumn: 'user_role',
  * });
  * ```
  */
 export class PasswordProvider implements AuthProvider {
   // deno-lint-ignore no-explicit-any
-  private db: any;
+  protected db: any;
   // deno-lint-ignore no-explicit-any
-  private usersTable: any;
-  private identityField: string;
-  private passwordField: string;
-  private roleField?: string;
-  private idField: string;
+  protected usersTable: any;
+  protected identityColumn: string;
+  protected passwordColumn: string;
+  protected roleColumn?: string;
+  protected idColumn: string;
 
   constructor(options: PasswordProviderOptions) {
     this.db = options.db;
     this.usersTable = options.usersTable;
-    this.identityField = options.identityField ?? 'email';
-    this.passwordField = options.passwordField ?? 'passwordHash';
-    this.idField = options.idField ?? 'id';
-    this.roleField = options.roleField ?? 'role';
+    this.identityColumn = options.identityColumn ?? 'email';
+    this.passwordColumn = options.passwordColumn ?? 'passwordHash';
+    this.idColumn = options.idColumn ?? 'id';
+    this.roleColumn = options.roleColumn ?? 'role';
 
-    // Validate that required fields exist on the table
-    if (!this.usersTable[this.identityField]) {
+    // Validate that required columns exist on the table
+    if (!this.usersTable[this.identityColumn]) {
       throw new Error(
-        `PasswordProvider: identity field '${this.identityField}' not found on users table`,
+        `PasswordProvider: identity column '${this.identityColumn}' not found on users table`,
       );
     }
-    if (!this.usersTable[this.passwordField]) {
+    if (!this.usersTable[this.passwordColumn]) {
       throw new Error(
-        `PasswordProvider: password field '${this.passwordField}' not found on users table`,
+        `PasswordProvider: password column '${this.passwordColumn}' not found on users table`,
       );
     }
-    if (!this.usersTable[this.idField]) {
+    if (!this.usersTable[this.idColumn]) {
       throw new Error(
-        `PasswordProvider: id field '${this.idField}' not found on users table`,
+        `PasswordProvider: id column '${this.idColumn}' not found on users table`,
       );
     }
   }
@@ -150,18 +150,18 @@ export class PasswordProvider implements AuthProvider {
     }
 
     try {
-      // Query user by identity field
-      const identityColumn = this.usersTable[this.identityField];
-      if (!identityColumn) {
+      // Query user by identity column
+      const identityCol = this.usersTable[this.identityColumn];
+      if (!identityCol) {
         throw new Error(
-          `Identity field '${this.identityField}' not found on users table`,
+          `Identity column '${this.identityColumn}' not found on users table`,
         );
       }
 
       const results = await this.db
         .select()
         .from(this.usersTable)
-        .where(eq(identityColumn, identity))
+        .where(eq(identityCol, identity))
         .limit(1);
 
       const user = results[0] as Record<string, unknown> | undefined;
@@ -172,7 +172,7 @@ export class PasswordProvider implements AuthProvider {
       // Verify password
       // Always run verifyPassword to prevent timing attacks from revealing
       // which accounts have passwords set vs those that don't
-      const storedHash = user[this.passwordField] as string | undefined;
+      const storedHash = user[this.passwordColumn] as string | undefined;
       const dummyHash =
         '$pbkdf2-sha256$600000$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
       const valid = await verifyPassword(password, storedHash ?? dummyHash);
@@ -182,9 +182,9 @@ export class PasswordProvider implements AuthProvider {
 
       // Return user info for JWT
       return {
-        id: user[this.idField] as string | number,
-        role: this.roleField
-          ? (user[this.roleField] as string | undefined)
+        id: user[this.idColumn] as string | number,
+        role: this.roleColumn
+          ? (user[this.roleColumn] as string | undefined)
           : undefined,
       };
     } catch {

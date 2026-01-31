@@ -45,9 +45,9 @@ Deno.test('integration: JWT auth tests', async (t) => {
         provider: new PasswordProvider({
           db,
           usersTable: adminUsers,
-          identityField: 'email',
-          passwordField: 'passwordHash',
-          roleField: 'role',
+          identityColumn: 'email',
+          passwordColumn: 'passwordHash',
+          roleColumn: 'role',
         }),
       },
       policies: 'dangerously-open',

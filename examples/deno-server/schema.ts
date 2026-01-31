@@ -28,6 +28,7 @@ const users = pgTable('users', {
   name: varchar('name', { length: 100 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash'), // required for cms password login only
+  totpSecret: text('totp_secret'), // for 2FA (base32 encoded)
   role: varchar('role', { length: 50 }), // 'admin', 'editor', etc.
   avatar: jsonb('avatar').$cms({ file: true }),
   bio: text('bio'),

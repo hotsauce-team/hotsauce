@@ -93,7 +93,8 @@
   "fmt": {
     "indentWidth": 2,
     "singleQuote": true,
-    "proseWrap": "preserve"
+    "proseWrap": "preserve",
+    "exclude": ["packages/vendor/qrcode-generator/"]
   },
 
   // Linting
@@ -101,7 +102,8 @@
     "rules": {
       "tags": ["recommended"],
       "include": ["no-console"]
-    }
+    },
+    "exclude": ["packages/vendor/qrcode-generator/"]
   },
 
   // Exclude build artifacts
