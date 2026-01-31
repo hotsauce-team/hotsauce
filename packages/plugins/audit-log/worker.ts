@@ -7,7 +7,7 @@ import type {
   CmsGlobalThis,
   CrudAction,
   Serializable,
-} from 'jsr:@hotsauce/workers@0.1.0';
+} from '@hotsauce/workers';
 
 // Minimal Worker globals declaration (avoids triple-slash directives banned by JSR)
 // deno-lint-ignore no-explicit-any

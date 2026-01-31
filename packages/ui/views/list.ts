@@ -1,8 +1,8 @@
 // List view - table of records
 
 import { attrs, escapeHtml, html, raw } from '../html.ts';
-import type { CMSField } from 'jsr:@hotsauce/core@0.1.0';
-import { isValidFileReference } from 'jsr:@hotsauce/core@0.1.0';
+import type { CMSField } from '@hotsauce/core';
+import { isValidFileReference } from '@hotsauce/core';
 import type { RelationOption } from '../forms/inputs.ts';
 
 /**

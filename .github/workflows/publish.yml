@@ -70,10 +70,12 @@ jobs:
       # 5. plugins (depends on workers)
       # 6. cms (depends on core, ui, workers, auth, plugins)
 
-      # Delete deno.jsonc and deno.lock to avoid cross-package issues
-      - name: Clean up deno config files
+      # Replace lines in deno.jsonc to use JSR import paths
+      # e.g. `./packages/core` -> `jsr:@hotsauce/core@<version>`
+      - name: Update import paths for JSR
         run: |
-          rm -f deno.jsonc deno.lock
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          deno task update-jsr-paths --version "$TAG_VERSION"
 
       - name: Publish @hotsauce/core
         run: deno publish --allow-slow-types

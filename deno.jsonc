@@ -31,13 +31,10 @@
     // Local packages (for cross-package imports)
     "@hotsauce/core": "./packages/core/mod.ts",
     "@hotsauce/core/extend": "./packages/core/extend/mod.ts",
-    "jsr:@hotsauce/core@0.1.0": "./packages/core/mod.ts",
-    "jsr:@hotsauce/core@0.1.0/extend": "./packages/core/extend/mod.ts",
     "@hotsauce/ui": "./packages/ui/mod.ts",
     "@hotsauce/auth": "./packages/auth/mod.ts",
     "@hotsauce/cms": "./packages/cms/mod.ts",
     "@hotsauce/workers": "./packages/workers/mod.ts",
-    "jsr:@hotsauce/workers@0.1.0": "./packages/workers/mod.ts",
     "@hotsauce/plugins": "./packages/plugins/mod.ts",
     "@hotsauce/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
     "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
@@ -68,7 +65,8 @@
     "hono:seed": "deno task -f hono-fullstack-example seed",
     "hono:dev": "deno task -f hono-fullstack-example dev",
     "hono:dev:watch": "deno task -f hono-fullstack-example dev:watch",
-    "hono:dev:debug": "deno task -f hono-fullstack-example dev:debug"
+    "hono:dev:debug": "deno task -f hono-fullstack-example dev:debug",
+    "update-jsr-paths": "deno run --allow-read=deno.jsonc --allow-write=deno.jsonc scripts/update_jsr_paths.ts"
     // "build:npm": "deno run --allow-read=. --allow-write=./npm --allow-env=HOME scripts/build_npm.ts"
   },
 
