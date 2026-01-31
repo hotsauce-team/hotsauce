@@ -1,0 +1,120 @@
+{
+  // Workspace configuration for drizzle-cms monorepo
+  "name": "@hotsauce/workspace",
+  "version": "0.0.1",
+  "exports": "./packages/core/mod.ts",
+
+  // Use local node_modules for npm packages (enables fine-grained permissions)
+  "nodeModulesDir": "auto",
+
+  // Monorepo packages
+  "workspace": [
+    "./packages/core",
+    "./packages/ui",
+    "./packages/auth",
+    "./packages/cms",
+    "./packages/workers",
+    "./packages/plugins",
+
+    // Examples
+    "./examples/deno-server",
+    "./examples/hono-fullstack"
+  ],
+
+  // Shared import map for all packages
+  "imports": {
+    "drizzle-orm": "npm:drizzle-orm@^0.45.1",
+    "drizzle-zod": "npm:drizzle-zod@^0.8.3",
+    "postgres": "npm:postgres@^3.4.8",
+    "zod": "npm:zod@^4.3.5",
+
+    // Local packages (for cross-package imports)
+    "@hotsauce/core": "jsr:@hotsauce/core@0.1.1",
+    "@hotsauce/core/extend": "jsr:@hotsauce/core@0.1.1/extend",
+    "@hotsauce/ui": "jsr:@hotsauce/ui@0.1.1",
+    "@hotsauce/auth": "jsr:@hotsauce/auth@0.1.1",
+    "@hotsauce/cms": "jsr:@hotsauce/cms@0.1.1",
+    "@hotsauce/workers": "jsr:@hotsauce/workers@0.1.1",
+    "@hotsauce/plugins": "jsr:@hotsauce/plugins@0.1.1",
+    "@hotsauce/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
+    "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
+
+    // Optional peer dependency for 2FA QR code generation
+    "qrcode-generator": "npm:qrcode-generator@^2.0.4",
+
+    // Dev dependencies (not shipped to users)
+    "@std/assert": "jsr:@std/assert@*",
+    "@electric-sql/pglite": "npm:@electric-sql/pglite@^0.3.14",
+    "sql.js": "npm:sql.js@^1.13.0"
+  },
+
+  // Tasks
+  "tasks": {
+    "test": "deno test -P --parallel",
+    "test:debug": "deno test -P", // sequential for debugging
+    "test:watch": "deno test -P --watch",
+    "test:drizzle-compat": "deno test -P packages/core/tests/drizzle_compat_test.ts",
+    "check": "deno check packages/*/mod.ts",
+    "lint": "deno lint",
+    "fmt": "deno fmt",
+    "hooks:run": "deno fmt --check && deno lint && deno task check",
+    "example:seed": "deno task -f example-deno-server seed",
+    "example:dev": "deno task -f example-deno-server dev",
+    "example:dev:watch": "deno task -f example-deno-server dev:watch",
+    "example:dev:debug": "deno task -f example-deno-server dev:debug",
+    "hono:seed": "deno task -f hono-fullstack-example seed",
+    "hono:dev": "deno task -f hono-fullstack-example dev",
+    "hono:dev:watch": "deno task -f hono-fullstack-example dev:watch",
+    "hono:dev:debug": "deno task -f hono-fullstack-example dev:debug",
+    "update-jsr-paths": "deno run --allow-read=deno.jsonc --allow-write=deno.jsr.jsonc scripts/update_jsr_paths.ts"
+    // "build:npm": "deno run --allow-read=. --allow-write=./npm --allow-env=HOME scripts/build_npm.ts"
+  },
+
+  // Test configuration with fine-grained permissions
+  "test": {
+    "include": ["packages/*/tests/"],
+    "permissions": {
+      "read": [
+        "./packages",
+        "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "./node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm",
+        "./node_modules/.deno/sql.js@1.13.0/node_modules/sql.js/dist/sql-wasm.wasm"
+      ],
+      "env": [
+        "CMS_2FA_SECRET",
+        "CMS_CSRF_SECRET",
+        "CMS_JWT_SECRET",
+        "CMS_TESTING"
+      ]
+    }
+  },
+
+  // Compiler options
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true
+  },
+
+  // Formatting
+  "fmt": {
+    "indentWidth": 2,
+    "singleQuote": true,
+    "proseWrap": "preserve"
+  },
+
+  // Linting
+  "lint": {
+    "rules": {
+      "tags": ["recommended"],
+      "include": ["no-console"]
+    }
+  },
+
+  // Exclude build artifacts
+  "exclude": [
+    "npm/",
+    "coverage/",
+    ".git/"
+  ]
+}
