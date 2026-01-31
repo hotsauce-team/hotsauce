@@ -307,7 +307,8 @@ git clone https://github.com/yourname/drizzle-cms
 cd drizzle-cms
 
 # Enable pre-commit hooks (runs fmt/lint/check)
-git config core.hooksPath .githooks
+git config core.hooksPath .githooks && \
+chmod +x .githooks/pre-commit
 
 # Run tests
 deno task test
