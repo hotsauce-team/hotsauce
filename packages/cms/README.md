@@ -832,7 +832,7 @@ When using `PasswordProvider`, users can enable/disable 2FA themselves via the a
 
 1. User visits `/admin/account/2fa/enable`
 2. A new TOTP secret is generated and embedded in a signed challenge token
-3. QR code is displayed (using `@hotsauce/vendor` qrcode library)
+3. QR code is displayed (requires `qrcode-generator` peer dependency)
 4. User scans with authenticator app and enters the 6-digit code
 5. Code is verified, secret is saved to database
 
