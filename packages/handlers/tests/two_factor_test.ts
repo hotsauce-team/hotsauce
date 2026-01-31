@@ -21,6 +21,55 @@ import {
   PasswordProvider,
 } from '@drizzle-cms/auth';
 
+// ─────────────────────────────────────────────────────────────
+// Pre-computed password hashes (PBKDF2 is ~130ms per hash)
+// ─────────────────────────────────────────────────────────────
+const PRECOMPUTED_HASHES: Record<string, string> = {};
+
+// Compute hashes once at module load (parallel)
+const hashInit = Promise.all([
+  hashPassword('password123').then((
+    h,
+  ) => (PRECOMPUTED_HASHES['password123'] = h)),
+  hashPassword('secure123').then((h) => (PRECOMPUTED_HASHES['secure123'] = h)),
+  hashPassword('correct-password').then((
+    h,
+  ) => (PRECOMPUTED_HASHES['correct-password'] = h)),
+  hashPassword('test123').then((h) => (PRECOMPUTED_HASHES['test123'] = h)),
+]);
+
+/** Get pre-computed hash (or compute if not cached) */
+async function getHash(password: string): Promise<string> {
+  await hashInit;
+  return PRECOMPUTED_HASHES[password] ?? await hashPassword(password);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Shared PGlite instance for unit tests (saves ~300ms per test)
+// ─────────────────────────────────────────────────────────────
+let unitTestClient: PGlite | null = null;
+let unitTestDb: ReturnType<typeof drizzle> | null = null;
+let unitTestInitPromise: Promise<void> | null = null;
+
+async function getUnitTestDb() {
+  if (!unitTestInitPromise) {
+    unitTestInitPromise = (async () => {
+      unitTestClient = new PGlite();
+      unitTestDb = drizzle(unitTestClient, { schema: schemaWith2fa });
+      await createAdminUsers2faTable(unitTestDb);
+    })();
+  }
+  await unitTestInitPromise;
+  return unitTestDb!;
+}
+
+async function resetUnitTestDb() {
+  const db = await getUnitTestDb();
+  await db.execute(
+    sql`TRUNCATE TABLE admin_users_2fa RESTART IDENTITY CASCADE`,
+  );
+}
+
 // Admin users table with TOTP secret column
 const adminUsers2fa = pgTable('admin_users_2fa', {
   id: serial('id').primaryKey(),
@@ -46,111 +95,165 @@ async function createAdminUsers2faTable(
   `);
 }
 
-Deno.test('integration: two-factor auth tests', async (t) => {
-  // Create single PGlite instance for all 2FA tests
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
+Deno.test({
+  name: 'integration: two-factor auth tests',
+  // Pre-computed hashes start before the test but may complete during it
+  sanitizeOps: false,
+  fn: async (t) => {
+    // Wait for pre-computed hashes to be ready
+    await hashInit;
 
-  // Create tables once
-  await createBasicTables(db);
-  await createAdminUsers2faTable(db);
+    // Create single PGlite instance for all 2FA tests
+    const client = new PGlite();
+    const db = drizzle(client, { schema: schemaWith2fa });
 
-  // Helper to reset tables between tests
-  async function resetDb() {
-    await db.execute(
-      sql`TRUNCATE TABLE posts, users, admin_users_2fa RESTART IDENTITY CASCADE`,
-    );
-  }
+    // Create tables once
+    await createBasicTables(db);
+    await createAdminUsers2faTable(db);
 
-  // Helper to create handler with 2FA auth
-  function create2faHandler(extraOptions = {}) {
-    return createCmsHandler({
-      csrfSecret: TEST_CSRF_SECRET,
-      db,
-      schema: schemaWith2fa,
-      basePath: '/admin',
-      auth: {
-        secret: AUTH_SECRET,
-        provider: new PasswordProvider({
-          db,
-          usersTable: adminUsers2fa,
-          identityColumn: 'email',
-          passwordColumn: 'passwordHash',
-          roleColumn: 'role',
-          totpSecretColumn: 'totpSecret',
-          issuer: 'Test CMS',
-          challengeSecret: AUTH_SECRET, // Use same secret for simplicity in tests
-        }),
+    // Helper to reset tables between tests
+    async function resetDb() {
+      await db.execute(
+        sql`TRUNCATE TABLE posts, users, admin_users_2fa RESTART IDENTITY CASCADE`,
+      );
+    }
+
+    // Helper to create handler with 2FA auth
+    function create2faHandler(extraOptions = {}) {
+      return createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWith2fa,
+        basePath: '/admin',
+        auth: {
+          secret: AUTH_SECRET,
+          provider: new PasswordProvider({
+            db,
+            usersTable: adminUsers2fa,
+            identityColumn: 'email',
+            passwordColumn: 'passwordHash',
+            roleColumn: 'role',
+            totpSecretColumn: 'totpSecret',
+            issuer: 'Test CMS',
+            challengeSecret: AUTH_SECRET, // Use same secret for simplicity in tests
+          }),
+        },
+        policies: 'dangerously-open',
+        ...extraOptions,
+      });
+    }
+
+    // Helper to get CSRF token from a page
+    async function getCsrfToken(
+      handler: (req: Request) => Response | Promise<Response>,
+      url: string,
+    ): Promise<string> {
+      const res = await handler(new Request(url));
+      const html = await res.text();
+      const match = html.match(/name="_csrf" value="([^"]+)"/);
+      if (!match) throw new Error('CSRF token not found');
+      return match[1]!;
+    }
+
+    await t.step(
+      'user without 2FA: logs in directly without TOTP prompt',
+      async () => {
+        await resetDb();
+
+        // Create user WITHOUT 2FA
+        const passwordHash = await getHash('password123');
+        await db.insert(adminUsers2fa).values({
+          email: 'regular@example.com',
+          passwordHash,
+          role: 'admin',
+          totpSecret: null, // No 2FA
+        });
+
+        const handler = create2faHandler();
+
+        // Get CSRF token
+        const csrfToken = await getCsrfToken(
+          handler,
+          'http://localhost/admin/login',
+        );
+
+        // Submit login - should redirect directly (no 2FA)
+        const formData = createFormData({
+          identity: 'regular@example.com',
+          password: 'password123',
+          _csrf: csrfToken,
+        });
+
+        const loginRes = await handler(
+          new Request('http://localhost/admin/login', {
+            method: 'POST',
+            body: formData,
+          }),
+        );
+
+        assertEquals(loginRes.status, 302);
+        assertEquals(loginRes.headers.get('Location'), '/admin');
+
+        const setCookie = loginRes.headers.get('Set-Cookie');
+        assertExists(setCookie, 'Cookie should be set');
+        assertStringIncludes(setCookie, 'cms_token=');
       },
-      policies: 'dangerously-open',
-      ...extraOptions,
-    });
-  }
+    );
 
-  // Helper to get CSRF token from a page
-  async function getCsrfToken(
-    handler: (req: Request) => Response | Promise<Response>,
-    url: string,
-  ): Promise<string> {
-    const res = await handler(new Request(url));
-    const html = await res.text();
-    const match = html.match(/name="_csrf" value="([^"]+)"/);
-    if (!match) throw new Error('CSRF token not found');
-    return match[1]!;
-  }
+    await t.step(
+      'user with 2FA: password shows TOTP form, not final login',
+      async () => {
+        await resetDb();
 
-  await t.step(
-    'user without 2FA: logs in directly without TOTP prompt',
-    async () => {
-      await resetDb();
+        // Create user WITH 2FA
+        const passwordHash = await getHash('secure123');
+        const totpSecret = generateTOTPSecret();
+        await db.insert(adminUsers2fa).values({
+          email: 'secure@example.com',
+          passwordHash,
+          role: 'admin',
+          totpSecret,
+        });
 
-      // Create user WITHOUT 2FA
-      const passwordHash = await hashPassword('password123');
-      await db.insert(adminUsers2fa).values({
-        email: 'regular@example.com',
-        passwordHash,
-        role: 'admin',
-        totpSecret: null, // No 2FA
-      });
+        const handler = create2faHandler();
 
-      const handler = create2faHandler();
+        // Get CSRF token
+        const csrfToken = await getCsrfToken(
+          handler,
+          'http://localhost/admin/login',
+        );
 
-      // Get CSRF token
-      const csrfToken = await getCsrfToken(
-        handler,
-        'http://localhost/admin/login',
-      );
+        // Submit password - should show TOTP form
+        const formData = createFormData({
+          identity: 'secure@example.com',
+          password: 'secure123',
+          _csrf: csrfToken,
+        });
 
-      // Submit login - should redirect directly (no 2FA)
-      const formData = createFormData({
-        identity: 'regular@example.com',
-        password: 'password123',
-        _csrf: csrfToken,
-      });
+        const passwordRes = await handler(
+          new Request('http://localhost/admin/login', {
+            method: 'POST',
+            body: formData,
+          }),
+        );
 
-      const loginRes = await handler(
-        new Request('http://localhost/admin/login', {
-          method: 'POST',
-          body: formData,
-        }),
-      );
+        assertEquals(passwordRes.status, 200);
 
-      assertEquals(loginRes.status, 302);
-      assertEquals(loginRes.headers.get('Location'), '/admin');
+        const html = await passwordRes.text();
+        assertStringIncludes(html, 'totp_code');
+        assertStringIncludes(html, 'challenge_token');
+        assertStringIncludes(html, 'Verification Code');
 
-      const setCookie = loginRes.headers.get('Set-Cookie');
-      assertExists(setCookie, 'Cookie should be set');
-      assertStringIncludes(setCookie, 'cms_token=');
-    },
-  );
+        // Should NOT have a cookie yet
+        assertEquals(passwordRes.headers.get('Set-Cookie'), null);
+      },
+    );
 
-  await t.step(
-    'user with 2FA: password shows TOTP form, not final login',
-    async () => {
+    await t.step('user with 2FA: valid TOTP completes login', async () => {
       await resetDb();
 
       // Create user WITH 2FA
-      const passwordHash = await hashPassword('secure123');
+      const passwordHash = await getHash('secure123');
       const totpSecret = generateTOTPSecret();
       await db.insert(adminUsers2fa).values({
         email: 'secure@example.com',
@@ -161,171 +264,63 @@ Deno.test('integration: two-factor auth tests', async (t) => {
 
       const handler = create2faHandler();
 
-      // Get CSRF token
-      const csrfToken = await getCsrfToken(
+      // Phase 1: Submit password
+      const csrfToken1 = await getCsrfToken(
         handler,
         'http://localhost/admin/login',
       );
-
-      // Submit password - should show TOTP form
-      const formData = createFormData({
-        identity: 'secure@example.com',
-        password: 'secure123',
-        _csrf: csrfToken,
-      });
 
       const passwordRes = await handler(
         new Request('http://localhost/admin/login', {
           method: 'POST',
-          body: formData,
+          body: createFormData({
+            identity: 'secure@example.com',
+            password: 'secure123',
+            _csrf: csrfToken1,
+          }),
         }),
       );
 
-      assertEquals(passwordRes.status, 200);
+      // Extract challenge_token from TOTP form
+      const totpFormHtml = await passwordRes.text();
+      const challengeMatch = totpFormHtml.match(
+        /name="challenge_token" value="([^"]+)"/,
+      );
+      assertExists(challengeMatch, 'challenge_token should be in form');
+      const challengeToken = challengeMatch[1]!;
 
-      const html = await passwordRes.text();
-      assertStringIncludes(html, 'totp_code');
-      assertStringIncludes(html, 'challenge_token');
-      assertStringIncludes(html, 'Verification Code');
+      // Extract CSRF token from TOTP form
+      const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
+      assertExists(csrfMatch, 'CSRF token should be in TOTP form');
+      const csrfToken2 = csrfMatch[1]!;
 
-      // Should NOT have a cookie yet
-      assertEquals(passwordRes.headers.get('Set-Cookie'), null);
-    },
-  );
+      // Phase 2: Submit valid TOTP
+      const validTotp = await generateTOTP(totpSecret);
 
-  await t.step('user with 2FA: valid TOTP completes login', async () => {
-    await resetDb();
+      const totpRes = await handler(
+        new Request('http://localhost/admin/login', {
+          method: 'POST',
+          body: createFormData({
+            totp_code: validTotp,
+            challenge_token: challengeToken,
+            _csrf: csrfToken2,
+          }),
+        }),
+      );
 
-    // Create user WITH 2FA
-    const passwordHash = await hashPassword('secure123');
-    const totpSecret = generateTOTPSecret();
-    await db.insert(adminUsers2fa).values({
-      email: 'secure@example.com',
-      passwordHash,
-      role: 'admin',
-      totpSecret,
+      assertEquals(totpRes.status, 302);
+      assertEquals(totpRes.headers.get('Location'), '/admin');
+
+      const setCookie = totpRes.headers.get('Set-Cookie');
+      assertExists(setCookie, 'Cookie should be set after TOTP');
+      assertStringIncludes(setCookie, 'cms_token=');
     });
 
-    const handler = create2faHandler();
-
-    // Phase 1: Submit password
-    const csrfToken1 = await getCsrfToken(
-      handler,
-      'http://localhost/admin/login',
-    );
-
-    const passwordRes = await handler(
-      new Request('http://localhost/admin/login', {
-        method: 'POST',
-        body: createFormData({
-          identity: 'secure@example.com',
-          password: 'secure123',
-          _csrf: csrfToken1,
-        }),
-      }),
-    );
-
-    // Extract challenge_token from TOTP form
-    const totpFormHtml = await passwordRes.text();
-    const challengeMatch = totpFormHtml.match(
-      /name="challenge_token" value="([^"]+)"/,
-    );
-    assertExists(challengeMatch, 'challenge_token should be in form');
-    const challengeToken = challengeMatch[1]!;
-
-    // Extract CSRF token from TOTP form
-    const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
-    assertExists(csrfMatch, 'CSRF token should be in TOTP form');
-    const csrfToken2 = csrfMatch[1]!;
-
-    // Phase 2: Submit valid TOTP
-    const validTotp = await generateTOTP(totpSecret);
-
-    const totpRes = await handler(
-      new Request('http://localhost/admin/login', {
-        method: 'POST',
-        body: createFormData({
-          totp_code: validTotp,
-          challenge_token: challengeToken,
-          _csrf: csrfToken2,
-        }),
-      }),
-    );
-
-    assertEquals(totpRes.status, 302);
-    assertEquals(totpRes.headers.get('Location'), '/admin');
-
-    const setCookie = totpRes.headers.get('Set-Cookie');
-    assertExists(setCookie, 'Cookie should be set after TOTP');
-    assertStringIncludes(setCookie, 'cms_token=');
-  });
-
-  await t.step('user with 2FA: invalid TOTP shows error', async () => {
-    await resetDb();
-
-    // Create user WITH 2FA
-    const passwordHash = await hashPassword('secure123');
-    const totpSecret = generateTOTPSecret();
-    await db.insert(adminUsers2fa).values({
-      email: 'secure@example.com',
-      passwordHash,
-      role: 'admin',
-      totpSecret,
-    });
-
-    const handler = create2faHandler();
-
-    // Phase 1: Submit password
-    const csrfToken1 = await getCsrfToken(
-      handler,
-      'http://localhost/admin/login',
-    );
-
-    const passwordRes = await handler(
-      new Request('http://localhost/admin/login', {
-        method: 'POST',
-        body: createFormData({
-          identity: 'secure@example.com',
-          password: 'secure123',
-          _csrf: csrfToken1,
-        }),
-      }),
-    );
-
-    const totpFormHtml = await passwordRes.text();
-    const challengeMatch = totpFormHtml.match(
-      /name="challenge_token" value="([^"]+)"/,
-    );
-    const challengeToken = challengeMatch![1]!;
-    const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
-    const csrfToken2 = csrfMatch![1]!;
-
-    // Phase 2: Submit INVALID TOTP
-    const totpRes = await handler(
-      new Request('http://localhost/admin/login', {
-        method: 'POST',
-        body: createFormData({
-          totp_code: '000000', // Invalid code
-          challenge_token: challengeToken,
-          _csrf: csrfToken2,
-        }),
-      }),
-    );
-
-    assertEquals(totpRes.status, 401);
-
-    const html = await totpRes.text();
-    assertStringIncludes(html, 'Invalid or expired verification code');
-    // When challenge expires or TOTP fails, user is sent back to login
-    assertStringIncludes(html, 'identity'); // Should show login form
-  });
-
-  await t.step(
-    'user with 2FA: wrong password never shows TOTP form',
-    async () => {
+    await t.step('user with 2FA: invalid TOTP shows error', async () => {
       await resetDb();
 
-      const passwordHash = await hashPassword('correct-password');
+      // Create user WITH 2FA
+      const passwordHash = await getHash('secure123');
       const totpSecret = generateTOTPSecret();
       await db.insert(adminUsers2fa).values({
         email: 'secure@example.com',
@@ -335,104 +330,166 @@ Deno.test('integration: two-factor auth tests', async (t) => {
       });
 
       const handler = create2faHandler();
-      const csrfToken = await getCsrfToken(
+
+      // Phase 1: Submit password
+      const csrfToken1 = await getCsrfToken(
         handler,
         'http://localhost/admin/login',
       );
 
-      // Submit WRONG password
-      const loginRes = await handler(
+      const passwordRes = await handler(
         new Request('http://localhost/admin/login', {
           method: 'POST',
           body: createFormData({
             identity: 'secure@example.com',
-            password: 'wrong-password',
-            _csrf: csrfToken,
+            password: 'secure123',
+            _csrf: csrfToken1,
           }),
         }),
       );
 
-      assertEquals(loginRes.status, 401);
+      const totpFormHtml = await passwordRes.text();
+      const challengeMatch = totpFormHtml.match(
+        /name="challenge_token" value="([^"]+)"/,
+      );
+      const challengeToken = challengeMatch![1]!;
+      const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
+      const csrfToken2 = csrfMatch![1]!;
 
-      const html = await loginRes.text();
-      assertStringIncludes(html, 'Invalid email or password');
+      // Phase 2: Submit INVALID TOTP
+      const totpRes = await handler(
+        new Request('http://localhost/admin/login', {
+          method: 'POST',
+          body: createFormData({
+            totp_code: '000000', // Invalid code
+            challenge_token: challengeToken,
+            _csrf: csrfToken2,
+          }),
+        }),
+      );
 
-      // Should NOT show TOTP form
-      assertEquals(html.includes('totp_code'), false);
-    },
-  );
+      assertEquals(totpRes.status, 401);
 
-  await t.step('TOTP with spaces is accepted', async () => {
-    await resetDb();
-
-    const passwordHash = await hashPassword('secure123');
-    const totpSecret = generateTOTPSecret();
-    await db.insert(adminUsers2fa).values({
-      email: 'secure@example.com',
-      passwordHash,
-      role: 'admin',
-      totpSecret,
+      const html = await totpRes.text();
+      assertStringIncludes(html, 'Invalid or expired verification code');
+      // When challenge expires or TOTP fails, user is sent back to login
+      assertStringIncludes(html, 'identity'); // Should show login form
     });
 
-    const handler = create2faHandler();
+    await t.step(
+      'user with 2FA: wrong password never shows TOTP form',
+      async () => {
+        await resetDb();
 
-    // Phase 1: Submit password
-    const csrfToken1 = await getCsrfToken(
-      handler,
-      'http://localhost/admin/login',
+        const passwordHash = await getHash('correct-password');
+        const totpSecret = generateTOTPSecret();
+        await db.insert(adminUsers2fa).values({
+          email: 'secure@example.com',
+          passwordHash,
+          role: 'admin',
+          totpSecret,
+        });
+
+        const handler = create2faHandler();
+        const csrfToken = await getCsrfToken(
+          handler,
+          'http://localhost/admin/login',
+        );
+
+        // Submit WRONG password
+        const loginRes = await handler(
+          new Request('http://localhost/admin/login', {
+            method: 'POST',
+            body: createFormData({
+              identity: 'secure@example.com',
+              password: 'wrong-password',
+              _csrf: csrfToken,
+            }),
+          }),
+        );
+
+        assertEquals(loginRes.status, 401);
+
+        const html = await loginRes.text();
+        assertStringIncludes(html, 'Invalid email or password');
+
+        // Should NOT show TOTP form
+        assertEquals(html.includes('totp_code'), false);
+      },
     );
 
-    const passwordRes = await handler(
-      new Request('http://localhost/admin/login', {
-        method: 'POST',
-        body: createFormData({
-          identity: 'secure@example.com',
-          password: 'secure123',
-          _csrf: csrfToken1,
+    await t.step('TOTP with spaces is accepted', async () => {
+      await resetDb();
+
+      const passwordHash = await getHash('secure123');
+      const totpSecret = generateTOTPSecret();
+      await db.insert(adminUsers2fa).values({
+        email: 'secure@example.com',
+        passwordHash,
+        role: 'admin',
+        totpSecret,
+      });
+
+      const handler = create2faHandler();
+
+      // Phase 1: Submit password
+      const csrfToken1 = await getCsrfToken(
+        handler,
+        'http://localhost/admin/login',
+      );
+
+      const passwordRes = await handler(
+        new Request('http://localhost/admin/login', {
+          method: 'POST',
+          body: createFormData({
+            identity: 'secure@example.com',
+            password: 'secure123',
+            _csrf: csrfToken1,
+          }),
         }),
-      }),
-    );
+      );
 
-    const totpFormHtml = await passwordRes.text();
-    const challengeMatch = totpFormHtml.match(
-      /name="challenge_token" value="([^"]+)"/,
-    );
-    const challengeToken = challengeMatch![1]!;
-    const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
-    const csrfToken2 = csrfMatch![1]!;
+      const totpFormHtml = await passwordRes.text();
+      const challengeMatch = totpFormHtml.match(
+        /name="challenge_token" value="([^"]+)"/,
+      );
+      const challengeToken = challengeMatch![1]!;
+      const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
+      const csrfToken2 = csrfMatch![1]!;
 
-    // Generate valid code and add spaces (like users often copy-paste)
-    const validTotp = await generateTOTP(totpSecret);
-    const codeWithSpaces = validTotp.slice(0, 3) + ' ' + validTotp.slice(3);
+      // Generate valid code and add spaces (like users often copy-paste)
+      const validTotp = await generateTOTP(totpSecret);
+      const codeWithSpaces = validTotp.slice(0, 3) + ' ' + validTotp.slice(3);
 
-    // Phase 2: Submit TOTP with spaces
-    const totpRes = await handler(
-      new Request('http://localhost/admin/login', {
-        method: 'POST',
-        body: createFormData({
-          totp_code: codeWithSpaces,
-          challenge_token: challengeToken,
-          _csrf: csrfToken2,
+      // Phase 2: Submit TOTP with spaces
+      const totpRes = await handler(
+        new Request('http://localhost/admin/login', {
+          method: 'POST',
+          body: createFormData({
+            totp_code: codeWithSpaces,
+            challenge_token: challengeToken,
+            _csrf: csrfToken2,
+          }),
         }),
-      }),
-    );
+      );
 
-    assertEquals(totpRes.status, 302);
-    assertEquals(totpRes.headers.get('Location'), '/admin');
-  });
+      assertEquals(totpRes.status, 302);
+      assertEquals(totpRes.headers.get('Location'), '/admin');
+    });
 
-  // Cleanup
-  await client.close();
+    // Cleanup
+    await client.close();
+  },
 });
 
 // ─────────────────────────────────────────────────────────────
 // Unit tests for PasswordProvider (without full handler)
+// Uses shared PGlite instance for performance
 // ─────────────────────────────────────────────────────────────
 
 Deno.test('PasswordProvider: authenticate returns null for missing credentials', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
+  await resetUnitTestDb();
 
   const provider = new PasswordProvider({
     db,
@@ -448,14 +505,11 @@ Deno.test('PasswordProvider: authenticate returns null for missing credentials',
   });
 
   assertEquals(result, null);
-
-  await client.close();
 });
 
 Deno.test('PasswordProvider: authenticate returns null for non-existent user', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
+  await resetUnitTestDb();
 
   const provider = new PasswordProvider({
     db,
@@ -471,16 +525,13 @@ Deno.test('PasswordProvider: authenticate returns null for non-existent user', a
   });
 
   assertEquals(result, null);
-
-  await client.close();
 });
 
 Deno.test('PasswordProvider: user without 2FA gets full auth immediately', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
+  await resetUnitTestDb();
 
-  const passwordHash = await hashPassword('test123');
+  const passwordHash = await getHash('test123');
   await db.insert(adminUsers2fa).values({
     email: 'user@example.com',
     passwordHash,
@@ -507,16 +558,13 @@ Deno.test('PasswordProvider: user without 2FA gets full auth immediately', async
   if (result.status === 'authenticated') {
     assertEquals(result.user.role, 'editor');
   }
-
-  await client.close();
 });
 
 Deno.test('PasswordProvider: user with 2FA returns pending state', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
+  await resetUnitTestDb();
 
-  const passwordHash = await hashPassword('test123');
+  const passwordHash = await getHash('test123');
   const totpSecret = generateTOTPSecret();
   await db.insert(adminUsers2fa).values({
     email: 'secure@example.com',
@@ -545,16 +593,13 @@ Deno.test('PasswordProvider: user with 2FA returns pending state', async () => {
   if (result.status === 'pending_2fa') {
     assertExists(result.challenge);
   }
-
-  await client.close();
 });
 
 Deno.test('PasswordProvider: TOTP phase returns full auth', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
+  await resetUnitTestDb();
 
-  const passwordHash = await hashPassword('test123');
+  const passwordHash = await getHash('test123');
   const totpSecret = generateTOTPSecret();
   const [inserted] = await db
     .insert(adminUsers2fa)
@@ -599,16 +644,13 @@ Deno.test('PasswordProvider: TOTP phase returns full auth', async () => {
     assertEquals(result.user.role, 'admin');
     assertEquals(result.user.id, inserted!.id);
   }
-
-  await client.close();
 });
 
 Deno.test('PasswordProvider: invalid TOTP returns null', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
+  await resetUnitTestDb();
 
-  const passwordHash = await hashPassword('test123');
+  const passwordHash = await getHash('test123');
   const totpSecret = generateTOTPSecret();
   await db.insert(adminUsers2fa).values({
     email: 'secure@example.com',
@@ -640,14 +682,10 @@ Deno.test('PasswordProvider: invalid TOTP returns null', async () => {
   });
 
   assertEquals(result, null);
-
-  await client.close();
 });
 
 Deno.test('PasswordProvider: renderTotpForm produces valid HTML', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
 
   const provider = new PasswordProvider({
     db,
@@ -671,14 +709,10 @@ Deno.test('PasswordProvider: renderTotpForm produces valid HTML', async () => {
   assertStringIncludes(html, '_csrf');
   assertStringIncludes(html, 'test-csrf-token');
   assertStringIncludes(html, 'Verification Code');
-
-  await client.close();
 });
 
 Deno.test('PasswordProvider: renderTotpForm shows error when provided', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
 
   const provider = new PasswordProvider({
     db,
@@ -698,14 +732,10 @@ Deno.test('PasswordProvider: renderTotpForm shows error when provided', async ()
 
   assertStringIncludes(html, 'Invalid code');
   assertStringIncludes(html, 'alert'); // Error styling
-
-  await client.close();
 });
 
 Deno.test('PasswordProvider: throws error when no challengeSecret provided and env var not set', async () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema: schemaWith2fa });
-  await createAdminUsers2faTable(db);
+  const db = await getUnitTestDb();
 
   let errorThrown = false;
   try {
@@ -730,6 +760,4 @@ Deno.test('PasswordProvider: throws error when no challengeSecret provided and e
   }
 
   assertEquals(errorThrown, true, 'Should throw when no challengeSecret');
-
-  await client.close();
 });
