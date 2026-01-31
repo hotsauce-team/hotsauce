@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "Drizzle ORM compatibility matrix for @drizzle-cms",
+  "description": "Drizzle ORM compatibility matrix for @hotsauce",
 
   "_why": "The CMS extends Drizzle column builders with $cms() via prototype patching. This relies on undocumented internals (the config property on builders). These tests ensure those internals remain stable across Drizzle versions. See AGENTS.md for details.",
 

@@ -1,4 +1,4 @@
-# Security Guide 
+# Security Guide
 
 This document outlines security best practices and considerations when using Drizzle CMS.
 
@@ -77,7 +77,7 @@ frame-ancestors 'none'
 
 ```typescript
 // ✅ Use html`` template literal (auto-escapes)
-import { html } from '@drizzle-cms/ui';
+import { html } from '@hotsauce/ui';
 html`
   <p>User input: ${userInput}</p>
 `; // Safe

@@ -1,18 +1,18 @@
-# @drizzle-cms/core
+# @hotsauce/core
 
 Schema introspection, field mapping, and validation for Drizzle ORM.
 
 ## Installation
 
 ```ts
-import { introspectFullSchema, mapColumnToField } from '@drizzle-cms/core';
+import { introspectFullSchema, mapColumnToField } from '@hotsauce/core';
 ```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    @drizzle-cms/core                        │
+│                    @hotsauce/core                        │
 ├─────────────────┬─────────────────┬─────────────────────────┤
 │   schema/       │   fields/       │   validation/           │
 │                 │                 │                         │
@@ -48,7 +48,7 @@ Works with any Drizzle dialect (Postgres, MySQL, SQLite).
 **Example:**
 
 ```ts
-import { introspectTable } from '@drizzle-cms/core';
+import { introspectTable } from '@hotsauce/core';
 import { users } from './schema';
 
 const meta = introspectTable(users);
@@ -87,7 +87,7 @@ Map database columns to CMS UI field types.
 **Example:**
 
 ```ts
-import { mapColumnToField } from '@drizzle-cms/core';
+import { mapColumnToField } from '@hotsauce/core';
 
 const field = mapColumnToField(meta.columns[0]);
 console.log(field.fieldType); // 'text'
@@ -103,7 +103,7 @@ This enables schema-authored hints (like file fields) to flow into introspection
 **Usage:**
 
 ```ts
-import '@drizzle-cms/core/extend';
+import '@hotsauce/core/extend';
 import { jsonb, pgTable, text } from 'drizzle-orm/pg-core';
 
 const users = pgTable('users', {
@@ -113,7 +113,7 @@ const users = pgTable('users', {
 
 Notes:
 
-- Importing `@drizzle-cms/core/extend` patches Drizzle builder prototypes (a global side effect).
+- Importing `@hotsauce/core/extend` patches Drizzle builder prototypes (a global side effect).
 - Metadata is stored on the Drizzle column config and is available as `IntrospectedColumn.cmsOptions`.
 
 #### Table-level `$cms()`
@@ -121,7 +121,7 @@ Notes:
 You can also call `$cms()` on entire tables to configure table-level CMS options:
 
 ```ts
-import '@drizzle-cms/core/extend';
+import '@hotsauce/core/extend';
 import { boolean, pgTable, text } from 'drizzle-orm/pg-core';
 
 const posts = pgTable('posts', {
@@ -200,7 +200,7 @@ export type FileReference = {
 };
 ```
 
-For runtime checks, `isValidFileReference(value)` is exported from `@drizzle-cms/core`.
+For runtime checks, `isValidFileReference(value)` is exported from `@hotsauce/core`.
 
 ### `validation/` - Zod Schema Generation
 
@@ -214,7 +214,7 @@ Re-exports from `drizzle-zod` for form validation.
 **Example:**
 
 ```ts
-import { createInsertSchema } from '@drizzle-cms/core';
+import { createInsertSchema } from '@hotsauce/core';
 import { users } from './schema';
 
 const insertSchema = createInsertSchema(users);

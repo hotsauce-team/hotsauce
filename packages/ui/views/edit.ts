@@ -3,7 +3,7 @@
 import { attrs, html, raw } from '../html.ts';
 import { form, type RelationOption } from '../forms/form.ts';
 import { checkboxListInput, type ManyToManyData } from '../forms/inputs.ts';
-import type { CMSField } from '@drizzle-cms/core';
+import type { CMSField } from '@hotsauce/core';
 
 /**
  * Options for edit view

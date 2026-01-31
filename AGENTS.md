@@ -60,11 +60,11 @@ See [`packages/vendor/README.md`](packages/vendor/README.md) for details.
 
 ## Package Boundaries
 
-| Package    | Purpose                                         | Runtime APIs         | DB-Specific Code | DB-Specific Tests  |
-| ---------- | ----------------------------------------------- | -------------------- | ---------------- | ------------------ |
-| `core`     | Schema introspection, field mapping, validation | ❌ None              | ❌ Generic only  | ✅ PGlite + sql.js |
-| `ui`       | HTML generation, form rendering                 | ❌ None              | ❌ Generic only  | ❌ None            |
-| `handlers` | CRUD route handlers (Request → Response)        | ❌ Web Standard only | ❌ Generic only  | ✅ PGlite + sql.js |
+| Package | Purpose                                         | Runtime APIs         | DB-Specific Code | DB-Specific Tests  |
+| ------- | ----------------------------------------------- | -------------------- | ---------------- | ------------------ |
+| `core`  | Schema introspection, field mapping, validation | ❌ None              | ❌ Generic only  | ✅ PGlite + sql.js |
+| `ui`    | HTML generation, form rendering                 | ❌ None              | ❌ Generic only  | ❌ None            |
+| `cms`   | CRUD route handlers (Request → Response)        | ❌ Web Standard only | ❌ Generic only  | ✅ PGlite + sql.js |
 
 ## Database Guidelines
 
@@ -161,7 +161,7 @@ import { pgTable } from 'drizzle-orm/pg-core';
 
 ```typescript
 // Good: auto-escaped template
-import { attrs, html, raw } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@hotsauce/ui';
 
 html`
   <input ${attrs({ name, value: userInput })} />
@@ -180,7 +180,7 @@ Each package has a README with detailed API documentation:
 
 - [`packages/core/README.md`](packages/core/README.md) — Schema introspection, field mapping
 - [`packages/ui/README.md`](packages/ui/README.md) — HTML generation, forms, views
-- [`packages/handlers/README.md`](packages/handlers/README.md) — CRUD handlers, routing
+- [`packages/cms/README.md`](packages/cms/README.md) — CRUD handlers, routing
 
 ```
 packages/core/
@@ -212,7 +212,7 @@ packages/ui/
     ├── alert.ts        # Flash messages
     └── pagination.ts   # Page navigation
 
-packages/handlers/
+packages/cms/
 ├── mod.ts              # Main entry, exports createCmsHandler
 ├── README.md           # Package documentation
 ├── router.ts           # URL routing and method dispatch
@@ -226,11 +226,11 @@ packages/handlers/
 ├── types.ts            # Handler types (CmsOptions, ErrorContext, etc.)
 ├── auth/               # JWT authentication module
 └── plugins/            # Plugin registry, service, and types
-    ├── types.ts        # Plugin, PluginConfig, re-exports from handlers-workers
+    ├── types.ts        # Plugin, PluginConfig, re-exports from workers
     ├── registry.ts     # Plugin registration and validation
     └── service.ts      # Plugin execution orchestration
 
-packages/handlers-workers/
+packages/workers/
 ├── mod.ts              # Main entry, exports WorkerExecutor
 ├── README.md           # Package documentation
 ├── types.ts            # Serializable, PluginContext, ActionContext, etc.
@@ -454,7 +454,7 @@ Plugins extend the CMS with custom hooks that run during CRUD operations. Key de
 ```typescript
 // User creates Worker with explicit permissions
 const auditWorker = new Worker(
-  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  import.meta.resolve('@hotsauce/plugins/audit-log/worker'),
   {
     type: 'module',
     deno: { permissions: { net: ['audit.example.com'] } },

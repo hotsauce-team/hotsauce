@@ -1,7 +1,7 @@
 // Account route handlers
 // Handles account settings, password change, and 2FA setup/disable
 
-import { qrcode } from '@drizzle-cms/vendor';
+import { qrcode } from '@hotsauce/vendor';
 import type { PasswordProvider } from '../provider.ts';
 import { hashPassword } from '../password.ts';
 import { generateTOTPSecret, generateTOTPUri, verifyTOTP } from '../totp.ts';

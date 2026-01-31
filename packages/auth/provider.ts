@@ -2,8 +2,8 @@
 // Password authentication provider with optional TOTP 2FA support
 
 import { eq } from 'drizzle-orm';
-import { attrs, html, raw } from '@drizzle-cms/ui';
-import { layout } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@hotsauce/ui';
+import { layout } from '@hotsauce/ui';
 import type {
   AuthProvider,
   AuthResult,

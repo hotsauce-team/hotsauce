@@ -1,6 +1,6 @@
 {
   // Workspace configuration for drizzle-cms monorepo
-  "name": "@drizzle-cms/workspace",
+  "name": "@hotsauce/workspace",
   "version": "0.0.1",
   "exports": "./packages/core/mod.ts",
 
@@ -12,8 +12,8 @@
     "./packages/core",
     "./packages/ui",
     "./packages/auth",
-    "./packages/handlers",
-    "./packages/handlers-workers",
+    "./packages/cms",
+    "./packages/workers",
     "./packages/plugins",
     "./packages/vendor",
 
@@ -30,17 +30,17 @@
     "zod": "npm:zod@^4.3.5",
 
     // Local packages (for cross-package imports)
-    "@drizzle-cms/core": "./packages/core/mod.ts",
-    "@drizzle-cms/core/extend": "./packages/core/extend/mod.ts",
-    "@drizzle-cms/ui": "./packages/ui/mod.ts",
-    "@drizzle-cms/auth": "./packages/auth/mod.ts",
-    "@drizzle-cms/handlers": "./packages/handlers/mod.ts",
-    "@drizzle-cms/handlers-workers": "./packages/handlers-workers/mod.ts",
-    "@drizzle-cms/plugins": "./packages/plugins/mod.ts",
-    "@drizzle-cms/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
-    "@drizzle-cms/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
+    "@hotsauce/core": "./packages/core/mod.ts",
+    "@hotsauce/core/extend": "./packages/core/extend/mod.ts",
+    "@hotsauce/ui": "./packages/ui/mod.ts",
+    "@hotsauce/auth": "./packages/auth/mod.ts",
+    "@hotsauce/cms": "./packages/cms/mod.ts",
+    "@hotsauce/workers": "./packages/workers/mod.ts",
+    "@hotsauce/plugins": "./packages/plugins/mod.ts",
+    "@hotsauce/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
+    "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
 
-    "@drizzle-cms/vendor": "./packages/vendor/mod.ts",
+    "@hotsauce/vendor": "./packages/vendor/mod.ts",
 
     // Dev dependencies (not shipped to users)
     "@std/assert": "jsr:@std/assert@*",

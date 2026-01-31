@@ -6,7 +6,7 @@ import {
   type RelationOption,
   renderFieldInput,
 } from './inputs.ts';
-import type { CMSField } from '@drizzle-cms/core';
+import type { CMSField } from '@hotsauce/core';
 
 // Re-export for convenience
 export type { RelationOption } from './inputs.ts';

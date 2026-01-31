@@ -1,4 +1,4 @@
-# @drizzle-cms/vendor
+# @hotsauce/vendor
 
 Vendored third-party dependencies with typed wrappers.
 
@@ -27,7 +27,7 @@ QR Code Generator implementing ISO/IEC 18004 with Reed-Solomon error correction.
 #### API
 
 ```typescript
-import { qrcode } from '@drizzle-cms/vendor';
+import { qrcode } from '@hotsauce/vendor';
 
 // Create QR code (0 = auto-detect type, 'M' = medium error correction)
 const qr = qrcode(0, 'M');

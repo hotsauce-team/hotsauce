@@ -1,4 +1,4 @@
-// @drizzle-cms/plugins
+// @hotsauce/plugins
 // Official plugins for the Drizzle CMS
 
 // Audit log plugin types

@@ -10,7 +10,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
-import '@drizzle-cms/core/extend';
+import '@hotsauce/core/extend';
 
 import { z } from 'zod/v4';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';

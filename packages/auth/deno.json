@@ -1,5 +1,5 @@
 {
-  "name": "@drizzle-cms/auth",
+  "name": "@hotsauce/auth",
   "version": "0.0.1",
   "exports": "./mod.ts"
 }

@@ -1,4 +1,4 @@
-// @drizzle-cms/auth
+// @hotsauce/auth
 // Authentication package for the CMS
 // Includes JWT, password hashing, TOTP 2FA, and account management
 

@@ -1,4 +1,4 @@
-// @drizzle-cms/core
+// @hotsauce/core
 // Schema introspection, field mapping, and validation for Drizzle ORM
 
 // ─────────────────────────────────────────────────────────────

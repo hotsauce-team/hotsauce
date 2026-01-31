@@ -1,18 +1,18 @@
-# @drizzle-cms/ui
+# @hotsauce/ui
 
 HTML generation, form rendering, and view components for the CMS admin interface.
 
 ## Installation
 
 ```ts
-import { editView, html, layout, raw } from '@drizzle-cms/ui';
+import { editView, html, layout, raw } from '@hotsauce/ui';
 ```
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                         @drizzle-cms/ui                              │
+│                         @hotsauce/ui                              │
 ├────────────┬────────────┬────────────┬────────────┬──────────────────┤
 │  html.ts   │ styles.ts  │   forms/   │   views/   │   components/    │
 │            │            │            │            │                  │
@@ -51,7 +51,7 @@ Tagged template literal with automatic XSS escaping.
 **Example:**
 
 ```ts
-import { attrs, html, raw } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@hotsauce/ui';
 
 // Auto-escaping prevents XSS
 const userInput = '<script>alert("xss")</script>';
@@ -84,7 +84,7 @@ External CSS stylesheet for strict CSP compliance.
 The stylesheet is served externally at `{basePath}/styles.css` by the handlers package. This enables strict Content Security Policy (`style-src 'self'`) without requiring nonces.
 
 ```ts
-import { cmsStylesheet } from '@drizzle-cms/ui';
+import { cmsStylesheet } from '@hotsauce/ui';
 
 // Raw CSS content (useful for custom serving)
 console.log(cmsStylesheet.length); // ~8KB
@@ -116,7 +116,7 @@ Individual input components for different field types.
 **Example:**
 
 ```ts
-import { formField, selectInput, textInput } from '@drizzle-cms/ui';
+import { formField, selectInput, textInput } from '@hotsauce/ui';
 
 // Basic text input
 textInput({ name: 'title', value: 'Hello', required: true, maxLength: 200 });
@@ -137,7 +137,7 @@ formField(cmsField, record.title, { relationOptions });
 
 #### File inputs
 
-For fields marked as file fields (via `@drizzle-cms/core` `$cms({ file: true })` metadata), the UI renders:
+For fields marked as file fields (via `@hotsauce/core` `$cms({ file: true })` metadata), the UI renders:
 
 - An `<input type="file">` with an `accept` attribute (when available)
 - A preview for existing values (data URL or external `url`)
@@ -184,7 +184,7 @@ interface EditViewOptions {
 **Example:**
 
 ```ts
-import { editView, listView } from '@drizzle-cms/ui';
+import { editView, listView } from '@hotsauce/ui';
 
 // List page
 const html = listView({
@@ -222,7 +222,7 @@ Page chrome and reusable UI elements.
 **Example:**
 
 ```ts
-import { alert, layout, nav } from '@drizzle-cms/ui';
+import { alert, layout, nav } from '@hotsauce/ui';
 
 layout({
   title: 'Posts - Admin',
