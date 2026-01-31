@@ -36,6 +36,10 @@ if (import.meta.main) {
       /@hotsauce\/workers["']:\s*["']\.\/packages\/workers\/mod\.ts["']/g,
       `@hotsauce/workers": "jsr:@hotsauce/workers@${version}"`,
     ],
+    [
+      /@hotsauce\/ui["']:\s*["']\.\/packages\/ui\/mod\.ts["']/g,
+      `@hotsauce/ui": "jsr:@hotsauce/ui@${version}"`,
+    ],
   ];
 
   for (const [pattern, replacement] of replacements) {
