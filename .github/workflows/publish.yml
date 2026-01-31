@@ -74,13 +74,13 @@ jobs:
         run: deno publish --allow-slow-types
         working-directory: packages/core
 
-      - name: Publish @hotsauce/ui
-        run: deno publish
-        working-directory: packages/ui
-
       - name: Publish @hotsauce/workers
         run: deno publish
         working-directory: packages/workers
+
+      - name: Publish @hotsauce/ui
+        run: deno publish
+        working-directory: packages/ui
 
       - name: Publish @hotsauce/auth
         run: deno publish
