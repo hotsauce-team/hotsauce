@@ -66,7 +66,7 @@
     "hono:dev": "deno task -f hono-fullstack-example dev",
     "hono:dev:watch": "deno task -f hono-fullstack-example dev:watch",
     "hono:dev:debug": "deno task -f hono-fullstack-example dev:debug",
-    "update-jsr-paths": "deno run --allow-read=deno.jsonc --allow-write=deno.jsonc scripts/update_jsr_paths.ts"
+    "update-jsr-paths": "deno run --allow-read=deno.jsonc --allow-write=deno.jsr.jsonc scripts/update_jsr_paths.ts"
     // "build:npm": "deno run --allow-read=. --allow-write=./npm --allow-env=HOME scripts/build_npm.ts"
   },
 
