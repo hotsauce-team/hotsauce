@@ -29,13 +29,13 @@
     "zod": "npm:zod@^4.3.5",
 
     // Local packages (for cross-package imports)
-    "@hotsauce/core": "jsr:@hotsauce/core@0.1.1",
-    "@hotsauce/core/extend": "jsr:@hotsauce/core@0.1.1/extend",
-    "@hotsauce/ui": "jsr:@hotsauce/ui@0.1.1",
-    "@hotsauce/auth": "jsr:@hotsauce/auth@0.1.1",
-    "@hotsauce/cms": "jsr:@hotsauce/cms@0.1.1",
-    "@hotsauce/workers": "jsr:@hotsauce/workers@0.1.1",
-    "@hotsauce/plugins": "jsr:@hotsauce/plugins@0.1.1",
+    "@hotsauce/core": "jsr:@hotsauce/core@0.1.2",
+    "@hotsauce/core/extend": "jsr:@hotsauce/core@0.1.2/extend",
+    "@hotsauce/ui": "jsr:@hotsauce/ui@0.1.2",
+    "@hotsauce/auth": "jsr:@hotsauce/auth@0.1.2",
+    "@hotsauce/cms": "jsr:@hotsauce/cms@0.1.2",
+    "@hotsauce/workers": "jsr:@hotsauce/workers@0.1.2",
+    "@hotsauce/plugins": "jsr:@hotsauce/plugins@0.1.2",
     "@hotsauce/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
     "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
 
