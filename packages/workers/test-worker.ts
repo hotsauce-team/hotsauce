@@ -2,6 +2,10 @@
 // Simple test Worker for executor tests
 // Echoes back data for transform hooks, logs actions
 
+// Minimal Worker globals declaration
+// deno-lint-ignore no-explicit-any
+declare const self: { onmessage: any; postMessage: (msg: any) => void };
+
 interface WorkerRequest {
   id: string;
   type: string;

@@ -2,17 +2,16 @@
 // This file is loaded directly by a Worker and handles all messages
 // deno-lint-ignore-file no-console
 
-/// <reference lib="webworker" />
-/// <reference types="@hotsauce/workers" />
-
 import type {
   ActionContext,
+  CmsGlobalThis,
   CrudAction,
   Serializable,
 } from '@hotsauce/workers';
 
-// Declare Worker globals for TypeScript
-declare const self: DedicatedWorkerGlobalScope;
+// Minimal Worker globals declaration (avoids triple-slash directives banned by JSR)
+// deno-lint-ignore no-explicit-any
+declare const self: { onmessage: any; postMessage: (msg: any) => void };
 
 // ─────────────────────────────────────────────────────────────
 // Worker message types
@@ -53,7 +52,9 @@ export function shouldAuditTable(
   table: string,
   config: AuditLogConfig,
 ): boolean {
-  if (globalThis.__CMS_MAIN_PROCESS__) throw new Error('Worker only');
+  if ((globalThis as CmsGlobalThis).__CMS_MAIN_PROCESS__) {
+    throw new Error('Worker only');
+  }
   if (config.excludeTables?.includes(table)) {
     return false;
   }

@@ -6,6 +6,7 @@
 // Worker isolation guard - for plugin authors
 // ─────────────────────────────────────────────────────────────
 export { assertWorkerContext, isWorkerContext } from './guard.ts';
+export type { CmsGlobalThis } from './guard.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Serialization validation - runtime checks for Worker data
