@@ -14,6 +14,7 @@
     "./packages/handlers",
     "./packages/handlers-workers",
     "./packages/plugins",
+    "./packages/vendor",
 
     // Examples
     "./examples/deno-server",
@@ -36,6 +37,8 @@
     "@drizzle-cms/plugins": "./packages/plugins/mod.ts",
     "@drizzle-cms/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
     "@drizzle-cms/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
+
+    "@drizzle-cms/vendor": "./packages/vendor/mod.ts",
 
     // Dev dependencies (not shipped to users)
     "@std/assert": "jsr:@std/assert@*",

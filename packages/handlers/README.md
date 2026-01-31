@@ -817,7 +817,7 @@ const totpSecret = generateTOTPSecret();
 const qrUri = generateTOTPUri(totpSecret, 'user@example.com', 'My App');
 
 // Display QR code (use any QR library, or the vendored one)
-import qrcode from '@drizzle-cms/vendor/qrcode-generator';
+import { qrcode } from '@drizzle-cms/vendor';
 const qr = qrcode(0, 'M');
 qr.addData(qrUri);
 qr.make();

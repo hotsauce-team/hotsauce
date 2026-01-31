@@ -12,7 +12,6 @@ import {
   type PasswordProviderOptions,
 } from './provider.ts';
 import { verifyTOTP } from './totp.ts';
-import { loginStyles } from './login.ts';
 
 /**
  * Credentials for two-factor authentication
@@ -333,8 +332,6 @@ export class TwoFactorPasswordProvider implements AuthProvider {
  * Additional CSS for TOTP input
  */
 export const twoFactorStyles = `
-${loginStyles}
-
 /* TOTP-specific styles */
 .cms-input-totp {
   font-family: monospace;
