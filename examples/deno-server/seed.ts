@@ -6,7 +6,7 @@ import {
   generateTOTPSecret,
   generateTOTPUri,
   hashPassword,
-} from '../../packages/handlers/mod.ts';
+} from '@hotsauce/auth';
 import qrcode from 'qrcode-generator';
 
 // Database connection (persisted to ./data)

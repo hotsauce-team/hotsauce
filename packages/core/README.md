@@ -100,6 +100,49 @@ console.log(field.column); // Original column metadata
 Optionally patch Drizzle column builders to attach CMS-specific metadata to columns.
 This enables schema-authored hints (like file fields) to flow into introspection and field mapping.
 
+**Setup (required for TypeScript):**
+
+Add type declarations to your schema file (one-time setup per project):
+
+```ts
+// schema.ts (or a separate cms-types.d.ts file)
+import '@hotsauce/core/extend';
+import type { CmsColumnOptions, CmsTableOptions } from '@hotsauce/core/extend';
+
+// For PostgreSQL:
+declare module 'drizzle-orm/pg-core' {
+  interface PgColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface PgTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
+
+// For SQLite:
+declare module 'drizzle-orm/sqlite-core' {
+  interface SQLiteColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface SQLiteTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
+
+// For MySQL:
+declare module 'drizzle-orm/mysql-core' {
+  interface MySqlColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface MySqlTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
+```
+
+> **Why?** JSR doesn't allow packages to augment external modules. The runtime
+> patching works, but TypeScript needs these declarations in your project.
+
 **Usage:**
 
 ```ts

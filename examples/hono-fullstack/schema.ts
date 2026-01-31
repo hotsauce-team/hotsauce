@@ -13,8 +13,25 @@ import { relations } from 'drizzle-orm';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
 
 import '@hotsauce/core/extend';
-import type { FileReference } from '@hotsauce/core';
+import type {
+  CmsColumnOptions,
+  CmsTableOptions,
+  FileReference,
+} from '@hotsauce/core/extend';
 import type { Parsers } from '@hotsauce/cms';
+
+// ─────────────────────────────────────────────────────────────
+// Type declarations for $cms() method on Drizzle columns/tables.
+// Required for TypeScript support. Add once per project.
+// ─────────────────────────────────────────────────────────────
+declare module 'drizzle-orm/pg-core' {
+  interface PgColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface PgTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // Tables

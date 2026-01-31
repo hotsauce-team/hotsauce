@@ -1,3 +1,5 @@
+/// <reference path="../extend/drizzle.d.ts" />
+
 import { assertEquals, assertExists } from '@std/assert';
 
 // Importing this module patches Drizzle's column builder prototypes.
