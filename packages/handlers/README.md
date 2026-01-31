@@ -100,8 +100,13 @@ openssl rand -base64 32
 | `getEnv(key)`                    | Get environment variable (cross-runtime)               |
 | `requireEnv(key, desc)`          | Get required env var or throw                          |
 | `PasswordProvider`               | Password-based auth provider class                     |
+| `TwoFactorPasswordProvider`      | Password + TOTP two-factor auth provider               |
 | `hashPassword(password)`         | Hash password with PBKDF2-SHA256                       |
 | `verifyPassword(password, hash)` | Verify password against hash                           |
+| `generateTOTP(secret)`           | Generate a 6-digit TOTP code                           |
+| `verifyTOTP(token, secret)`      | Verify a TOTP code (with ±30s tolerance)               |
+| `generateTOTPSecret()`           | Generate a random TOTP secret (base32)                 |
+| `generateTOTPUri(...)`           | Generate otpauth:// URI for QR codes                   |
 
 **Example:**
 
@@ -712,6 +717,7 @@ auth: {
 | Export                                 | Purpose                             |
 | -------------------------------------- | ----------------------------------- |
 | `PasswordProvider`                     | Password-based auth provider class  |
+| `TwoFactorPasswordProvider`            | Password + TOTP auth provider       |
 | `hashPassword(password)`               | Hash password with PBKDF2-SHA256    |
 | `verifyPassword(password, hash)`       | Verify password against hash        |
 | `signJwt(payload, secret)`             | Sign a JWT token                    |
@@ -750,6 +756,112 @@ await db.insert(adminUsers).values({
 ```
 
 Hash format: `$pbkdf2-sha256$iterations$base64salt$base64hash`
+
+### Two-Factor Authentication (TOTP)
+
+Add TOTP-based two-factor authentication with `TwoFactorPasswordProvider`:
+
+```ts
+import {
+  createCmsHandler,
+  generateTOTPSecret,
+  generateTOTPUri,
+  TwoFactorPasswordProvider,
+} from '@drizzle-cms/handlers';
+
+// Schema: users table needs a totpSecret column
+const users = pgTable('users', {
+  id: serial('id').primaryKey(),
+  email: varchar('email', { length: 255 }).notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  totpSecret: text('totp_secret'), // null = 2FA not enabled
+  role: varchar('role', { length: 50 }),
+});
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  auth: {
+    secret: process.env.JWT_SECRET!,
+    provider: new TwoFactorPasswordProvider({
+      db,
+      usersTable: users,
+      totpSecretColumn: 'totpSecret', // default
+      issuer: 'My App', // shown in authenticator apps
+    }),
+  },
+});
+```
+
+**How it works:**
+
+1. User enters email/password
+2. If password valid AND user has `totpSecret` → show TOTP form
+3. User enters 6-digit code from authenticator app
+4. If TOTP valid → login complete
+
+Users without a `totpSecret` skip step 2-3 (2FA is optional per-user).
+
+**Setting up 2FA for a user:**
+
+```ts
+import {
+  generateTOTPSecret,
+  generateTOTPUri,
+  hashPassword,
+} from '@drizzle-cms/handlers';
+
+// Generate secret and QR code URI
+const totpSecret = generateTOTPSecret();
+const qrUri = generateTOTPUri(totpSecret, 'user@example.com', 'My App');
+
+// Display QR code (use any QR library, or the vendored one)
+import qrcode from '@drizzle-cms/vendor/qrcode-generator';
+const qr = qrcode(0, 'M');
+qr.addData(qrUri);
+qr.make();
+console.log(qr.createASCII()); // Terminal output
+// Or: qr.createDataURL() for <img src>
+// Or: qr.createSvgTag() for inline SVG
+
+// Save to database after user verifies a code
+await db.update(users)
+  .set({ totpSecret })
+  .where(eq(users.id, userId));
+```
+
+**TwoFactorPasswordProvider Options:**
+
+| Option                           | Default        | Description                       |
+| -------------------------------- | -------------- | --------------------------------- |
+| `totpSecretColumn`               | `'totpSecret'` | Column storing base32 TOTP secret |
+| `issuer`                         | `'CMS'`        | App name shown in authenticator   |
+| (+ all PasswordProvider options) |                |                                   |
+
+**TOTP Utilities:**
+
+```ts
+import {
+  generateTOTP,
+  generateTOTPSecret,
+  generateTOTPUri,
+  verifyTOTP,
+} from '@drizzle-cms/handlers';
+
+// Generate a random secret (32-char base32 string)
+const secret = generateTOTPSecret();
+
+// Generate current 6-digit code (for testing)
+const code = await generateTOTP(secret);
+
+// Verify a code (allows ±30 second window for clock drift)
+const isValid = await verifyTOTP(userInput, secret);
+
+// Generate URI for QR code
+const uri = generateTOTPUri(secret, 'user@example.com', 'My App');
+// => otpauth://totp/My%20App:user%40example.com?secret=...&issuer=My%20App&...
+```
 
 ### Custom Auth Provider
 
