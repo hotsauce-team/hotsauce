@@ -3,12 +3,14 @@
 
 export {
   type AccountRouteContext,
+  type AccountRouteContextWith2FA,
   handle2FADisable,
   handle2FAEnable,
   handle2FASetupForm,
   handleAccountPage,
   handlePasswordChange,
   handlePasswordChangeForm,
+  has2FAEnabled,
 } from './routes.ts';
 
 export {

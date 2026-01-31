@@ -231,6 +231,7 @@ export { isWorkerPlugin } from './plugins/types.ts';
 // ─────────────────────────────────────────────────────────────
 export type {
   AccountRouteContext,
+  AccountRouteContextWith2FA,
   AuthProvider,
   AuthResult,
   AuthUser,
@@ -258,6 +259,8 @@ export {
   handleAccountPage,
   handlePasswordChange,
   handlePasswordChangeForm,
+  // Type guard for 2FA context
+  has2FAEnabled,
   // Password hashing
   hashPassword,
   isSecureRequest,
@@ -747,16 +750,15 @@ export function createCmsHandler(options: CmsOptions): Handler {
       const provider = resolvedAuth.provider as PasswordProvider;
 
       // Create account route context
-      // Note: challengeSecret is guaranteed ≥32 chars when twoFactorEnabled is true
-      // (provider constructor throws otherwise). The ?? '' fallback is for when 2FA
-      // is disabled - account routes guard on twoFactorEnabled before using it.
+      // challengeSecret is undefined when 2FA is disabled. When twoFactorEnabled
+      // is true, provider constructor guarantees it's ≥32 chars.
       const accountCtx: AccountRouteContext = {
         basePath: opts.basePath,
         title: opts.title,
         jwtPayload,
         provider,
         csrfSecret,
-        challengeSecret: provider.challengeSecret ?? '',
+        challengeSecret: provider.challengeSecret,
         generateCsrfToken,
         validateCsrfToken,
       };

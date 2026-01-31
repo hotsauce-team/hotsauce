@@ -42,12 +42,43 @@ export interface AccountRouteContext {
   provider: PasswordProvider;
   /** CSRF secret for token generation/validation */
   csrfSecret: string;
-  /** Secret for signing 2FA setup tokens */
-  challengeSecret: string;
+  /**
+   * Secret for signing 2FA setup tokens.
+   * Undefined when 2FA is disabled (provider.twoFactorEnabled is false).
+   * Guaranteed ≥32 chars when defined (provider constructor validates).
+   */
+  challengeSecret: string | undefined;
   /** Function to generate CSRF token */
   generateCsrfToken: (secret: string) => Promise<string>;
   /** Function to validate CSRF token */
   validateCsrfToken: (token: string | null, secret: string) => Promise<boolean>;
+}
+
+/**
+ * Narrowed context type when 2FA is enabled.
+ * Use `has2FAEnabled()` type guard to narrow from `AccountRouteContext`.
+ */
+export type AccountRouteContextWith2FA = AccountRouteContext & {
+  challengeSecret: string;
+};
+
+/**
+ * Type guard to check if 2FA is enabled in the context.
+ * When true, narrows `challengeSecret` from `string | undefined` to `string`.
+ *
+ * @example
+ * ```ts
+ * if (!has2FAEnabled(ctx)) {
+ *   return redirect(`${basePath}/account`);
+ * }
+ * // ctx.challengeSecret is now typed as string
+ * const token = await createChallengeToken(data, ctx.challengeSecret);
+ * ```
+ */
+export function has2FAEnabled(
+  ctx: AccountRouteContext,
+): ctx is AccountRouteContextWith2FA {
+  return ctx.provider.twoFactorEnabled && ctx.challengeSecret !== undefined;
 }
 
 /**
@@ -238,8 +269,15 @@ export async function handle2FASetupForm(
   _request: Request,
   ctx: AccountRouteContext,
 ): Promise<Response> {
+  const { basePath } = ctx;
+
+  // 2FA routes require 2FA to be enabled in provider
+  // Type guard narrows challengeSecret to string
+  if (!has2FAEnabled(ctx)) {
+    return redirect(`${basePath}/account`);
+  }
+
   const {
-    basePath,
     title,
     jwtPayload,
     provider,
@@ -247,11 +285,6 @@ export async function handle2FASetupForm(
     challengeSecret,
     generateCsrfToken,
   } = ctx;
-
-  // 2FA routes require 2FA to be enabled in provider
-  if (!provider.twoFactorEnabled) {
-    return redirect(`${basePath}/account`);
-  }
 
   // Check if 2FA is already enabled
   const has2FA = await provider.userHas2FA(jwtPayload.sub);
@@ -313,8 +346,15 @@ export async function handle2FAEnable(
   request: Request,
   ctx: AccountRouteContext,
 ): Promise<Response> {
+  const { basePath } = ctx;
+
+  // 2FA routes require 2FA to be enabled in provider
+  // Type guard narrows challengeSecret to string
+  if (!has2FAEnabled(ctx)) {
+    return redirect(`${basePath}/account`);
+  }
+
   const {
-    basePath,
     title,
     jwtPayload,
     provider,
@@ -323,11 +363,6 @@ export async function handle2FAEnable(
     generateCsrfToken,
     validateCsrfToken,
   } = ctx;
-
-  // 2FA routes require 2FA to be enabled in provider
-  if (!provider.twoFactorEnabled) {
-    return redirect(`${basePath}/account`);
-  }
 
   const formData = await request.formData();
 

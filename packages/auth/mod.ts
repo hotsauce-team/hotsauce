@@ -69,6 +69,7 @@ export { loginStyles, renderLoginPage, twoFactorStyles } from './login.ts';
 // ─────────────────────────────────────────────────────────────
 export {
   type AccountRouteContext,
+  type AccountRouteContextWith2FA,
   accountStyles,
   handle2FADisable,
   handle2FAEnable,
@@ -76,6 +77,7 @@ export {
   handleAccountPage,
   handlePasswordChange,
   handlePasswordChangeForm,
+  has2FAEnabled,
   render2FADisablePage,
   render2FASetupPage,
   renderAccountPage,
