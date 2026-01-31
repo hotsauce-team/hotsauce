@@ -1,5 +1,5 @@
 {
-  "name": "@drizzle-cms/core",
+  "name": "@hotsauce/core",
   "version": "0.0.1",
   "exports": {
     ".": "./mod.ts",

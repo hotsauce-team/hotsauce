@@ -1,6 +1,6 @@
 // HTML templates for the public site
 // Uses drizzle-cms/ui's html tagged template for XSS-safe rendering
-import { html, raw } from '@drizzle-cms/ui';
+import { html, raw } from '@hotsauce/ui';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
 

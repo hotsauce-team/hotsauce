@@ -19,7 +19,7 @@ import {
   generateTOTPSecret,
   hashPassword,
   PasswordProvider,
-} from '@drizzle-cms/auth';
+} from '@hotsauce/auth';
 
 // ─────────────────────────────────────────────────────────────
 // Pre-computed password hashes (PBKDF2 is ~130ms per hash)

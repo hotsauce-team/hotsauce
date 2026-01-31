@@ -1,7 +1,7 @@
 // Handler types and options
 
-import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
-import type { AuthProvider, JwtPayload } from '@drizzle-cms/auth';
+import type { IntrospectedSchema, IntrospectedTable } from '@hotsauce/core';
+import type { AuthProvider, JwtPayload } from '@hotsauce/auth';
 import type { Policies } from './policies/types.ts';
 import type { PluginConfig } from './plugins/types.ts';
 import type { PluginRegistry } from './plugins/registry.ts';
@@ -198,7 +198,7 @@ export interface CmsOptionsWithAuth extends CmsOptionsBase {
    *
    * @example
    * ```ts
-   * import { ownedBy, adminOr, readOnly } from '@drizzle-cms/handlers';
+   * import { ownedBy, adminOr, readOnly } from '@hotsauce/handlers';
    *
    * policies: {
    *   // Users can only edit their own posts

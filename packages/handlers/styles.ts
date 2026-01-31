@@ -1,11 +1,11 @@
 // Stylesheet route handler
-// CSS content lives in @drizzle-cms/ui, this file handles HTTP serving
+// CSS content lives in @hotsauce/ui, this file handles HTTP serving
 
-import { cmsStylesheet } from '@drizzle-cms/ui';
-import { accountStyles, loginStyles, twoFactorStyles } from '@drizzle-cms/auth';
+import { cmsStylesheet } from '@hotsauce/ui';
+import { accountStyles, loginStyles, twoFactorStyles } from '@hotsauce/auth';
 
 // Re-export for convenience
-export { cmsStylesheet } from '@drizzle-cms/ui';
+export { cmsStylesheet } from '@hotsauce/ui';
 
 // Combined stylesheet (CMS base + auth styles + account styles)
 const fullStylesheet = cmsStylesheet + '\n' + loginStyles + '\n' +

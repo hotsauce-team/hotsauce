@@ -1,4 +1,4 @@
-# @drizzle-cms/auth
+# @hotsauce/auth
 
 Authentication and authorization utilities for Drizzle CMS. Provides JWT tokens, password hashing, TOTP-based two-factor authentication, and account management.
 
@@ -11,7 +11,7 @@ import {
   hashPassword,
   PasswordProvider,
   verifyPassword,
-} from '@drizzle-cms/auth';
+} from '@hotsauce/auth';
 ```
 
 ## Overview
@@ -37,7 +37,7 @@ This package provides:
 | `JwtPayload`                           | Type for JWT claims            |
 
 ```ts
-import { createJwtPayload, signJwt, verifyJwt } from '@drizzle-cms/auth';
+import { createJwtPayload, signJwt, verifyJwt } from '@hotsauce/auth';
 
 // Create a payload (8-hour default expiry)
 const payload = createJwtPayload('user-123', 'admin');
@@ -63,7 +63,7 @@ if (decoded) {
 Hash format: `$pbkdf2-sha256$iterations$base64salt$base64hash`
 
 ```ts
-import { hashPassword, verifyPassword } from '@drizzle-cms/auth';
+import { hashPassword, verifyPassword } from '@hotsauce/auth';
 
 // Hash for storage
 const hash = await hashPassword('user-password');
@@ -91,7 +91,7 @@ import {
   generateTOTPSecret,
   generateTOTPUri,
   verifyTOTP,
-} from '@drizzle-cms/auth';
+} from '@hotsauce/auth';
 
 // Generate secret for new user
 const secret = generateTOTPSecret();
@@ -116,7 +116,7 @@ Short-lived signed tokens for multi-step authentication flows (e.g., 2FA challen
 | `verifyChallengeToken(token, secret)`            | Verify and extract userId |
 
 ```ts
-import { createChallengeToken, verifyChallengeToken } from '@drizzle-cms/auth';
+import { createChallengeToken, verifyChallengeToken } from '@hotsauce/auth';
 
 // After password verification, create challenge
 const token = await createChallengeToken(userId, secret, { totpSecret });
@@ -160,8 +160,8 @@ The main authentication provider class. Supports password authentication with op
 ### Basic Usage
 
 ```ts
-import { PasswordProvider } from '@drizzle-cms/auth';
-import { createCmsHandler } from '@drizzle-cms/handlers';
+import { PasswordProvider } from '@hotsauce/auth';
+import { createCmsHandler } from '@hotsauce/handlers';
 
 const handler = createCmsHandler({
   db,
@@ -244,7 +244,7 @@ The 2FA challenge includes a signed token (5-minute expiry) to prevent unlimited
 
 ## Account Management
 
-The PasswordProvider includes methods for self-service account management. These are automatically integrated into the CMS when using `@drizzle-cms/handlers`.
+The PasswordProvider includes methods for self-service account management. These are automatically integrated into the CMS when using `@hotsauce/handlers`.
 
 ### Account Routes
 
@@ -378,18 +378,18 @@ interface TwoFactorCredentials {
 
 ## Integration with Handlers
 
-The `@drizzle-cms/handlers` package re-exports everything from `@drizzle-cms/auth` for convenience:
+The `@hotsauce/handlers` package re-exports everything from `@hotsauce/auth` for convenience:
 
 ```ts
 // These are equivalent:
-import { PasswordProvider } from '@drizzle-cms/auth';
-import { PasswordProvider } from '@drizzle-cms/handlers';
+import { PasswordProvider } from '@hotsauce/auth';
+import { PasswordProvider } from '@hotsauce/handlers';
 ```
 
 When using `createCmsHandler`, the auth integration is automatic:
 
 ```ts
-import { createCmsHandler, PasswordProvider } from '@drizzle-cms/handlers';
+import { createCmsHandler, PasswordProvider } from '@hotsauce/handlers';
 
 const handler = createCmsHandler({
   db,

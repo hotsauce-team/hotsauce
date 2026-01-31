@@ -7,7 +7,7 @@ import {
   matchesAcceptPattern,
   parseMultipartFormData,
 } from '../http.ts';
-import type { IntrospectedColumn } from '@drizzle-cms/core';
+import type { IntrospectedColumn } from '@hotsauce/core';
 
 // =============================================================================
 // matchesAcceptPattern tests

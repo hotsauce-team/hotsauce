@@ -170,11 +170,11 @@ The example includes these tables:
 
 ## Templates
 
-Templates use `@drizzle-cms/ui`'s `html` tagged template for XSS-safe rendering:
+Templates use `@hotsauce/ui`'s `html` tagged template for XSS-safe rendering:
 
 ```typescript
 // site/templates.ts
-import { html, raw } from '@drizzle-cms/ui';
+import { html, raw } from '@hotsauce/ui';
 
 function postCard(post: Post): string {
   return html`

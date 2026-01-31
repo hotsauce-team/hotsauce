@@ -1,4 +1,4 @@
-# @drizzle-cms/handlers-workers
+# @hotsauce/handlers-workers
 
 Worker sandbox execution for CMS plugins. Provides isolated execution environment for untrusted plugin code.
 
@@ -15,19 +15,19 @@ This package handles the Worker-based isolation layer for plugins:
 
 ```bash
 # Deno
-deno add jsr:@drizzle-cms/handlers-workers
+deno add jsr:@hotsauce/handlers-workers
 
 # Node
-npx jsr add @drizzle-cms/handlers-workers
+npx jsr add @hotsauce/handlers-workers
 ```
 
 ## Usage
 
-This package is primarily used internally by `@drizzle-cms/handlers`. For direct usage:
+This package is primarily used internally by `@hotsauce/handlers`. For direct usage:
 
 ```typescript
-import { WorkerExecutor } from '@drizzle-cms/handlers-workers';
-import type { RegisteredPlugin } from '@drizzle-cms/handlers-workers';
+import { WorkerExecutor } from '@hotsauce/handlers-workers';
+import type { RegisteredPlugin } from '@hotsauce/handlers-workers';
 
 // Create executor
 const executor = new WorkerExecutor();
@@ -72,7 +72,7 @@ You provide the Worker instance, giving full control over isolation:
 ```typescript
 // Create Worker with your desired permissions
 const myWorker = new Worker(
-  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  import.meta.resolve('@hotsauce/plugins/audit-log/worker'),
   {
     type: 'module',
     // Deno: restrict permissions
@@ -109,7 +109,7 @@ Plugin modules loaded by Workers must export a `createPlugin` factory:
 
 ```typescript
 // my-plugin.worker.ts
-import type { PluginHooks, Serializable } from '@drizzle-cms/handlers-workers';
+import type { PluginHooks, Serializable } from '@hotsauce/handlers-workers';
 
 export function createPlugin(config: Serializable): { hooks: PluginHooks } {
   return {

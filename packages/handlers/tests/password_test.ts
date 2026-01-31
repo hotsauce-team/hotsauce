@@ -1,8 +1,8 @@
 // Tests for password hashing utilities
-// Note: These tests verify the re-exports from @drizzle-cms/auth work correctly
+// Note: These tests verify the re-exports from @hotsauce/auth work correctly
 
 import { assertEquals } from '@std/assert';
-import { hashPassword, verifyPassword } from '@drizzle-cms/auth';
+import { hashPassword, verifyPassword } from '@hotsauce/auth';
 
 // ============================================================================
 // hashPassword tests

@@ -8,19 +8,19 @@ import type {
   IntrospectedSchema,
   IntrospectedTable,
   JunctionTable,
-} from '@drizzle-cms/core';
+} from '@hotsauce/core';
 import {
   createInsertSchema,
   createUpdateSchema,
   mapColumnToField,
   mapColumnToFieldType,
-} from '@drizzle-cms/core';
+} from '@hotsauce/core';
 import { ZodError } from 'zod';
-import type { ManyToManyData, RelationOption } from '@drizzle-cms/ui';
-import type { ManyToManyDisplayData } from '@drizzle-cms/ui';
+import type { ManyToManyData, RelationOption } from '@hotsauce/ui';
+import type { ManyToManyDisplayData } from '@hotsauce/ui';
 import type { ParserFn, ResolvedCmsOptions } from './types.ts';
 import { cmsUrl, formatColumnName, formatTableName } from './router.ts';
-import type { ListColumn, NavItem } from '@drizzle-cms/ui';
+import type { ListColumn, NavItem } from '@hotsauce/ui';
 
 // ============================================================================
 // Navigation helpers

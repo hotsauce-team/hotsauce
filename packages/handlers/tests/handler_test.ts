@@ -2,7 +2,7 @@
 
 import { assertEquals } from '@std/assert';
 import { createCmsHandler } from '../mod.ts';
-import type { IntrospectedSchema, IntrospectedTable } from '@drizzle-cms/core';
+import type { IntrospectedSchema, IntrospectedTable } from '@hotsauce/core';
 
 // Test CSRF secret
 const TEST_CSRF_SECRET = 'test-csrf-secret-for-handler-tests-min-32-chars';

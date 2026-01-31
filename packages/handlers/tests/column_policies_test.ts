@@ -16,7 +16,7 @@ import type {
   PolicyContext,
   TablePolicy,
 } from '../policies/types.ts';
-import type { IntrospectedColumn } from '@drizzle-cms/core';
+import type { IntrospectedColumn } from '@hotsauce/core';
 
 // Helper to create test contexts
 function createTestContext(

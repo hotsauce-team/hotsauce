@@ -17,7 +17,7 @@ import {
 import { relations } from 'drizzle-orm';
 
 // Import extend module for side effects (patches Drizzle prototypes)
-import '@drizzle-cms/core/extend';
+import '@hotsauce/core/extend';
 
 // Test secrets (long enough to pass validation)
 export const TEST_CSRF_SECRET =

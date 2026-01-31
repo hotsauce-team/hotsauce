@@ -1,12 +1,12 @@
 // Form field input renderers by field type
 
 import { attrs, html, raw } from '../html.ts';
-import type { CMSField } from '@drizzle-cms/core';
+import type { CMSField } from '@hotsauce/core';
 import {
   FILE_DEFAULT_ACCEPT,
   FILE_DEFAULT_MAX_SIZE,
   isValidFileReference,
-} from '@drizzle-cms/core';
+} from '@hotsauce/core';
 
 /**
  * An option for a relation select field

@@ -1,5 +1,5 @@
 // Plugin system types
-// Re-exports from @drizzle-cms/handlers-workers with CMS-specific additions
+// Re-exports from @hotsauce/handlers-workers with CMS-specific additions
 
 // Re-export all types from handlers-workers
 export type {
@@ -19,7 +19,7 @@ export type {
   SerializableValue,
   TransformFn,
   TransformHooks,
-} from '@drizzle-cms/handlers-workers';
+} from '@hotsauce/handlers-workers';
 
 // Import for use in local type definitions
 import type {
@@ -28,7 +28,7 @@ import type {
   PluginHooks,
   PluginRoute,
   TransformHooks,
-} from '@drizzle-cms/handlers-workers';
+} from '@hotsauce/handlers-workers';
 
 // ─────────────────────────────────────────────────────────────
 // Plugin capabilities - declared permissions
@@ -67,7 +67,7 @@ export interface PluginCapabilities {
 export type {
   PluginErrorContext,
   PluginErrorHandler,
-} from '@drizzle-cms/handlers-workers';
+} from '@hotsauce/handlers-workers';
 
 // ─────────────────────────────────────────────────────────────
 // Plugin filter context - for deciding whether to invoke hooks
@@ -191,7 +191,7 @@ interface PluginConfigBase {
  * ```ts
  * {
  *   name: 'audit-log',
- *   worker: new Worker(import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'), {
+ *   worker: new Worker(import.meta.resolve('@hotsauce/plugins/audit-log/worker'), {
  *     type: 'module',
  *     deno: { permissions: { net: ['audit.example.com'] } },
  *   }),

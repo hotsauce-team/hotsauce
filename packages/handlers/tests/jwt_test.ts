@@ -1,9 +1,9 @@
 // Tests for JWT utilities
-// Note: These tests verify the re-exports from @drizzle-cms/auth work correctly
+// Note: These tests verify the re-exports from @hotsauce/auth work correctly
 
 import { assertEquals, assertNotEquals } from '@std/assert';
-import { createJwtPayload, signJwt, verifyJwt } from '@drizzle-cms/auth';
-import type { JwtPayload } from '@drizzle-cms/auth';
+import { createJwtPayload, signJwt, verifyJwt } from '@hotsauce/auth';
+import type { JwtPayload } from '@hotsauce/auth';
 
 const TEST_SECRET = 'test-secret-must-be-at-least-32-characters-long';
 

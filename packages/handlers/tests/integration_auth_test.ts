@@ -15,7 +15,7 @@ import {
   TEST_CSRF_SECRET,
 } from './integration_helpers.ts';
 import { createCmsHandler } from '../mod.ts';
-import { hashPassword, PasswordProvider } from '@drizzle-cms/auth';
+import { hashPassword, PasswordProvider } from '@hotsauce/auth';
 
 Deno.test('integration: JWT auth tests', async (t) => {
   // Create single PGlite instance for all auth tests

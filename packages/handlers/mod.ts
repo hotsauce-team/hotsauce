@@ -1,4 +1,4 @@
-// @drizzle-cms/handlers
+// @hotsauce/handlers
 // CRUD route handlers using Web Standard Request/Response
 // Works with Deno, Node 20+, Bun, Cloudflare Workers
 
@@ -12,7 +12,7 @@ import type {
   RouteContext,
 } from './types.ts';
 import type { Policies } from './policies/types.ts';
-import { introspectFullSchema, isValidFileReference } from '@drizzle-cms/core';
+import { introspectFullSchema, isValidFileReference } from '@hotsauce/core';
 import { parseRoute, resolveAction } from './router.ts';
 import {
   base64ToUint8Array,
@@ -40,7 +40,7 @@ import {
 } from './crud.ts';
 import { handleStylesheet } from './styles.ts';
 
-// Auth imports from @drizzle-cms/auth
+// Auth imports from @hotsauce/auth
 import {
   type AccountRouteContext,
   createAuthCookie,
@@ -59,7 +59,7 @@ import {
   renderLoginPage,
   signJwt,
   verifyJwt,
-} from '@drizzle-cms/auth';
+} from '@hotsauce/auth';
 
 import {
   applyPolicy,
@@ -227,7 +227,7 @@ export type {
 export { isWorkerPlugin } from './plugins/types.ts';
 
 // ─────────────────────────────────────────────────────────────
-// Auth - JWT authentication (re-exported from @drizzle-cms/auth)
+// Auth - JWT authentication (re-exported from @hotsauce/auth)
 // ─────────────────────────────────────────────────────────────
 export type {
   AccountRouteContext,
@@ -239,7 +239,7 @@ export type {
   PasswordCredentials,
   PasswordProviderOptions,
   TwoFactorCredentials,
-} from '@drizzle-cms/auth';
+} from '@hotsauce/auth';
 
 export {
   accountStyles,
@@ -279,7 +279,7 @@ export {
   verifyJwt,
   verifyPassword,
   verifyTOTP,
-} from '@drizzle-cms/auth';
+} from '@hotsauce/auth';
 
 /**
  * Create a CMS handler function
@@ -292,7 +292,7 @@ export {
  *
  * @example
  * ```ts
- * import { createCmsHandler } from '@drizzle-cms/handlers';
+ * import { createCmsHandler } from '@hotsauce/handlers';
  * import * as schema from './schema.ts';
  *
  * const handler = createCmsHandler({
@@ -306,7 +306,7 @@ export {
  *
  * @example With authentication
  * ```ts
- * import { createCmsHandler, PasswordProvider } from '@drizzle-cms/handlers';
+ * import { createCmsHandler, PasswordProvider } from '@hotsauce/handlers';
  *
  * const handler = createCmsHandler({
  *   db,
@@ -361,7 +361,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     Array.isArray(options.schema.tables);
   const introspected = isAlreadyIntrospected
     ? options
-      .schema as unknown as import('@drizzle-cms/core').IntrospectedSchema
+      .schema as unknown as import('@hotsauce/core').IntrospectedSchema
     : introspectFullSchema(options.schema);
 
   // Validate file column configurations (file: true must be on JSON columns)

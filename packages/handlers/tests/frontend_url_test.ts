@@ -6,7 +6,7 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import { boolean, pgTable, serial, varchar } from 'drizzle-orm/pg-core';
 
-import '@drizzle-cms/core/extend';
+import '@hotsauce/core/extend';
 
 import { createCmsHandler } from '../mod.ts';
 import type { Handler } from '../types.ts';

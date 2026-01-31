@@ -10,11 +10,11 @@ import type {
   Serializable,
 } from './types.ts';
 import type { PluginRegistry, RegisteredPlugin } from './registry.ts';
-import { WorkerExecutor } from '@drizzle-cms/handlers-workers';
-import type { PluginErrorHandler } from '@drizzle-cms/handlers-workers';
+import { WorkerExecutor } from '@hotsauce/handlers-workers';
+import type { PluginErrorHandler } from '@hotsauce/handlers-workers';
 
 // Re-export for convenience
-export type { PluginErrorHandler } from '@drizzle-cms/handlers-workers';
+export type { PluginErrorHandler } from '@hotsauce/handlers-workers';
 
 /**
  * Plugin service provides a convenient API for executing plugin hooks.

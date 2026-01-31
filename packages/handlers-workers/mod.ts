@@ -1,4 +1,4 @@
-// @drizzle-cms/handlers-workers
+// @hotsauce/handlers-workers
 // Worker sandbox execution for CMS plugins
 // Compatible with Deno and Node.js 20+
 

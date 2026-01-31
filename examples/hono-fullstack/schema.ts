@@ -12,9 +12,9 @@ import {
 import { relations } from 'drizzle-orm';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
 
-import '@drizzle-cms/core/extend';
-import type { FileReference } from '@drizzle-cms/core';
-import type { Parsers } from '@drizzle-cms/handlers';
+import '@hotsauce/core/extend';
+import type { FileReference } from '@hotsauce/core';
+import type { Parsers } from '@hotsauce/handlers';
 
 // ─────────────────────────────────────────────────────────────
 // Tables

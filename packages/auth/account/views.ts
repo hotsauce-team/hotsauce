@@ -1,8 +1,8 @@
 // Account page views - HTML templates for account management
 // Uses the same styling as the rest of the CMS
 
-import { attrs, html, raw } from '@drizzle-cms/ui';
-import { layout } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@hotsauce/ui';
+import { layout } from '@hotsauce/ui';
 import type { AuthUser } from '../types.ts';
 
 /**

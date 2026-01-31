@@ -4,9 +4,9 @@ import {
   createCmsHandler,
   PasswordProvider,
   readOnly,
-} from '@drizzle-cms/handlers';
-import type { FilterContext, WorkerPluginConfig } from '@drizzle-cms/handlers';
-import type { TransformHooks } from '@drizzle-cms/handlers-workers';
+} from '@hotsauce/handlers';
+import type { FilterContext, WorkerPluginConfig } from '@hotsauce/handlers';
+import type { TransformHooks } from '@hotsauce/handlers-workers';
 
 import type { Database } from '../db.ts';
 import { adminUsers, parsers, schema } from '../schema.ts';

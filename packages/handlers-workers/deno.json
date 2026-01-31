@@ -1,5 +1,5 @@
 {
-  "name": "@drizzle-cms/handlers-workers",
+  "name": "@hotsauce/handlers-workers",
   "version": "0.0.1",
   "exports": "./mod.ts",
   "publish": {

@@ -39,6 +39,6 @@ export {
 export {
   createWorkerExecutor,
   WorkerExecutor,
-} from '@drizzle-cms/handlers-workers';
+} from '@hotsauce/handlers-workers';
 
 export { createPluginService, PluginService } from './service.ts';

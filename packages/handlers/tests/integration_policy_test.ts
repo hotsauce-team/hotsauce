@@ -24,7 +24,7 @@ import {
   signJwt,
 } from '../mod.ts';
 import { generateCsrfToken } from '../csrf.ts';
-import { hashPassword, PasswordProvider } from '@drizzle-cms/auth';
+import { hashPassword, PasswordProvider } from '@hotsauce/auth';
 
 // ─────────────────────────────────────────────────────────────
 // Pre-computed password hashes (PBKDF2 is ~130ms per hash)
@@ -816,7 +816,7 @@ Deno.test({
 
         // Import the handleList function directly to test with crafted options
         const { handleList } = await import('../crud.ts');
-        const { introspectFullSchema } = await import('@drizzle-cms/core');
+        const { introspectFullSchema } = await import('@hotsauce/core');
 
         const introspected = introspectFullSchema(schemaWithAuth);
         const usersTable = introspected.tables.find((t) => t.name === 'users')!;

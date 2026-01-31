@@ -1,5 +1,5 @@
 // TOTP utilities tests
-// Note: These tests verify the re-exports from @drizzle-cms/auth work correctly
+// Note: These tests verify the re-exports from @hotsauce/auth work correctly
 
 import { assertEquals, assertMatch } from '@std/assert';
 import {
@@ -7,7 +7,7 @@ import {
   generateTOTPSecret,
   generateTOTPUri,
   verifyTOTP,
-} from '@drizzle-cms/auth';
+} from '@hotsauce/auth';
 
 // ─────────────────────────────────────────────────────────────
 // generateTOTPSecret tests

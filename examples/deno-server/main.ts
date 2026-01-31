@@ -7,7 +7,7 @@ import {
   ownedBy,
   PasswordProvider,
   readOnly,
-} from '@drizzle-cms/handlers';
+} from '@hotsauce/handlers';
 import {
   inProcessFormatNamesPlugin,
   isolatedAuditLogPlugin,

@@ -1,4 +1,4 @@
-// @drizzle-cms/ui
+// @hotsauce/ui
 // HTML generation, form rendering, and view components
 // Zero dependencies - pure template literal functions
 

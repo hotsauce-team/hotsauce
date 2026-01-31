@@ -1,7 +1,7 @@
 // URL routing and handler dispatch
 
 import type { CrudAction, ParsedRoute } from './types.ts';
-import type { IntrospectedTable } from '@drizzle-cms/core';
+import type { IntrospectedTable } from '@hotsauce/core';
 
 /**
  * Parse a request URL into route information

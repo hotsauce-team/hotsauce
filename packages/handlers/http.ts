@@ -1,12 +1,12 @@
 // Response helpers and form parsing utilities
 
-import type { IntrospectedColumn } from '@drizzle-cms/core';
+import type { IntrospectedColumn } from '@hotsauce/core';
 import {
   FILE_DEFAULT_ACCEPT,
   FILE_DEFAULT_MAX_SIZE,
   type FileReference,
-} from '@drizzle-cms/core';
-import { escapeHtml } from '@drizzle-cms/ui';
+} from '@hotsauce/core';
+import { escapeHtml } from '@hotsauce/ui';
 
 /**
  * Security headers for HTML responses

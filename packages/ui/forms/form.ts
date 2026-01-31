@@ -2,7 +2,7 @@
 
 import { attrs, html, raw } from '../html.ts';
 import { formFields, type RelationOption } from './field.ts';
-import type { CMSField } from '@drizzle-cms/core';
+import type { CMSField } from '@hotsauce/core';
 
 // Re-export RelationOption for convenience
 export type { RelationOption } from './field.ts';

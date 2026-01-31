@@ -161,7 +161,7 @@ import { pgTable } from 'drizzle-orm/pg-core';
 
 ```typescript
 // Good: auto-escaped template
-import { attrs, html, raw } from '@drizzle-cms/ui';
+import { attrs, html, raw } from '@hotsauce/ui';
 
 html`
   <input ${attrs({ name, value: userInput })} />
@@ -454,7 +454,7 @@ Plugins extend the CMS with custom hooks that run during CRUD operations. Key de
 ```typescript
 // User creates Worker with explicit permissions
 const auditWorker = new Worker(
-  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  import.meta.resolve('@hotsauce/plugins/audit-log/worker'),
   {
     type: 'module',
     deno: { permissions: { net: ['audit.example.com'] } },

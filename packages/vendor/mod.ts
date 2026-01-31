@@ -1,4 +1,4 @@
-// @drizzle-cms/vendor
+// @hotsauce/vendor
 // Vendored third-party dependencies
 //
 // All code in this package is from third-party sources, included

@@ -8,7 +8,7 @@ import {
   parseRoute,
   resolveAction,
 } from '../router.ts';
-import type { IntrospectedTable } from '@drizzle-cms/core';
+import type { IntrospectedTable } from '@hotsauce/core';
 
 // Mock tables for testing
 const mockTables: IntrospectedTable[] = [

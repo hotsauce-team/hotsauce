@@ -3,13 +3,13 @@
 import { asc, desc, sql } from 'drizzle-orm';
 import type { Table } from 'drizzle-orm';
 
-import type { IntrospectedTable } from '@drizzle-cms/core';
+import type { IntrospectedTable } from '@hotsauce/core';
 
-import { alert, layout, pagination } from '@drizzle-cms/ui';
-import { listView } from '@drizzle-cms/ui';
-import { detailView } from '@drizzle-cms/ui';
-import { createView, editView } from '@drizzle-cms/ui';
-import { html, raw } from '@drizzle-cms/ui';
+import { alert, layout, pagination } from '@hotsauce/ui';
+import { listView } from '@hotsauce/ui';
+import { detailView } from '@hotsauce/ui';
+import { createView, editView } from '@hotsauce/ui';
+import { html, raw } from '@hotsauce/ui';
 import type { RouteContext } from './types.ts';
 import {
   coerceFormValues,
@@ -30,7 +30,7 @@ import type {
   LayoutOptions,
   ListViewOptions,
   NavItem,
-} from '@drizzle-cms/ui';
+} from '@hotsauce/ui';
 import {
   generateCsrfToken,
   getCsrfTokenFromFormData,
