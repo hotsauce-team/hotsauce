@@ -52,7 +52,6 @@
     "check": "deno check packages/*/mod.ts",
     "lint": "deno lint",
     "fmt": "deno fmt",
-    "hooks:install": "deno run scripts/install_git_hooks.ts",
     "hooks:run": "deno fmt --check && deno lint && deno task check",
     "example:seed": "deno task -f example-deno-server seed",
     "example:dev": "deno task -f example-deno-server dev",

@@ -306,8 +306,11 @@ This project is developed with **Deno** — no Node.js or npm required locally.
 git clone https://github.com/yourname/drizzle-cms
 cd drizzle-cms
 
+# Enable pre-commit hooks (runs fmt/lint/check)
+git config core.hooksPath .githooks
+
 # Run tests
-deno test
+deno task test
 
 # Type check
 deno check packages/*/mod.ts
@@ -318,8 +321,8 @@ deno fmt
 # Lint
 deno lint
 
-# Optional: install a pre-commit hook (runs fmt/lint/check)
-deno task hooks:install
+# Run all checks manually
+deno task hooks:run
 
 # Build npm packages (for publishing)
 deno task build:npm
