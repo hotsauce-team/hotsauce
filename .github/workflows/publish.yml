@@ -70,26 +70,5 @@ jobs:
       # 5. plugins (depends on workers)
       # 6. cms (depends on core, ui, workers, auth, plugins)
 
-      - name: Publish @hotsauce/core
-        run: deno publish --allow-slow-types
-        working-directory: packages/core
-
-      - name: Publish @hotsauce/workers
+      - name: Publish all packages
         run: deno publish
-        working-directory: packages/workers
-
-      - name: Publish @hotsauce/plugins
-        run: deno publish
-        working-directory: packages/plugins
-
-      - name: Publish @hotsauce/ui
-        run: deno publish
-        working-directory: packages/ui
-
-      - name: Publish @hotsauce/auth
-        run: deno publish
-        working-directory: packages/auth
-
-      - name: Publish @hotsauce/cms
-        run: deno publish
-        working-directory: packages/cms
