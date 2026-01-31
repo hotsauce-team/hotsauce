@@ -4,7 +4,7 @@ import { assertEquals, assertStringIncludes } from '@std/assert';
 import { fieldsToListColumns, listTable, listView } from '../views/list.ts';
 import { detailField, detailView } from '../views/detail.ts';
 import { createView, editView } from '../views/edit.ts';
-import type { CMSField, IntrospectedColumn } from '@hotsauce/core';
+import type { CMSField, IntrospectedColumn } from 'jsr:@hotsauce/core@0.1.0';
 
 // Helper to create mock CMSField
 function createMockField(overrides: Partial<CMSField> = {}): CMSField {

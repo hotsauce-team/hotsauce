@@ -2,7 +2,7 @@
 
 import { attrs, html, raw } from '../html.ts';
 import { formFields, type RelationOption } from './field.ts';
-import type { CMSField } from '@hotsauce/core';
+import type { CMSField } from 'jsr:@hotsauce/core@0.1.0';
 
 // Re-export RelationOption for convenience
 export type { RelationOption } from './field.ts';

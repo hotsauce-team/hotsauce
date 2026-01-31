@@ -6,7 +6,7 @@ import {
   type RelationOption,
   renderFieldInput,
 } from './inputs.ts';
-import type { CMSField } from '@hotsauce/core';
+import type { CMSField } from 'jsr:@hotsauce/core@0.1.0';
 
 // Re-export for convenience
 export type { RelationOption } from './inputs.ts';

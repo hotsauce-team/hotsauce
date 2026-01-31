@@ -31,6 +31,8 @@
     // Local packages (for cross-package imports)
     "@hotsauce/core": "./packages/core/mod.ts",
     "@hotsauce/core/extend": "./packages/core/extend/mod.ts",
+    "jsr:@hotsauce/core@0.1.0": "./packages/core/mod.ts",
+    "jsr:@hotsauce/core@0.1.0/extend": "./packages/core/extend/mod.ts",
     "@hotsauce/ui": "./packages/ui/mod.ts",
     "@hotsauce/auth": "./packages/auth/mod.ts",
     "@hotsauce/cms": "./packages/cms/mod.ts",
