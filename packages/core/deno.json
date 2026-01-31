@@ -1,6 +1,7 @@
 {
   "name": "@hotsauce/core",
   "version": "0.1.0",
+  "license": "MIT",
   "exports": {
     ".": "./mod.ts",
     "./extend": "./extend/mod.ts"
@@ -14,6 +15,9 @@
       "validation/",
       "README.md",
       "LICENSE"
+    ],
+    "exclude": [
+      "extend/drizzle.d.ts"
     ]
   }
 }

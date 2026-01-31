@@ -4,9 +4,8 @@
 // so schema definitions can attach CMS metadata that flows from builder → column.
 // It also patches table classes to allow table-level CMS configuration.
 //
-// Type declarations are in drizzle.d.ts (separate file for JSR compatibility).
-
-/// <reference path="./drizzle.d.ts" />
+// For TypeScript support, users must add type declarations to their project.
+// See README or copy from extend/drizzle.d.ts
 
 import { MySqlColumnBuilder } from 'drizzle-orm/mysql-core';
 import { PgColumnBuilder } from 'drizzle-orm/pg-core';

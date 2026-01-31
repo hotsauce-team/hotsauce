@@ -1,3 +1,5 @@
+/// <reference path="../../core/extend/drizzle.d.ts" />
+
 // Integration tests for frontendUrl ($cms table option)
 
 import { assertEquals } from '@std/assert';

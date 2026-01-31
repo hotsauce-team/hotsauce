@@ -1,3 +1,5 @@
+/// <reference path="../../core/extend/drizzle.d.ts" />
+
 // Shared helpers and schemas for integration tests
 // This module is used by all integration test files
 
