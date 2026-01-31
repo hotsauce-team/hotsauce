@@ -78,6 +78,10 @@ jobs:
         run: deno publish
         working-directory: packages/workers
 
+      - name: Publish @hotsauce/plugins
+        run: deno publish
+        working-directory: packages/plugins
+
       - name: Publish @hotsauce/ui
         run: deno publish
         working-directory: packages/ui
@@ -85,10 +89,6 @@ jobs:
       - name: Publish @hotsauce/auth
         run: deno publish
         working-directory: packages/auth
-
-      - name: Publish @hotsauce/plugins
-        run: deno publish
-        working-directory: packages/plugins
 
       - name: Publish @hotsauce/cms
         run: deno publish
