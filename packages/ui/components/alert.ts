@@ -24,7 +24,7 @@ export function alert(message: string, type: AlertType = 'info'): string {
 /**
  * Flash message styles (add to defaultStyles if using flash messages)
  */
-export const alertStyles = `
+export const alertStyles: string = `
   .cms-alert {
     padding: 0.75rem 1rem;
     border-radius: var(--cms-radius);

@@ -87,7 +87,7 @@ export function pagination(options: PaginationOptions): string {
 /**
  * Pagination styles (add to defaultStyles if using pagination)
  */
-export const paginationStyles = `
+export const paginationStyles: string = `
   .cms-pagination {
     display: flex;
     gap: 0.25rem;
