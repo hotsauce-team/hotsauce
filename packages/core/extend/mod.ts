@@ -1,8 +1,12 @@
 // Extends Drizzle column builders and tables with a `$cms()` method.
 //
-// This module intentionally patches Drizzle's builder prototypes (Pg/SQLite/MySQL)
+// This module patches Drizzle's builder prototypes (Pg/SQLite/MySQL)
 // so schema definitions can attach CMS metadata that flows from builder → column.
 // It also patches table classes to allow table-level CMS configuration.
+//
+// Type declarations are in drizzle.d.ts (separate file for JSR compatibility).
+
+/// <reference path="./drizzle.d.ts" />
 
 import { MySqlColumnBuilder } from 'drizzle-orm/mysql-core';
 import { PgColumnBuilder } from 'drizzle-orm/pg-core';
@@ -15,50 +19,6 @@ import { MySqlTable } from 'drizzle-orm/mysql-core';
 
 import type { CmsColumnOptions, CmsTableOptions } from './types.ts';
 import { CMS_TABLE_OPTIONS } from './types.ts';
-
-// ─────────────────────────────────────────────────────────────
-// Column builder $cms() declarations
-// ─────────────────────────────────────────────────────────────
-
-declare module 'drizzle-orm/pg-core' {
-  interface PgColumnBuilder {
-    $cms(options: CmsColumnOptions): this;
-  }
-}
-
-declare module 'drizzle-orm/sqlite-core' {
-  interface SQLiteColumnBuilder {
-    $cms(options: CmsColumnOptions): this;
-  }
-}
-
-declare module 'drizzle-orm/mysql-core' {
-  interface MySqlColumnBuilder {
-    $cms(options: CmsColumnOptions): this;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────
-// Table $cms() declarations
-// ─────────────────────────────────────────────────────────────
-
-declare module 'drizzle-orm/pg-core' {
-  interface PgTable {
-    $cms(options: CmsTableOptions): this;
-  }
-}
-
-declare module 'drizzle-orm/sqlite-core' {
-  interface SQLiteTable {
-    $cms(options: CmsTableOptions): this;
-  }
-}
-
-declare module 'drizzle-orm/mysql-core' {
-  interface MySqlTable {
-    $cms(options: CmsTableOptions): this;
-  }
-}
 
 // ─────────────────────────────────────────────────────────────
 // Column builder prototype patch
