@@ -441,6 +441,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             'Set-Cookie': createClearCookie(
               resolvedAuth.cookieName,
               opts.basePath,
+              isSecureRequest(request),
             ),
             ...SECURITY_HEADERS,
           },
@@ -743,15 +744,17 @@ export function createCmsHandler(options: CmsOptions): Handler {
       // Account routes (when authenticated)
       // ─────────────────────────────────────────────────────────────
       const accountPath = `${opts.basePath}/account`;
+      const provider = resolvedAuth.provider as PasswordProvider;
 
       // Create account route context
       const accountCtx: AccountRouteContext = {
         basePath: opts.basePath,
         title: opts.title,
         jwtPayload,
-        provider: resolvedAuth.provider as PasswordProvider,
+        provider,
         csrfSecret,
-        challengeSecret: getEnv('CMS_2FA_SECRET') ?? '',
+        // Use provider's challengeSecret (validated at construction time)
+        challengeSecret: provider.challengeSecret ?? '',
         generateCsrfToken,
         validateCsrfToken,
       };

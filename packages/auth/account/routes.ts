@@ -243,6 +243,11 @@ export async function handle2FASetupForm(
     generateCsrfToken,
   } = ctx;
 
+  // 2FA routes require 2FA to be enabled in provider
+  if (!provider.twoFactorEnabled) {
+    return redirect(`${basePath}/account`);
+  }
+
   // Check if 2FA is already enabled
   const has2FA = await provider.userHas2FA(jwtPayload.sub);
   if (has2FA) {
@@ -311,6 +316,11 @@ export async function handle2FAEnable(
     generateCsrfToken,
     validateCsrfToken,
   } = ctx;
+
+  // 2FA routes require 2FA to be enabled in provider
+  if (!provider.twoFactorEnabled) {
+    return redirect(`${basePath}/account`);
+  }
 
   const formData = await request.formData();
 
@@ -411,6 +421,11 @@ export async function handle2FADisable(
     generateCsrfToken,
     validateCsrfToken,
   } = ctx;
+
+  // 2FA routes require 2FA to be enabled in provider
+  if (!provider.twoFactorEnabled) {
+    return redirect(`${basePath}/account`);
+  }
 
   const formData = await request.formData();
 

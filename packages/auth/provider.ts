@@ -141,13 +141,21 @@ export class PasswordProvider implements AuthProvider {
   protected roleColumn?: string;
   protected idColumn: string;
   protected totpSecretColumn?: string;
-  protected challengeSecret?: string;
+  private _challengeSecret?: string;
 
   /** Application name for authenticator apps (used in 2FA setup flow) */
   readonly issuer: string;
 
   /** Whether 2FA is enabled (totpSecretColumn is configured) */
   readonly twoFactorEnabled: boolean;
+
+  /**
+   * Secret used for 2FA challenge tokens (undefined if 2FA disabled)
+   * This is needed by account route handlers for token signing/verification
+   */
+  get challengeSecret(): string | undefined {
+    return this._challengeSecret;
+  }
 
   constructor(options: PasswordProviderOptions) {
     this.db = options.db;
@@ -191,7 +199,7 @@ export class PasswordProvider implements AuthProvider {
             'Either pass challengeSecret option or set CMS_2FA_SECRET environment variable.',
         );
       }
-      this.challengeSecret = challengeSecret;
+      this._challengeSecret = challengeSecret;
     }
   }
 
@@ -199,10 +207,10 @@ export class PasswordProvider implements AuthProvider {
     const creds = credentials as TwoFactorCredentials;
 
     // Phase 2: TOTP verification with signed challenge
-    if (creds.totpCode && creds.challengeToken && this.challengeSecret) {
+    if (creds.totpCode && creds.challengeToken && this._challengeSecret) {
       const userId = await verifyChallengeToken(
         creds.challengeToken,
-        this.challengeSecret,
+        this._challengeSecret,
       );
 
       if (!userId) {
@@ -245,12 +253,12 @@ export class PasswordProvider implements AuthProvider {
       if (this.twoFactorEnabled && this.totpSecretColumn) {
         const totpSecret = user[this.totpSecretColumn] as string | null;
 
-        if (totpSecret && this.challengeSecret) {
+        if (totpSecret && this._challengeSecret) {
           // Create signed challenge token for phase 2
           const userId = user[this.idColumn] as string | number;
           const challenge = await createChallengeToken(
             userId,
-            this.challengeSecret,
+            this._challengeSecret,
           );
 
           return {

@@ -714,18 +714,18 @@ auth: {
 
 ### Auth Exports
 
-| Export                                 | Purpose                             |
-| -------------------------------------- | ----------------------------------- |
-| `PasswordProvider`                     | Password + optional TOTP auth       |
-| `hashPassword(password)`               | Hash password with PBKDF2-SHA256    |
-| `verifyPassword(password, hash)`       | Verify password against hash        |
-| `signJwt(payload, secret)`             | Sign a JWT token                    |
-| `verifyJwt(token, secret)`             | Verify and decode JWT               |
-| `createJwtPayload(id, role?, maxAge?)` | Create JWT payload with expiry      |
-| `AuthProvider`                         | Interface for custom auth providers |
-| `getTokenFromCookies(req, name)`       | Parse JWT from cookie header        |
-| `createAuthCookie(...)`                | Create Set-Cookie header for JWT    |
-| `createClearCookie(name, path)`        | Create Set-Cookie to clear JWT      |
+| Export                                  | Purpose                             |
+| --------------------------------------- | ----------------------------------- |
+| `PasswordProvider`                      | Password + optional TOTP auth       |
+| `hashPassword(password)`                | Hash password with PBKDF2-SHA256    |
+| `verifyPassword(password, hash)`        | Verify password against hash        |
+| `signJwt(payload, secret)`              | Sign a JWT token                    |
+| `verifyJwt(token, secret)`              | Verify and decode JWT               |
+| `createJwtPayload(id, role?, maxAge?)`  | Create JWT payload with expiry      |
+| `AuthProvider`                          | Interface for custom auth providers |
+| `getTokenFromCookies(req, name)`        | Parse JWT from cookie header        |
+| `createAuthCookie(...)`                 | Create Set-Cookie header for JWT    |
+| `createClearCookie(name, path, secure)` | Create Set-Cookie to clear JWT      |
 
 ### Auth Routes
 

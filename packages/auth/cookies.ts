@@ -62,19 +62,45 @@ export function createAuthCookie(
  *
  * @param cookieName - Cookie name to clear
  * @param path - Cookie path
+ * @param isSecure - Whether to add Secure flag (must match original cookie)
  * @returns Set-Cookie header value that expires the cookie
  */
-export function createClearCookie(cookieName: string, path: string): string {
-  return `${cookieName}=; Path=${path}; Max-Age=0; HttpOnly; SameSite=Lax`;
+export function createClearCookie(
+  cookieName: string,
+  path: string,
+  isSecure: boolean,
+): string {
+  const parts = [
+    `${cookieName}=`,
+    `Path=${path}`,
+    'Max-Age=0',
+    'HttpOnly',
+    'SameSite=Lax',
+  ];
+  if (isSecure) {
+    parts.push('Secure');
+  }
+  return parts.join('; ');
 }
 
 /**
- * Check if request is over HTTPS
+ * Check if request is over HTTPS (handles TLS-terminating proxies)
+ *
+ * Checks multiple indicators:
+ * 1. X-Forwarded-Proto header (set by reverse proxies)
+ * 2. Request URL protocol (direct HTTPS connections)
  *
  * @param request - HTTP request
- * @returns true if request uses HTTPS protocol
+ * @returns true if request originated over HTTPS
  */
 export function isSecureRequest(request: Request): boolean {
+  // Check X-Forwarded-Proto first (common for TLS-terminating proxies)
+  const forwardedProto = request.headers.get('X-Forwarded-Proto');
+  if (forwardedProto) {
+    return forwardedProto.toLowerCase() === 'https';
+  }
+
+  // Fall back to URL protocol for direct connections
   const url = new URL(request.url);
   return url.protocol === 'https:';
 }
