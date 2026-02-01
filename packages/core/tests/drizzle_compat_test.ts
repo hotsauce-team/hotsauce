@@ -294,7 +294,7 @@ Deno.test('drizzle-compat: MySqlTable class exists and has prototype', async () 
 Deno.test('drizzle-compat: PgTable instance can have custom symbol properties', async () => {
   const { pgTable, serial } = await import('drizzle-orm/pg-core');
 
-  const TEST_SYMBOL = Symbol.for('drizzle-cms:test');
+  const TEST_SYMBOL = Symbol.for('hotsauce-cms:test');
   const table = pgTable('test', {
     id: serial('id').primaryKey(),
   });
@@ -312,7 +312,7 @@ Deno.test('drizzle-compat: PgTable instance can have custom symbol properties', 
 Deno.test('drizzle-compat: SQLiteTable instance can have custom symbol properties', async () => {
   const { sqliteTable, integer } = await import('drizzle-orm/sqlite-core');
 
-  const TEST_SYMBOL = Symbol.for('drizzle-cms:test');
+  const TEST_SYMBOL = Symbol.for('hotsauce-cms:test');
   const table = sqliteTable('test', {
     id: integer('id').primaryKey(),
   });
@@ -329,7 +329,7 @@ Deno.test('drizzle-compat: SQLiteTable instance can have custom symbol propertie
 Deno.test('drizzle-compat: MySqlTable instance can have custom symbol properties', async () => {
   const { mysqlTable, serial } = await import('drizzle-orm/mysql-core');
 
-  const TEST_SYMBOL = Symbol.for('drizzle-cms:test');
+  const TEST_SYMBOL = Symbol.for('hotsauce-cms:test');
   const table = mysqlTable('test', {
     id: serial('id').primaryKey(),
   });

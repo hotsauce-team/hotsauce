@@ -1,6 +1,6 @@
 # Deno Server Example
 
-A simple example of drizzle-cms running on Deno with PGlite (in-process Postgres) and JWT authentication.
+A simple example of hotsauce-cms running on Deno with PGlite (in-process Postgres) and JWT authentication.
 
 ## Prerequisites
 

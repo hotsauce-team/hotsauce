@@ -1,4 +1,4 @@
-# drizzle-cms
+# hotsauce-cms
 
 A schema-driven CMS derived from your Drizzle ORM definitions. Define your database schema once — get a type-safe admin interface for free.
 
@@ -273,6 +273,9 @@ interface TableParsers {
 - [x] Multi-tenant compatibility (shared database with tenant column)
 - [x] Plugin system with Worker isolation (Deno + Node.js 20+)
 - [x] File uploads (base64 in DB, validation, serving route)
+- [x] Publish alpha release to jsr (Deno support)
+- [ ] Security disclosure policy
+- [ ] Add tests for NodeJS runtime
 - [ ] File uploads (S3/R2 cloud storage adapter)
 - [ ] Plugin config - timeout, worker response validation, load testing
 - [ ] Plugin data obfuscation (PII/credential redaction)
@@ -307,8 +310,8 @@ This project is developed with **Deno** — no Node.js or npm required locally.
 
 ```bash
 # Clone
-git clone https://github.com/yourname/drizzle-cms
-cd drizzle-cms
+git clone https://github.com/hotsauce-team/hotsauce
+cd hotsauce
 
 # Enable pre-commit hooks (runs fmt/lint/check)
 git config core.hooksPath .githooks && \

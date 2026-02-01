@@ -40,7 +40,7 @@ async function getSiteSettings(db: Database): Promise<SiteSettings> {
 
   return {
     siteName: settingsMap['site_name'] ?? 'My Blog',
-    tagline: settingsMap['tagline'] ?? 'A blog powered by drizzle-cms',
+    tagline: settingsMap['tagline'] ?? 'A blog powered by hotsauce-cms',
     footerText: settingsMap['footer_text'] ?? '© 2026 My Blog',
   };
 }

@@ -1,5 +1,5 @@
 // CMS admin configuration
-// Sets up drizzle-cms handler for /admin routes
+// Sets up hotsauce-cms handler for /admin routes
 import { createCmsHandler, PasswordProvider, readOnly } from '@hotsauce/cms';
 import type { FilterContext, WorkerPluginConfig } from '@hotsauce/cms';
 import type { TransformHooks } from '@hotsauce/workers';

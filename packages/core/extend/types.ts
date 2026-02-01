@@ -117,5 +117,5 @@ export type CmsTableOptions = {
 
 /** Symbol used to store CMS table options on Drizzle table objects. */
 export const CMS_TABLE_OPTIONS: unique symbol = Symbol.for(
-  'drizzle-cms:tableOptions',
+  'hotsauce-cms:tableOptions',
 );

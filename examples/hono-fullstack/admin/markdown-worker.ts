@@ -1,5 +1,5 @@
 /**
- * Markdown rendering Worker plugin for drizzle-cms
+ * Markdown rendering Worker plugin for hotsauce-cms
  *
  * Converts markdown `content` to HTML `contentHtml` at save time.
  * Runs in an isolated Web Worker for demonstration purposes.

@@ -1,5 +1,5 @@
 // HTML templates for the public site
-// Uses drizzle-cms/ui's html tagged template for XSS-safe rendering
+// Uses hotsauce-cms/ui's html tagged template for XSS-safe rendering
 import { html, raw } from '@hotsauce/ui';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
@@ -141,8 +141,8 @@ export function layout(
           <div class="container">
             <p>${settings.footerText}</p>
             <p>
-              Powered by <a href="https://github.com/your-org/drizzle-cms"
-              >drizzle-cms</a> + <a href="https://hono.dev">Hono</a>
+              Powered by <a href="https://github.com/hotsauce-team/hotsauce"
+              >hotsauce-cms</a> + <a href="https://hono.dev">Hono</a>
             </p>
           </div>
         </footer>

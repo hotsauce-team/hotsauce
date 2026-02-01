@@ -1,11 +1,11 @@
 # Hono Fullstack Example
 
-A complete blog site with a server-rendered public frontend (Hono) and a headless CMS admin interface (drizzle-cms) sharing the same database.
+A complete blog site with a server-rendered public frontend (Hono) and a headless CMS admin interface (hotsauce-cms) sharing the same database.
 
 ## Features
 
 - **Public Blog** - Server-rendered pages using Hono and template literals
-- **CMS Admin** - Full admin interface powered by drizzle-cms
+- **CMS Admin** - Full admin interface powered by hotsauce-cms
 - **Shared Database** - Both frontend and admin use the same Drizzle schema
 - **Minimal Dependencies** - Hono via JSR + a small markdown parser for the example plugin
 
@@ -18,7 +18,7 @@ A complete blog site with a server-rendered public frontend (Hono) and a headles
 │                                                             │
 │   ┌─────────────────┐         ┌─────────────────────────┐  │
 │   │  Public Routes  │         │    Admin Routes         │  │
-│   │    (Hono)       │         │    (drizzle-cms)        │  │
+│   │    (Hono)       │         │    (hotsauce-cms)        │  │
 │   │                 │         │                         │  │
 │   │  GET /          │         │  /admin/* → cmsHandler  │  │
 │   │  GET /post/:id  │         │  /admin/login           │  │
@@ -124,10 +124,10 @@ The site uses a strict Content Security Policy (CSP) that:
 - **Same-origin forms** — Form submissions restricted to same origin
 - **No iframes** — Cannot be embedded in other sites
 
-The CSP middleware in [security.ts](security.ts) applies to all public site routes but **skips `/admin/*`** to avoid overriding drizzle-cms response headers.
+The CSP middleware in [security.ts](security.ts) applies to all public site routes but **skips `/admin/*`** to avoid overriding hotsauce-cms response headers.
 
 This example also includes a **public** media route (`GET /files/media/:id`) for rendering images/files on the public site.
-It’s separate from drizzle-cms’s protected file route (`GET {basePath}/files/{table}/{column}/{id}`), which enforces auth + row/column policies.
+It’s separate from hotsauce-cms’s protected file route (`GET {basePath}/files/{table}/{column}/{id}`), which enforces auth + row/column policies.
 
 ## Markdown Rendering
 
@@ -201,7 +201,7 @@ function postCard(post: Post): string {
 
 ## CMS Routes
 
-All `/admin/*` routes are handled by drizzle-cms:
+All `/admin/*` routes are handled by hotsauce-cms:
 
 | Route                   | Description                           |
 | ----------------------- | ------------------------------------- |

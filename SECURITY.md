@@ -301,9 +301,9 @@ Before deploying to production:
 
 If you discover a security vulnerability, please report it through one of these methods:
 
-**Preferred:** Open a [GitHub Security Advisory](https://github.com/earthlingdavey/drizzle-cms/security/advisories) (requires repository access)
+**Preferred:** Open a [GitHub Security Advisory](https://github.com/hotsauce-team/hotsauce/security/advisories) (requires repository access)
 
-**Alternative:** Open a private security report by going to the [Security tab](https://github.com/earthlingdavey/drizzle-cms/security) and clicking "Report a vulnerability"
+**Alternative:** Open a private security report by going to the [Security tab](https://github.com/hotsauce-team/hotsauce-cms/security) and clicking "Report a vulnerability"
 
 Include in your report:
 
