@@ -74,7 +74,7 @@ jobs:
 
       - name: Ensure deno.jsr.jsonc is up to date
         run: |
-          deno task update-jsr-paths --version "${GITHUB_REF_NAME#v}"
+          deno task update-jsr-paths
 
       - name: Publish @hotsauce/core
         run: deno publish --config deno.jsr.jsonc
