@@ -32,19 +32,6 @@ if [ $LINT_EXIT -ne 0 ]; then
   exit 1
 fi
 
-# Update deno.jsr.jsonc with current version from packages/core/deno.json
-echo "   Updating deno.jsr.jsonc..."
-VERSION=$(grep -o '"version": "[^"]*"' packages/core/deno.json | cut -d'"' -f4)
-if ! deno task update-jsr-paths --version "$VERSION"; then
-  echo "❌ Failed to update deno.jsr.jsonc"
-  exit 1
-fi
-
-# Stage deno.jsr.jsonc if it was modified
-if [ -f deno.jsr.jsonc ]; then
-  git add deno.jsr.jsonc
-fi
-
 # Type check last (slowest)
 echo "   Type checking..."
 if ! deno task check; then

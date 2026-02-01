@@ -69,33 +69,34 @@ jobs:
       # 4. auth (depends on nothing internal)
       # 5. plugins (depends on workers)
       # 6. cms (depends on core, ui, workers, auth, plugins)
-      #
-      # Note: deno.jsr.jsonc is created by pre-commit hook and committed with version bump
 
-      - name: Ensure deno.jsr.jsonc is up to date
+      # Replace lines in deno.jsonc to use JSR import paths
+      # e.g. `./packages/core` -> `jsr:@hotsauce/core@<version>`
+      - name: Update import paths for JSR
         run: |
-          deno task update_jsr_paths
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          deno task update-jsr-paths --version "$TAG_VERSION"
 
       - name: Publish @hotsauce/core
-        run: deno publish --config deno.jsr.jsonc
+        run: deno publish --allow-dirty
         working-directory: packages/core
 
       - name: Publish @hotsauce/workers
-        run: deno publish --config deno.jsr.jsonc
+        run: deno publish --allow-dirty
         working-directory: packages/workers
 
       - name: Publish @hotsauce/plugins
-        run: deno publish --config deno.jsr.jsonc
+        run: deno publish --allow-dirty
         working-directory: packages/plugins
 
       - name: Publish @hotsauce/ui
-        run: deno publish --config deno.jsr.jsonc
+        run: deno publish --allow-dirty
         working-directory: packages/ui
 
       - name: Publish @hotsauce/auth
-        run: deno publish --config deno.jsr.jsonc
+        run: deno publish --allow-dirty
         working-directory: packages/auth
 
       - name: Publish @hotsauce/cms
-        run: deno publish --config deno.jsr.jsonc
+        run: deno publish --allow-dirty
         working-directory: packages/cms

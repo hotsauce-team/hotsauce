@@ -1,10 +1,8 @@
-// Copy deno.jsonc to deno.jsr.jsonc and replace local paths with JSR import paths
+// Replace lines in deno.jsonc to use JSR import paths
 // e.g.
 //   "@hotsauce/core": "./packages/core"
 //    ->
 //   "@hotsauce/core": "jsr:@hotsauce/core@<version>"
-//
-// This should be run in a pre-commit hook to keep deno.jsr.jsonc in sync.
 
 // deno-lint-ignore-file
 
@@ -23,7 +21,6 @@ if (import.meta.main) {
   const version = args[1];
 
   const denoJsonPath = path.join(Deno.cwd(), 'deno.jsonc');
-  const denoJsrJsonPath = path.join(Deno.cwd(), 'deno.jsr.jsonc');
   let denoJsonContent = await readTextFile(denoJsonPath);
 
   const replacements: [RegExp, string][] = [
@@ -47,21 +44,12 @@ if (import.meta.main) {
       /@hotsauce\/auth["']:\s*["']\.\/packages\/auth\/mod\.ts["']/g,
       `@hotsauce/auth": "jsr:@hotsauce/auth@${version}"`,
     ],
-    [
-      /@hotsauce\/cms["']:\s*["']\.\/packages\/cms\/mod\.ts["']/g,
-      `@hotsauce/cms": "jsr:@hotsauce/cms@${version}"`,
-    ],
-    [
-      /@hotsauce\/plugins["']:\s*["']\.\/packages\/plugins\/mod\.ts["']/g,
-      `@hotsauce/plugins": "jsr:@hotsauce/plugins@${version}"`,
-    ],
   ];
 
   for (const [pattern, replacement] of replacements) {
     denoJsonContent = denoJsonContent.replace(pattern, replacement);
   }
 
-  await writeTextFile(denoJsrJsonPath, denoJsonContent);
-  console.log(`✓ Created deno.jsr.jsonc with JSR paths for version ${version}`);
-  console.log('  Commit this file with your version bump.');
+  await writeTextFile(denoJsonPath, denoJsonContent);
+  console.log(`Updated deno.jsonc with JSR paths for version ${version}`);
 }
