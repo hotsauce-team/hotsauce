@@ -59,8 +59,26 @@ jobs:
           done
           echo "✅ All package versions match tag $TAG_VERSION"
 
-      # - name: Run tests
-      #   run: deno task test
+      - name: Run tests
+        run: deno task test
+
+      - name: Update the package versions
+        run: |
+          deno task update-package-versions --version "${GITHUB_REF_NAME#v}"
+      
+      - name: Commit and push to main
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add deno.jsonc packages/*/deno.json
+          git commit -m "chore: bump version to ${GITHUB_REF_NAME#v}" || echo "No changes to commit"
+          git push origin HEAD:main
+
+      # Replace lines in deno.jsonc to use JSR import paths
+      # e.g. `./packages/core` -> `jsr:@hotsauce/core@<version>`
+      - name: Update import paths for JSR
+        run: |
+          deno task update-jsr-paths --version "${GITHUB_REF_NAME#v}"
 
       # Publish packages in dependency order:
       # 1. core (no internal deps)
@@ -70,12 +88,6 @@ jobs:
       # 5. plugins (depends on workers)
       # 6. cms (depends on core, ui, workers, auth, plugins)
 
-      # Replace lines in deno.jsonc to use JSR import paths
-      # e.g. `./packages/core` -> `jsr:@hotsauce/core@<version>`
-      - name: Update import paths for JSR
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
-          deno task update-jsr-paths --version "$TAG_VERSION"
 
       - name: Publish @hotsauce/core
         run: deno publish --allow-dirty
