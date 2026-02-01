@@ -1,5 +1,20 @@
-// @hotsauce/core
-// Schema introspection, field mapping, and validation for Drizzle ORM
+/**
+ * @module
+ *
+ * Schema introspection, field mapping, and validation for Drizzle ORM.
+ *
+ * This module provides tools to extract metadata from Drizzle schemas,
+ * map database column types to CMS field types, and generate Zod validation
+ * schemas. Works with any Drizzle dialect: Postgres, MySQL, SQLite.
+ *
+ * @example
+ * ```ts
+ * import { introspectSchema, mapColumnsToFields } from "@hotsauce/core";
+ *
+ * const schema = introspectSchema({ users, posts });
+ * const fields = mapColumnsToFields(schema.users.columns);
+ * ```
+ */
 
 // ─────────────────────────────────────────────────────────────
 // Types - Core data structures for introspected schema metadata

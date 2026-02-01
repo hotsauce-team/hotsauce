@@ -1,11 +1,25 @@
-// Extends Drizzle column builders and tables with a `$cms()` method.
-//
-// This module patches Drizzle's builder prototypes (Pg/SQLite/MySQL)
-// so schema definitions can attach CMS metadata that flows from builder → column.
-// It also patches table classes to allow table-level CMS configuration.
-//
-// For TypeScript support, users must add type declarations to their project.
-// See README or copy from extend/drizzle.d.ts
+/**
+ * @module
+ *
+ * Extends Drizzle column builders and tables with a `$cms()` method.
+ *
+ * This module patches Drizzle's builder prototypes (Pg/SQLite/MySQL)
+ * so schema definitions can attach CMS metadata that flows from builder → column.
+ * It also patches table classes to allow table-level CMS configuration.
+ *
+ * For TypeScript support, users must add type declarations to their project.
+ * See README or copy from extend/drizzle.d.ts.
+ *
+ * @example
+ * ```ts
+ * import "@hotsauce/core/extend";
+ *
+ * const posts = pgTable("posts", {
+ *   content: text("content").$cms({ widget: "richtext" }),
+ *   avatar: text("avatar").$cms({ file: { accept: "image/*" } }),
+ * });
+ * ```
+ */
 
 import { MySqlColumnBuilder } from 'drizzle-orm/mysql-core';
 import { PgColumnBuilder } from 'drizzle-orm/pg-core';
