@@ -1,6 +1,6 @@
 # @hotsauce/plugins
 
-Official plugins for the Drizzle CMS.
+Official plugins for the HotSauce CMS.
 
 ## Installation
 

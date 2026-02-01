@@ -71,7 +71,7 @@ const totpSecret = generateTOTPSecret();
 const totpUri = generateTOTPUri(
   totpSecret,
   'secure@example.com',
-  'Drizzle CMS Demo',
+  'HotSauce CMS Demo',
 );
 
 console.log('\n🔐 2FA Test Account Created:');

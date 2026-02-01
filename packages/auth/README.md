@@ -1,6 +1,6 @@
 # @hotsauce/auth
 
-Authentication and authorization utilities for Drizzle CMS. Provides JWT tokens, password hashing, TOTP-based two-factor authentication, and account management.
+Authentication and authorization utilities for HotSauce CMS. Provides JWT tokens, password hashing, TOTP-based two-factor authentication, and account management.
 
 ## Installation
 

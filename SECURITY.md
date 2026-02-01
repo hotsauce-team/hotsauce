@@ -1,10 +1,10 @@
 # Security Guide
 
-This document outlines security best practices and considerations when using Drizzle CMS.
+This document outlines security best practices and considerations when using HotSauce CMS.
 
 ## Security Features
 
-Drizzle CMS implements multiple layers of security:
+HotSauce CMS implements multiple layers of security:
 
 ### 1. Authentication (JWT-based)
 
@@ -93,7 +93,7 @@ html`
 
 ### 5. SQL Injection Prevention
 
-Drizzle CMS uses Drizzle ORM, which provides:
+HotSauce CMS uses Drizzle ORM, which provides:
 
 - **Parameterized queries** by default
 - **Type-safe query building**
@@ -326,9 +326,9 @@ Stay informed about security updates:
 
 ### OWASP Top 10 Coverage
 
-This table shows how Drizzle CMS addresses the OWASP Top 10 security risks:
+This table shows how HotSauce CMS addresses the OWASP Top 10 security risks:
 
-| Risk                           | Mitigation in Drizzle CMS                                         |
+| Risk                           | Mitigation in HotSauce CMS                                        |
 | ------------------------------ | ----------------------------------------------------------------- |
 | A01: Broken Access Control     | Row-level policies, JWT authentication                            |
 | A02: Cryptographic Failures    | PBKDF2 password hashing, HMAC-SHA256 tokens, HTTPS support        |

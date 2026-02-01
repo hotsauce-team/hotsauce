@@ -76,7 +76,6 @@ jobs:
       # 5. plugins (depends on workers)
       # 6. cms (depends on core, ui, workers, auth, plugins)
 
-
       - name: Publish @hotsauce/core
         run: deno publish --allow-dirty
         working-directory: packages/core

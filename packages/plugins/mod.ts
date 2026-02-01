@@ -1,7 +1,7 @@
 /**
  * @module
  *
- * Official plugins for the Drizzle CMS.
+ * Official plugins for the HotSauce CMS.
  *
  * This package provides ready-to-use plugins that extend CMS functionality.
  * Plugins run in isolated Web Workers for security and use declarative hooks.

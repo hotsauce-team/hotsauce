@@ -34,7 +34,7 @@ const cmsHandler = createCmsHandler({
     provider: new PasswordProvider({
       db,
       usersTable: users,
-      issuer: 'Drizzle CMS Demo', // For TOTP URI
+      issuer: 'HotSauce CMS Demo', // For TOTP URI
     }),
   },
   // Row-level security policies (atomic authorization in WHERE clauses)

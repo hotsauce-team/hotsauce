@@ -48,7 +48,7 @@ function defineCmsMethod(proto: object): void {
       const self = this as any;
       const config = self?.config;
       if (!config || typeof config !== 'object') {
-        throw new Error('Drizzle CMS: column builder has no config object');
+        throw new Error('HotSauce CMS: column builder has no config object');
       }
 
       const current = (config.cmsOptions ?? {}) as Record<string, unknown>;
