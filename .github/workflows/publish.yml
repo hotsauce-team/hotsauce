@@ -39,20 +39,28 @@ jobs:
         with:
           deno-version: v2.x
 
+      - name: Verify version consistency
+        run: |
+          # Extract version from git tag (strip 'v' prefix)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          echo "Tag version: $TAG_VERSION"
+
+          # Check each package has the correct version
+          PACKAGES=(core ui workers auth plugins cms)
+          for pkg in "${PACKAGES[@]}"; do
+            PKG_VERSION=$(grep -o '"version": "[^"]*"' "packages/$pkg/deno.json" | cut -d'"' -f4)
+            if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+              echo "❌ Version mismatch in packages/$pkg/deno.json"
+              echo "   Expected: $TAG_VERSION"
+              echo "   Found: $PKG_VERSION"
+              exit 1
+            fi
+            echo "✓ packages/$pkg/deno.json: $PKG_VERSION"
+          done
+          echo "✅ All package versions match tag $TAG_VERSION"
+
       - name: Run tests
         run: deno task test
-
-      - name: Update the package versions
-        run: |
-          deno task update-package-versions --version "${GITHUB_REF_NAME#v}"
-      
-      - name: Commit and push to main
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add deno.jsonc packages/*/deno.json
-          git commit -m "chore: bump version to ${GITHUB_REF_NAME#v}" || echo "No changes to commit"
-          git push origin HEAD:main
 
       # Replace lines in deno.jsonc to use JSR import paths
       # e.g. `./packages/core` -> `jsr:@hotsauce/core@<version>`
