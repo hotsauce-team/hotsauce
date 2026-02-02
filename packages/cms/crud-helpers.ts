@@ -91,6 +91,8 @@ export function getEditableColumns(
 export function getListColumns(table: IntrospectedTable): ListColumn[] {
   return table.columns
     .filter((c) => {
+      // Exclude columns marked as hidden via $cms({ hidden: true })
+      if (c.cmsOptions?.hidden) return false;
       // Exclude large text fields from list
       const fieldType = mapColumnToFieldType(c);
       if (fieldType === 'textarea' || fieldType === 'json') return false;
