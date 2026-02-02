@@ -448,6 +448,32 @@ export function createCmsHandler(options: CmsOptions): Handler {
 
       // Handle login page (GET)
       if (pathname === loginPath && request.method === 'GET') {
+        // If already logged in, redirect to dashboard
+        const existingToken = getTokenFromCookies(
+          request,
+          resolvedAuth.cookieName,
+        );
+        if (existingToken) {
+          const existingPayload = await verifyJwt(
+            existingToken,
+            resolvedAuth.secret,
+          );
+          // Check if not revoked
+          let isRevoked = false;
+          if (existingPayload && resolvedAuth.isRevoked) {
+            isRevoked = await resolvedAuth.isRevoked(existingPayload);
+          }
+          if (existingPayload && !isRevoked) {
+            return new Response(null, {
+              status: 302,
+              headers: {
+                'Location': opts.basePath,
+                ...SECURITY_HEADERS,
+              },
+            });
+          }
+        }
+
         const csrfToken = await generateCsrfToken(csrfSecret);
         const html = renderLoginPage({
           basePath: opts.basePath,

@@ -216,6 +216,59 @@ Deno.test('integration: JWT auth tests', async (t) => {
     assertStringIncludes(html, 'users');
   });
 
+  await t.step(
+    'redirects logged-in user from login page to dashboard',
+    async () => {
+      await resetDb();
+
+      const passwordHash = await hashPassword('admin123');
+      await db.insert(adminUsers).values({
+        email: 'admin@example.com',
+        passwordHash,
+        role: 'admin',
+      });
+
+      const handler = createAuthHandler();
+
+      // Login to get token
+      const loginPageRes = await handler(
+        new Request('http://localhost/admin/login'),
+      );
+      const loginHtml = await loginPageRes.text();
+      const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
+      const csrfToken = csrfMatch![1]!;
+
+      const formData = createFormData({
+        identity: 'admin@example.com',
+        password: 'admin123',
+        _csrf: csrfToken,
+      });
+
+      const loginRes = await handler(
+        new Request('http://localhost/admin/login', {
+          method: 'POST',
+          body: formData,
+        }),
+      );
+
+      // Extract token from Set-Cookie
+      const setCookie = loginRes.headers.get('Set-Cookie')!;
+      const tokenMatch = setCookie.match(/cms_token=([^;]+)/);
+      assertExists(tokenMatch, 'Token should be in Set-Cookie');
+      const token = tokenMatch[1];
+
+      // Visit login page while already authenticated
+      const loginWhileAuthReq = new Request('http://localhost/admin/login', {
+        headers: { 'Cookie': `cms_token=${token}` },
+      });
+      const loginWhileAuthRes = await handler(loginWhileAuthReq);
+
+      // Should redirect to dashboard, not show login form
+      assertEquals(loginWhileAuthRes.status, 302);
+      assertEquals(loginWhileAuthRes.headers.get('Location'), '/admin');
+    },
+  );
+
   // Cleanup
   await client.close();
 });

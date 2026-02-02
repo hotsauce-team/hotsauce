@@ -1757,3 +1757,87 @@ app.use('/admin', async (req, res) => {
   res.send(await response.text());
 });
 ```
+
+## Lazy Loading for Serverless & Mixed Applications
+
+When running a combined frontend + CMS application, importing the CMS at startup can add unnecessary overhead:
+
+- **Module parsing**: The entire CMS module tree is loaded even for frontend-only requests
+- **Worker startup**: Any Worker plugins are instantiated immediately
+- **Memory footprint**: CMS code stays resident even if never used
+
+This matters most for:
+
+- **Serverless** (Lambda, Cloudflare Workers, Vercel Edge) — cold starts affect every request
+- **Mixed applications** — frontend routes don't need CMS loaded
+
+### The Problem
+
+```ts
+// server.ts
+import { createAdminHandler } from './admin/admin.ts'; // ← Loads CMS immediately
+
+const app = new Hono();
+app.route('/', siteRoutes); // Frontend routes
+const cmsHandler = createAdminHandler(db); // ← Worker created at startup
+app.all('/admin/*', (c) => cmsHandler(c.req.raw));
+```
+
+Even a request to `/` (homepage) pays the cost of loading the CMS module.
+
+### The Solution: Lazy Dynamic Import
+
+Defer CMS loading until the first admin request:
+
+```ts
+// server.ts
+import { Hono } from 'hono';
+import { db } from './db.ts';
+import { createSiteRoutes } from './site/routes.ts';
+
+const app = new Hono();
+
+// Frontend routes - no CMS overhead
+app.route('/', createSiteRoutes(db));
+
+// Lazy-load CMS only when admin routes are accessed
+let cmsHandler: ((req: Request) => Promise<Response>) | null = null;
+
+app.all('/admin/*', async (c) => {
+  if (!cmsHandler) {
+    // First admin request: load CMS module and create handler
+    const { createAdminHandler } = await import('./admin/admin.ts');
+    cmsHandler = createAdminHandler(db);
+  }
+  return cmsHandler(c.req.raw);
+});
+
+app.all('/admin', async (c) => {
+  if (!cmsHandler) {
+    const { createAdminHandler } = await import('./admin/admin.ts');
+    cmsHandler = createAdminHandler(db);
+  }
+  return cmsHandler(c.req.raw);
+});
+```
+
+### Benefits
+
+| Request Type          | Eager Loading        | Lazy Loading           |
+| --------------------- | -------------------- | ---------------------- |
+| `GET /` (frontend)    | CMS + Workers loaded | Nothing extra loaded   |
+| First `GET /admin`    | Already loaded       | CMS + Workers load now |
+| Subsequent `/admin/*` | Uses cached handler  | Uses cached handler    |
+
+### When to Use Lazy Loading
+
+| Environment                          | Recommendation                                |
+| ------------------------------------ | --------------------------------------------- |
+| Long-lived server (Deno.serve, Node) | Optional — startup cost paid once             |
+| Serverless (Lambda, Workers)         | **Recommended** — reduces cold start latency  |
+| Mixed frontend + admin app           | **Recommended** — frontend requests stay fast |
+| Admin-only application               | Not needed — every request needs CMS anyway   |
+
+### Note on Workers
+
+Worker plugins (like audit-log) are created inside your `createAdminHandler` function. With lazy loading, they're only instantiated when the CMS module loads — i.e., on the first admin request. No additional `createWorker` factory pattern is needed.
