@@ -14,8 +14,8 @@
     "example-deno-server": {
       "read": [
         "./data",
-        "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
-        "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.wasm",
         "../../packages/plugins/audit-log/worker.ts"
       ],
       "write": [
