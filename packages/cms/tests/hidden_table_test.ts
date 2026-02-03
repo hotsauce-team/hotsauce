@@ -186,7 +186,11 @@ Deno.test('hidden table: can still access hidden table via direct URL', async ()
       new Request('http://localhost/admin/internal_settings'),
     );
 
-    assertEquals(listResponse.status, 200, 'Should be able to access hidden table directly');
+    assertEquals(
+      listResponse.status,
+      200,
+      'Should be able to access hidden table directly',
+    );
     const html = await listResponse.text();
 
     // Should show the table content
