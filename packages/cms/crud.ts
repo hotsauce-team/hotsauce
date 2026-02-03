@@ -208,9 +208,9 @@ export function handleDashboard(ctx: RouteContext): Response {
   const { options } = ctx;
   const basePath = options.basePath;
 
-  // Filter out junction tables from dashboard
+  // Filter out junction tables and tables marked as hidden via $cms({ hidden: true })
   const visibleTables = options.introspected.tables.filter((t) =>
-    !t.isJunction
+    !t.isJunction && !t.cmsOptions?.hidden
   );
 
   const navItems: NavItem[] = [

@@ -172,8 +172,8 @@ const handler = createCmsHandler({
       db,
       usersTable: users,
     }),
+    policies: {},
   },
-  policies: {}, // Required when auth enabled
 });
 ```
 
@@ -191,8 +191,8 @@ const handler = createCmsHandler({
       issuer: 'My App', // Shown in authenticator apps
       // challengeSecret reads from CMS_2FA_SECRET env var if not provided
     }),
+    policies: {},
   },
-  policies: {},
 });
 ```
 
@@ -401,8 +401,8 @@ const handler = createCmsHandler({
       usersTable: users,
       issuer: 'My App',
     }),
+    policies: {},
   },
-  policies: {},
 });
 
 // Automatically adds these routes:

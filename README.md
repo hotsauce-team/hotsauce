@@ -36,7 +36,7 @@ const handler = createCmsHandler({
   schema,
   db,
   basePath: '/admin',
-  auth: 'open-to-anyone', // No authentication (dev mode)
+  auth: 'dangerously-open', // No authentication (dev mode)
 });
 
 // Use with any server
@@ -98,7 +98,7 @@ const handler = createCmsHandler({
   schema,
   db,
   basePath: '/admin',
-  auth: 'open-to-anyone', // Or { provider: ... } or { external: ... }
+  auth: 'dangerously-open', // Or { provider: ..., policies: ... } or { external: ... }
 });
 
 // Deno
@@ -226,7 +226,7 @@ const parsers: Parsers = {
 const handler = createCmsHandler({
   db,
   schema,
-  auth: 'open-to-anyone',
+  auth: 'dangerously-open',
   parsers, // Tables without custom parsers use auto-generated schemas
 });
 ```
@@ -242,12 +242,12 @@ interface TableParsers {
 
 ## Extension Points
 
-| Option     | Purpose                                                                                     |
-| ---------- | ------------------------------------------------------------------------------------------- |
-| `auth`     | Authentication: `'open-to-anyone'`, `{ provider }` (JWT), or `{ external }` (reverse proxy) |
-| `policies` | Row-level security with SQL conditions + column-level read/write control                    |
-| `parsers`  | Custom validation (Zod, Valibot, Arktype, or any library)                                   |
-| `onError`  | Error logging integration (Sentry, Datadog, etc.)                                           |
+| Option          | Purpose                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| `auth`          | Authentication: `'dangerously-open'`, `{ provider, policies }` (JWT), or `{ external }` (reverse proxy) |
+| `auth.policies` | Row-level security with SQL conditions + column-level read/write control                                |
+| `parsers`       | Custom validation (Zod, Valibot, Arktype, or any library)                                               |
+| `onError`       | Error logging integration (Sentry, Datadog, etc.)                                                       |
 
 ## Features
 

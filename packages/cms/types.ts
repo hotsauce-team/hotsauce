@@ -161,7 +161,7 @@ export interface CmsOptionsBase {
 
 /**
  * CMS options with authentication enabled.
- * Policies are REQUIRED when using auth to ensure explicit authorization decisions.
+ * Policies are REQUIRED inside auth to ensure explicit authorization decisions.
  *
  * @example
  * ```ts
@@ -170,10 +170,10 @@ export interface CmsOptionsBase {
  *   schema,
  *   auth: {
  *     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
- *   },
- *   // Required! Use {} for full access to all authenticated users
- *   policies: {
- *     posts: ownedBy(schema.posts, 'authorId'),
+ *     // Required! Use {} for full access to all authenticated users
+ *     policies: {
+ *       posts: ownedBy(schema.posts, 'authorId'),
+ *     },
  *   },
  * });
  * ```
@@ -184,11 +184,66 @@ export interface CmsOptionsWithAuth extends CmsOptionsBase {
    *
    * When provided, the CMS requires login to access.
    * Includes automatic /login and /logout routes.
+   * Policies are configured within this object.
    */
   auth: CmsAuthOptions;
+}
+
+/**
+ * CMS options without authentication.
+ * Requires explicit acknowledgment that the CMS is open to anyone.
+ */
+export interface CmsOptionsWithoutAuth extends CmsOptionsBase {
+  /**
+   * Explicit acknowledgment that the CMS is open without authentication.
+   *
+   * This string literal forces developers to consciously opt-in to running
+   * the CMS without any authentication, preventing accidental exposure.
+   *
+   * Without authentication, there's no user context for policies to evaluate.
+   * If you need policies, configure proper authentication instead.
+   *
+   * @example
+   * ```ts
+   * createCmsHandler({
+   *   db,
+   *   schema,
+   *   auth: 'dangerously-open', // I understand this is insecure
+   * });
+   * ```
+   */
+  auth: 'dangerously-open';
+}
+
+/**
+ * Options for creating the CMS handler.
+ *
+ * Authentication is required by design:
+ * - Provide `auth: { provider: ..., policies: ... }` for proper authentication
+ * - Or use `auth: 'dangerously-open'` to explicitly run without auth
+ *
+ * When `auth` is a configuration object, `policies` is required inside it to ensure explicit authorization.
+ * Use `policies: {}` to grant full access to all authenticated users.
+ */
+export type CmsOptions = CmsOptionsWithAuth | CmsOptionsWithoutAuth;
+
+/**
+ * JWT authentication options for CMS
+ */
+export interface CmsAuthOptions {
+  /**
+   * Secret for signing JWTs (32+ characters).
+   *
+   * If not provided, falls back to CMS_JWT_SECRET environment variable.
+   * If neither is set, createCmsHandler() throws an error.
+   */
+  secret?: string;
+
+  /** Auth provider for login (e.g., PasswordProvider) */
+  provider: AuthProvider;
 
   /**
-   * Row-level security policies (REQUIRED when auth is enabled).
+   * Row-level security policies.
    *
    * Policies return SQL conditions that filter queries atomically.
    * This prevents TOCTOU race conditions - the permission check IS the query.
@@ -218,66 +273,6 @@ export interface CmsOptionsWithAuth extends CmsOptionsBase {
    * ```
    */
   policies: Policies | 'dangerously-open';
-}
-
-/**
- * CMS options without authentication.
- * Requires explicit acknowledgment that the CMS is open to anyone.
- * Policies are optional when auth is not used.
- */
-export interface CmsOptionsWithoutAuth extends CmsOptionsBase {
-  /**
-   * Explicit acknowledgment that the CMS is open without authentication.
-   *
-   * This string literal forces developers to consciously opt-in to running
-   * the CMS without any authentication, preventing accidental exposure.
-   *
-   * @example
-   * ```ts
-   * createCmsHandler({
-   *   db,
-   *   schema,
-   *   auth: 'dangerously-open', // I understand this is insecure
-   * });
-   * ```
-   */
-  auth: 'dangerously-open';
-
-  /**
-   * Policies must NOT be set when auth is 'dangerously-open'.
-   *
-   * Without authentication, there's no user context for policies to evaluate.
-   * If you need policies, configure proper authentication instead.
-   */
-  policies?: never;
-}
-
-/**
- * Options for creating the CMS handler.
- *
- * Authentication is required by design:
- * - Provide `auth: { provider: ... }` for proper authentication
- * - Or use `auth: 'dangerously-open'` to explicitly run without auth
- *
- * When `auth` is a configuration object, `policies` is required to ensure explicit authorization.
- * Use `policies: {}` to grant full access to all authenticated users.
- */
-export type CmsOptions = CmsOptionsWithAuth | CmsOptionsWithoutAuth;
-
-/**
- * JWT authentication options for CMS
- */
-export interface CmsAuthOptions {
-  /**
-   * Secret for signing JWTs (32+ characters).
-   *
-   * If not provided, falls back to CMS_JWT_SECRET environment variable.
-   * If neither is set, createCmsHandler() throws an error.
-   */
-  secret?: string;
-
-  /** Auth provider for login (e.g., PasswordProvider) */
-  provider: AuthProvider;
 
   /** Token lifetime in seconds (default: 8 hours) */
   maxAge?: number;

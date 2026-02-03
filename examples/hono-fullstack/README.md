@@ -279,4 +279,4 @@ const db = drizzle(client, { schema });
 
 - PGlite data is persisted to `./data` directory
 - The CMS handles all authentication - no separate auth needed for the frontend
-- Settings are read-only for non-admin users (configured via policies)
+- Settings are read-only for non-admin users (configured via `auth.policies`)

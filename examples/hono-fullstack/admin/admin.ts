@@ -51,10 +51,10 @@ export function createAdminHandler(db: Database) {
     basePath: '/admin',
     auth: {
       provider: new PasswordProvider({ db, usersTable: adminUsers }),
-    },
-    policies: {
-      // Settings are read-only for non-admins
-      settings: readOnly(),
+      policies: {
+        // Settings are read-only for non-admins
+        settings: readOnly(),
+      },
     },
     parsers,
     plugins: [markdownPlugin],

@@ -137,8 +137,8 @@ Deno.test({
             issuer: 'Test CMS',
             challengeSecret: AUTH_SECRET, // Use same secret for simplicity in tests
           }),
+          policies: 'dangerously-open',
         },
-        policies: 'dangerously-open',
         ...extraOptions,
       });
     }
