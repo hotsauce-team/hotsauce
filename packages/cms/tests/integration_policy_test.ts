@@ -96,9 +96,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-        },
-        policies: {
-          posts: ownedBy(posts, 'authorId'),
+          policies: {
+            posts: ownedBy(posts, 'authorId'),
+          },
         },
       });
 
@@ -154,9 +154,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-        },
-        policies: {
-          posts: adminOr(ownedBy(posts, 'authorId')),
+          policies: {
+            posts: adminOr(ownedBy(posts, 'authorId')),
+          },
         },
       });
 
@@ -205,9 +205,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-        },
-        policies: {
-          posts: ownedBy(posts, 'authorId'),
+          policies: {
+            posts: ownedBy(posts, 'authorId'),
+          },
         },
       });
 
@@ -255,9 +255,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-        },
-        policies: {
-          posts: ownedBy(posts, 'authorId'),
+          policies: {
+            posts: ownedBy(posts, 'authorId'),
+          },
         },
       });
 
@@ -341,11 +341,11 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-        },
-        policies: {
-          users: {
-            columns: {
-              email: { read: () => false }, // Hide email from all users
+          policies: {
+            users: {
+              columns: {
+                email: { read: () => false }, // Hide email from all users
+              },
             },
           },
         },
@@ -405,11 +405,11 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-        },
-        policies: {
-          users: {
-            columns: {
-              email: { read: () => false },
+          policies: {
+            users: {
+              columns: {
+                email: { read: () => false },
+              },
             },
           },
         },
@@ -462,11 +462,11 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-        },
-        policies: {
-          users: {
-            columns: {
-              email: { read: () => false },
+          policies: {
+            users: {
+              columns: {
+                email: { read: () => false },
+              },
             },
           },
         },
@@ -530,12 +530,12 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-        },
-        policies: {
-          users: {
-            columns: {
-              // Only admins can see email
-              email: { read: (ctx) => ctx.user?.role === 'admin' },
+          policies: {
+            users: {
+              columns: {
+                // Only admins can see email
+                email: { read: (ctx) => ctx.user?.role === 'admin' },
+              },
             },
           },
         },
@@ -603,12 +603,12 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          },
-          policies: {
-            users: {
-              columns: {
-                // Email is read-only (can see but not edit)
-                email: { write: () => false },
+            policies: {
+              users: {
+                columns: {
+                  // Email is read-only (can see but not edit)
+                  email: { write: () => false },
+                },
               },
             },
           },
@@ -668,12 +668,12 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          },
-          policies: {
-            users: {
-              columns: {
-                // Email is hidden from writing with NO default
-                email: { write: () => false },
+            policies: {
+              users: {
+                columns: {
+                  // Email is hidden from writing with NO default
+                  email: { write: () => false },
+                },
               },
             },
           },
@@ -726,13 +726,13 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          },
-          policies: {
-            users: {
-              columns: {
-                email: {
-                  write: () => false,
-                  default: () => 'auto-generated@example.com',
+            policies: {
+              users: {
+                columns: {
+                  email: {
+                    write: () => false,
+                    default: () => 'auto-generated@example.com',
+                  },
                 },
               },
             },

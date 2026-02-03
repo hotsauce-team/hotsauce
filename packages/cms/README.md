@@ -805,8 +805,8 @@ const handler = createCmsHandler({
       issuer: 'My App', // shown in authenticator apps
       // challengeSecret reads from CMS_2FA_SECRET env var if not provided
     }),
+    policies: {},
   },
-  policies: {},
 });
 ```
 
@@ -931,7 +931,7 @@ class MyCustomProvider implements AuthProvider {
 
 ### Authorization (Permissions)
 
-> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use **policies** (recommended) or the `canAccess` callback.
+> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use `auth.policies` (recommended) or the `canAccess` callback.
 
 ## Row-Level Security (Policies)
 
@@ -955,13 +955,13 @@ const handler = createCmsHandler({
   auth: {
     secret: process.env.JWT_SECRET!,
     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
-  },
-  policies: {
-    // Users can only see/edit their own posts
-    posts: ownedBy(schema.posts, 'authorId'),
+    policies: {
+      // Users can only see/edit their own posts
+      posts: ownedBy(schema.posts, 'authorId'),
 
-    // Admins have full access, others only see their own
-    comments: adminOr(ownedBy(schema.comments, 'userId')),
+      // Admins have full access, others only see their own
+      comments: adminOr(ownedBy(schema.comments, 'userId')),
+    },
   },
 });
 ```
@@ -1004,34 +1004,40 @@ Apply different rules for different CRUD operations:
 ```ts
 import { forActions, always, authenticated, ownedBy, roleIs } from '@hotsauce/cms';
 
-policies: {
-  posts: forActions({
-    list: always(),                        // Anyone can see list
-    read: always(),                        // Anyone can view
-    create: authenticated(),               // Must be logged in to create
-    update: ownedBy(schema.posts, 'authorId'),  // Only edit own posts
-    delete: roleIs('admin'),               // Only admins can delete
-  }),
+auth: {
+  // ... provider config
+  policies: {
+    posts: forActions({
+      list: always(),                        // Anyone can see list
+      read: always(),                        // Anyone can view
+      create: authenticated(),               // Must be logged in to create
+      update: ownedBy(schema.posts, 'authorId'),  // Only edit own posts
+      delete: roleIs('admin'),               // Only admins can delete
+    }),
+  },
 }
 ```
 
 Use `'*'` as a fallback for actions not explicitly defined:
 
 ```ts
-policies: {
-  // "Deny by default" - only allow what's explicitly permitted
-  posts: forActions({
-    list: always(),
-    read: always(),
-    '*': never(),  // create, update, delete → 403
-  }),
-  
-  // "Admin-only writes" - anyone can read, admins can modify
-  settings: forActions({
-    list: always(),
-    read: always(),
-    '*': roleIs('admin'),  // create, update, delete require admin
-  }),
+auth: {
+  // ... provider config
+  policies: {
+    // "Deny by default" - only allow what's explicitly permitted
+    posts: forActions({
+      list: always(),
+      read: always(),
+      '*': never(),  // create, update, delete → 403
+    }),
+    
+    // "Admin-only writes" - anyone can read, admins can modify
+    settings: forActions({
+      list: always(),
+      read: always(),
+      '*': roleIs('admin'),  // create, update, delete require admin
+    }),
+  },
 }
 ```
 
@@ -1045,8 +1051,11 @@ Check if user is in a contributors array:
 import { ownedByOrContributor } from '@hotsauce/cms';
 
 // Schema: posts.contributors is text[] containing user IDs
-policies: {
-  posts: ownedByOrContributor(schema.posts, 'authorId', 'contributors'),
+auth: {
+  // ... provider config
+  policies: {
+    posts: ownedByOrContributor(schema.posts, 'authorId', 'contributors'),
+  },
 }
 ```
 
@@ -1124,9 +1133,12 @@ const handler = createCmsHandler({
     return true;
   },
 
-  // Row-level: filter within allowed tables
-  policies: {
-    posts: ownedBy(schema.posts, 'authorId'),
+  auth: {
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+    // Row-level: filter within allowed tables
+    policies: {
+      posts: ownedBy(schema.posts, 'authorId'),
+    },
   },
 });
 ```
@@ -1171,10 +1183,13 @@ function tenantScoped<T extends Table>(
   };
 }
 
-// Usage
-policies: {
-  posts: tenantScoped(schema.posts, 'tenantId'),
-  comments: tenantScoped(schema.comments, 'tenantId'),
+// Usage (inside auth config)
+auth: {
+  // ... provider config
+  policies: {
+    posts: tenantScoped(schema.posts, 'tenantId'),
+    comments: tenantScoped(schema.comments, 'tenantId'),
+  },
 }
 ```
 
@@ -1210,29 +1225,31 @@ const handler = createCmsHandler({
   db,
   schema,
   basePath: '/admin',
-  auth: { jwtSecret },
-  policies: {
-    users: {
-      // Row-level policy (optional, existing behavior)
-      row: ownedBy(schema.users, 'id'),
+  auth: {
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+    policies: {
+      users: {
+        // Row-level policy (optional, existing behavior)
+        row: ownedBy(schema.users, 'id'),
 
-      // Column-level policies (new)
-      columns: {
-        // Salary is hidden from non-admins entirely
-        salary: {
-          read: (ctx) => ctx.user?.role === 'admin',
-          write: (ctx) => ctx.user?.role === 'admin',
-        },
-        // SSN is completely hidden (never readable or writable)
-        ssn: {
-          read: () => false,
-          write: () => false,
-        },
-        // tenantId is auto-injected, never shown to users
-        tenantId: {
-          read: () => false,
-          write: () => false,
-          default: (ctx) => ctx.user?.tenantId, // Auto-inject on create
+        // Column-level policies (new)
+        columns: {
+          // Salary is hidden from non-admins entirely
+          salary: {
+            read: (ctx) => ctx.user?.role === 'admin',
+            write: (ctx) => ctx.user?.role === 'admin',
+          },
+          // SSN is completely hidden (never readable or writable)
+          ssn: {
+            read: () => false,
+            write: () => false,
+          },
+          // tenantId is auto-injected, never shown to users
+          tenantId: {
+            read: () => false,
+            write: () => false,
+            default: (ctx) => ctx.user?.tenantId, // Auto-inject on create
+          },
         },
       },
     },
@@ -1286,20 +1303,32 @@ When a required column (NOT NULL without default) is hidden from users, you **mu
 
 ```ts
 // ✅ Correct: hidden required column has a default
-columns: {
-  tenantId: {
-    read: () => false,
-    write: () => false,
-    default: (ctx) => ctx.user?.tenantId,
+auth: {
+  policies: {
+    myTable: {
+      columns: {
+        tenantId: {
+          read: () => false,
+          write: () => false,
+          default: (ctx) => ctx.user?.tenantId,
+        },
+      },
+    },
   },
 }
 
 // ❌ Error at runtime: "Column 'tenantId' is required (NOT NULL) but hidden..."
-columns: {
-  tenantId: {
-    read: () => false,
-    write: () => false,
-    // Missing default!
+auth: {
+  policies: {
+    myTable: {
+      columns: {
+        tenantId: {
+          read: () => false,
+          write: () => false,
+          // Missing default!
+        },
+      },
+    },
   },
 }
 ```
@@ -1342,9 +1371,12 @@ function multiTenant<T extends Table>(
 }
 
 // Usage
-policies: {
-  posts: multiTenant(schema.posts, 'tenantId'),
-  comments: multiTenant(schema.comments, 'tenantId'),
+auth: {
+  // ... provider config
+  policies: {
+    posts: multiTenant(schema.posts, 'tenantId'),
+    comments: multiTenant(schema.comments, 'tenantId'),
+  },
 }
 ```
 
@@ -1366,12 +1398,16 @@ Existing row-only policies continue to work:
 
 ```ts
 // These are equivalent:
-policies: {
-  posts: ownedBy(schema.posts, 'authorId'),
+auth: {
+  policies: {
+    posts: ownedBy(schema.posts, 'authorId'),
+  },
 }
 
-policies: {
-  posts: { row: ownedBy(schema.posts, 'authorId') },
+auth: {
+  policies: {
+    posts: { row: ownedBy(schema.posts, 'authorId') },
+  },
 }
 ```
 
@@ -1384,12 +1420,15 @@ const adminOnly = (ctx: PolicyContext) => ctx.user?.role === 'admin';
 const managerOrAbove = (ctx: PolicyContext) =>
   ['admin', 'manager'].includes(ctx.user?.role ?? '');
 
-policies: {
-  employees: {
-    columns: {
-      salary: { read: managerOrAbove, write: adminOnly },
-      ssn: { read: adminOnly, write: () => false }, // Admin read, no one writes
-      performanceReview: { read: managerOrAbove, write: managerOrAbove },
+auth: {
+  // ... provider config
+  policies: {
+    employees: {
+      columns: {
+        salary: { read: managerOrAbove, write: adminOnly },
+        ssn: { read: adminOnly, write: () => false }, // Admin read, no one writes
+        performanceReview: { read: managerOrAbove, write: managerOrAbove },
+      },
     },
   },
 }

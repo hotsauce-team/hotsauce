@@ -256,14 +256,14 @@ The CMS uses a **layered security model** for authorization. Understanding this 
 ### Security Layers (in order)
 
 1. **Type-level enforcement** (`CmsOptions` in `types.ts`)
-   - When `auth` is configured, `policies` is **required** by TypeScript
+   - When `auth` is configured, `policies` is **required** inside `auth` by TypeScript
    - Forces developers to explicitly choose an authorization strategy
-   - Options: `policies: { ... }`, `policies: {}`, or `policies: 'dangerously-open'`
+   - Options: `auth.policies: { ... }`, `auth.policies: {}`, or `auth.policies: 'dangerously-open'`
 
 2. **Zod validation at startup** (`validateCmsOptions` in `validation.ts`)
    - Validates entire config when `createCmsHandler()` is called
    - Throws `CmsConfigError` with detailed messages for invalid config
-   - Enforces: policies required with auth, policies forbidden with `auth: 'dangerously-open'`
+   - Enforces: `auth.policies` required when auth is configured
 
 3. **Runtime column policy column policy validation** (`crud.ts` handlers)
    - If auth is enabled but policies somehow undefined, handlers return 403
@@ -285,20 +285,24 @@ The CMS uses a **layered security model** for authorization. Understanding this 
 **Row policies** filter which records a user can access (WHERE clause injection):
 
 ```typescript
-policies: {
-  posts: ownedBy(schema.posts, 'authorId'), // Row-only
+auth: {
+  policies: {
+    posts: ownedBy(schema.posts, 'authorId'), // Row-only
+  },
 }
 ```
 
 **Column policies** filter which fields within records are visible/editable:
 
 ```typescript
-policies: {
-  posts: {
-    row: ownedBy(schema.posts, 'authorId'),   // Row filter
-    columns: {                                  // Column filter
-      salary: { read: adminOnly, write: adminOnly },
-      tenantId: { read: () => false, write: () => false, default: getTenant },
+auth: {
+  policies: {
+    posts: {
+      row: ownedBy(schema.posts, 'authorId'),   // Row filter
+      columns: {                                  // Column filter
+        salary: { read: adminOnly, write: adminOnly },
+        tenantId: { read: () => false, write: () => false, default: getTenant },
+      },
     },
   },
 }

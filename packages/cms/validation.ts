@@ -10,6 +10,20 @@ import { z } from 'zod';
  * Throws ZodError with detailed messages for invalid config.
  */
 /**
+ * Schema for policies: either 'dangerously-open' literal or an object (can be empty for full access)
+ */
+const PoliciesSchema = z.union([
+  z.literal('dangerously-open'),
+  z.any().refine(
+    (val) => val != null && typeof val === 'object',
+    { message: 'auth.policies must be an object or "dangerously-open"' },
+  ),
+], {
+  message:
+    "auth.policies is required: provide table policies or 'dangerously-open' to bypass",
+});
+
+/**
  * Schema for auth configuration object (when not using 'dangerously-open')
  *
  * AuthProvider validation is minimal - we check that provider exists and has
@@ -26,6 +40,7 @@ const AuthConfigSchema = z.object({
         'auth.provider must be an AuthProvider with an authenticate() method',
     },
   ),
+  policies: PoliciesSchema,
   secret: z.string().min(32, {
     message: 'auth.secret must be at least 32 characters for security',
   }).optional(),
@@ -34,20 +49,6 @@ const AuthConfigSchema = z.object({
   loginTitle: z.string().optional(),
   identityLabel: z.string().optional(),
   isRevoked: z.any().optional(),
-});
-
-/**
- * Schema for policies: either 'dangerously-open' literal or an object (can be empty for full access)
- */
-const PoliciesSchema = z.union([
-  z.literal('dangerously-open'),
-  z.any().refine(
-    (val) => val != null && typeof val === 'object',
-    { message: 'policies must be an object or "dangerously-open"' },
-  ),
-], {
-  message:
-    "policies is required when auth is configured: provide table policies or 'dangerously-open' to bypass",
 });
 
 /**
@@ -87,22 +88,17 @@ const BaseOptionsSchema = z.object({
 });
 
 /**
- * Schema for CMS with auth: 'dangerously-open' (policies must NOT be set)
+ * Schema for CMS with auth: 'dangerously-open'
  */
 const DangerouslyOpenAuthSchema = BaseOptionsSchema.extend({
   auth: z.literal('dangerously-open'),
-  policies: z.undefined({
-    message:
-      "policies must not be set when auth is 'dangerously-open' (no user context for policies)",
-  }),
 });
 
 /**
- * Schema for CMS with auth config (policies required)
+ * Schema for CMS with auth config (policies required inside auth)
  */
 const AuthenticatedSchema = BaseOptionsSchema.extend({
   auth: AuthConfigSchema,
-  policies: PoliciesSchema,
 });
 
 /**

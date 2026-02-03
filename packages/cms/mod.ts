@@ -363,8 +363,11 @@ export function createCmsHandler(options: CmsOptions): Handler {
   validateFileColumns(introspected);
 
   // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
-  const resolvedPolicies: Policies | undefined =
-    options.policies === 'dangerously-open' ? {} : options.policies;
+  const resolvedPolicies: Policies | undefined = hasRealAuth
+    ? (options.auth.policies === 'dangerously-open'
+      ? {}
+      : options.auth.policies)
+    : undefined;
 
   // Resolve auth options if provided
   const resolvedAuth: ResolvedAuthOptions | undefined = hasRealAuth

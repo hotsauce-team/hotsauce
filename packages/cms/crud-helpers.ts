@@ -31,8 +31,10 @@ export function buildNavItems(
   basePath: string,
   activeTable?: string,
 ): NavItem[] {
-  // Filter out junction tables from navigation
-  const visibleTables = schema.tables.filter((t) => !t.isJunction);
+  // Filter out junction tables and tables marked as hidden via $cms({ hidden: true })
+  const visibleTables = schema.tables.filter((t) =>
+    !t.isJunction && !t.cmsOptions?.hidden
+  );
 
   return [
     { href: cmsUrl(basePath), label: 'Dashboard', active: !activeTable },
