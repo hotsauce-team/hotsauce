@@ -32,8 +32,8 @@ jobs:
           deno run --no-lock \
             --ignore-env \
             --allow-env="DENO_DIR,HOME" \
-            --allow-read="/workspace,/root/.npmrc" \
-            --allow-write="/workspace" \
+            --allow-read=".,/root/.npmrc" \
+            --allow-write="." \
             scripts/npm/build_npm.ts
 
       - name: Copy packages to npm-tests workspace
