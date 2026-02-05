@@ -32,7 +32,7 @@ jobs:
           deno run --no-lock \
             --ignore-env \
             --allow-env="DENO_DIR,HOME" \
-            --allow-read=".,/root/.npmrc" \
+            --allow-read=".,/home/runner/.npmrc" \
             --allow-write="." \
             scripts/npm/build_npm.ts
 
