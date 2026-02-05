@@ -1,0 +1,17 @@
+# Dockerfile for building and testing npm packages
+# Contains both Deno (for dnt build) and Node.js (for npm install during build)
+
+FROM debian:bookworm-slim
+
+# Install Deno and Node.js
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates unzip \
+    && curl -fsSL https://deno.land/install.sh | sh \
+    && curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="$DENO_INSTALL/bin:$PATH"
+
+WORKDIR /workspace

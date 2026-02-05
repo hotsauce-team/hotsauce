@@ -1,0 +1,21 @@
+{
+  "name": "hotsauce-npm-tests",
+  "private": true,
+  "type": "module",
+  "description": "E2E tests for @hotsauce/* npm packages in Node.js",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "node --test smoke.test.js cms.test.js"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.3.15",
+    "drizzle-orm": "^0.45.1",
+    "drizzle-zod": "^0.8.3",
+    "zod": "^3.24.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
