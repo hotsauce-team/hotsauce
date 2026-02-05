@@ -22,6 +22,8 @@ async function getVersion(): Promise<string> {
 }
 
 const version = await getVersion();
+const cwd = Deno.cwd();
+const baseUrl = `file://${cwd}`;
 
 console.log(`Building npm packages version ${version}...`);
 
@@ -92,7 +94,7 @@ await build({
   },
   mappings: {
     // Map the resolved file paths to npm packages
-    'file:///workspace/packages/core/mod.ts': {
+    [`${baseUrl}/packages/core/mod.ts`]: {
       name: '@hotsauce/core',
       version: `>=${version}`,
     },
@@ -123,7 +125,7 @@ await build({
     engines: { node: '>=20.0.0' },
   },
   mappings: {
-    'file:///workspace/packages/ui/mod.ts': {
+    [`${baseUrl}/packages/ui/mod.ts`]: {
       name: '@hotsauce/ui',
       version: `>=${version}`,
     },
@@ -158,15 +160,15 @@ await build({
     },
   },
   mappings: {
-    'file:///workspace/packages/core/mod.ts': {
+    [`${baseUrl}/packages/core/mod.ts`]: {
       name: '@hotsauce/core',
       version: `>=${version}`,
     },
-    'file:///workspace/packages/ui/mod.ts': {
+    [`${baseUrl}/packages/ui/mod.ts`]: {
       name: '@hotsauce/ui',
       version: `>=${version}`,
     },
-    'file:///workspace/packages/auth/mod.ts': {
+    [`${baseUrl}/packages/auth/mod.ts`]: {
       name: '@hotsauce/auth',
       version: `>=${version}`,
     },
