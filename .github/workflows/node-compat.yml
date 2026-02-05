@@ -28,7 +28,13 @@ jobs:
           node-version: ${{ matrix.node-version }}
 
       - name: Build npm packages
-        run: deno run --no-lock -A scripts/npm/build_npm.ts
+        run: |
+          deno run --no-lock \
+            --ignore-env \
+            --allow-env="DENO_DIR,HOME" \
+            --allow-read="/workspace,/root/.npmrc" \
+            --allow-write="/workspace" \
+            scripts/npm/build_npm.ts
 
       - name: Copy packages to npm-tests workspace
         run: |

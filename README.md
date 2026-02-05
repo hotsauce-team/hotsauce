@@ -308,6 +308,11 @@ The core schema introspection is database-agnostic via Drizzle's abstractions. D
 
 This project is developed with **Deno** — no Node.js or npm required locally.
 
+Node.js and npm are used **only** to validate the generated npm packages:
+
+- **CI:** runs Node.js compatibility tests for the npm build output
+- **Local (optional):** `deno task test:npm` runs the same Node.js E2E tests in Docker
+
 ```bash
 # Clone
 git clone https://github.com/hotsauce-team/hotsauce

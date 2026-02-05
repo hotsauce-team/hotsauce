@@ -33,6 +33,7 @@ const sharedOptions = {
   typeCheck: false as const, // Skip type checking (avoids npm install issues with unpublished deps)
   scriptModule: false as const, // ESM only, no CommonJS
   shims: {}, // No shims - packages use Web Standard APIs only
+  skipNpmInstall: true, // Don't run npm install - we'll handle this manually after build
 };
 
 const repoUrl = 'https://github.com/hotsauce-team/hotsauce.git';
@@ -80,7 +81,6 @@ console.log('\n[2/4] Building @hotsauce/ui...');
 await emptyDir('./npm/ui');
 await build({
   ...sharedOptions,
-  skipNpmInstall: true, // @hotsauce/core not on npm yet
   entryPoints: ['./packages/ui/mod.ts'],
   outDir: './npm/ui',
   package: {
@@ -112,7 +112,6 @@ console.log('\n[3/4] Building @hotsauce/auth...');
 await emptyDir('./npm/auth');
 await build({
   ...sharedOptions,
-  skipNpmInstall: true, // @hotsauce/* deps not on npm yet
   entryPoints: ['./packages/auth/mod.ts'],
   outDir: './npm/auth',
   package: {
@@ -143,7 +142,6 @@ console.log('\n[4/4] Building @hotsauce/cms...');
 await emptyDir('./npm/cms');
 await build({
   ...sharedOptions,
-  skipNpmInstall: true, // @hotsauce/* deps not on npm yet
   entryPoints: ['./packages/cms/mod.ts'],
   outDir: './npm/cms',
   package: {
