@@ -17,7 +17,8 @@ import type {
   JunctionTable,
 } from './types.ts';
 
-import type { CmsColumnOptions } from '../extend/types.ts';
+import type { CmsColumnOptions, CmsTableOptions } from '../extend/types.ts';
+import { CMS_TABLE_OPTIONS } from '../extend/types.ts';
 
 /** Symbols used by Drizzle to store inline foreign keys (database-specific, no helper exported) */
 const TABLE_FOREIGN_KEY_SYMBOLS = [
@@ -269,12 +270,24 @@ export function introspectTable(table: Table): IntrospectedTable {
   // Use composite PK if found, otherwise use column-level PKs
   const finalPrimaryKey = compositePK.length > 0 ? compositePK : primaryKeys;
 
-  return {
+  // Extract table-level CMS options if present
+  // deno-lint-ignore no-explicit-any
+  const cmsOptions = (table as any)[CMS_TABLE_OPTIONS] as
+    | CmsTableOptions
+    | undefined;
+
+  const result: IntrospectedTable = {
     name: tableName,
     columns,
     primaryKey: finalPrimaryKey,
     table, // Reference to original Drizzle table for query building
   };
+
+  if (cmsOptions) {
+    result.cmsOptions = cmsOptions;
+  }
+
+  return result;
 }
 
 /**

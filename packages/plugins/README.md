@@ -1,15 +1,15 @@
-# @drizzle-cms/plugins
+# @hotsauce/plugins
 
-Official plugins for the Drizzle CMS.
+Official plugins for the HotSauce CMS.
 
 ## Installation
 
 ```bash
 # Deno
-deno add jsr:@drizzle-cms/plugins
+deno add jsr:@hotsauce/plugins
 
 # Node
-npx jsr add @drizzle-cms/plugins
+npx jsr add @hotsauce/plugins
 ```
 
 ## Available Plugins
@@ -19,12 +19,12 @@ npx jsr add @drizzle-cms/plugins
 Logs all CRUD operations for compliance and debugging.
 
 ```typescript
-import type { AuditLogConfig } from '@drizzle-cms/plugins/audit-log';
-import { createCmsHandler } from '@drizzle-cms/handlers';
+import type { AuditLogConfig } from '@hotsauce/plugins/audit-log';
+import { createCmsHandler } from '@hotsauce/cms';
 
 // Create Worker for plugin isolation (you control permissions)
 const auditWorker = new Worker(
-  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  import.meta.resolve('@hotsauce/plugins/audit-log/worker'),
   {
     type: 'module',
     // Deno-specific: restrict what the plugin can access
@@ -105,7 +105,7 @@ plugins: [
 ];
 
 // my-plugin.worker.ts (runs in Worker)
-import type { PluginHooks, Serializable } from '@drizzle-cms/plugins';
+import type { PluginHooks, Serializable } from '@hotsauce/plugins';
 
 export function createPlugin(config: Serializable): { hooks: PluginHooks } {
   return {

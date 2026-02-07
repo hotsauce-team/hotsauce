@@ -1,15 +1,20 @@
 {
-  "name": "@drizzle-cms/ui",
-  "version": "0.0.1",
+  "name": "@hotsauce/ui",
+  "version": "0.1.4",
   "exports": "./mod.ts",
   "publish": {
     "include": [
       "mod.ts",
+      "html.ts",
+      "styles.ts",
       "forms/",
       "views/",
       "components/",
       "README.md",
       "LICENSE"
+    ],
+    "exclude": [
+      "tests/"
     ]
   }
 }

@@ -1,10 +1,10 @@
 # Security Guide
 
-This document outlines security best practices and considerations when using Drizzle CMS.
+This document outlines security best practices and considerations when using HotSauce CMS.
 
 ## Security Features
 
-Drizzle CMS implements multiple layers of security:
+HotSauce CMS implements multiple layers of security:
 
 ### 1. Authentication (JWT-based)
 
@@ -77,7 +77,7 @@ frame-ancestors 'none'
 
 ```typescript
 // ✅ Use html`` template literal (auto-escapes)
-import { html } from '@drizzle-cms/ui';
+import { html } from '@hotsauce/ui';
 html`
   <p>User input: ${userInput}</p>
 `; // Safe
@@ -93,7 +93,7 @@ html`
 
 ### 5. SQL Injection Prevention
 
-Drizzle CMS uses Drizzle ORM, which provides:
+HotSauce CMS uses Drizzle ORM, which provides:
 
 - **Parameterized queries** by default
 - **Type-safe query building**
@@ -187,14 +187,15 @@ openssl rand -base64 32
 node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ```
 
-| Variable          | Purpose            | Min Length |
-| ----------------- | ------------------ | ---------- |
-| `CMS_CSRF_SECRET` | CSRF token signing | 32 chars   |
-| `CMS_JWT_SECRET`  | JWT token signing  | 32 chars   |
+| Variable          | Purpose                     | Min Length |
+| ----------------- | --------------------------- | ---------- |
+| `CMS_2FA_SECRET`  | 2FA challenge token signing | 32 chars   |
+| `CMS_CSRF_SECRET` | CSRF token signing          | 32 chars   |
+| `CMS_JWT_SECRET`  | JWT token signing           | 32 chars   |
 
 **Best Practices:**
 
-- Use different secrets for CSRF and JWT
+- Use different secrets for CSRF, JWT, and challenge tokens
 - Store secrets in environment variables, not in code
 - Use secret management services in production (AWS Secrets Manager, etc.)
 - Rotate secrets periodically
@@ -203,6 +204,9 @@ node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
 ### .env.example
 
 ```bash
+# 2FA Challenge Tokens (required if using 2FA with PasswordProvider)
+CMS_2FA_SECRET=yet-another-random-32-character-secret
+
 # CSRF Protection (required)
 CMS_CSRF_SECRET=your-random-32-character-secret-here
 
@@ -297,9 +301,9 @@ Before deploying to production:
 
 If you discover a security vulnerability, please report it through one of these methods:
 
-**Preferred:** Open a [GitHub Security Advisory](https://github.com/earthlingdavey/drizzle-cms/security/advisories) (requires repository access)
+**Preferred:** Open a [GitHub Security Advisory](https://github.com/hotsauce-team/hotsauce/security/advisories) (requires repository access)
 
-**Alternative:** Open a private security report by going to the [Security tab](https://github.com/earthlingdavey/drizzle-cms/security) and clicking "Report a vulnerability"
+**Alternative:** Open a private security report by going to the [Security tab](https://github.com/hotsauce-team/hotsauce-cms/security) and clicking "Report a vulnerability"
 
 Include in your report:
 
@@ -322,9 +326,9 @@ Stay informed about security updates:
 
 ### OWASP Top 10 Coverage
 
-This table shows how Drizzle CMS addresses the OWASP Top 10 security risks:
+This table shows how HotSauce CMS addresses the OWASP Top 10 security risks:
 
-| Risk                           | Mitigation in Drizzle CMS                                         |
+| Risk                           | Mitigation in HotSauce CMS                                        |
 | ------------------------------ | ----------------------------------------------------------------- |
 | A01: Broken Access Control     | Row-level policies, JWT authentication                            |
 | A02: Cryptographic Failures    | PBKDF2 password hashing, HMAC-SHA256 tokens, HTTPS support        |

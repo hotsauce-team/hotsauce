@@ -7,7 +7,7 @@ import {
   ownedBy,
   PasswordProvider,
   readOnly,
-} from '@drizzle-cms/handlers';
+} from '@hotsauce/cms';
 import {
   inProcessFormatNamesPlugin,
   isolatedAuditLogPlugin,
@@ -20,24 +20,30 @@ const db = drizzle(client, { schema });
 
 // Create CMS handler with authentication
 // Secrets can be passed directly or via environment variables:
+//   CMS_2FA_SECRET - for 2FA challenge token signing
 //   CMS_CSRF_SECRET - for CSRF token signing
 //   CMS_JWT_SECRET - for JWT signing (when auth enabled)
 const cmsHandler = createCmsHandler({
   db,
   schema,
   basePath: '/admin',
-  // JWT authentication - enables /login and /logout routes
+  // JWT authentication with optional 2FA - enables /login, /logout, and /account routes
   auth: {
-    // PasswordProvider defaults: id, email, passwordHash, role columns
-    provider: new PasswordProvider({ db, usersTable: users }),
-  },
-  // Row-level security policies (atomic authorization in WHERE clauses)
-  policies: {
-    posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
-    categories: (readOnly()), // Admins: full access, others: read-only
-    users: {
-      columns: {
-        password_hash: { read: () => false }, // Hide password hashes
+    // PasswordProvider: password auth with optional TOTP 2FA (if user has totpSecret)
+    // Uses CMS_2FA_SECRET env var for challenge token signing
+    provider: new PasswordProvider({
+      db,
+      usersTable: users,
+      issuer: 'HotSauce CMS Demo', // For TOTP URI
+    }),
+    // Row-level security policies (atomic authorization in WHERE clauses)
+    policies: {
+      posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
+      categories: (readOnly()), // Admins: full access, others: read-only
+      users: {
+        columns: {
+          password_hash: { read: () => false }, // Hide password hashes
+        },
       },
     },
   },

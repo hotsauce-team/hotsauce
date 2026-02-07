@@ -12,9 +12,26 @@ import {
 import { relations } from 'drizzle-orm';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
 
-import '@drizzle-cms/core/extend';
-import type { FileReference } from '@drizzle-cms/core';
-import type { Parsers } from '@drizzle-cms/handlers';
+import '@hotsauce/core/extend';
+import type {
+  CmsColumnOptions,
+  CmsTableOptions,
+  FileReference,
+} from '@hotsauce/core/extend';
+import type { Parsers } from '@hotsauce/cms';
+
+// ─────────────────────────────────────────────────────────────
+// Type declarations for $cms() method on Drizzle columns/tables.
+// Required for TypeScript support. Add once per project.
+// ─────────────────────────────────────────────────────────────
+declare module 'drizzle-orm/pg-core' {
+  interface PgColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface PgTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // Tables
@@ -63,7 +80,7 @@ export const posts = pgTable('posts', {
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   excerpt: text('excerpt'),
   content: text('content').notNull(),
-  contentHtml: text('content_html'), // Rendered markdown (populated by plugin)
+  contentHtml: text('content_html').$cms({ hidden: true }), // Rendered markdown (populated by plugin)
   published: boolean('published').default(false).notNull(),
   authorId: integer('author_id')
     .notNull()
@@ -71,6 +88,8 @@ export const posts = pgTable('posts', {
   categoryId: integer('category_id').references(() => categories.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}).$cms({
+  frontendUrl: (post) => post.published ? `/post/${post.slug}` : null,
 });
 
 /**
@@ -86,6 +105,8 @@ export const pages = pgTable('pages', {
   sortOrder: integer('sort_order').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+}).$cms({
+  frontendUrl: (page) => page.published ? `/page/${page.slug}` : null,
 });
 
 /**

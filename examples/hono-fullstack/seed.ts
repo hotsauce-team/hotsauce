@@ -5,8 +5,8 @@
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
-import { hashPassword } from '@drizzle-cms/handlers';
-import type { FileReference } from '@drizzle-cms/core';
+import { hashPassword } from '@hotsauce/cms';
+import type { FileReference } from '@hotsauce/core';
 import { parseMarkdown } from './lib/markdown.ts';
 import { sanitizeHtml } from './lib/sanitize.ts';
 
@@ -147,7 +147,7 @@ await db.insert(settings).values([
   },
   {
     key: 'tagline',
-    value: 'A demo blog powered by drizzle-cms + Hono',
+    value: 'A demo blog powered by hotsauce-cms + Hono',
     description: 'Tagline shown under site title',
   },
   {
@@ -339,12 +339,12 @@ Stay tuned for more tutorials in this series!`,
 
 if (authorAlex && news) {
   await db.insert(posts).values(postData({
-    title: 'Announcing drizzle-cms 1.0',
-    slug: 'announcing-drizzle-cms-1-0',
+    title: 'Announcing hotsauce-cms 1.0',
+    slug: 'announcing-hotsauce-cms-1-0',
     excerpt:
-      'We are excited to announce the first stable release of drizzle-cms, the headless CMS built on Drizzle ORM.',
+      'We are excited to announce the first stable release of hotsauce-cms, the headless CMS built on Drizzle ORM.',
     content:
-      `After months of development and testing, we are thrilled to announce drizzle-cms 1.0!
+      `After months of development and testing, we are thrilled to announce hotsauce-cms 1.0!
 
 This release marks a major milestone in our journey to create the most developer-friendly headless CMS. Here's what's included:
 
@@ -354,7 +354,7 @@ Core Features:
 - Row-level security policies for fine-grained access control
 - Plugin system for extending functionality
 
-What makes drizzle-cms unique is its zero-dependency philosophy. The entire CMS ships with just four production dependencies: drizzle-orm, postgres, zod, and drizzle-zod.
+What makes hotsauce-cms unique is its zero-dependency philosophy. The entire CMS ships with just four production dependencies: drizzle-orm, postgres, zod, and drizzle-zod.
 
 We've also focused heavily on runtime compatibility. The same code runs on Deno, Node.js, Bun, and even Cloudflare Workers.
 
@@ -461,24 +461,24 @@ await db.insert(pages).values(pageData({
   slug: 'about',
   content: `Welcome to The Hono Blog!
 
-This is a demo site showcasing how to build a complete blog with drizzle-cms and Hono.
+This is a demo site showcasing how to build a complete blog with hotsauce-cms and Hono.
 
 What is this?
 
 This example demonstrates a "Backend for Frontend" (BFF) architecture where:
 
 - The public-facing blog is rendered server-side using Hono
-- The admin interface is powered by drizzle-cms
+- The admin interface is powered by hotsauce-cms
 - Both share the same database and Drizzle schema
 
 Technology Stack:
 
 - Hono - Lightweight web framework with zero dependencies
 - Drizzle ORM - Type-safe database toolkit
-- drizzle-cms - Headless CMS with automatic admin UI
+- hotsauce-cms - Headless CMS with automatic admin UI
 - PGlite - In-process PostgreSQL for development
 
-This architecture gives you complete control over your frontend while benefiting from the automatic admin interface that drizzle-cms provides.
+This architecture gives you complete control over your frontend while benefiting from the automatic admin interface that hotsauce-cms provides.
 
 Get Started:
 
@@ -502,12 +502,12 @@ Twitter: Follow us for updates and announcements.
 
 Contributing:
 
-Interested in contributing to drizzle-cms? We welcome contributions of all kinds:
+Interested in contributing to hotsauce-cms? We welcome contributions of all kinds:
 
 - Bug reports and feature requests
 - Documentation improvements
 - Code contributions
-- Sharing your projects built with drizzle-cms
+- Sharing your projects built with hotsauce-cms
 
 Please read our contributing guidelines before submitting a pull request.`,
   published: true,

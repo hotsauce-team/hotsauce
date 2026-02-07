@@ -1,8 +1,8 @@
 // List view - table of records
 
 import { attrs, escapeHtml, html, raw } from '../html.ts';
-import type { CMSField } from '@drizzle-cms/core';
-import { isValidFileReference } from '@drizzle-cms/core';
+import type { CMSField } from '@hotsauce/core';
+import { isValidFileReference } from '@hotsauce/core';
 import type { RelationOption } from '../forms/inputs.ts';
 
 /**

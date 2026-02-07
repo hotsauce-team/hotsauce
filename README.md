@@ -1,4 +1,4 @@
-# drizzle-cms
+# hotsauce-cms
 
 A schema-driven CMS derived from your Drizzle ORM definitions. Define your database schema once — get a type-safe admin interface for free.
 
@@ -15,16 +15,16 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 
 ```bash
 # Deno
-deno add jsr:@drizzle-cms/core jsr:@drizzle-cms/ui jsr:@drizzle-cms/handlers
+deno add jsr:@hotsauce/core jsr:@hotsauce/ui jsr:@hotsauce/cms
 
 # Node
-npx jsr add @drizzle-cms/core @drizzle-cms/ui @drizzle-cms/handlers
+npx jsr add @hotsauce/core @hotsauce/ui @hotsauce/cms
 ```
 
 ## Quick Start
 
 ```typescript
-import { createCmsHandler } from '@drizzle-cms/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from './schema.ts';
@@ -36,7 +36,7 @@ const handler = createCmsHandler({
   schema,
   db,
   basePath: '/admin',
-  auth: 'open-to-anyone', // No authentication (dev mode)
+  auth: 'dangerously-open', // No authentication (dev mode)
 });
 
 // Use with any server
@@ -47,13 +47,13 @@ Deno.serve(handler);
 
 Each package has its own README with detailed API documentation:
 
-| Package                                                       | Purpose                                         | Docs                                          |
-| ------------------------------------------------------------- | ----------------------------------------------- | --------------------------------------------- |
-| [`@drizzle-cms/core`](packages/core/)                         | Schema introspection, field mapping, validation | [README](packages/core/README.md)             |
-| [`@drizzle-cms/ui`](packages/ui/)                             | HTML generation, form rendering, views          | [README](packages/ui/README.md)               |
-| [`@drizzle-cms/handlers`](packages/handlers/)                 | CRUD route handlers (Request → Response)        | [README](packages/handlers/README.md)         |
-| [`@drizzle-cms/handlers-workers`](packages/handlers-workers/) | Worker sandbox for plugin isolation             | [README](packages/handlers-workers/README.md) |
-| [`@drizzle-cms/plugins`](packages/plugins/)                   | Official plugins (audit-log, etc.)              | [README](packages/plugins/README.md)          |
+| Package                                  | Purpose                                         | Docs                                 |
+| ---------------------------------------- | ----------------------------------------------- | ------------------------------------ |
+| [`@hotsauce/core`](packages/core/)       | Schema introspection, field mapping, validation | [README](packages/core/README.md)    |
+| [`@hotsauce/ui`](packages/ui/)           | HTML generation, form rendering, views          | [README](packages/ui/README.md)      |
+| [`@hotsauce/cms`](packages/cms/)         | CRUD route handlers (Request → Response)        | [README](packages/cms/README.md)     |
+| [`@hotsauce/workers`](packages/workers/) | Worker sandbox for plugin isolation             | [README](packages/workers/README.md) |
+| [`@hotsauce/plugins`](packages/plugins/) | Official plugins (audit-log, etc.)              | [README](packages/plugins/README.md) |
 
 ```
 packages/
@@ -70,14 +70,14 @@ packages/
 │   ├── views/         # List, detail, edit views
 │   └── components/    # Layout, pagination, alerts
 │
-├── handlers/          # CRUD route handlers (Web Standard Request/Response)
+├── cms/               # CRUD route handlers (Web Standard Request/Response)
 │   │                  # Bring Your Own Server - works with any framework
 │   ├── router.ts      # URL routing and handler dispatch
 │   ├── crud.ts        # List, create, read, update, delete handlers
 │   ├── auth/          # JWT authentication module
-│   └── plugins/       # Plugin registry and service (uses handlers-workers)
+│   └── plugins/       # Plugin registry and service (uses workers)
 │
-├── handlers-workers/  # Worker sandbox for plugin isolation
+├── workers/           # Worker sandbox for plugin isolation
 │   │                  # Compatible with Deno and Node.js 20+
 │   ├── executor.ts    # Manages Worker instances
 │   └── sandbox/       # Worker script that runs plugin code
@@ -91,14 +91,14 @@ packages/
 The handlers package exports a single function that returns a Web Standard `Request → Response` handler. Wire it up to any server:
 
 ```typescript
-import { createCmsHandler } from '@drizzle-cms/handlers';
+import { createCmsHandler } from '@hotsauce/cms';
 import * as schema from './schema.ts';
 
 const handler = createCmsHandler({
   schema,
   db,
   basePath: '/admin',
-  auth: 'open-to-anyone', // Or { provider: ... } or { external: ... }
+  auth: 'dangerously-open', // Or { provider: ..., policies: ... } or { external: ... }
 });
 
 // Deno
@@ -204,7 +204,7 @@ By default, the CMS auto-generates validation schemas from your Drizzle tables u
 ```typescript
 import { z } from 'zod';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
-import type { Parsers } from '@drizzle-cms/handlers';
+import type { Parsers } from '@hotsauce/cms';
 
 // Extend drizzle-zod schemas with custom rules
 const usersInsertSchema = createInsertSchema(users, {
@@ -226,7 +226,7 @@ const parsers: Parsers = {
 const handler = createCmsHandler({
   db,
   schema,
-  auth: 'open-to-anyone',
+  auth: 'dangerously-open',
   parsers, // Tables without custom parsers use auto-generated schemas
 });
 ```
@@ -242,12 +242,12 @@ interface TableParsers {
 
 ## Extension Points
 
-| Option     | Purpose                                                                                     |
-| ---------- | ------------------------------------------------------------------------------------------- |
-| `auth`     | Authentication: `'open-to-anyone'`, `{ provider }` (JWT), or `{ external }` (reverse proxy) |
-| `policies` | Row-level security with SQL conditions + column-level read/write control                    |
-| `parsers`  | Custom validation (Zod, Valibot, Arktype, or any library)                                   |
-| `onError`  | Error logging integration (Sentry, Datadog, etc.)                                           |
+| Option          | Purpose                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------- |
+| `auth`          | Authentication: `'dangerously-open'`, `{ provider, policies }` (JWT), or `{ external }` (reverse proxy) |
+| `auth.policies` | Row-level security with SQL conditions + column-level read/write control                                |
+| `parsers`       | Custom validation (Zod, Valibot, Arktype, or any library)                                               |
+| `onError`       | Error logging integration (Sentry, Datadog, etc.)                                                       |
 
 ## Features
 
@@ -263,23 +263,30 @@ interface TableParsers {
 - [x] Web Standard Request/Response handlers
 - [x] Relation field pickers (FK → select dropdown with display labels)
 - [x] Many-to-many relationships (junction table detection, checkbox UI)
-- [x] Column metadata hints via `$cms()` (e.g. file fields)
+- [x] Column metadata hints via `$cms()` (file, hidden, readOnly)
+- [x] Table metadata hints via `$cms()` (frontendUrl, hidden)
 - [x] JWT authentication (cookie-based tokens)
+- [x] Two-factor authentication (TOTP)
 - [x] External authentication (reverse proxy / OAuth integration)
 - [x] Row-level security policies (atomic authorization)
 - [x] Column-level access control (read/write policies per field)
 - [x] Multi-tenant compatibility (shared database with tenant column)
 - [x] Plugin system with Worker isolation (Deno + Node.js 20+)
+- [x] File uploads (base64 in DB, validation, serving route)
+- [x] Publish alpha release to jsr (Deno support)
+- [ ] Security disclosure policy
+- [ ] Add tests for NodeJS runtime
+- [ ] File uploads (S3/R2 cloud storage adapter)
 - [ ] Plugin config - timeout, worker response validation, load testing
 - [ ] Plugin data obfuscation (PII/credential redaction)
-- [ ] File uploads (local + S3) (upload pipeline + storage)
 - [ ] Audit logging
+- [ ] 2FA backup codes (recovery codes for lost authenticator)
 - [ ] Customizable UI components
 
 Schema hints example:
 
 ```ts
-import '@drizzle-cms/core/extend';
+import '@hotsauce/core/extend';
 import { jsonb, pgTable } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
@@ -301,13 +308,22 @@ The core schema introspection is database-agnostic via Drizzle's abstractions. D
 
 This project is developed with **Deno** — no Node.js or npm required locally.
 
+Node.js and npm are used **only** to validate the generated npm packages:
+
+- **CI:** runs Node.js compatibility tests for the npm build output
+- **Local (optional):** `deno task test:npm` runs the same Node.js E2E tests in Docker
+
 ```bash
 # Clone
-git clone https://github.com/yourname/drizzle-cms
-cd drizzle-cms
+git clone https://github.com/hotsauce-team/hotsauce
+cd hotsauce
+
+# Enable pre-commit hooks (runs fmt/lint/check)
+git config core.hooksPath .githooks && \
+chmod +x .githooks/pre-commit
 
 # Run tests
-deno test
+deno task test
 
 # Type check
 deno check packages/*/mod.ts
@@ -317,6 +333,9 @@ deno fmt
 
 # Lint
 deno lint
+
+# Run all checks manually
+deno task hooks:run
 
 # Build npm packages (for publishing)
 deno task build:npm

@@ -16,7 +16,7 @@ import {
   textInput,
   uuidInput,
 } from '../forms/inputs.ts';
-import type { CMSField, IntrospectedColumn } from '@drizzle-cms/core';
+import type { CMSField, IntrospectedColumn } from '@hotsauce/core';
 
 // Helper to create mock CMSField
 function createMockField(overrides: Partial<CMSField> = {}): CMSField {

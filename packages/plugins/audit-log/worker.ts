@@ -1,18 +1,41 @@
-// Audit log plugin - Worker module version
-// This file is loaded directly by a Worker and handles all messages
-// deno-lint-ignore-file no-console
+/**
+ * @module
+ *
+ * Audit log plugin Worker module.
+ *
+ * This file is loaded directly by a Web Worker and handles all audit logging
+ * messages. It runs in isolation from the main thread for security.
+ *
+ * @example
+ * ```ts
+ * const auditWorker = new Worker(
+ *   import.meta.resolve("@hotsauce/plugins/audit-log/worker"),
+ *   { type: "module" }
+ * );
+ *
+ * // Use with CMS plugin config
+ * plugins: [{
+ *   name: "audit-log",
+ *   worker: auditWorker,
+ *   hooks: { on: ["create", "update", "delete"] },
+ *   filter: (ctx) => !ctx.table.startsWith("_"),
+ *   config: { webhookUrl: "https://audit.example.com" },
+ * }]
+ * ```
+ */
 
-/// <reference lib="webworker" />
-/// <reference types="@drizzle-cms/handlers-workers" />
+// deno-lint-ignore-file no-console
 
 import type {
   ActionContext,
+  CmsGlobalThis,
   CrudAction,
   Serializable,
-} from '@drizzle-cms/handlers-workers';
+} from '@hotsauce/workers';
 
-// Declare Worker globals for TypeScript
-declare const self: DedicatedWorkerGlobalScope;
+// Minimal Worker globals declaration (avoids triple-slash directives banned by JSR)
+// deno-lint-ignore no-explicit-any
+declare const self: { onmessage: any; postMessage: (msg: any) => void };
 
 // ─────────────────────────────────────────────────────────────
 // Worker message types
@@ -33,7 +56,18 @@ interface WorkerResponse {
 
 // Import shared types
 import type { AuditEntry, AuditLogConfig } from './types.ts';
-export type { AuditEntry, AuditLogConfig };
+
+/**
+ * Audit log entry structure representing a single audited action.
+ * Contains timestamp, action, table, user info, and data snapshots.
+ */
+export type { AuditEntry };
+
+/**
+ * Configuration options for the audit log plugin.
+ * Controls webhook URL, table filtering, and which actions to log.
+ */
+export type { AuditLogConfig };
 
 // ─────────────────────────────────────────────────────────────
 // Plugin state
@@ -53,7 +87,9 @@ export function shouldAuditTable(
   table: string,
   config: AuditLogConfig,
 ): boolean {
-  if (globalThis.__CMS_MAIN_PROCESS__) throw new Error('Worker only');
+  if ((globalThis as CmsGlobalThis).__CMS_MAIN_PROCESS__) {
+    throw new Error('Worker only');
+  }
   if (config.excludeTables?.includes(table)) {
     return false;
   }

@@ -1,6 +1,6 @@
 # Deno Server Example
 
-A simple example of drizzle-cms running on Deno with PGlite (in-process Postgres) and JWT authentication.
+A simple example of hotsauce-cms running on Deno with PGlite (in-process Postgres) and JWT authentication.
 
 ## Prerequisites
 
@@ -52,7 +52,7 @@ The example includes commented-out policy configuration showing how to:
 - **Read-only tables:** Anyone can view but no one can modify
 - **Admin bypass:** Admins can access everything
 
-Uncomment the `policies` section in `main.ts` to enable. See [handlers README](../../packages/handlers/README.md#row-level-security-policies) for full documentation.
+Uncomment the `auth.policies` section in `main.ts` to enable. See the CMS docs: [Row-Level Security (Policies)](../../packages/cms/README.md#row-level-security-policies).
 
 ## Notes
 

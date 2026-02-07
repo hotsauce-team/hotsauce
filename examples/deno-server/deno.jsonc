@@ -1,5 +1,5 @@
 {
-  "name": "@drizzle-cms/example-deno-server",
+  "name": "@hotsauce/example-deno-server",
 
   "tasks": {
     "dev": "deno run --env-file=.env.example --permission-set=example-deno-server --unstable-worker-options main.ts",
@@ -14,8 +14,8 @@
     "example-deno-server": {
       "read": [
         "./data",
-        "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.data",
-        "../../node_modules/.deno/@electric-sql+pglite@0.3.14/node_modules/@electric-sql/pglite/dist/pglite.wasm",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.wasm",
         "../../packages/plugins/audit-log/worker.ts"
       ],
       "write": [
@@ -25,6 +25,7 @@
         "127.0.0.1:3000"
       ],
       "env": [
+        "CMS_2FA_SECRET",
         "CMS_CSRF_SECRET",
         "CMS_JWT_SECRET"
       ]

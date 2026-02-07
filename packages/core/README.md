@@ -1,18 +1,18 @@
-# @drizzle-cms/core
+# @hotsauce/core
 
 Schema introspection, field mapping, and validation for Drizzle ORM.
 
 ## Installation
 
 ```ts
-import { introspectFullSchema, mapColumnToField } from '@drizzle-cms/core';
+import { introspectFullSchema, mapColumnToField } from '@hotsauce/core';
 ```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    @drizzle-cms/core                        │
+│                    @hotsauce/core                        │
 ├─────────────────┬─────────────────┬─────────────────────────┤
 │   schema/       │   fields/       │   validation/           │
 │                 │                 │                         │
@@ -48,7 +48,7 @@ Works with any Drizzle dialect (Postgres, MySQL, SQLite).
 **Example:**
 
 ```ts
-import { introspectTable } from '@drizzle-cms/core';
+import { introspectTable } from '@hotsauce/core';
 import { users } from './schema';
 
 const meta = introspectTable(users);
@@ -87,7 +87,7 @@ Map database columns to CMS UI field types.
 **Example:**
 
 ```ts
-import { mapColumnToField } from '@drizzle-cms/core';
+import { mapColumnToField } from '@hotsauce/core';
 
 const field = mapColumnToField(meta.columns[0]);
 console.log(field.fieldType); // 'text'
@@ -100,11 +100,54 @@ console.log(field.column); // Original column metadata
 Optionally patch Drizzle column builders to attach CMS-specific metadata to columns.
 This enables schema-authored hints (like file fields) to flow into introspection and field mapping.
 
+**Setup (required for TypeScript):**
+
+Add type declarations to your schema file (one-time setup per project):
+
+```ts
+// schema.ts (or a separate cms-types.d.ts file)
+import '@hotsauce/core/extend';
+import type { CmsColumnOptions, CmsTableOptions } from '@hotsauce/core/extend';
+
+// For PostgreSQL:
+declare module 'drizzle-orm/pg-core' {
+  interface PgColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface PgTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
+
+// For SQLite:
+declare module 'drizzle-orm/sqlite-core' {
+  interface SQLiteColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface SQLiteTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
+
+// For MySQL:
+declare module 'drizzle-orm/mysql-core' {
+  interface MySqlColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface MySqlTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
+```
+
+> **Why?** JSR doesn't allow packages to augment external modules. The runtime
+> patching works, but TypeScript needs these declarations in your project.
+
 **Usage:**
 
 ```ts
-import '@drizzle-cms/core/extend';
-import { jsonb, pgTable } from 'drizzle-orm/pg-core';
+import '@hotsauce/core/extend';
+import { jsonb, pgTable, text } from 'drizzle-orm/pg-core';
 
 const users = pgTable('users', {
   avatar: jsonb('avatar').$cms({ file: true }),
@@ -113,8 +156,47 @@ const users = pgTable('users', {
 
 Notes:
 
-- Importing `@drizzle-cms/core/extend` patches Drizzle builder prototypes (a global side effect).
+- Importing `@hotsauce/core/extend` patches Drizzle builder prototypes (a global side effect).
 - Metadata is stored on the Drizzle column config and is available as `IntrospectedColumn.cmsOptions`.
+
+#### Table-level `$cms()`
+
+You can also call `$cms()` on entire tables to configure table-level CMS options:
+
+```ts
+import '@hotsauce/core/extend';
+import { boolean, pgTable, text } from 'drizzle-orm/pg-core';
+
+const posts = pgTable('posts', {
+  slug: text('slug').notNull(),
+  published: boolean('published').default(false),
+}).$cms({
+  // Generate a "View on site" link for published posts
+  frontendUrl: (post) => post.published ? `/blog/${post.slug}` : null,
+  label: 'Blog Post', // Singular label (default: table name)
+  labelPlural: 'Blog Posts', // Plural label (default: table name + 's')
+});
+```
+
+**`CmsTableOptions`:**
+
+| Option        | Type                                                | Description                                         |
+| ------------- | --------------------------------------------------- | --------------------------------------------------- |
+| `frontendUrl` | `(record: Record<string, unknown>) => string\|null` | Generate a "View on site" link on detail/edit views |
+| `label`       | `string`                                            | Singular label for the table (e.g., "Blog Post")    |
+| `labelPlural` | `string`                                            | Plural label for lists (e.g., "Blog Posts")         |
+| `hidden`      | `boolean`                                           | Hide the table from the CMS sidebar                 |
+| `icon`        | `string`                                            | Icon identifier for the sidebar                     |
+
+The `frontendUrl` function receives the full record and should return:
+
+- A URL string to show a "View on site ↗" link
+- `null` or `undefined` to hide the link (e.g., for draft content)
+
+For security, prefer returning either:
+
+- A relative URL (e.g. `/blog/my-post`)
+- An absolute `https://...` (or `http://...`) URL
 
 #### File fields
 
@@ -131,6 +213,24 @@ The default constraints are:
 - `accept`: `image/*`
 - `maxSize`: `200_000` (200KB)
 
+#### UI Visibility
+
+Control how fields appear in the CMS UI:
+
+```ts
+const posts = pgTable('posts', {
+  contentHtml: text('content_html').$cms({ hidden: true }), // Hide from all views
+  score: integer('score').$cms({ readOnly: true }), // Show but not editable
+});
+```
+
+- `hidden?: boolean` — hide from all CMS views (forms, lists, detail). Still saved to DB.
+- `readOnly?: boolean` — show the field but prevent editing
+
+> **Note:** `hidden` and `readOnly` are UI hints only. A crafted POST request could still submit values for these columns. To enforce write protection server-side, use column policies with `write: () => false`.
+
+#### FileReference Type
+
 File values are stored as a JSON object:
 
 ```ts
@@ -143,7 +243,7 @@ export type FileReference = {
 };
 ```
 
-For runtime checks, `isValidFileReference(value)` is exported from `@drizzle-cms/core`.
+For runtime checks, `isValidFileReference(value)` is exported from `@hotsauce/core`.
 
 ### `validation/` - Zod Schema Generation
 
@@ -157,7 +257,7 @@ Re-exports from `drizzle-zod` for form validation.
 **Example:**
 
 ```ts
-import { createInsertSchema } from '@drizzle-cms/core';
+import { createInsertSchema } from '@hotsauce/core';
 import { users } from './schema';
 
 const insertSchema = createInsertSchema(users);
@@ -182,6 +282,7 @@ interface IntrospectedColumn {
   enumValues?: readonly string[];
   isArray?: boolean;
   references?: { table: string; column: string };
+  cmsOptions?: CmsColumnOptions; // Optional CMS metadata from column $cms()
 }
 ```
 
@@ -194,6 +295,7 @@ interface IntrospectedTable {
   primaryKey: string[];
   table: unknown; // Original Drizzle table reference
   isJunction?: boolean; // True for many-to-many link tables
+  cmsOptions?: CmsTableOptions; // Optional CMS metadata from table $cms()
 }
 ```
 

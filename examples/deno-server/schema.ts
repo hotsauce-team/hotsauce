@@ -10,11 +10,25 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 
-import '@drizzle-cms/core/extend';
+import '@hotsauce/core/extend';
+import type { CmsColumnOptions, CmsTableOptions } from '@hotsauce/core/extend';
+
+// ─────────────────────────────────────────────────────────────
+// Type declarations for $cms() method on Drizzle columns/tables.
+// Required for TypeScript support. Add once per project.
+// ─────────────────────────────────────────────────────────────
+declare module 'drizzle-orm/pg-core' {
+  interface PgColumnBuilder {
+    $cms(options: CmsColumnOptions): this;
+  }
+  interface PgTable {
+    $cms(options: CmsTableOptions): this;
+  }
+}
 
 import { z } from 'zod/v4';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
-import type { Parsers } from '../../packages/handlers/mod.ts';
+import type { Parsers } from '@hotsauce/cms';
 
 /**
  * Users table
@@ -28,6 +42,7 @@ const users = pgTable('users', {
   name: varchar('name', { length: 100 }).notNull(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: text('password_hash'), // required for cms password login only
+  totpSecret: text('totp_secret'), // for 2FA (base32 encoded)
   role: varchar('role', { length: 50 }), // 'admin', 'editor', etc.
   avatar: jsonb('avatar').$cms({ file: true }),
   bio: text('bio'),

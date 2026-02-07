@@ -1,13 +1,13 @@
 // Type-only import - no plugin code runs, just compile-time type checking
-import type { AuditLogConfig } from '@drizzle-cms/plugins/audit-log';
-import type { PluginConfig } from '@drizzle-cms/handlers';
+import type { AuditLogConfig } from '@hotsauce/plugins/audit-log';
+import type { PluginConfig } from '@hotsauce/cms';
 
 // Create Worker for the audit log plugin
 // The plugin code is loaded ONLY in the Worker - no plugin code runs in main thread
 // You control permissions - the plugin code runs entirely in this Worker
 // Worker console.log outputs appear in the terminal prefixed with [audit]
 const auditLogWorker = new Worker(
-  import.meta.resolve('@drizzle-cms/plugins/audit-log/worker'),
+  import.meta.resolve('@hotsauce/plugins/audit-log/worker'),
   {
     type: 'module',
     // Deno-specific: restrict what the plugin can access

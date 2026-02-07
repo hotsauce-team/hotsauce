@@ -1,12 +1,8 @@
 // CMS admin configuration
-// Sets up drizzle-cms handler for /admin routes
-import {
-  createCmsHandler,
-  PasswordProvider,
-  readOnly,
-} from '@drizzle-cms/handlers';
-import type { FilterContext, WorkerPluginConfig } from '@drizzle-cms/handlers';
-import type { TransformHooks } from '@drizzle-cms/handlers-workers';
+// Sets up hotsauce-cms handler for /admin routes
+import { createCmsHandler, PasswordProvider, readOnly } from '@hotsauce/cms';
+import type { FilterContext, WorkerPluginConfig } from '@hotsauce/cms';
+import type { TransformHooks } from '@hotsauce/workers';
 
 import type { Database } from '../db.ts';
 import { adminUsers, parsers, schema } from '../schema.ts';
@@ -55,10 +51,10 @@ export function createAdminHandler(db: Database) {
     basePath: '/admin',
     auth: {
       provider: new PasswordProvider({ db, usersTable: adminUsers }),
-    },
-    policies: {
-      // Settings are read-only for non-admins
-      settings: readOnly(),
+      policies: {
+        // Settings are read-only for non-admins
+        settings: readOnly(),
+      },
     },
     parsers,
     plugins: [markdownPlugin],

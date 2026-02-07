@@ -268,3 +268,105 @@ Deno.test('drizzle-compat: report drizzle-orm version', async () => {
   assertExists(sqliteCore.sqliteTable, 'sqlite-core should export sqliteTable');
   assertExists(mysqlCore.mysqlTable, 'mysql-core should export mysqlTable');
 });
+
+// ============================================================================
+// Table Class Internals (for table-level $cms() extension)
+// ============================================================================
+
+Deno.test('drizzle-compat: PgTable class exists and has prototype', async () => {
+  const { PgTable } = await import('drizzle-orm/pg-core');
+  assertExists(PgTable, 'PgTable should be exported');
+  assertExists(PgTable.prototype, 'PgTable.prototype should exist');
+});
+
+Deno.test('drizzle-compat: SQLiteTable class exists and has prototype', async () => {
+  const { SQLiteTable } = await import('drizzle-orm/sqlite-core');
+  assertExists(SQLiteTable, 'SQLiteTable should be exported');
+  assertExists(SQLiteTable.prototype, 'SQLiteTable.prototype should exist');
+});
+
+Deno.test('drizzle-compat: MySqlTable class exists and has prototype', async () => {
+  const { MySqlTable } = await import('drizzle-orm/mysql-core');
+  assertExists(MySqlTable, 'MySqlTable should be exported');
+  assertExists(MySqlTable.prototype, 'MySqlTable.prototype should exist');
+});
+
+Deno.test('drizzle-compat: PgTable instance can have custom symbol properties', async () => {
+  const { pgTable, serial } = await import('drizzle-orm/pg-core');
+
+  const TEST_SYMBOL = Symbol.for('hotsauce-cms:test');
+  const table = pgTable('test', {
+    id: serial('id').primaryKey(),
+  });
+
+  // We should be able to attach a symbol property to the table instance
+  (table as any)[TEST_SYMBOL] = { label: 'Test Table' };
+
+  assertEquals(
+    (table as any)[TEST_SYMBOL],
+    { label: 'Test Table' },
+    'Custom symbol properties should persist on PgTable instance',
+  );
+});
+
+Deno.test('drizzle-compat: SQLiteTable instance can have custom symbol properties', async () => {
+  const { sqliteTable, integer } = await import('drizzle-orm/sqlite-core');
+
+  const TEST_SYMBOL = Symbol.for('hotsauce-cms:test');
+  const table = sqliteTable('test', {
+    id: integer('id').primaryKey(),
+  });
+
+  (table as any)[TEST_SYMBOL] = { label: 'Test Table' };
+
+  assertEquals(
+    (table as any)[TEST_SYMBOL],
+    { label: 'Test Table' },
+    'Custom symbol properties should persist on SQLiteTable instance',
+  );
+});
+
+Deno.test('drizzle-compat: MySqlTable instance can have custom symbol properties', async () => {
+  const { mysqlTable, serial } = await import('drizzle-orm/mysql-core');
+
+  const TEST_SYMBOL = Symbol.for('hotsauce-cms:test');
+  const table = mysqlTable('test', {
+    id: serial('id').primaryKey(),
+  });
+
+  (table as any)[TEST_SYMBOL] = { label: 'Test Table' };
+
+  assertEquals(
+    (table as any)[TEST_SYMBOL],
+    { label: 'Test Table' },
+    'Custom symbol properties should persist on MySqlTable instance',
+  );
+});
+
+Deno.test('drizzle-compat: table prototype can be extended', async () => {
+  const { PgTable, pgTable, serial } = await import('drizzle-orm/pg-core');
+
+  // Verify we can add methods to the prototype (our $cms() approach)
+  const proto = PgTable.prototype as unknown as Record<string, unknown>;
+  const originalMethod = proto.testMethod;
+  proto.testMethod = function () {
+    return 'extended';
+  };
+
+  const table = pgTable('test', {
+    id: serial('id').primaryKey(),
+  });
+
+  assertEquals(
+    (table as any).testMethod(),
+    'extended',
+    'Prototype methods should be callable on table instances',
+  );
+
+  // Cleanup
+  if (originalMethod === undefined) {
+    delete proto.testMethod;
+  } else {
+    proto.testMethod = originalMethod;
+  }
+});

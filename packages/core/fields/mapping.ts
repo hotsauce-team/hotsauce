@@ -135,6 +135,14 @@ export function mapColumnToField(column: IntrospectedColumn): CMSField {
     label,
   };
 
+  // Apply $cms() options
+  if (column.cmsOptions?.hidden) {
+    field.hidden = true;
+  }
+  if (column.cmsOptions?.readOnly) {
+    field.readOnly = true;
+  }
+
   // Auto-hide primary keys and timestamps
   if (column.isPrimaryKey) {
     field.hidden = true;

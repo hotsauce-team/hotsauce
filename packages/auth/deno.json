@@ -1,0 +1,17 @@
+{
+  "name": "@hotsauce/auth",
+  "version": "0.1.4",
+  "exports": "./mod.ts",
+  "publish": {
+    "include": [
+      "mod.ts",
+      "*.ts",
+      "account/",
+      "README.md",
+      "LICENSE"
+    ],
+    "exclude": [
+      "tests/"
+    ]
+  }
+}

@@ -7,7 +7,7 @@
  * All CSS is served from a single external file to enable
  * strict Content Security Policy (style-src 'self') without nonces.
  */
-export const cmsStylesheet = `
+export const cmsStylesheet: string = `
 :root {
   --cms-primary: #2563eb;
   --cms-primary-hover: #1d4ed8;
@@ -91,6 +91,17 @@ body {
   align-items: center;
 }
 
+.cms-user {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.cms-user-name {
+  color: var(--cms-gray-600);
+  font-size: 0.875rem;
+}
+
 .cms-content {
   padding: 1.5rem;
   flex: 1;
@@ -107,6 +118,8 @@ body {
   border: none;
   cursor: pointer;
   transition: background 0.15s;
+  line-height: 1.25;
+  box-sizing: border-box;
 }
 
 .cms-btn-primary {
@@ -126,6 +139,14 @@ body {
   color: white;
 }
 .cms-btn-danger:hover { background: var(--cms-danger-hover); }
+
+.cms-btn-text {
+  background: transparent;
+  color: var(--cms-primary);
+  padding: 0.5rem 0.75rem;
+}
+.cms-btn-text:hover { background: var(--cms-gray-100); }
+
 .cms-btn-small {
   padding: 0.25rem 0.5rem;
   font-size: 0.75rem;
@@ -179,15 +200,6 @@ body {
 
 /* File Upload */
 .cms-file-input-wrapper { display: flex; flex-direction: column; gap: 0.5rem; }
-.cms-file-current {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.75rem;
-  background: var(--cms-gray-50);
-  border: 1px solid var(--cms-gray-200);
-  border-radius: var(--cms-radius);
-}
 .cms-file-icon { font-size: 1.25rem; }
 .cms-file-name { font-weight: 500; }
 .cms-file-size { color: var(--cms-gray-500); font-size: 0.875rem; }
@@ -228,6 +240,7 @@ body {
   gap: 0.5rem;
   padding: 0.75rem;
   background: var(--cms-gray-50);
+  border: 1px solid var(--cms-gray-200);
   border-radius: var(--cms-radius);
   margin-bottom: 0.5rem;
 }
@@ -246,7 +259,6 @@ body {
   font-size: 0.875rem;
 }
 .cms-file-link:hover { text-decoration: underline; }
-.cms-inline-form { display: inline; }
 
 .cms-error { color: var(--cms-danger); font-size: 0.875rem; margin: 0.25rem 0 0; }
 .cms-help { color: var(--cms-gray-500); font-size: 0.875rem; margin: 0.25rem 0 0; }
@@ -319,8 +331,8 @@ body {
   font-size: 1.5rem;
 }
 
-.cms-detail-actions { display: flex; gap: 0.5rem; }
-.cms-inline-form { display: inline; }
+.cms-detail-actions { display: flex; gap: 0.5rem; align-items: stretch; }
+.cms-inline-form { display: contents; }
 
 .cms-detail-list {
   background: white;

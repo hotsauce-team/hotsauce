@@ -3,7 +3,7 @@
 import { attrs, html, raw } from '../html.ts';
 import { form, type RelationOption } from '../forms/form.ts';
 import { checkboxListInput, type ManyToManyData } from '../forms/inputs.ts';
-import type { CMSField } from '@drizzle-cms/core';
+import type { CMSField } from '@hotsauce/core';
 
 /**
  * Options for edit view
@@ -19,6 +19,8 @@ export interface EditViewOptions {
   csrfToken?: string;
   /** Enable multipart form data (for file uploads) */
   multipart?: boolean;
+  /** Frontend URL for "View on site" link (null = hide link) */
+  frontendUrl?: string | null;
   /** Additional CSS classes */
   class?: string;
 }
@@ -63,10 +65,28 @@ export function editView(
 
   const m2mSections = renderManyToManySections(manyToManyData);
 
+  // Build header actions (only "View on site" for now)
+  const headerActions: string[] = [];
+  if (options.frontendUrl) {
+    headerActions.push(html`
+      <a
+        href="${options
+          .frontendUrl}"
+        target="_blank"
+        rel="noopener"
+        class="cms-btn cms-btn-secondary"
+      >View on site ↗</a>
+    `);
+  }
+  const actionsHtml = headerActions.length > 0
+    ? `<div class="cms-edit-actions">${headerActions.join('\n')}</div>`
+    : '';
+
   return html`
     <div ${attrs({ class: `cms-edit-view ${options.class ?? ''}`.trim() })}>
       <header class="cms-edit-header">
         <h1>${title}</h1>
+        ${raw(actionsHtml)}
       </header>
       ${raw(form(
         fields,

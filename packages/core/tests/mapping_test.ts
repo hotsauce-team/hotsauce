@@ -254,3 +254,46 @@ Deno.test('mapColumnsToFields: returns empty array for empty columns', () => {
   const fields = mapColumnsToFields([]);
   assertEquals(fields.length, 0);
 });
+
+// $cms() options tests
+Deno.test('mapColumnToField: cmsOptions.hidden sets hidden to true', () => {
+  const column = createMockColumn({
+    propertyName: 'contentHtml',
+    dataType: 'string',
+    cmsOptions: { hidden: true },
+  });
+
+  const field = mapColumnToField(column);
+
+  assertEquals(field.hidden, true);
+  assertEquals(field.readOnly, undefined);
+});
+
+Deno.test('mapColumnToField: cmsOptions.readOnly sets readOnly to true', () => {
+  const column = createMockColumn({
+    propertyName: 'computedScore',
+    dataType: 'number',
+    cmsOptions: { readOnly: true },
+  });
+
+  const field = mapColumnToField(column);
+
+  assertEquals(field.readOnly, true);
+  assertEquals(field.hidden, undefined);
+});
+
+Deno.test('mapColumnToField: multiple cmsOptions work together', () => {
+  const column = createMockColumn({
+    propertyName: 'internalNote',
+    dataType: 'string',
+    cmsOptions: {
+      hidden: true,
+      readOnly: true,
+    },
+  });
+
+  const field = mapColumnToField(column);
+
+  assertEquals(field.hidden, true);
+  assertEquals(field.readOnly, true);
+});

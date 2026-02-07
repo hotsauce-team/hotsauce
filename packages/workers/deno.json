@@ -1,0 +1,16 @@
+{
+  "name": "@hotsauce/workers",
+  "version": "0.1.4",
+  "exports": "./mod.ts",
+  "publish": {
+    "include": [
+      "mod.ts",
+      "executor.ts",
+      "guard.ts",
+      "validate.ts",
+      "types.ts",
+      "README.md",
+      "LICENSE"
+    ]
+  }
+}
