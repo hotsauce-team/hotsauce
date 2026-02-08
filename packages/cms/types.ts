@@ -145,14 +145,14 @@ export interface CmsOptionsBase {
   /**
    * Plugins to extend CMS functionality.
    *
-   * Plugins run in isolated Worker threads for security.
-   * They can transform data, respond to CRUD actions, and add routes.
+   * Plugins can provide UI customizations (custom field renderers),
+   * data transformations, and action hooks.
    *
    * @example
    * ```ts
    * plugins: [
-   *   { plugin: auditLogPlugin },
-   *   { plugin: s3UploadPlugin, config: { bucket: 'my-bucket' } },
+   *   { name: 'audit', worker: auditWorker, hooks: { on: ['create'] } },
+   *   createPuckPlugin({ basePath: '/admin' }),
    * ]
    * ```
    */

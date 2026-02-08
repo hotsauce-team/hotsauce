@@ -4,10 +4,12 @@
 import type { CrudAction } from '../types.ts';
 import type {
   ActionContext,
+  FieldUIOverride,
   FilterContext,
   HookType,
   PluginContext,
   Serializable,
+  UIRenderFieldContext,
 } from './types.ts';
 import type { PluginRegistry, RegisteredPlugin } from './registry.ts';
 import { WorkerExecutor } from '@hotsauce/workers';
@@ -233,6 +235,35 @@ export class PluginService {
     };
 
     await this.executor.executeAction(plugins, action, ctx);
+  }
+
+  /**
+   * Execute UI renderField hook for all plugins.
+   * Called when rendering edit/create forms.
+   * Returns first non-null override, or null for default rendering.
+   *
+   * @returns Field UI override or null
+   */
+  async renderField(
+    ctx: UIRenderFieldContext,
+  ): Promise<FieldUIOverride> {
+    const allPlugins = this.registry.getPluginsWithUI('renderField');
+    if (allPlugins.length === 0) return null;
+
+    // Apply plugin filters
+    // Use 'read' action for UI hooks since we're rendering a view
+    const plugins = this.applyFilter(
+      allPlugins,
+      'ui:renderField',
+      ctx.table,
+      ctx.view === 'edit' ? 'read' : 'create',
+      ctx.user,
+    );
+    if (plugins.length === 0) return null;
+
+    await this.ensureInitialized();
+
+    return await this.executor.executeRenderField(plugins, ctx);
   }
 
   /**

@@ -19,7 +19,10 @@ export type CmsColumnOptions = {
   hidden?: boolean;
   /** Show this field but prevent editing. */
   readOnly?: boolean;
+  /** Plugin-specific configuration, keyed by plugin name. */
+  plugins?: Record<string, unknown>;
 };
+
 
 /** Default accept filter for file inputs */
 export const FILE_DEFAULT_ACCEPT = 'image/*';

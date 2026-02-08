@@ -28,6 +28,7 @@ export type {
   ActionHookConfig,
   ActionHooks,
   CrudAction,
+  FieldUIOverride,
   PluginContext,
   PluginHooks,
   PluginRequest,
@@ -38,6 +39,10 @@ export type {
   SerializableValue,
   TransformFn,
   TransformHooks,
+  UIFieldInfo,
+  UIHooks,
+  UIRenderFieldContext,
+  UIRenderFieldFn,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────

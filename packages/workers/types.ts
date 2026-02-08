@@ -117,6 +117,98 @@ export interface TransformHooks {
 }
 
 // ─────────────────────────────────────────────────────────────
+// UI hooks - customize field rendering (always block)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Simplified field info passed to UI hooks.
+ * Contains only serializable properties from CMSField.
+ */
+export interface UIFieldInfo {
+  /** Column name in the database */
+  name: string;
+  /** Display label for the field */
+  label: string;
+  /** CMS field type (text, number, select, json, file, etc.) */
+  fieldType: string;
+  /** Database column type */
+  columnType: string;
+  /** Whether the field is required */
+  required: boolean;
+  /** Whether the field is read-only */
+  readOnly: boolean;
+  /**
+   * This plugin's config from the column's `.$cms({ plugins: { [name]: config } })`.
+   * Only present if the column has config for the plugin receiving this context.
+   * 
+   * @example
+   * ```ts
+   * // Column: content: text().$cms({ plugins: { puck: { variant: 'full' } } })
+   * // In puck plugin's renderField hook:
+   * if (ctx.field.plugin) {  // truthy = this field uses puck
+   *   const variant = ctx.field.plugin.variant;  // 'full'
+   * }
+   * ```
+   */
+  plugin?: Serializable;
+  /** @internal All plugin configs - used to extract per-plugin config */
+  _plugins?: Record<string, Serializable>;
+}
+
+/**
+ * Context for UI renderField hook.
+ * Contains field info, current value, and record context.
+ */
+export interface UIRenderFieldContext {
+  /** Table name */
+  table: string;
+  /** Field information */
+  field: UIFieldInfo;
+  /** Current field value */
+  value: Serializable;
+  /** Record ID (undefined on create) */
+  recordId?: string | number;
+  /** View type: 'edit' for edit form, 'create' for create form */
+  view: 'edit' | 'create';
+  /** Authenticated user info (if available) */
+  user?: {
+    sub: string;
+    role?: string;
+  };
+}
+
+/**
+ * Override the default field input UI.
+ *
+ * Return from renderField hook to customize how a field is rendered:
+ * - `null` or `undefined`: Show the default input
+ * - `{ link: ... }`: Replace the input with a link (e.g., to an external editor)
+ */
+export type FieldUIOverride =
+  | null
+  | { link: { label: string; href: string; target?: '_blank' } };
+
+/**
+ * UI render field function signature.
+ * Receives field context, returns UI override or null for default.
+ */
+export type UIRenderFieldFn = (
+  ctx: UIRenderFieldContext,
+) => Promise<FieldUIOverride> | FieldUIOverride;
+
+/**
+ * UI hooks customize how fields are rendered.
+ * These always block because they return rendering instructions.
+ */
+export interface UIHooks {
+  /**
+   * Customize field rendering on edit/create forms.
+   * Return null for default input, or an override object.
+   */
+  renderField?: UIRenderFieldFn;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Action hooks - side effects (optionally fire-and-forget)
 // ─────────────────────────────────────────────────────────────
 
@@ -176,6 +268,8 @@ export interface ActionHooks {
 export interface PluginHooks {
   /** Transform hooks modify data as it flows through (always blocks) */
   transform?: TransformHooks;
+  /** UI hooks customize field rendering (always blocks) */
+  ui?: UIHooks;
   /** Action hooks for side effects after CRUD operations */
   on?: ActionHooks;
 }

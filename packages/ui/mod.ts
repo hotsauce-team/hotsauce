@@ -37,7 +37,7 @@ export {
 // ─────────────────────────────────────────────────────────────
 // Form Fields - Field wrappers with labels and errors
 // ─────────────────────────────────────────────────────────────
-export type { FormFieldOptions } from './forms/field.ts';
+export type { FieldUIOverride, FormFieldOptions } from './forms/field.ts';
 export { formField, formFields } from './forms/field.ts';
 
 // ─────────────────────────────────────────────────────────────

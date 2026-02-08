@@ -210,6 +210,7 @@ export type {
   ActionContext,
   ActionHandlerFn,
   ActionHook,
+  FieldUIOverride,
   FilterContext,
   // Filter types
   HookType,
@@ -221,6 +222,10 @@ export type {
   PluginHooks,
   Serializable,
   TransformFn,
+  UIFieldInfo,
+  UIHooks,
+  UIRenderFieldContext,
+  UIRenderFieldFn,
   WorkerPluginConfig,
 } from './plugins/types.ts';
 

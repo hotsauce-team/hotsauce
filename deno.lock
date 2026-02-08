@@ -372,6 +372,11 @@
           "jsr:@hono/hono@^4.11.5",
           "npm:micromark@4.0.2"
         ]
+      },
+      "examples/puck-editor": {
+        "dependencies": [
+          "jsr:@hono/hono@^4.11.5"
+        ]
       }
     }
   }

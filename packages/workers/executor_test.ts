@@ -262,3 +262,292 @@ Deno.test('WorkerExecutor: terminatePlugin removes worker', async () => {
     'No worker for plugin',
   );
 });
+
+// ─────────────────────────────────────────────────────────────
+// FieldUIOverride validation tests (via executeRenderField)
+// ─────────────────────────────────────────────────────────────
+
+import type { PluginHooks, UIRenderFieldContext } from './types.ts';
+
+function createInProcessUIPlugin(
+  name: string,
+  renderFieldFn: (ctx: UIRenderFieldContext) => unknown,
+): RegisteredPlugin {
+  const hooks: PluginHooks = {
+    ui: {
+      renderField: renderFieldFn as PluginHooks['ui'] extends { renderField?: infer F } ? F : never,
+    },
+  };
+  return {
+    plugin: {
+      name,
+      hooks,
+      // Note: filter is optional for test purposes since PluginConfig here
+      // doesn't require it (it's in the CMS-specific types)
+    },
+    initialized: true,
+    isWorker: false,
+  };
+}
+
+const testUIFieldContext: UIRenderFieldContext = {
+  table: 'posts',
+  field: {
+    name: 'content',
+    label: 'Content',
+    fieldType: 'textarea',
+    columnType: 'text',
+    required: false,
+    readOnly: false,
+  },
+  value: 'test content',
+  recordId: '1',
+  view: 'edit',
+};
+
+Deno.test('FieldUIOverride validation: accepts null', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => null);
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: accepts undefined', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => undefined);
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: accepts valid link', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const validLink = { link: { label: 'Edit', href: '/edit/1' } };
+  const plugin = createInProcessUIPlugin('test', () => validLink);
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, validLink);
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: accepts link with target', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const validLink = { link: { label: 'Edit', href: '/edit/1', target: '_blank' as const } };
+  const plugin = createInProcessUIPlugin('test', () => validLink);
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, validLink);
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: rejects non-object', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => 'invalid string');
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Expected null or an object'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects missing link property', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({ other: 'prop' }));
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes("Expected object with 'link' property"), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects link with missing label', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({ link: { href: '/test' } }));
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes("'link.label' to be a string"), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects link with missing href', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({ link: { label: 'Test' } }));
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes("'link.href' to be a string"), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects invalid target', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Test', href: '/test', target: '_self' },
+  }));
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes("'link.target' to be '_blank'"), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects unexpected properties on link', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Test', href: '/test', extra: 'prop' },
+  }));
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes("Unexpected properties on 'link'"), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects unexpected properties on root', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Test', href: '/test' },
+    extra: 'prop',
+  }));
+
+  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unexpected properties on FieldUIOverride'), true);
+});
+
+Deno.test('FieldUIOverride validation: continues to next plugin on invalid return', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+
+  // First plugin returns invalid, second returns valid
+  const invalidPlugin = createInProcessUIPlugin('invalid-plugin', () => 'bad');
+  const validPlugin = createInProcessUIPlugin('valid-plugin', () => ({
+    link: { label: 'Valid', href: '/valid' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [invalidPlugin, validPlugin],
+    testUIFieldContext,
+  );
+
+  // Should get valid result from second plugin
+  assertEquals(result, { link: { label: 'Valid', href: '/valid' } });
+  // Should have one error from first plugin
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('invalid-plugin'), true);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Plugin config extraction tests
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('FieldUIOverride: extracts plugin-specific config from _plugins', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+
+  // Track what the plugin receives
+  let receivedCtx: UIRenderFieldContext | null = null;
+  const plugin = createInProcessUIPlugin('puck', (ctx) => {
+    receivedCtx = ctx;
+    return null;
+  });
+
+  const ctxWithPlugins: UIRenderFieldContext = {
+    ...testUIFieldContext,
+    field: {
+      ...testUIFieldContext.field,
+      _plugins: {
+        puck: { variant: 'full' },
+        other: { setting: true },
+      },
+    },
+  };
+
+  await executor.executeRenderField([plugin], ctxWithPlugins);
+
+  // Plugin should receive only its own config in `plugin`
+  assertEquals(receivedCtx!.field.plugin, { variant: 'full' });
+  // Plugin should NOT see other plugins' configs
+  assertEquals(receivedCtx!.field._plugins, undefined);
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride: plugin receives undefined when no config for that plugin', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+
+  let receivedCtx: UIRenderFieldContext | null = null;
+  const plugin = createInProcessUIPlugin('puck', (ctx) => {
+    receivedCtx = ctx;
+    return null;
+  });
+
+  const ctxWithOtherPlugins: UIRenderFieldContext = {
+    ...testUIFieldContext,
+    field: {
+      ...testUIFieldContext.field,
+      _plugins: {
+        other: { setting: true },  // No 'puck' config
+      },
+    },
+  };
+
+  await executor.executeRenderField([plugin], ctxWithOtherPlugins);
+
+  // Plugin should receive undefined for its config
+  assertEquals(receivedCtx!.field.plugin, undefined);
+  assertEquals(receivedCtx!.field._plugins, undefined);
+});
+
+Deno.test('FieldUIOverride: plugin receives true when config is boolean', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+
+  let receivedCtx: UIRenderFieldContext | null = null;
+  const plugin = createInProcessUIPlugin('puck', (ctx) => {
+    receivedCtx = ctx;
+    return null;
+  });
+
+  const ctxWithBoolConfig: UIRenderFieldContext = {
+    ...testUIFieldContext,
+    field: {
+      ...testUIFieldContext.field,
+      _plugins: {
+        puck: true,  // Simple boolean config
+      },
+    },
+  };
+
+  await executor.executeRenderField([plugin], ctxWithBoolConfig);
+
+  // Plugin should receive true
+  assertEquals(receivedCtx!.field.plugin, true);
+});

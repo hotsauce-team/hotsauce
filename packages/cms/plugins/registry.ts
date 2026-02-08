@@ -6,6 +6,7 @@ import type {
   PluginConfig,
   PluginRoute,
   TransformHooks,
+  UIHooks,
   WorkerPluginConfig,
 } from './types.ts';
 
@@ -130,6 +131,28 @@ export class PluginRegistry {
   }
 
   /**
+   * Get all plugins that have UI hooks.
+   * Worker plugins MUST explicitly declare UI hooks (no runtime discovery).
+   * This prevents sending ui:renderField messages to Workers that don't handle them.
+   */
+  getPluginsWithUI(hook: keyof UIHooks): RegisteredPlugin[] {
+    return this.getAll().filter((p) => {
+      // Worker plugins: require explicit UI hook declaration
+      if (p.isWorker) {
+        const workerConfig = p.plugin as WorkerPluginConfig;
+        // UI hooks require explicit declaration - no "include all" fallback
+        // (unlike transform/action hooks which have runtime discovery)
+        if (!workerConfig.hooks?.ui) return false;
+        return workerConfig.hooks.ui.includes(hook);
+      }
+
+      // In-process plugins: check for actual function
+      const inProcessConfig = p.plugin as InProcessPluginConfig;
+      return inProcessConfig.hooks?.ui?.[hook] !== undefined;
+    });
+  }
+
+  /**
    * Get all routes from all plugins
    */
   getAllRoutes(): Array<{ pluginName: string; route: PluginRoute }> {
@@ -245,6 +268,26 @@ export class PluginRegistry {
           }
         }
       }
+
+      // Check UI hooks are arrays, not objects
+      if (plugin.hooks.ui !== undefined) {
+        if (!Array.isArray(plugin.hooks.ui)) {
+          throw new PluginValidationError(
+            plugin.name,
+            'Worker plugins must use declarative hooks (arrays), not functions. Use { ui: ["renderField"] } instead of { ui: { renderField: fn } }',
+          );
+        }
+        // Validate each entry is a valid UI hook name
+        const validUIHooks = ['renderField'];
+        for (const hook of plugin.hooks.ui) {
+          if (!validUIHooks.includes(hook)) {
+            throw new PluginValidationError(
+              plugin.name,
+              `Invalid UI hook "${hook}". Valid hooks: ${validUIHooks.join(', ')}`,
+            );
+          }
+        }
+      }
     }
 
     // Worker plugins cannot have routes (they'd need main-thread access)
@@ -302,6 +345,26 @@ export class PluginRegistry {
             throw new PluginValidationError(
               plugin.name,
               `Action hook "${actionName}" must be a function or { handler, blocking? } object`,
+            );
+          }
+        }
+      }
+
+      // Check UI hooks are functions
+      if (plugin.hooks.ui !== undefined) {
+        if (
+          typeof plugin.hooks.ui !== 'object' || Array.isArray(plugin.hooks.ui)
+        ) {
+          throw new PluginValidationError(
+            plugin.name,
+            'In-process plugins must use function hooks, not declarative arrays',
+          );
+        }
+        for (const [hookName, fn] of Object.entries(plugin.hooks.ui)) {
+          if (typeof fn !== 'function') {
+            throw new PluginValidationError(
+              plugin.name,
+              `UI hook "${hookName}" must be a function`,
             );
           }
         }

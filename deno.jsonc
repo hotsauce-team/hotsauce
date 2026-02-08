@@ -18,7 +18,8 @@
 
     // Examples
     "./examples/deno-server",
-    "./examples/hono-fullstack"
+    "./examples/hono-fullstack",
+    "./examples/puck-editor"
   ],
 
   // Shared import map for all packages
@@ -50,15 +51,21 @@
 
   // Tasks
   "tasks": {
+    // Testing tasks with fine-grained permissions
     "test": "deno test -P --parallel",
     "test:debug": "deno test -P", // sequential for debugging
     "test:watch": "deno test -P --watch",
     "test:drizzle-compat": "deno test -P packages/core/tests/drizzle_compat_test.ts",
     "test:npm": "./scripts/npm/test-npm.sh", // builds + tests in Docker
+    // Code quality tasks
     "check": "deno check packages/*/mod.ts",
     "lint": "deno lint",
     "fmt": "deno fmt",
     "hooks:run": "deno fmt --check && deno lint && deno task check",
+    // JRS
+    "update-jsr-paths": "deno run --allow-read=deno.jsonc --allow-write=deno.jsonc scripts/jsr/update_jsr_paths.ts",
+    "update-package-versions": "deno run --allow-read=packages,deno.jsonc --allow-write=packages,deno.jsonc scripts/jsr/update_package_versions.ts",
+    // Example-specific tasks
     "example:seed": "deno task -f example-deno-server seed",
     "example:dev": "deno task -f example-deno-server dev",
     "example:dev:watch": "deno task -f example-deno-server dev:watch",
@@ -67,8 +74,9 @@
     "hono:dev": "deno task -f hono-fullstack-example dev",
     "hono:dev:watch": "deno task -f hono-fullstack-example dev:watch",
     "hono:dev:debug": "deno task -f hono-fullstack-example dev:debug",
-    "update-jsr-paths": "deno run --allow-read=deno.jsonc --allow-write=deno.jsonc scripts/jsr/update_jsr_paths.ts",
-    "update-package-versions": "deno run --allow-read=packages,deno.jsonc --allow-write=packages,deno.jsonc scripts/jsr/update_package_versions.ts"
+    "puck:seed": "deno task -f puck-editor-example seed",
+    "puck:dev": "deno task -f puck-editor-example dev",
+    "puck:dev:watch": "deno task -f puck-editor-example dev:watch"
   },
 
   // Test configuration with fine-grained permissions

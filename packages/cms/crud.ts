@@ -27,6 +27,7 @@ import { cmsUrl, formatTableName } from './router.ts';
 import type {
   DetailViewOptions,
   EditViewOptions,
+  FieldUIOverride,
   LayoutOptions,
   ListViewOptions,
   NavItem,
@@ -68,6 +69,27 @@ import {
   validateHiddenRequiredColumns,
 } from './policies/mod.ts';
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
+import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
+import type { CMSField } from '@hotsauce/core';
+
+/**
+ * Convert CMSField to serializable UIFieldInfo for plugin hooks
+ */
+function toUIFieldInfo(field: CMSField): UIFieldInfo {
+  const plugins = field.column.cmsOptions?.plugins as
+    | Record<string, unknown>
+    | undefined;
+  return {
+    name: field.column.name,
+    label: field.label,
+    fieldType: field.fieldType,
+    columnType: field.column.columnType,
+    required: field.column.notNull && !field.column.hasDefault,
+    readOnly: field.readOnly ?? false,
+    // Pass all plugin configs; executor extracts per-plugin
+    _plugins: plugins as Record<string, import('@hotsauce/workers').Serializable> | undefined,
+  };
+}
 
 /**
  * Get plugin user context from RouteContext
@@ -1097,7 +1119,7 @@ async function renderCreateForm(
   formError?: string,
   fieldErrors: Record<string, string> = {},
 ): Promise<Response> {
-  const { options, route } = ctx;
+  const { options, route, pluginService } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
@@ -1115,6 +1137,31 @@ async function renderCreateForm(
 
   // Check if any writable fields are file fields
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
+
+  // Get field UI overrides from plugins (parallel for performance)
+  const fieldOverrides: Record<string, FieldUIOverride> = {};
+  if (pluginService) {
+    const user = getPluginUser(ctx);
+    const results = await Promise.all(
+      cmsFields.map(async (field) => {
+        const uiCtx: UIRenderFieldContext = {
+          table: table.name,
+          field: toUIFieldInfo(field),
+          value: (values[field.column.propertyName] ?? null) as UIRenderFieldContext['value'],
+          recordId: undefined, // create view has no record ID
+          view: 'create',
+          user,
+        };
+        return {
+          name: field.column.propertyName,
+          override: await pluginService.renderField(uiCtx),
+        };
+      }),
+    );
+    for (const { name, override } of results) {
+      if (override) fieldOverrides[name] = override;
+    }
+  }
 
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -1141,6 +1188,7 @@ async function renderCreateForm(
     errors,
     relationData,
     manyToManyData,
+    fieldOverrides,
   );
 
   const page = layout(
@@ -1160,7 +1208,7 @@ async function renderEditForm(
   /** Original record for computing frontendUrl (optional - uses values if not provided) */
   record?: Record<string, unknown>,
 ): Promise<Response> {
-  const { options, route } = ctx;
+  const { options, route, pluginService } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
@@ -1183,6 +1231,31 @@ async function renderEditForm(
   // Compute frontend URL from table's $cms() config
   // Use provided record if available, fall back to values (which may be form data or record)
   const frontendUrl = getFrontendUrl(ctx, table, record ?? values, 'update');
+
+  // Get field UI overrides from plugins (parallel for performance)
+  const fieldOverrides: Record<string, FieldUIOverride> = {};
+  if (pluginService) {
+    const user = getPluginUser(ctx);
+    const results = await Promise.all(
+      cmsFields.map(async (field) => {
+        const uiCtx: UIRenderFieldContext = {
+          table: table.name,
+          field: toUIFieldInfo(field),
+          value: (values[field.column.propertyName] ?? null) as UIRenderFieldContext['value'],
+          recordId: recordId,
+          view: 'edit',
+          user,
+        };
+        return {
+          name: field.column.propertyName,
+          override: await pluginService.renderField(uiCtx),
+        };
+      }),
+    );
+    for (const { name, override } of results) {
+      if (override) fieldOverrides[name] = override;
+    }
+  }
 
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -1210,6 +1283,7 @@ async function renderEditForm(
     errors,
     relationData,
     manyToManyData,
+    fieldOverrides,
   );
 
   const page = layout(

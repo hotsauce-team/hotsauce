@@ -9,6 +9,7 @@ export type {
   ActionHookConfig,
   ActionHooks,
   CrudAction,
+  FieldUIOverride,
   PluginContext,
   PluginHooks,
   PluginRequest,
@@ -19,6 +20,10 @@ export type {
   SerializableValue,
   TransformFn,
   TransformHooks,
+  UIFieldInfo,
+  UIHooks,
+  UIRenderFieldContext,
+  UIRenderFieldFn,
 } from '@hotsauce/workers';
 
 // Import for use in local type definitions
@@ -28,6 +33,7 @@ import type {
   PluginHooks,
   PluginRoute,
   TransformHooks,
+  UIHooks,
 } from '@hotsauce/workers';
 
 // ─────────────────────────────────────────────────────────────
@@ -53,6 +59,11 @@ export interface PluginCapabilities {
   transforms?: (keyof TransformHooks)[];
 
   /**
+   * UI hooks the plugin uses
+   */
+  ui?: (keyof UIHooks)[];
+
+  /**
    * Action hooks the plugin uses
    */
   actions?: (keyof ActionHooks)[];
@@ -76,6 +87,7 @@ export type { PluginErrorContext, PluginErrorHandler } from '@hotsauce/workers';
 export type HookType =
   | 'transform:beforeSave'
   | 'transform:afterRead'
+  | 'ui:renderField'
   | 'action';
 
 /**
@@ -125,6 +137,12 @@ export interface WorkerHookDeclaration {
    * @example ['beforeSave', 'afterRead']
    */
   transform?: (keyof TransformHooks)[];
+
+  /**
+   * UI hooks the Worker handles.
+   * @example ['renderField']
+   */
+  ui?: (keyof UIHooks)[];
 
   /**
    * Action hooks the Worker handles.
