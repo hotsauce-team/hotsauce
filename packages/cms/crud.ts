@@ -16,12 +16,16 @@ import {
   getPagination,
   getSort,
   htmlResponse,
+  jsonError,
+  jsonSuccess,
+  jsonValidationError,
   notFound,
   parseFlashFromUrl,
   parseFormData,
   parseMultipartFormData,
   redirect,
   redirectWithFlash,
+  wantsJson,
 } from './http.ts';
 import { cmsUrl, formatTableName } from './router.ts';
 import type {
@@ -588,10 +592,14 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
   const table = route.table!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  const isJsonRequest = wantsJson(request);
 
   // Apply row policy for create action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
+    if (isJsonRequest) {
+      return jsonError('forbidden', 'You do not have permission to create records in this table.');
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
   }
   const tablePolicy = options.policies?.[table.name];
@@ -601,6 +609,9 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
 
   // For create, policy can only allow or deny (no filtering)
   if (!policyResult.allowed) {
+    if (isJsonRequest) {
+      return jsonError('forbidden', 'You do not have permission to create records in this table.');
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
   }
 
@@ -653,6 +664,9 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
+      if (isJsonRequest) {
+        return jsonValidationError('create', table.name, { _form: 'Invalid or expired form. Please try again.' });
+      }
       return await renderCreateForm(
         ctx,
         columnResult,
@@ -663,6 +677,9 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
 
     // Check for file upload errors
     if (Object.keys(fileErrors).length > 0) {
+      if (isJsonRequest) {
+        return jsonValidationError('create', table.name, fileErrors);
+      }
       return await renderCreateForm(
         ctx,
         columnResult,
@@ -701,6 +718,11 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       'insert',
     );
     if (!validation.success) {
+      if (isJsonRequest) {
+        const errors: Record<string, string> = { ...validation.errors };
+        if (validation.formError) errors._form = validation.formError;
+        return jsonValidationError('create', table.name, errors);
+      }
       return await renderCreateForm(
         ctx,
         columnResult,
@@ -748,10 +770,16 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
         );
       }
 
+      if (isJsonRequest) {
+        return jsonSuccess('create', table.name, newId, cmsUrl(basePath, table.name, newId));
+      }
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'create');
+      if (isJsonRequest) {
+        return jsonValidationError('create', table.name, { _form: safeMessage });
+      }
       return await renderCreateForm(ctx, columnResult, values, safeMessage);
     }
   }
@@ -769,10 +797,14 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  const isJsonRequest = wantsJson(request);
 
   // Apply row policy for update action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
+    if (isJsonRequest) {
+      return jsonError('forbidden', 'You do not have permission to update this record.');
+    }
     return redirectWithFlash(
       cmsUrl(basePath, table.name, recordId),
       'update_forbidden',
@@ -784,6 +816,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'update');
 
   if (!policyResult.allowed) {
+    if (isJsonRequest) {
+      return jsonError('forbidden', 'You do not have permission to update this record.');
+    }
     return redirectWithFlash(
       cmsUrl(basePath, table.name, recordId),
       'update_forbidden',
@@ -816,10 +851,16 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       recordId,
     );
     if (exists) {
+      if (isJsonRequest) {
+        return jsonError('forbidden', 'You do not have permission to update this record.');
+      }
       return redirectWithFlash(
         cmsUrl(basePath, table.name),
         'update_forbidden',
       );
+    }
+    if (isJsonRequest) {
+      return jsonError('not_found', 'Record not found.');
     }
     return notFound(`Record not found`);
   }
@@ -848,6 +889,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
+      if (isJsonRequest) {
+        return jsonValidationError('update', table.name, { _form: 'Invalid or expired form. Please try again.' }, recordId);
+      }
       return await renderEditForm(
         ctx,
         columnResult,
@@ -858,6 +902,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
 
     // Check for file upload errors
     if (Object.keys(fileErrors).length > 0) {
+      if (isJsonRequest) {
+        return jsonValidationError('update', table.name, fileErrors, recordId);
+      }
       return await renderEditForm(
         ctx,
         columnResult,
@@ -904,6 +951,11 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       'update',
     );
     if (!validation.success) {
+      if (isJsonRequest) {
+        const errors: Record<string, string> = { ...validation.errors };
+        if (validation.formError) errors._form = validation.formError;
+        return jsonValidationError('update', table.name, errors, recordId);
+      }
       return await renderEditForm(
         ctx,
         columnResult,
@@ -945,10 +997,16 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           recordId,
         );
         if (exists) {
+          if (isJsonRequest) {
+            return jsonError('forbidden', 'You do not have permission to update this record.');
+          }
           return redirectWithFlash(
             cmsUrl(basePath, table.name),
             'update_forbidden',
           );
+        }
+        if (isJsonRequest) {
+          return jsonError('not_found', 'Record not found.');
         }
         return redirectWithFlash(
           cmsUrl(basePath, table.name),
@@ -972,10 +1030,16 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
         );
       }
 
+      if (isJsonRequest) {
+        return jsonSuccess('update', table.name, recordId, cmsUrl(basePath, table.name, recordId));
+      }
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'update');
+      if (isJsonRequest) {
+        return jsonValidationError('update', table.name, { _form: safeMessage }, recordId);
+      }
       return await renderEditForm(ctx, columnResult, values, safeMessage);
     }
   }
@@ -1017,10 +1081,14 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  const isJsonRequest = wantsJson(request);
 
   // Apply row policy for delete action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
+    if (isJsonRequest) {
+      return jsonError('forbidden', 'You do not have permission to delete this record.');
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
   }
   const tablePolicy = options.policies?.[table.name];
@@ -1029,6 +1097,9 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'delete');
 
   if (!policyResult.allowed) {
+    if (isJsonRequest) {
+      return jsonError('forbidden', 'You do not have permission to delete this record.');
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
   }
 
@@ -1037,6 +1108,9 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
     const formData = await parseFormData(request);
     const csrfToken = getCsrfTokenFromFormData(formData);
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
+      if (isJsonRequest) {
+        return jsonValidationError('delete', table.name, { _form: 'Invalid or expired form. Please try again.' }, recordId);
+      }
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
     }
   }
@@ -1072,12 +1146,18 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       );
       if (exists) {
         // Record exists but policy denied access
+        if (isJsonRequest) {
+          return jsonError('forbidden', 'You do not have permission to delete this record.');
+        }
         return redirectWithFlash(
           cmsUrl(basePath, table.name),
           'delete_forbidden',
         );
       }
       // Record doesn't exist
+      if (isJsonRequest) {
+        return jsonError('not_found', 'Record not found.');
+      }
       return redirectWithFlash(
         cmsUrl(basePath, table.name),
         'delete_not_found',
@@ -1097,13 +1177,24 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       );
     }
 
+    if (isJsonRequest) {
+      return jsonSuccess('delete', table.name, recordId, cmsUrl(basePath, table.name));
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');
   } catch (error) {
     // Use helper to check for FK violation
     if (isForeignKeyViolation(error)) {
+      if (isJsonRequest) {
+        return jsonValidationError('delete', table.name, {
+          _form: 'Cannot delete this record because it is referenced by other records. Remove those references first.',
+        }, recordId);
+      }
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_fk_error');
     }
 
+    if (isJsonRequest) {
+      return jsonValidationError('delete', table.name, { _form: 'Failed to delete record. Please try again.' }, recordId);
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
   }
 }

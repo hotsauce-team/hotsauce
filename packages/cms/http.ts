@@ -50,6 +50,126 @@ export function redirect(url: string, status = 303): Response {
   });
 }
 
+// ─────────────────────────────────────────────────────────────
+// JSON API Response Types
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Check if a request wants a JSON response.
+ * Returns true if Accept header includes 'application/json'.
+ */
+export function wantsJson(request: Request): boolean {
+  const accept = request.headers.get('Accept') ?? '';
+  return accept.includes('application/json');
+}
+
+/**
+ * CRUD action types for JSON responses
+ */
+export type JsonCrudAction = 'create' | 'update' | 'delete';
+
+/**
+ * Successful JSON response for CRUD operations
+ */
+export interface JsonSuccessResponse {
+  success: true;
+  action: JsonCrudAction;
+  table: string;
+  /** Record ID (always string - comes from URL or stringified PK) */
+  id: string;
+  /** Where the HTML response would redirect */
+  redirect: string;
+}
+
+/**
+ * Validation error response (field-level errors)
+ */
+export interface JsonValidationErrorResponse {
+  success: false;
+  action: JsonCrudAction;
+  table: string;
+  /** Record ID (present for update/delete, absent for create) */
+  id?: string;
+  errors: {
+    /** Form-level errors (CSRF, general) */
+    _form?: string[];
+    /** Field-level errors keyed by field name */
+    [fieldName: string]: string[] | undefined;
+  };
+}
+
+/**
+ * Authorization or not-found error response
+ */
+export interface JsonErrorResponse {
+  success: false;
+  error: 'forbidden' | 'not_found';
+  message: string;
+}
+
+/**
+ * All possible JSON responses from CRUD endpoints
+ */
+export type JsonCrudResponse =
+  | JsonSuccessResponse
+  | JsonValidationErrorResponse
+  | JsonErrorResponse;
+
+/**
+ * Create a JSON success response for CRUD operations
+ */
+export function jsonSuccess(
+  action: JsonCrudAction,
+  table: string,
+  id: string,
+  redirect: string,
+): Response {
+  const data: JsonSuccessResponse = { success: true, action, table, id, redirect };
+  // 201 for create, 200 for update/delete
+  const status = action === 'create' ? 201 : 200;
+  return jsonResponse(data, status);
+}
+
+/**
+ * Create a JSON validation error response
+ */
+export function jsonValidationError(
+  action: JsonCrudAction,
+  table: string,
+  errors: Record<string, string | string[]>,
+  id?: string,
+): Response {
+  // Normalize errors to arrays
+  const normalizedErrors: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(errors)) {
+    normalizedErrors[key] = Array.isArray(value) ? value : [value];
+  }
+  const data: JsonValidationErrorResponse = {
+    success: false,
+    action,
+    table,
+    ...(id !== undefined && { id }),
+    errors: normalizedErrors,
+  };
+  return jsonResponse(data, 400);
+}
+
+/**
+ * Create a JSON error response (forbidden, not found)
+ */
+export function jsonError(
+  error: 'forbidden' | 'not_found',
+  message: string,
+): Response {
+  const data: JsonErrorResponse = { success: false, error, message };
+  const status = error === 'forbidden' ? 403 : 404;
+  return jsonResponse(data, status);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Flash Messages (HTML responses)
+// ─────────────────────────────────────────────────────────────
+
 /**
  * Predefined flash message codes (secure - no user input echoed)
  */

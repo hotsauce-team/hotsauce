@@ -136,7 +136,15 @@ export {
 // ─────────────────────────────────────────────────────────────
 // Utils - Response helpers and form parsing
 // ─────────────────────────────────────────────────────────────
-export type { FlashCode, ParsedMultipartData } from './http.ts';
+export type {
+  FlashCode,
+  JsonCrudAction,
+  JsonCrudResponse,
+  JsonErrorResponse,
+  JsonSuccessResponse,
+  JsonValidationErrorResponse,
+  ParsedMultipartData,
+} from './http.ts';
 
 export {
   base64ToUint8Array,
@@ -147,7 +155,10 @@ export {
   getPagination,
   getSort,
   htmlResponse,
+  jsonError,
   jsonResponse,
+  jsonSuccess,
+  jsonValidationError,
   methodNotAllowed,
   notFound,
   parseFlashFromUrl,
@@ -155,6 +166,7 @@ export {
   parseMultipartFormData,
   redirect,
   redirectWithFlash,
+  wantsJson,
 } from './http.ts';
 
 // ─────────────────────────────────────────────────────────────

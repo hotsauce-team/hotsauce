@@ -209,6 +209,10 @@ Internal handlers for each CRUD operation. These are called by the main handler.
 | `coerceFormValues(data, columns)` | Convert form strings to types |
 | `getPagination(url)`              | Extract page/limit from URL   |
 | `getSort(url, columns)`           | Extract sort column/direction |
+| `wantsJson(request)`              | Check if request wants JSON   |
+| `jsonSuccess(...)`                | JSON success response         |
+| `jsonValidationError(...)`        | JSON validation error         |
+| `jsonError(...)`                  | JSON error (forbidden/404)    |
 
 **Example:**
 
@@ -229,6 +233,123 @@ redirect('/admin/posts'); // 302 redirect
 const formData = await parseFormData(request);
 const values = coerceFormValues(formData, table.columns);
 // { title: 'Hello', published: true, authorId: 1 }
+```
+
+### JSON API for CRUD Operations
+
+CRUD endpoints (`create`, `update`, `delete`) support JSON responses when the request includes `Accept: application/json`. This enables programmatic access and integration with external editors.
+
+**Request:**
+
+```ts
+// Client sends Accept header to request JSON response
+const response = await fetch('/admin/posts/1', {
+  method: 'POST',
+  headers: { 'Accept': 'application/json' },
+  body: formData, // Still sends FormData (including CSRF token)
+});
+const result = await response.json();
+```
+
+**Response formats:**
+
+| Scenario         | HTTP Status | Response Type               |
+| ---------------- | ----------- | --------------------------- |
+| Create success   | 201         | `JsonSuccessResponse`       |
+| Update success   | 200         | `JsonSuccessResponse`       |
+| Delete success   | 200         | `JsonSuccessResponse`       |
+| Validation error | 400         | `JsonValidationErrorResponse` |
+| Forbidden        | 403         | `JsonErrorResponse`         |
+| Not found        | 404         | `JsonErrorResponse`         |
+
+**Success response:**
+
+```ts
+interface JsonSuccessResponse {
+  success: true;
+  action: 'create' | 'update' | 'delete';
+  table: string;
+  id: string;  // Always string (from URL or stringified PK)
+  redirect: string; // Where HTML response would redirect
+}
+
+// Example:
+{
+  "success": true,
+  "action": "update",
+  "table": "posts",
+  "id": "1",
+  "redirect": "/admin/posts/1"
+}
+```
+
+**Validation error response:**
+
+```ts
+interface JsonValidationErrorResponse {
+  success: false;
+  action: 'create' | 'update' | 'delete';
+  table: string;
+  id?: string;  // Present for update/delete, absent for create
+  errors: {
+    _form?: string[];  // Form-level errors (CSRF, general)
+    [field: string]: string[] | undefined;  // Field-level errors
+  };
+}
+
+// Example:
+{
+  "success": false,
+  "action": "create",
+  "table": "posts",
+  "errors": {
+    "title": ["Required"],
+    "body": ["Must be at least 10 characters"]
+  }
+}
+```
+
+**Error response (forbidden/not found):**
+
+```ts
+interface JsonErrorResponse {
+  success: false;
+  error: 'forbidden' | 'not_found';
+  message: string;
+}
+
+// Example:
+{
+  "success": false,
+  "error": "not_found",
+  "message": "Record not found."
+}
+```
+
+**Use case: External editors**
+
+The JSON API enables plugins like visual editors to save data without page reloads:
+
+```ts
+// In Puck editor (client-side)
+const handlePublish = async (data) => {
+  const formData = new FormData();
+  formData.append('content', JSON.stringify(data));
+  formData.append('_csrf', csrfToken);
+
+  const response = await fetch(`/admin/pages/${pageId}`, {
+    method: 'POST',
+    headers: { 'Accept': 'application/json' },
+    body: formData,
+  });
+
+  const result = await response.json();
+  if (result.success) {
+    window.location.href = result.redirect;
+  } else {
+    showErrors(result.errors);
+  }
+};
 ```
 
 ### File uploads (MVP)
