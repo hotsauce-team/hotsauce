@@ -1,10 +1,10 @@
 /**
  * CMS E2E test with PGlite (in-memory Postgres)
- * 
+ *
  * Tests the full CRUD flow: list → create → read → update → delete
  */
 
-import { describe, it, before, after } from 'node:test';
+import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { PGlite } from '@electric-sql/pglite';
@@ -25,8 +25,10 @@ describe('@hotsauce/cms CRUD', () => {
     db = drizzle(pglite);
 
     // Create tables (PGlite requires separate statements)
-    await db.execute(sql`CREATE TYPE post_status AS ENUM ('draft', 'published', 'archived')`);
-    
+    await db.execute(
+      sql`CREATE TYPE post_status AS ENUM ('draft', 'published', 'archived')`,
+    );
+
     await db.execute(sql`
       CREATE TABLE users (
         id SERIAL PRIMARY KEY,
@@ -37,7 +39,7 @@ describe('@hotsauce/cms CRUD', () => {
         created_at TIMESTAMP NOT NULL DEFAULT NOW()
       )
     `);
-    
+
     await db.execute(sql`
       CREATE TABLE posts (
         id SERIAL PRIMARY KEY,
@@ -66,17 +68,17 @@ describe('@hotsauce/cms CRUD', () => {
   });
 
   // Helper to make requests
-  const request = async (method, path, body = null) => {
+  const request = (method, path, body = null) => {
     const url = `http://localhost/admin${path}`;
     const options = { method, headers: {} };
-    
+
     if (body) {
       if (body instanceof URLSearchParams) {
         options.body = body.toString();
         options.headers['Content-Type'] = 'application/x-www-form-urlencoded';
       }
     }
-    
+
     const req = new Request(url, options);
     return cmsHandler(req);
   };
@@ -84,7 +86,7 @@ describe('@hotsauce/cms CRUD', () => {
   it('shows empty list initially', async () => {
     const res = await request('GET', '/users');
     assert.equal(res.status, 200);
-    
+
     const html = await res.text();
     assert.ok(html.includes('users'));
   });
@@ -94,7 +96,7 @@ describe('@hotsauce/cms CRUD', () => {
     const formRes = await request('GET', '/users/new');
     assert.equal(formRes.status, 200);
     const formHtml = await formRes.text();
-    
+
     // Extract CSRF token
     const csrfMatch = formHtml.match(/name="_csrf"\s+value="([^"]+)"/);
     assert.ok(csrfMatch, 'CSRF token not found in form');
@@ -117,7 +119,7 @@ describe('@hotsauce/cms CRUD', () => {
   it('reads the created user', async () => {
     const res = await request('GET', '/users/1');
     assert.equal(res.status, 200);
-    
+
     const html = await res.text();
     assert.ok(html.includes('test@example.com') || html.includes('Test User'));
   });
@@ -125,7 +127,7 @@ describe('@hotsauce/cms CRUD', () => {
   it('lists the user', async () => {
     const res = await request('GET', '/users');
     assert.equal(res.status, 200);
-    
+
     const html = await res.text();
     assert.ok(html.includes('Test User') || html.includes('test@example.com'));
   });
@@ -135,7 +137,7 @@ describe('@hotsauce/cms CRUD', () => {
     const formRes = await request('GET', '/users/1/edit');
     assert.equal(formRes.status, 200);
     const formHtml = await formRes.text();
-    
+
     const csrfMatch = formHtml.match(/name="_csrf"\s+value="([^"]+)"/);
     const csrfToken = csrfMatch[1];
 
@@ -162,7 +164,10 @@ describe('@hotsauce/cms CRUD', () => {
 
     const form = new URLSearchParams({ _csrf: csrfToken });
     const deleteRes = await request('POST', '/users/1/delete', form);
-    assert.ok([200, 302, 303].includes(deleteRes.status), `Expected redirect, got ${deleteRes.status}`);
+    assert.ok(
+      [200, 302, 303].includes(deleteRes.status),
+      `Expected redirect, got ${deleteRes.status}`,
+    );
 
     // Verify deleted
     const readRes = await request('GET', '/users/1');

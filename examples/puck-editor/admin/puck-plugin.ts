@@ -19,7 +19,8 @@ export function createPuckPlugin(basePath: string): InProcessPluginConfig {
         renderField: (ctx) => {
           // ctx.field.plugin is set if column has .$cms({ plugins: { puck: ... } })
           if (ctx.field.plugin && ctx.recordId) {
-            const href = `${basePath}/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`;
+            const href =
+              `${basePath}/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`;
             return {
               link: { href, label: 'Edit with Puck', target: '_blank' },
             };

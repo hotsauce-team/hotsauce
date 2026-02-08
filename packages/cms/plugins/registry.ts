@@ -283,7 +283,9 @@ export class PluginRegistry {
           if (!validUIHooks.includes(hook)) {
             throw new PluginValidationError(
               plugin.name,
-              `Invalid UI hook "${hook}". Valid hooks: ${validUIHooks.join(', ')}`,
+              `Invalid UI hook "${hook}". Valid hooks: ${
+                validUIHooks.join(', ')
+              }`,
             );
           }
         }

@@ -124,7 +124,13 @@ export function jsonSuccess(
   id: string,
   redirect: string,
 ): Response {
-  const data: JsonSuccessResponse = { success: true, action, table, id, redirect };
+  const data: JsonSuccessResponse = {
+    success: true,
+    action,
+    table,
+    id,
+    redirect,
+  };
   // 201 for create, 200 for update/delete
   const status = action === 'create' ? 201 : 200;
   return jsonResponse(data, status);

@@ -275,7 +275,8 @@ function createInProcessUIPlugin(
 ): RegisteredPlugin {
   const hooks: PluginHooks = {
     ui: {
-      renderField: renderFieldFn as PluginHooks['ui'] extends { renderField?: infer F } ? F : never,
+      renderField: renderFieldFn as PluginHooks['ui'] extends
+        { renderField?: infer F } ? F : never,
     },
   };
   return {
@@ -310,7 +311,10 @@ Deno.test('FieldUIOverride validation: accepts null', async () => {
   const executor = new WorkerExecutor((err) => errors.push(err));
   const plugin = createInProcessUIPlugin('test', () => null);
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 0);
@@ -321,7 +325,10 @@ Deno.test('FieldUIOverride validation: accepts undefined', async () => {
   const executor = new WorkerExecutor((err) => errors.push(err));
   const plugin = createInProcessUIPlugin('test', () => undefined);
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 0);
@@ -333,7 +340,10 @@ Deno.test('FieldUIOverride validation: accepts valid link', async () => {
   const validLink = { link: { label: 'Edit', href: '/edit/1' } };
   const plugin = createInProcessUIPlugin('test', () => validLink);
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, validLink);
   assertEquals(errors.length, 0);
@@ -342,10 +352,15 @@ Deno.test('FieldUIOverride validation: accepts valid link', async () => {
 Deno.test('FieldUIOverride validation: accepts link with target', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));
-  const validLink = { link: { label: 'Edit', href: '/edit/1', target: '_blank' as const } };
+  const validLink = {
+    link: { label: 'Edit', href: '/edit/1', target: '_blank' as const },
+  };
   const plugin = createInProcessUIPlugin('test', () => validLink);
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, validLink);
   assertEquals(errors.length, 0);
@@ -356,7 +371,10 @@ Deno.test('FieldUIOverride validation: rejects non-object', async () => {
   const executor = new WorkerExecutor((err) => errors.push(err));
   const plugin = createInProcessUIPlugin('test', () => 'invalid string');
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 1);
@@ -368,31 +386,52 @@ Deno.test('FieldUIOverride validation: rejects missing link property', async () 
   const executor = new WorkerExecutor((err) => errors.push(err));
   const plugin = createInProcessUIPlugin('test', () => ({ other: 'prop' }));
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 1);
-  assertEquals(errors[0]!.message.includes("Expected object with 'link' property"), true);
+  assertEquals(
+    errors[0]!.message.includes("Expected object with 'link' property"),
+    true,
+  );
 });
 
 Deno.test('FieldUIOverride validation: rejects link with missing label', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));
-  const plugin = createInProcessUIPlugin('test', () => ({ link: { href: '/test' } }));
+  const plugin = createInProcessUIPlugin(
+    'test',
+    () => ({ link: { href: '/test' } }),
+  );
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 1);
-  assertEquals(errors[0]!.message.includes("'link.label' to be a string"), true);
+  assertEquals(
+    errors[0]!.message.includes("'link.label' to be a string"),
+    true,
+  );
 });
 
 Deno.test('FieldUIOverride validation: rejects link with missing href', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));
-  const plugin = createInProcessUIPlugin('test', () => ({ link: { label: 'Test' } }));
+  const plugin = createInProcessUIPlugin(
+    'test',
+    () => ({ link: { label: 'Test' } }),
+  );
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 1);
@@ -406,11 +445,17 @@ Deno.test('FieldUIOverride validation: rejects invalid target', async () => {
     link: { label: 'Test', href: '/test', target: '_self' },
   }));
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 1);
-  assertEquals(errors[0]!.message.includes("'link.target' to be '_blank'"), true);
+  assertEquals(
+    errors[0]!.message.includes("'link.target' to be '_blank'"),
+    true,
+  );
 });
 
 Deno.test('FieldUIOverride validation: rejects unexpected properties on link', async () => {
@@ -420,11 +465,17 @@ Deno.test('FieldUIOverride validation: rejects unexpected properties on link', a
     link: { label: 'Test', href: '/test', extra: 'prop' },
   }));
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 1);
-  assertEquals(errors[0]!.message.includes("Unexpected properties on 'link'"), true);
+  assertEquals(
+    errors[0]!.message.includes("Unexpected properties on 'link'"),
+    true,
+  );
 });
 
 Deno.test('FieldUIOverride validation: rejects unexpected properties on root', async () => {
@@ -435,11 +486,17 @@ Deno.test('FieldUIOverride validation: rejects unexpected properties on root', a
     extra: 'prop',
   }));
 
-  const result = await executor.executeRenderField([plugin], testUIFieldContext);
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
 
   assertEquals(result, null);
   assertEquals(errors.length, 1);
-  assertEquals(errors[0]!.message.includes('Unexpected properties on FieldUIOverride'), true);
+  assertEquals(
+    errors[0]!.message.includes('Unexpected properties on FieldUIOverride'),
+    true,
+  );
 });
 
 Deno.test('FieldUIOverride validation: continues to next plugin on invalid return', async () => {
@@ -514,7 +571,7 @@ Deno.test('FieldUIOverride: plugin receives undefined when no config for that pl
     field: {
       ...testUIFieldContext.field,
       _plugins: {
-        other: { setting: true },  // No 'puck' config
+        other: { setting: true }, // No 'puck' config
       },
     },
   };
@@ -541,7 +598,7 @@ Deno.test('FieldUIOverride: plugin receives true when config is boolean', async 
     field: {
       ...testUIFieldContext.field,
       _plugins: {
-        puck: true,  // Simple boolean config
+        puck: true, // Simple boolean config
       },
     },
   };

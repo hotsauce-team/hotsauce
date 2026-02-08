@@ -30,7 +30,8 @@ function createPuckPlugin(basePath: string): InProcessPluginConfig {
           if (ctx.field.plugin && ctx.recordId) {
             return {
               link: {
-                href: `${basePath}/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`,
+                href:
+                  `${basePath}/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`,
                 label: 'Edit with Puck',
               },
             };

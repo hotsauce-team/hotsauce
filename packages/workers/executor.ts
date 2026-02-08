@@ -41,12 +41,16 @@ function validateFieldUIOverride(value: unknown): string | null {
   // Check for link property
   const obj = value as Record<string, unknown>;
   if (!('link' in obj)) {
-    return `Expected object with 'link' property, got: ${JSON.stringify(Object.keys(obj))}`;
+    return `Expected object with 'link' property, got: ${
+      JSON.stringify(Object.keys(obj))
+    }`;
   }
 
   const link = obj.link;
   if (typeof link !== 'object' || link === null) {
-    return `Expected 'link' to be an object, got ${link === null ? 'null' : typeof link}`;
+    return `Expected 'link' to be an object, got ${
+      link === null ? 'null' : typeof link
+    }`;
   }
 
   const linkObj = link as Record<string, unknown>;
@@ -63,7 +67,9 @@ function validateFieldUIOverride(value: unknown): string | null {
 
   // Optional: target (must be '_blank' if present)
   if ('target' in linkObj && linkObj.target !== '_blank') {
-    return `Expected 'link.target' to be '_blank' or undefined, got ${JSON.stringify(linkObj.target)}`;
+    return `Expected 'link.target' to be '_blank' or undefined, got ${
+      JSON.stringify(linkObj.target)
+    }`;
   }
 
   // Check for unexpected properties on link
@@ -72,7 +78,9 @@ function validateFieldUIOverride(value: unknown): string | null {
     (k) => !allowedLinkProps.includes(k),
   );
   if (unexpectedLinkProps.length > 0) {
-    return `Unexpected properties on 'link': ${JSON.stringify(unexpectedLinkProps)}`;
+    return `Unexpected properties on 'link': ${
+      JSON.stringify(unexpectedLinkProps)
+    }`;
   }
 
   // Check for unexpected properties on root object
@@ -81,7 +89,9 @@ function validateFieldUIOverride(value: unknown): string | null {
     (k) => !allowedRootProps.includes(k),
   );
   if (unexpectedRootProps.length > 0) {
-    return `Unexpected properties on FieldUIOverride: ${JSON.stringify(unexpectedRootProps)}`;
+    return `Unexpected properties on FieldUIOverride: ${
+      JSON.stringify(unexpectedRootProps)
+    }`;
   }
 
   return null;

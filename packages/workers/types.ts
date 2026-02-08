@@ -140,7 +140,7 @@ export interface UIFieldInfo {
   /**
    * This plugin's config from the column's `.$cms({ plugins: { [name]: config } })`.
    * Only present if the column has config for the plugin receiving this context.
-   * 
+   *
    * @example
    * ```ts
    * // Column: content: text().$cms({ plugins: { puck: { variant: 'full' } } })

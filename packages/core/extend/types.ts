@@ -23,7 +23,6 @@ export type CmsColumnOptions = {
   plugins?: Record<string, unknown>;
 };
 
-
 /** Default accept filter for file inputs */
 export const FILE_DEFAULT_ACCEPT = 'image/*';
 

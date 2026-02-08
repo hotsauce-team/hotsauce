@@ -124,6 +124,7 @@
   "exclude": [
     "npm/",
     "coverage/",
-    ".git/"
+    ".git/",
+    "scripts/"
   ]
 }

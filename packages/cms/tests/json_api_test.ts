@@ -76,7 +76,10 @@ Deno.test({
       await resetDb(db);
 
       // First create a user (required for post's author_id)
-      await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
+      await db.insert(users).values({
+        email: 'test@example.com',
+        name: 'Test',
+      });
 
       const { body } = await createFormDataBody({
         title: 'Test Post',
@@ -162,7 +165,10 @@ Deno.test({
       await resetDb(db);
 
       // Create test data
-      await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
+      await db.insert(users).values({
+        email: 'test@example.com',
+        name: 'Test',
+      });
       await db.insert(posts).values({
         title: 'Original Title',
         body: 'Original content',
@@ -197,7 +203,10 @@ Deno.test({
       await resetDb(db);
 
       // Create test data
-      await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
+      await db.insert(users).values({
+        email: 'test@example.com',
+        name: 'Test',
+      });
       await db.insert(posts).values({
         title: 'Original Title',
         body: 'Original content',
@@ -257,7 +266,10 @@ Deno.test({
       await resetDb(db);
 
       // Create test data
-      await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
+      await db.insert(users).values({
+        email: 'test@example.com',
+        name: 'Test',
+      });
       await db.insert(posts).values({
         title: 'To Delete',
         body: 'Will be deleted',
@@ -303,33 +315,39 @@ Deno.test({
       assertEquals(json.error, 'not_found');
     });
 
-    await t.step('delete: returns 400 for FK constraint violation', async () => {
-      await resetDb(db);
+    await t.step(
+      'delete: returns 400 for FK constraint violation',
+      async () => {
+        await resetDb(db);
 
-      // Create user with posts (can't delete user due to FK)
-      await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
-      await db.insert(posts).values({
-        title: 'Test Post',
-        body: 'Content',
-        authorId: 1,
-      });
+        // Create user with posts (can't delete user due to FK)
+        await db.insert(users).values({
+          email: 'test@example.com',
+          name: 'Test',
+        });
+        await db.insert(posts).values({
+          title: 'Test Post',
+          body: 'Content',
+          authorId: 1,
+        });
 
-      const { body } = await createFormDataBody({});
+        const { body } = await createFormDataBody({});
 
-      const response = await handler(
-        jsonRequest('http://localhost/admin/users/1/delete', {
-          method: 'POST',
-          body,
-        }),
-      );
+        const response = await handler(
+          jsonRequest('http://localhost/admin/users/1/delete', {
+            method: 'POST',
+            body,
+          }),
+        );
 
-      assertEquals(response.status, 400);
+        assertEquals(response.status, 400);
 
-      const json = (await response.json()) as JsonValidationErrorResponse;
-      assertEquals(json.success, false);
-      assertEquals(json.action, 'delete');
-      assertExists(json.errors._form);
-    });
+        const json = (await response.json()) as JsonValidationErrorResponse;
+        assertEquals(json.success, false);
+        assertEquals(json.action, 'delete');
+        assertExists(json.errors._form);
+      },
+    );
 
     // ========================================================================
     // HTML fallback Tests
@@ -339,7 +357,10 @@ Deno.test({
       await resetDb(db);
 
       // Create test data
-      await db.insert(users).values({ email: 'test@example.com', name: 'Test' });
+      await db.insert(users).values({
+        email: 'test@example.com',
+        name: 'Test',
+      });
 
       const { body } = await createFormDataBody({
         title: 'Test Post',
@@ -373,19 +394,29 @@ Deno.test('wantsJson: detects application/json in Accept header', async () => {
 
   // Should return true for JSON requests
   assertEquals(
-    wantsJson(new Request('http://localhost', { headers: { Accept: 'application/json' } })),
+    wantsJson(
+      new Request('http://localhost', {
+        headers: { Accept: 'application/json' },
+      }),
+    ),
     true,
   );
 
   // Should return true for mixed accept headers
   assertEquals(
-    wantsJson(new Request('http://localhost', { headers: { Accept: 'text/html, application/json' } })),
+    wantsJson(
+      new Request('http://localhost', {
+        headers: { Accept: 'text/html, application/json' },
+      }),
+    ),
     true,
   );
 
   // Should return false for HTML requests
   assertEquals(
-    wantsJson(new Request('http://localhost', { headers: { Accept: 'text/html' } })),
+    wantsJson(
+      new Request('http://localhost', { headers: { Accept: 'text/html' } }),
+    ),
     false,
   );
 

@@ -253,14 +253,14 @@ const result = await response.json();
 
 **Response formats:**
 
-| Scenario         | HTTP Status | Response Type               |
-| ---------------- | ----------- | --------------------------- |
-| Create success   | 201         | `JsonSuccessResponse`       |
-| Update success   | 200         | `JsonSuccessResponse`       |
-| Delete success   | 200         | `JsonSuccessResponse`       |
+| Scenario         | HTTP Status | Response Type                 |
+| ---------------- | ----------- | ----------------------------- |
+| Create success   | 201         | `JsonSuccessResponse`         |
+| Update success   | 200         | `JsonSuccessResponse`         |
+| Delete success   | 200         | `JsonSuccessResponse`         |
 | Validation error | 400         | `JsonValidationErrorResponse` |
-| Forbidden        | 403         | `JsonErrorResponse`         |
-| Not found        | 404         | `JsonErrorResponse`         |
+| Forbidden        | 403         | `JsonErrorResponse`           |
+| Not found        | 404         | `JsonErrorResponse`           |
 
 **Success response:**
 
