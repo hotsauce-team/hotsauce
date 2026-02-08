@@ -49,24 +49,25 @@ await db.execute(sql`
 
 console.log('🌱 Seeding data...');
 
-// Sample pages with Puck JSON content
+// Sample Puck content with HeadingBlock
 const samplePuckContent = {
+  root: { props: {} },
   content: [
     {
-      type: 'Hero',
+      type: 'HeadingBlock',
       props: {
-        title: 'Welcome to Puck',
-        description: 'A visual editor for React',
-      },
-    },
-    {
-      type: 'Text',
-      props: {
-        text: 'This JSON content would normally be rendered by Puck/React.',
+        id: 'HeadingBlock-ae138693-e3d7-4c61-a418-aad713948364',
+        children: 'Test',
       },
     },
   ],
-  root: { props: { title: 'Home' } },
+  zones: {},
+};
+
+// Empty Puck content
+const emptyPuckContent = {
+  content: [],
+  root: { props: {} },
 };
 
 await db.insert(pages).values([
@@ -80,12 +81,7 @@ await db.insert(pages).values([
   {
     title: 'About',
     slug: 'about',
-    content: {
-      content: [
-        { type: 'Hero', props: { title: 'About Us' } },
-      ],
-      root: { props: { title: 'About' } },
-    },
+    content: emptyPuckContent,
     published: true,
     sortOrder: 1,
   },

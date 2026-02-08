@@ -1,9 +1,9 @@
 // CMS admin configuration
 import { createCmsHandler } from '@hotsauce/cms';
+import { createPuckPlugin } from '@hotsauce/plugins/puck';
 
 import type { Database } from '../db.ts';
 import { parsers, schema } from '../schema.ts';
-import { createPuckPlugin } from './puck-plugin.ts';
 
 /**
  * Create the CMS handler for admin routes

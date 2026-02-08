@@ -39,6 +39,7 @@
     "@hotsauce/plugins": "./packages/plugins/mod.ts",
     "@hotsauce/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
     "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
+    "@hotsauce/plugins/puck": "./packages/plugins/puck/mod.ts",
 
     // Optional peer dependency for 2FA QR code generation
     "qrcode-generator": "npm:qrcode-generator@^2.0.4",
@@ -76,7 +77,10 @@
     "hono:dev:debug": "deno task -f hono-fullstack-example dev:debug",
     "puck:seed": "deno task -f puck-editor-example seed",
     "puck:dev": "deno task -f puck-editor-example dev",
-    "puck:dev:watch": "deno task -f puck-editor-example dev:watch"
+    "puck:dev:watch": "deno task -f puck-editor-example dev:watch",
+    // Build tasks
+    "build:puck": "deno run --unstable-bundle --allow-read --allow-write --allow-net packages/plugins/puck/build.ts",
+    "build:puck:watch": "deno run --unstable-bundle --allow-read --allow-write --allow-net --watch=packages/plugins/puck/client/ packages/plugins/puck/build.ts"
   },
 
   // Test configuration with fine-grained permissions

@@ -40,7 +40,8 @@ function createPuckPlugin(basePath: string): InProcessPluginConfig {
         },
       },
     },
-    filter: (ctx) => ctx.hookType === 'ui:renderField',
+    filter: (ctx) =>
+      ctx.hookType === 'ui:renderField' || ctx.hookType === 'route',
   };
 }
 ```
@@ -65,7 +66,15 @@ deno task dev
 
 ## Current Status
 
-This example demonstrates the plugin hook system. The actual Puck visual editor requires React and will be added in a future update. Currently, clicking "Edit with Puck" shows a placeholder page.
+This example loads Puck directly from esm.sh without a bundler, demonstrating bundler-free React usage.
+
+**Known Limitations:**
+
+- Drag-and-drop operations may fail due to dnd-kit module loading issues with esm.sh
+- Component editing via the sidebar works fine
+- For production use, bundle Puck with Vite/esbuild/etc.
+
+The Save button returns 501 (not implemented) - POST route support is planned for a future release.
 
 ## Project Structure
 
