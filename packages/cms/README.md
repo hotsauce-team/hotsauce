@@ -242,13 +242,22 @@ CRUD endpoints (`create`, `update`, `delete`) support JSON responses when the re
 **Request:**
 
 ```ts
-// Client sends Accept header to request JSON response
+// Option 1: CSRF token in FormData
 const response = await fetch('/admin/posts/1', {
   method: 'POST',
   headers: { 'Accept': 'application/json' },
-  body: formData, // Still sends FormData (including CSRF token)
+  body: formData, // FormData with _csrf field
 });
-const result = await response.json();
+
+// Option 2: CSRF token in header (useful for JSON payloads)
+const response = await fetch('/admin/posts/1', {
+  method: 'POST',
+  headers: {
+    'Accept': 'application/json',
+    'X-CSRF-Token': csrfToken,
+  },
+  body: formData,
+});
 ```
 
 **Response formats:**
@@ -396,6 +405,7 @@ Notes:
 | `generateCsrfToken(secret)`        | Generate HMAC-SHA256 signed token (4-hour expiry) |
 | `validateCsrfToken(token, secret)` | Validate signature and check expiry               |
 | `getCsrfTokenFromFormData(data)`   | Extract `_csrf` field from form                   |
+| `getCsrfTokenFromHeader(request)`  | Extract `X-CSRF-Token` header from request        |
 
 **Token Format:** `timestamp.random.signature`
 
@@ -1849,6 +1859,148 @@ This is intentional for security:
 - If you need full record access, use `beforeSave` (which runs before filtering matters)
 
 If you have a trusted plugin that needs full record access for `afterRead`, consider running it in-process and fetching the data directly via `db` in your handler layer instead.
+
+### Plugin Routes
+
+Plugins can register custom routes under their namespace (`/admin/{pluginName}/...`). This enables plugins like visual editors to provide their own UI:
+
+```ts
+plugins: [
+  {
+    name: 'puck',
+    filter: (ctx) =>
+      ctx.hookType === 'ui:renderField' || ctx.hookType === 'route',
+    hooks: {
+      ui: {
+        renderField: (ctx) => {
+          // Add "Edit with Puck" link if column has puck config
+          if (ctx.field.plugin && ctx.recordId) {
+            return {
+              link: {
+                label: 'Edit with Puck',
+                href:
+                  `/admin/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`,
+              },
+            };
+          }
+          return null;
+        },
+      },
+    },
+    routes: [
+      {
+        // Matches: /admin/puck/:table/:id/:column
+        pattern: ':table/:id/:column',
+        methods: ['GET'],
+        handler: (ctx) => {
+          // ctx has record data, user info, CSRF token
+          return `<!DOCTYPE html>
+            <html>
+              <body>
+                <h1>Editing ${ctx.table}/${ctx.recordId}/${ctx.column}</h1>
+                <pre>${JSON.stringify(ctx.value, null, 2)}</pre>
+              </body>
+            </html>`;
+        },
+      },
+    ],
+  },
+];
+```
+
+> ℹ️ **POST routes:** Currently, plugin routes only support GET. POST support (with access to request body, FormData, etc.) is planned for a future release.
+
+**Route Pattern Syntax:**
+
+- `:param` - Captures a URL segment (e.g., `:table/:id`)
+- Common patterns: `table`, `id`, `column` are automatically extracted
+- Routes are matched in order; **first match wins**
+
+> ⚠️ **Validate Custom Params:** URL params are decoded with `decodeURIComponent`, which means encoded slashes (`%2F`) become literal `/` in the value. The built-in params (`:table`, `:id`, `:column`) are validated against your schema, but **custom params must be validated by your handler**. Never use raw params in file paths, shell commands, or SQL without validation.
+
+> ⚠️ **Route Ordering Matters:** Routes with static prefixes should come BEFORE generic parameter routes, otherwise the generic route will capture everything:
+>
+> ```ts
+> // ❌ BAD: generic route swallows specific routes
+> routes: [
+>   { pattern: ':table/:id/:column', ... },  // Matches 'preview/posts/1' as table=preview!
+>   { pattern: 'preview/:table/:id', ... },  // Never reached
+> ]
+>
+> // ✅ GOOD: static-prefix routes first
+> routes: [
+>   { pattern: 'preview/:table/:id', ... },  // Checked first
+>   { pattern: ':table/:id/:column', ... },  // Fallback
+> ]
+> ```
+
+**PluginRouteContext:**
+
+```ts
+interface PluginRouteContext {
+  table: string; // From :table param (empty if not in URL)
+  recordId: string; // From :id param
+  column?: string; // From :column param
+  record: Record<string, Serializable>; // Full record (column-policy filtered)
+  value: Serializable; // record[column] shortcut
+  field?: { // Field info if column specified
+    name: string;
+    type: string; // CMS field type
+    config: Record<string, Serializable>; // From .$cms() hints
+  };
+  user?: { sub: string; role?: string }; // Auth user
+  csrfToken: string; // For forms
+  basePath: string; // e.g., '/admin'
+  requestUrl: string; // Full URL
+  method: string; // 'GET' | 'POST'
+  params: Record<string, string>; // All URL params
+}
+```
+
+**Security:**
+
+- Routes require authentication (same as built-in CMS routes)
+- **Plugin filter is checked BEFORE fetching data** — routes respect the same `filter` function as hooks
+- Filter receives `hookType: 'route'` so you can handle routes separately from hooks
+- If `:table` param references a known table, `canAccess` is checked
+- POST requests validate CSRF tokens automatically
+- Row policies filter which records are accessible
+- Column policies filter which fields are visible in `ctx.record`
+
+**Important:** Plugin routes are subject to the same `filter` function as hooks. If your filter blocks a table, routes to that table will return 403 without fetching any data. This prevents data exfiltration via plugin routes:
+
+```ts
+{
+  name: 'untrusted-plugin',
+  filter: (ctx) => {
+    // Block sensitive tables from ALL plugin access (hooks AND routes)
+    if (['users', 'payments', 'api_keys'].includes(ctx.table)) return false;
+    // Allow routes and action hooks, but not transform hooks
+    return ctx.hookType === 'route' || ctx.hookType === 'action';
+  },
+  routes: [/* ... */],
+}
+```
+
+**Worker Routes:**
+
+Worker plugins can have routes too, but must use `render` instead of `handler`:
+
+```ts
+{
+  name: 'worker-plugin',
+  worker: myWorker,
+  routes: [
+    {
+      pattern: ':table/:id',
+      methods: ['GET'],
+      render: 'render:editor', // Message type sent to Worker
+    },
+  ],
+}
+```
+
+The Worker receives `{ type: 'route:render', id, payload: { renderType, context } }` and should respond with `{ id, success: true, result: { html: '...' } }`.
 
 ### Official Plugins
 

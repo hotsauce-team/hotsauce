@@ -201,17 +201,14 @@ Deno.test('Plugin: with routes', () => {
     filter: 'dangerously-open',
     routes: [
       {
-        path: '/api/custom',
-        method: 'POST',
-        handler: async (req: { body?: Serializable }) => ({
-          status: 200,
-          body: { received: req.body },
-        }),
+        pattern: 'api/custom',
+        methods: ['POST'],
+        handler: async (ctx) => JSON.stringify({ received: ctx.record }),
       },
     ],
   };
   assertEquals(plugin.routes?.length, 1);
-  assertEquals(plugin.routes?.[0]?.path, '/api/custom');
+  assertEquals(plugin.routes?.[0]?.pattern, 'api/custom');
 });
 
 Deno.test('Plugin: with capabilities', () => {

@@ -16,6 +16,24 @@ export function escapeHtml(unsafe: unknown): string {
 }
 
 /**
+ * Escape a string for use in a URL path segment.
+ * Uses encodeURIComponent to ensure special characters are percent-encoded.
+ *
+ * @example
+ * ```ts
+ * escapeUrlPath('hello world') // 'hello%20world'
+ * escapeUrlPath('../etc/passwd') // '..%2Fetc%2Fpasswd'
+ * escapeUrlPath('table"name') // 'table%22name'
+ * ```
+ */
+export function escapeUrlPath(segment: unknown): string {
+  if (segment === null || segment === undefined) {
+    return '';
+  }
+  return encodeURIComponent(String(segment));
+}
+
+/**
  * Wrapper to mark a string as safe (already escaped or trusted HTML)
  */
 export class SafeHtml {

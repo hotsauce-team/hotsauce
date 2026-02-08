@@ -6,14 +6,25 @@ import { eq, sql, type Table } from 'drizzle-orm';
 
 import type {
   CmsOptions,
+  CrudAction,
   Handler,
   ResolvedAuthOptions,
   ResolvedCmsOptions,
   RouteContext,
 } from './types.ts';
 import type { Policies } from './policies/types.ts';
-import { introspectFullSchema, isValidFileReference } from '@hotsauce/core';
-import { parseRoute, resolveAction } from './router.ts';
+import {
+  introspectFullSchema,
+  isValidFileReference,
+  mapColumnToFieldType,
+} from '@hotsauce/core';
+import { matchPluginRoute, parseRoute, resolveAction } from './router.ts';
+import type { PluginRouteMatch } from './router.ts';
+import type {
+  FilterContext,
+  PluginRouteContext,
+  Serializable,
+} from './plugins/types.ts';
 import {
   base64ToUint8Array,
   forbidden,
@@ -21,7 +32,11 @@ import {
   notFound,
   SECURITY_HEADERS,
 } from './http.ts';
-import { generateCsrfToken, validateCsrfToken } from './csrf.ts';
+import {
+  generateCsrfToken,
+  getCsrfTokenFromHeader,
+  validateCsrfToken,
+} from './csrf.ts';
 import {
   validateCmsOptions,
   validateFileColumns,
@@ -67,6 +82,9 @@ import {
   evaluateColumnPolicies,
   extractColumnPolicies,
   extractRowPolicy,
+  filterRecordColumns,
+  findRecordWithPolicy,
+  recordExists,
 } from './policies/mod.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -118,6 +136,7 @@ export {
   generateCsrfToken,
   getCsrfFieldName,
   getCsrfTokenFromFormData,
+  getCsrfTokenFromHeader,
   validateCsrfToken,
 } from './csrf.ts';
 
@@ -129,9 +148,12 @@ export {
   formatColumnName,
   formatTableName,
   generateNavLinks,
+  matchPattern,
+  matchPluginRoute,
   parseRoute,
   resolveAction,
 } from './router.ts';
+export type { PluginRouteMatch } from './router.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Utils - Response helpers and form parsing
@@ -232,6 +254,10 @@ export type {
   PluginContext,
   PluginFilter,
   PluginHooks,
+  // Route types
+  PluginRoute,
+  PluginRouteContext,
+  PluginRouteHandler,
   Serializable,
   TransformFn,
   UIFieldInfo,
@@ -344,6 +370,231 @@ export {
 
 // Import the CmsGlobalThis interface from workers for type-safe globalThis access
 import type { CmsGlobalThis } from '@hotsauce/workers';
+import type { PluginService } from './plugins/service.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Plugin route handling
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Handle a plugin route.
+ * Builds context, fetches record data, then calls handler or Worker.
+ */
+async function handlePluginRoute(
+  match: PluginRouteMatch,
+  request: Request,
+  options: ResolvedCmsOptions,
+  jwtPayload: JwtPayload | null,
+  pluginService: PluginService | null,
+): Promise<Response> {
+  const { plugin, route, params } = match;
+
+  // Extract table and recordId from params (common pattern)
+  const table = params.table;
+  const recordId = params.id;
+  const column = params.column;
+
+  // ─────────────────────────────────────────────────────────────
+  // SECURITY: Check plugin filter BEFORE fetching any data
+  // This prevents data exfiltration via routes even when the
+  // integrator has filtered out certain tables/actions.
+  // ─────────────────────────────────────────────────────────────
+  const pluginFilter = plugin.filter;
+
+  // Derive action from HTTP method: GET = read, POST = update (mutation)
+  const routeAction: CrudAction = request.method === 'POST' ? 'update' : 'read';
+
+  const filterCtx: FilterContext = {
+    hookType: 'route',
+    table: table ?? '',
+    action: routeAction,
+    user: jwtPayload
+      ? { sub: jwtPayload.sub, role: jwtPayload.role }
+      : undefined,
+  };
+
+  // Check filter - must explicitly allow route access
+  if (pluginFilter !== 'dangerously-open') {
+    const allowed = pluginFilter(filterCtx);
+    if (!allowed) {
+      return new Response('Plugin route not allowed for this table', {
+        status: 403,
+      });
+    }
+  }
+
+  // Get CSRF token for forms
+  const csrfSecret = options.csrfSecret;
+  const csrfToken = await generateCsrfToken(csrfSecret);
+
+  // Build base context (without record data)
+  const baseCtx: Omit<PluginRouteContext, 'record' | 'value' | 'field'> = {
+    table: table ?? '',
+    recordId: recordId ?? '',
+    column,
+    user: jwtPayload
+      ? {
+        sub: jwtPayload.sub,
+        role: jwtPayload.role,
+      }
+      : undefined,
+    csrfToken,
+    basePath: options.basePath,
+    requestUrl: request.url,
+    method: request.method,
+    params,
+  };
+
+  // Fetch record data if table and recordId are provided
+  // IMPORTANT: Apply row policies (filter which records user can access)
+  // and column policies (filter which fields user can see) to prevent data leaks
+  let record: Record<string, Serializable> = {};
+  let value: Serializable = undefined;
+  let field: PluginRouteContext['field'] = undefined;
+
+  if (table && recordId) {
+    // Find the table in schema
+    const tableInfo = options.introspected.tables.find((t) => t.name === table);
+    if (!tableInfo) {
+      return new Response('Table not found', { status: 404 });
+    }
+
+    // Get the Drizzle table object from introspected table
+    const drizzleTable = tableInfo.table as Table | undefined;
+    if (!drizzleTable) {
+      return new Response('Table not found', { status: 404 });
+    }
+
+    // Build policy context for row and column policy evaluation
+    const policyCtx = createPolicyContext(
+      request,
+      jwtPayload ? { id: jwtPayload.sub, role: jwtPayload.role } : undefined,
+    );
+
+    // Get table policy (may have row and/or column policies)
+    const tablePolicy = options.policies?.[table];
+
+    // Apply ROW policy - determines if user can access this specific record
+    const rowPolicy = extractRowPolicy(tablePolicy);
+    const policyResult = await applyPolicy(rowPolicy, policyCtx, 'read');
+
+    if (!policyResult.allowed) {
+      return new Response('Access denied', { status: 403 });
+    }
+
+    // Fetch record WITH row policy condition applied
+    const rawRecord = await findRecordWithPolicy(
+      options.db,
+      drizzleTable,
+      tableInfo,
+      recordId,
+      policyResult.condition,
+    );
+
+    if (!rawRecord) {
+      // Check if record exists at all (to distinguish 404 vs 403)
+      const exists = await recordExists(
+        options.db,
+        drizzleTable,
+        tableInfo,
+        recordId,
+      );
+      if (exists) {
+        // Record exists but policy filtered it out
+        return new Response('Access denied', { status: 403 });
+      }
+      return new Response('Record not found', { status: 404 });
+    }
+
+    // Apply COLUMN policies - filter which fields the user can see
+    const columnPolicies = extractColumnPolicies(tablePolicy);
+    const columnResult = await evaluateColumnPolicies(
+      columnPolicies,
+      tableInfo.columns,
+      policyCtx,
+    );
+
+    // Filter record to only include readable columns
+    record = filterRecordColumns(
+      rawRecord,
+      columnResult.readableColumns,
+      tableInfo.columns,
+    ) as Record<string, Serializable>;
+
+    // Extract column value and field info (from FILTERED record)
+    if (column) {
+      // Check if the requested column is readable
+      const columnInfo = tableInfo.columns.find((c) => c.name === column);
+      if (columnInfo && columnResult.readableColumns.includes(column)) {
+        value = record[columnInfo.propertyName] as Serializable;
+        field = {
+          name: columnInfo.name,
+          type: mapColumnToFieldType(columnInfo),
+          config: (columnInfo.cmsOptions ?? {}) as Record<string, Serializable>,
+        };
+      } else if (columnInfo) {
+        // Column exists but user doesn't have read access
+        return new Response('Column not accessible', { status: 403 });
+      }
+    }
+  }
+
+  // Build full context
+  const ctx: PluginRouteContext = {
+    ...baseCtx,
+    record,
+    value,
+    field,
+  };
+
+  // Dispatch based on route type
+  if (route.handler) {
+    // In-process handler
+    try {
+      const result = await route.handler(ctx);
+      if (result instanceof Response) {
+        return result;
+      }
+      // String result - wrap in HTML response
+      return new Response(result, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    } catch (error) {
+      options.onError?.(error as Error, {
+        request,
+        url: new URL(request.url),
+        route: null, // Plugin routes don't use ParsedRoute
+        action: 'read',
+      });
+      return new Response('Plugin error', { status: 500 });
+    }
+  }
+
+  if (route.render && pluginService) {
+    // Worker render - use executor
+    try {
+      const html = await pluginService.executeRouteRender(
+        plugin.name,
+        route.render,
+        ctx,
+      );
+      return new Response(html, {
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    } catch (error) {
+      options.onError?.(error as Error, {
+        request,
+        url: new URL(request.url),
+        route: null, // Plugin routes don't use ParsedRoute
+        action: 'read',
+      });
+      return new Response('Plugin error', { status: 500 });
+    }
+  }
+
+  // No handler or render configured (should be caught by validation)
+  return new Response('Route not configured', { status: 500 });
+}
 
 export function createCmsHandler(options: CmsOptions): Handler {
   // Mark the main thread - Workers won't have this set
@@ -866,11 +1117,81 @@ export function createCmsHandler(options: CmsOptions): Handler {
       }
     }
 
-    // Parse the route
+    // Parse the route - built-in CMS routes take precedence over plugins
     const route = parseRoute(url, opts.basePath, opts.introspected.tables);
 
-    // 404 if route doesn't match
+    // ─────────────────────────────────────────────────────────────
+    // Plugin routes - checked AFTER built-in CMS routes
+    // Routes are namespaced: /admin/{pluginName}/{pattern}
+    // Built-in table routes always win to prevent shadowing.
+    // ─────────────────────────────────────────────────────────────
     if (!route) {
+      const allPlugins = opts.plugins?.getPluginConfigs() ?? [];
+      const pluginRouteMatch = matchPluginRoute(
+        url,
+        opts.basePath,
+        request.method,
+        allPlugins,
+      );
+
+      if (pluginRouteMatch) {
+        // Auth check for plugin routes (same as built-in routes)
+        if (!resolvedAuth) {
+          const authenticated = await opts.isAuthenticated(request);
+          if (!authenticated) {
+            return forbidden('Authentication required');
+          }
+        }
+
+        // Authorization check - if plugin route references a table, check access
+        const pluginTable = pluginRouteMatch.params.table;
+        if (pluginTable) {
+          const tableInfo = opts.introspected.tables.find(
+            (t) => t.name === pluginTable,
+          );
+          if (tableInfo) {
+            // Plugin routes that reference tables default to 'read' access check
+            const authorized = await opts.canAccess(request, tableInfo, 'read');
+            if (!authorized) {
+              return forbidden('Access denied');
+            }
+          }
+        }
+
+        // CSRF validation for POST requests (check header first, then form data)
+        if (request.method === 'POST') {
+          // Try header first (for JSON/API requests)
+          let csrfToken = getCsrfTokenFromHeader(request);
+
+          // If no header, try form data
+          if (!csrfToken) {
+            const formData = await request.clone().formData().catch(() => null);
+            if (formData) {
+              const formToken = formData.get('_csrf');
+              if (typeof formToken === 'string') {
+                csrfToken = formToken;
+              }
+            }
+          }
+
+          // CSRF token is required for all POST requests
+          const csrfValid = csrfToken &&
+            (await validateCsrfToken(csrfToken, opts.csrfSecret));
+          if (!csrfValid) {
+            return forbidden('Invalid CSRF token');
+          }
+        }
+
+        return handlePluginRoute(
+          pluginRouteMatch,
+          request,
+          opts,
+          jwtPayload,
+          pluginService,
+        );
+      }
+
+      // No built-in route and no plugin route matched
       return notFound('Page not found');
     }
 

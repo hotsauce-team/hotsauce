@@ -279,39 +279,93 @@ export interface PluginHooks {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Serializable representation of a request (for Worker messaging)
+ * Context provided to plugin route handlers.
+ * Contains serializable data about the request, record, and field.
+ * Same context is provided to both in-process handlers and Worker renders.
  */
-export interface PluginRequest {
-  /** URL path parameters */
+export interface PluginRouteContext {
+  /** Table name from URL */
+  table: string;
+  /** Record ID from URL */
+  recordId: string;
+  /** Column name from URL (optional - not all routes are column-specific) */
+  column?: string;
+  /** Full record data (CMS fetches before calling plugin) */
+  record: Record<string, Serializable>;
+  /** Shortcut: record[column] value */
+  value: Serializable;
+  /** Field information (if column specified) */
+  field?: {
+    /** Column name */
+    name: string;
+    /** CMS field type (text, json, etc.) */
+    type: string;
+    /** Field config from $cms() hints */
+    config: Record<string, Serializable>;
+  };
+  /** Authenticated user (if any) */
+  user?: {
+    sub: string;
+    role?: string;
+    [key: string]: Serializable;
+  };
+  /** CSRF token for forms */
+  csrfToken: string;
+  /** CMS base path (e.g., '/admin') */
+  basePath: string;
+  /** Full request URL */
+  requestUrl: string;
+  /** HTTP method (GET, POST) */
+  method: string;
+  /** Additional route params from pattern matching */
   params: Record<string, string>;
-  /** Query string parameters */
-  query: Record<string, string>;
-  /** Request body (parsed JSON or form data) */
-  body?: Serializable;
-  /** Request headers (selected safe headers only) */
-  headers: Record<string, string>;
 }
 
 /**
- * Serializable representation of a response (for Worker messaging)
+ * Route handler function for in-process plugins.
+ * Returns Response directly (can set custom headers, status).
  */
-export interface PluginResponse {
-  /** HTTP status code */
-  status: number;
-  /** Response headers */
-  headers?: Record<string, string>;
-  /** Response body (will be JSON serialized) */
-  body?: Serializable;
-}
+export type PluginRouteHandler = (
+  ctx: PluginRouteContext,
+) => Response | string | Promise<Response | string>;
 
 /**
- * A custom route provided by a plugin
+ * A custom route provided by a plugin.
+ *
+ * Routes are namespaced under the plugin name: /admin/{pluginName}/{pattern}
+ *
+ * Use `handler` for in-process execution (returns Response).
+ * Use `render` for Worker execution (sends message, receives HTML string).
  */
 export interface PluginRoute {
-  /** Path pattern (e.g., '/upload/:table') relative to basePath */
-  path: string;
-  /** HTTP method */
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
-  /** Route handler - receives serializable request, returns serializable response */
-  handler: (request: PluginRequest) => Promise<PluginResponse>;
+  /**
+   * URL pattern relative to /admin/{pluginName}/
+   * Supports :param placeholders.
+   *
+   * @example ':table/:id/:column' → /admin/puck/posts/1/body
+   */
+  pattern: string;
+
+  /**
+   * HTTP methods supported by this route.
+   * If omitted, defaults to ['GET'].
+   */
+  methods?: Array<'GET' | 'POST'>;
+
+  /**
+   * In-process handler function.
+   * Receives PluginRouteContext, returns Response or HTML string.
+   * Cannot be used with `render`.
+   */
+  handler?: PluginRouteHandler;
+
+  /**
+   * Worker render message type.
+   * CMS sends this message type to Worker with PluginRouteContext.
+   * Worker should respond with { id, html: string }.
+   * Cannot be used with `handler`.
+   *
+   * @example 'renderEditor' → Worker receives { type: 'renderEditor', id, context }
+   */
+  render?: string;
 }

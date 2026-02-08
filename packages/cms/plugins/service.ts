@@ -267,6 +267,28 @@ export class PluginService {
   }
 
   /**
+   * Execute a plugin route render in Worker.
+   * Called when a plugin route with `render` is matched.
+   *
+   * @param pluginName - Name of the plugin that owns the route
+   * @param renderType - Message type to send to Worker (from route.render)
+   * @param context - Route context with record data, user info, etc.
+   * @returns HTML string from Worker
+   */
+  async executeRouteRender(
+    pluginName: string,
+    renderType: string,
+    context: import('./types.ts').PluginRouteContext,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return await this.executor.executeRouteRender(
+      pluginName,
+      renderType,
+      context,
+    );
+  }
+
+  /**
    * Terminate all plugin Workers.
    * Call this during graceful shutdown.
    */

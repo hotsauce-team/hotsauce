@@ -1,7 +1,7 @@
 // Tests for WorkerExecutor concurrent execution
 // Verifies request/response matching and isolation
 
-import { assertEquals, assertRejects } from '@std/assert';
+import { assert, assertEquals, assertRejects } from '@std/assert';
 import { WorkerExecutor } from './executor.ts';
 import type { RegisteredPlugin } from './executor.ts';
 
@@ -607,4 +607,140 @@ Deno.test('FieldUIOverride: plugin receives true when config is boolean', async 
 
   // Plugin should receive true
   assertEquals(receivedCtx!.field.plugin, true);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Worker Route Rendering
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('WorkerExecutor: executeRouteRender returns HTML from Worker', async () => {
+  const executor = new WorkerExecutor();
+  const worker = createTestWorker();
+  const plugin = createRegisteredPlugin('editor-plugin', worker);
+
+  try {
+    await executor.initPlugin(plugin);
+
+    const context = {
+      table: 'posts',
+      recordId: '123',
+      column: 'body',
+      record: { id: 123, title: 'Test Post', body: 'Content' },
+      value: 'Content',
+      field: { name: 'body', type: 'PgText', config: {} },
+      user: { sub: 'user-1', role: 'admin' },
+      csrfToken: 'test-csrf-token',
+      basePath: '/admin',
+      requestUrl: 'http://localhost/admin/editor-plugin/posts/123/body',
+      method: 'GET',
+      params: { table: 'posts', id: '123', column: 'body' },
+    };
+
+    const html = await executor.executeRouteRender(
+      'editor-plugin',
+      'render:editor',
+      context,
+    );
+
+    // Worker should return HTML containing context info
+    assertEquals(typeof html, 'string');
+    assertEquals(html.includes('<!DOCTYPE html>'), true);
+    assertEquals(html.includes('Rendered by Worker'), true);
+    assertEquals(html.includes('render:editor'), true);
+    assertEquals(html.includes('posts'), true);
+    assertEquals(html.includes('123'), true);
+    assertEquals(html.includes('body'), true);
+  } finally {
+    executor.terminate();
+  }
+});
+
+Deno.test('WorkerExecutor: executeRouteRender throws on invalid response', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const worker = createTestWorker();
+
+  const plugin: RegisteredPlugin = {
+    plugin: {
+      name: 'bad-render-plugin',
+      worker,
+      hooks: { on: ['create'] },
+    },
+    initialized: false,
+    isWorker: true,
+  };
+
+  await executor.initPlugin(plugin);
+
+  const context = {
+    table: 'test',
+    recordId: '1',
+    column: undefined,
+    record: {},
+    value: undefined,
+    field: undefined,
+    user: undefined,
+    csrfToken: 'test',
+    basePath: '/admin',
+    requestUrl: 'http://localhost/admin/test',
+    method: 'GET',
+    params: {},
+  };
+
+  // Use 'invalid-response' render type which returns { notHtml: ... } instead of { html: ... }
+  await assertRejects(
+    async () => {
+      await executor.executeRouteRender(
+        'bad-render-plugin',
+        'invalid-response',
+        context,
+      );
+    },
+    Error,
+    'returned invalid response',
+  );
+
+  // Verify error was reported via onError callback
+  assertEquals(errors.length, 1);
+  assert(errors[0]?.message.includes('returned invalid response'));
+
+  executor.terminate();
+});
+
+Deno.test('WorkerExecutor: executeRouteRender with minimal context', async () => {
+  const executor = new WorkerExecutor();
+  const worker = createTestWorker();
+  const plugin = createRegisteredPlugin('minimal-plugin', worker);
+
+  try {
+    await executor.initPlugin(plugin);
+
+    // Minimal context - no table/record info (dashboard-style route)
+    const context = {
+      table: '',
+      recordId: '',
+      column: undefined,
+      record: {},
+      value: undefined,
+      field: undefined,
+      user: { sub: 'user-1' },
+      csrfToken: 'csrf-token',
+      basePath: '/admin',
+      requestUrl: 'http://localhost/admin/minimal-plugin/dashboard',
+      method: 'GET',
+      params: {},
+    };
+
+    const html = await executor.executeRouteRender(
+      'minimal-plugin',
+      'render:dashboard',
+      context,
+    );
+
+    assertEquals(typeof html, 'string');
+    assertEquals(html.includes('<!DOCTYPE html>'), true);
+    assertEquals(html.includes('render:dashboard'), true);
+  } finally {
+    executor.terminate();
+  }
 });

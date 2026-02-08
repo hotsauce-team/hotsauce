@@ -89,6 +89,13 @@ export class PluginRegistry {
   }
 
   /**
+   * Get all plugin configurations (without registration metadata)
+   */
+  getPluginConfigs(): PluginConfig[] {
+    return this.getAll().map((rp) => rp.plugin);
+  }
+
+  /**
    * Get all plugins that have transform hooks
    * Worker plugins without hooks declared are included (hooks discovered at runtime)
    */
@@ -294,10 +301,10 @@ export class PluginRegistry {
 
     // Worker plugins cannot have routes (they'd need main-thread access)
     if (plugin.routes !== undefined) {
-      throw new PluginValidationError(
-        plugin.name,
-        'Worker plugins cannot have routes. Routes must run in the main thread.',
-      );
+      // Worker plugins CAN have routes, but only with `render` (not `handler`)
+      for (const route of plugin.routes) {
+        this.validateWorkerRoute(plugin.name, route);
+      }
     }
   }
 
@@ -443,28 +450,93 @@ export class PluginRegistry {
    * Validate a plugin route
    */
   private validateRoute(pluginName: string, route: PluginRoute): void {
-    // Path must start with /
-    if (!route.path.startsWith('/')) {
+    // Pattern is required
+    if (!route.pattern || typeof route.pattern !== 'string') {
       throw new PluginValidationError(
         pluginName,
-        `Route path must start with /: ${route.path}`,
+        'Route must have a pattern string',
       );
     }
 
-    // Method must be valid
-    const validMethods = ['GET', 'POST', 'PUT', 'DELETE'];
-    if (!validMethods.includes(route.method)) {
+    // Methods must be valid (if provided)
+    if (route.methods) {
+      const validMethods = ['GET', 'POST'];
+      for (const method of route.methods) {
+        if (!validMethods.includes(method)) {
+          throw new PluginValidationError(
+            pluginName,
+            `Invalid route method "${method}". Valid methods: ${
+              validMethods.join(', ')
+            }`,
+          );
+        }
+      }
+    }
+
+    // Must have exactly one of handler or render
+    if (route.handler && route.render) {
       throw new PluginValidationError(
         pluginName,
-        `Invalid route method: ${route.method}`,
+        `Route "${route.pattern}" cannot have both handler and render`,
+      );
+    }
+    if (!route.handler && !route.render) {
+      throw new PluginValidationError(
+        pluginName,
+        `Route "${route.pattern}" must have either handler or render`,
       );
     }
 
-    // Handler must be a function
-    if (typeof route.handler !== 'function') {
+    // In-process plugin routes must use handler
+    if (route.handler && typeof route.handler !== 'function') {
       throw new PluginValidationError(
         pluginName,
-        `Route handler must be a function: ${route.path}`,
+        `Route "${route.pattern}" handler must be a function`,
+      );
+    }
+
+    // Worker routes are validated separately
+  }
+
+  /**
+   * Validate a Worker plugin route (must use render, not handler)
+   */
+  private validateWorkerRoute(pluginName: string, route: PluginRoute): void {
+    // Pattern is required
+    if (!route.pattern || typeof route.pattern !== 'string') {
+      throw new PluginValidationError(
+        pluginName,
+        'Route must have a pattern string',
+      );
+    }
+
+    // Methods must be valid (if provided)
+    if (route.methods) {
+      const validMethods = ['GET', 'POST'];
+      for (const method of route.methods) {
+        if (!validMethods.includes(method)) {
+          throw new PluginValidationError(
+            pluginName,
+            `Invalid route method "${method}". Valid methods: ${
+              validMethods.join(', ')
+            }`,
+          );
+        }
+      }
+    }
+
+    // Worker routes MUST use render, not handler
+    if (route.handler) {
+      throw new PluginValidationError(
+        pluginName,
+        `Worker plugin route "${route.pattern}" cannot use handler. Use render instead (message type for Worker).`,
+      );
+    }
+
+    if (!route.render || typeof route.render !== 'string') {
+      throw new PluginValidationError(
+        pluginName,
+        `Worker plugin route "${route.pattern}" must have a render string (message type for Worker)`,
       );
     }
   }

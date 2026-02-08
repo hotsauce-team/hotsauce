@@ -5,7 +5,16 @@
 // ─────────────────────────────────────────────────────────────
 // HTML Utilities - XSS-safe template literals and helpers
 // ─────────────────────────────────────────────────────────────
-export { attrs, escapeHtml, html, join, raw, SafeHtml, when } from './html.ts';
+export {
+  attrs,
+  escapeHtml,
+  escapeUrlPath,
+  html,
+  join,
+  raw,
+  SafeHtml,
+  when,
+} from './html.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Form Inputs - Individual input renderers by field type

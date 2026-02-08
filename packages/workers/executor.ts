@@ -11,8 +11,7 @@ import type {
   FieldUIOverride,
   PluginContext,
   PluginHooks,
-  PluginRequest,
-  PluginResponse,
+  PluginRouteContext,
   Serializable,
   UIRenderFieldContext,
   UIRenderFieldFn,
@@ -110,7 +109,7 @@ type WorkerMessageType =
   | 'transform:afterRead'
   | 'ui:renderField'
   | 'action'
-  | 'route';
+  | 'route:render';
 
 /**
  * Message sent to Worker
@@ -203,7 +202,8 @@ export interface PluginErrorContext {
     | 'transform:beforeSave'
     | 'transform:afterRead'
     | 'ui:renderField'
-    | 'action';
+    | 'action'
+    | 'route:render';
   /** CRUD action (for action hooks) */
   action?: CrudAction;
 }
@@ -585,23 +585,45 @@ export class WorkerExecutor {
   }
 
   /**
-   * Execute a plugin route handler
+   * Execute a plugin route render in Worker.
+   * Sends context to Worker, receives HTML string back.
+   *
+   * @param pluginName - Plugin that owns the route
+   * @param renderType - Message type to send (from route.render)
+   * @param context - Route context with record data, user, etc.
+   * @returns HTML string from Worker
    */
-  async executeRoute(
+  async executeRouteRender(
     pluginName: string,
-    routePath: string,
-    request: PluginRequest,
-  ): Promise<PluginResponse> {
-    const response = await this.sendToWorker(pluginName, 'route', {
-      path: routePath,
-      request,
-    } as unknown as Serializable);
+    renderType: string,
+    context: PluginRouteContext,
+  ): Promise<string> {
+    const response = await this.sendToWorker(
+      pluginName,
+      'route:render',
+      {
+        renderType,
+        context,
+      } as unknown as Serializable,
+    );
 
-    if (response && typeof response === 'object' && 'status' in response) {
-      return response as unknown as PluginResponse;
+    // Worker should return { html: string }
+    if (
+      response &&
+      typeof response === 'object' &&
+      'html' in response &&
+      typeof (response as { html: unknown }).html === 'string'
+    ) {
+      return (response as { html: string }).html;
     }
 
-    return { status: 500, body: { error: 'Invalid route response' } };
+    // Invalid response
+    const err = new Error(
+      `Plugin '${pluginName}' route render '${renderType}' returned invalid response. ` +
+        `Expected { html: string }, got: ${JSON.stringify(response)}`,
+    );
+    this.onError?.(err, { plugin: pluginName, operation: 'route:render' });
+    throw err;
   }
 
   /**

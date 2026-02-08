@@ -77,6 +77,51 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     return;
   }
 
+  // For route renders, return HTML based on context
+  if (type === 'route:render') {
+    const renderType = payload.renderType as string;
+    const context = payload.context as {
+      table?: string;
+      recordId?: string;
+      column?: string;
+      record?: Record<string, unknown>;
+      value?: unknown;
+    };
+
+    // Special render type to test invalid response handling
+    if (renderType === 'invalid-response') {
+      const response: WorkerResponse = {
+        id,
+        success: true,
+        result: { notHtml: 'this is wrong format' }, // Missing 'html' key
+      };
+      self.postMessage(response);
+      return;
+    }
+
+    // Generate simple HTML response
+    const html = `<!DOCTYPE html>
+<html>
+<head><title>Worker Render: ${renderType}</title></head>
+<body>
+  <h1>Rendered by Worker</h1>
+  <p>Render Type: ${renderType}</p>
+  <p>Table: ${context.table ?? 'none'}</p>
+  <p>Record ID: ${context.recordId ?? 'none'}</p>
+  <p>Column: ${context.column ?? 'none'}</p>
+  <pre>${JSON.stringify(context.record ?? {}, null, 2)}</pre>
+</body>
+</html>`;
+
+    const response: WorkerResponse = {
+      id,
+      success: true,
+      result: { html },
+    };
+    self.postMessage(response);
+    return;
+  }
+
   // Unknown type - still respond
   const response: WorkerResponse = {
     id,

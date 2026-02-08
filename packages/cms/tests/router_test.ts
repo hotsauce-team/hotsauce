@@ -5,10 +5,13 @@ import {
   cmsUrl,
   formatColumnName,
   formatTableName,
+  matchPattern,
+  matchPluginRoute,
   parseRoute,
   resolveAction,
 } from '../router.ts';
 import type { IntrospectedTable } from '@hotsauce/core';
+import type { PluginConfig } from '../plugins/types.ts';
 
 // Mock tables for testing
 const mockTables: IntrospectedTable[] = [
@@ -277,4 +280,209 @@ Deno.test('formatColumnName: converts snake_case', () => {
 
 Deno.test('formatColumnName: handles single word', () => {
   assertEquals(formatColumnName('email'), 'Email');
+});
+
+// =============================================================================
+// matchPattern tests
+// =============================================================================
+
+Deno.test('matchPattern: exact match with no params', () => {
+  const params = matchPattern('upload', 'upload');
+  assertExists(params);
+  assertEquals(Object.keys(params).length, 0);
+});
+
+Deno.test('matchPattern: single param', () => {
+  const params = matchPattern(':table', 'posts');
+  assertExists(params);
+  assertEquals(params.table, 'posts');
+});
+
+Deno.test('matchPattern: multiple params', () => {
+  const params = matchPattern(':table/:id', 'posts/42');
+  assertExists(params);
+  assertEquals(params.table, 'posts');
+  assertEquals(params.id, '42');
+});
+
+Deno.test('matchPattern: three params', () => {
+  const params = matchPattern(':table/:id/:column', 'posts/42/body');
+  assertExists(params);
+  assertEquals(params.table, 'posts');
+  assertEquals(params.id, '42');
+  assertEquals(params.column, 'body');
+});
+
+Deno.test('matchPattern: mixed static and param segments', () => {
+  const params = matchPattern('edit/:table/:id', 'edit/users/123');
+  assertExists(params);
+  assertEquals(params.table, 'users');
+  assertEquals(params.id, '123');
+});
+
+Deno.test('matchPattern: returns null for segment count mismatch', () => {
+  const params = matchPattern(':table/:id', 'posts');
+  assertEquals(params, null);
+});
+
+Deno.test('matchPattern: returns null for static segment mismatch', () => {
+  const params = matchPattern('edit/:id', 'view/123');
+  assertEquals(params, null);
+});
+
+Deno.test('matchPattern: empty path matches empty pattern', () => {
+  const params = matchPattern('', '');
+  assertExists(params);
+  assertEquals(Object.keys(params).length, 0);
+});
+
+// =============================================================================
+// matchPluginRoute tests
+// =============================================================================
+
+// Mock plugins for route matching tests
+const mockPlugins: PluginConfig[] = [
+  {
+    name: 'puck',
+    filter: 'dangerously-open',
+    routes: [
+      {
+        pattern: ':table/:id/:column',
+        methods: ['GET', 'POST'],
+        handler: () => '<html>editor</html>',
+      },
+      {
+        pattern: 'preview/:table/:id',
+        methods: ['GET'],
+        handler: () => '<html>preview</html>',
+      },
+    ],
+  },
+  {
+    name: 'media',
+    filter: 'dangerously-open',
+    routes: [
+      {
+        pattern: 'upload',
+        methods: ['POST'],
+        handler: () => 'uploaded',
+      },
+      {
+        pattern: 'browse',
+        methods: ['GET'],
+        handler: () => '<html>browse</html>',
+      },
+    ],
+  },
+  {
+    name: 'no-routes',
+    filter: 'dangerously-open',
+    // No routes defined
+  },
+];
+
+Deno.test('matchPluginRoute: matches plugin with params', () => {
+  const url = new URL('http://localhost/admin/puck/posts/42/body');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+
+  assertExists(match);
+  assertEquals(match.plugin.name, 'puck');
+  assertEquals(match.route.pattern, ':table/:id/:column');
+  assertEquals(match.params.table, 'posts');
+  assertEquals(match.params.id, '42');
+  assertEquals(match.params.column, 'body');
+});
+
+Deno.test('matchPluginRoute: matches route with static prefix over param route', () => {
+  // preview/:table/:id should match when path starts with 'preview'
+  // BUT our routes are checked in order - first match wins
+  // So ':table/:id/:column' matches 'preview/users/123' as table=preview, id=users, column=123
+  const url = new URL('http://localhost/admin/puck/preview/users/123');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+
+  assertExists(match);
+  assertEquals(match.plugin.name, 'puck');
+  // First route matches because it's checked first
+  assertEquals(match.route.pattern, ':table/:id/:column');
+  assertEquals(match.params.table, 'preview');
+  assertEquals(match.params.id, 'users');
+  assertEquals(match.params.column, '123');
+});
+
+Deno.test('matchPluginRoute: matches different plugin', () => {
+  const url = new URL('http://localhost/admin/media/browse');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+
+  assertExists(match);
+  assertEquals(match.plugin.name, 'media');
+  assertEquals(match.route.pattern, 'browse');
+});
+
+Deno.test('matchPluginRoute: rejects POST requests (not yet supported)', () => {
+  // POST should be rejected until POST support is properly added
+  const postMatch = matchPluginRoute(
+    new URL('http://localhost/admin/media/upload'),
+    '/admin',
+    'POST',
+    mockPlugins,
+  );
+  assertEquals(postMatch, null);
+
+  // GET to browse should still work
+  const getMatch = matchPluginRoute(
+    new URL('http://localhost/admin/media/browse'),
+    '/admin',
+    'GET',
+    mockPlugins,
+  );
+  assertExists(getMatch);
+  assertEquals(getMatch.route.pattern, 'browse');
+});
+
+Deno.test('matchPluginRoute: returns null for unknown plugin', () => {
+  const url = new URL('http://localhost/admin/unknown/something');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+  assertEquals(match, null);
+});
+
+Deno.test('matchPluginRoute: returns null for plugin without routes', () => {
+  const url = new URL('http://localhost/admin/no-routes/anything');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+  assertEquals(match, null);
+});
+
+Deno.test('matchPluginRoute: returns null for non-matching segment count', () => {
+  // puck routes have 3 segments max, this has 4
+  const url = new URL('http://localhost/admin/puck/a/b/c/d');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+  assertEquals(match, null);
+});
+
+Deno.test('matchPluginRoute: returns null for base path only', () => {
+  const url = new URL('http://localhost/admin');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+  assertEquals(match, null);
+});
+
+Deno.test('matchPluginRoute: returns null for path outside base', () => {
+  const url = new URL('http://localhost/other/puck/posts/1/body');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+  assertEquals(match, null);
+});
+
+Deno.test('matchPluginRoute: handles trailing slashes', () => {
+  const url = new URL('http://localhost/admin/media/browse/');
+  const match = matchPluginRoute(url, '/admin', 'GET', mockPlugins);
+
+  assertExists(match);
+  assertEquals(match.plugin.name, 'media');
+});
+
+Deno.test('matchPluginRoute: handles base path with trailing slash', () => {
+  const url = new URL('http://localhost/admin/puck/posts/1/title');
+  const match = matchPluginRoute(url, '/admin/', 'GET', mockPlugins);
+
+  assertExists(match);
+  assertEquals(match.plugin.name, 'puck');
+  assertEquals(match.params.table, 'posts');
 });

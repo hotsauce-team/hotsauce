@@ -12,9 +12,9 @@ export type {
   FieldUIOverride,
   PluginContext,
   PluginHooks,
-  PluginRequest,
-  PluginResponse,
   PluginRoute,
+  PluginRouteContext,
+  PluginRouteHandler,
   Serializable,
   SerializableObject,
   SerializableValue,
@@ -88,7 +88,8 @@ export type HookType =
   | 'transform:beforeSave'
   | 'transform:afterRead'
   | 'ui:renderField'
-  | 'action';
+  | 'action'
+  | 'route';
 
 /**
  * Context passed to the filter function.
@@ -230,8 +231,12 @@ export interface WorkerPluginConfig extends PluginConfigBase {
    */
   hooks?: WorkerHookDeclaration;
 
-  /** Routes not supported for Worker plugins (they'd need main-thread access) */
-  routes?: never;
+  /**
+   * Routes handled by this Worker plugin.
+   * Worker routes MUST use `render` (message type), not `handler`.
+   * Routes are namespaced: /admin/{pluginName}/{pattern}
+   */
+  routes?: PluginRoute[];
 }
 
 /**

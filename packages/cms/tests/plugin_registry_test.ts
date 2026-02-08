@@ -7,7 +7,11 @@ import {
   PluginRegistry,
   PluginValidationError,
 } from '../plugins/registry.ts';
-import type { PluginConfig } from '../plugins/types.ts';
+import type {
+  PluginConfig,
+  PluginRoute,
+  PluginRouteHandler,
+} from '../plugins/types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Test fixtures
@@ -55,9 +59,9 @@ const pluginWithRoutes: PluginConfig = {
   },
   routes: [
     {
-      path: '/upload',
-      method: 'POST',
-      handler: async () => ({ status: 200, body: { ok: true } }),
+      pattern: 'upload',
+      methods: ['POST'],
+      handler: async () => 'uploaded',
     },
   ],
 };
@@ -82,9 +86,9 @@ const fullPlugin: PluginConfig = {
   },
   routes: [
     {
-      path: '/custom',
-      method: 'GET',
-      handler: async () => ({ status: 200, body: {} }),
+      pattern: 'custom',
+      methods: ['GET'],
+      handler: async () => 'custom page',
     },
   ],
 };
@@ -260,37 +264,37 @@ Deno.test('PluginRegistry: accepts valid plugin names', () => {
   assertEquals(registry.getAll().length, 5);
 });
 
-Deno.test('PluginRegistry: validates route path starts with /', () => {
+Deno.test('PluginRegistry: validates route must have handler or render', () => {
   const registry = new PluginRegistry();
   const badPlugin: PluginConfig = {
     name: 'bad-routes',
     filter: 'dangerously-open',
     routes: [
       {
-        path: 'upload',
-        method: 'POST',
-        handler: async () => ({ status: 200 }),
-      },
+        pattern: 'upload',
+        methods: ['POST'],
+        // Missing both handler and render
+      } as PluginRoute,
     ],
   };
 
   assertThrows(
     () => registry.register(badPlugin),
     PluginValidationError,
-    'start with /',
+    'must have either handler or render',
   );
 });
 
-Deno.test('PluginRegistry: validates route method', () => {
+Deno.test('PluginRegistry: validates route methods', () => {
   const registry = new PluginRegistry();
   const badPlugin: PluginConfig = {
     name: 'bad-method',
     filter: 'dangerously-open',
     routes: [
       {
-        path: '/upload',
-        method: 'PATCH' as 'POST',
-        handler: async () => ({ status: 200 }),
+        pattern: 'upload',
+        methods: ['PATCH' as 'POST'],
+        handler: async () => 'ok',
       },
     ],
   };
@@ -309,11 +313,9 @@ Deno.test('PluginRegistry: validates route handler is function', () => {
     filter: 'dangerously-open',
     routes: [
       {
-        path: '/upload',
-        method: 'POST',
-        handler: 'not a function' as unknown as () => Promise<
-          { status: number }
-        >,
+        pattern: 'upload',
+        methods: ['POST'],
+        handler: 'not a function' as unknown as PluginRouteHandler,
       },
     ],
   };
@@ -460,13 +462,13 @@ Deno.test('PluginRegistry: getAllRoutes collects routes from all plugins', () =>
 
   const routes = registry.getAllRoutes();
   assertEquals(routes.length, 2);
-  assertEquals(routes.map((r) => r.route.path).sort(), ['/custom', '/upload']);
+  assertEquals(routes.map((r) => r.route.pattern).sort(), ['custom', 'upload']);
   assertEquals(
-    routes.find((r) => r.route.path === '/upload')?.pluginName,
+    routes.find((r) => r.route.pattern === 'upload')?.pluginName,
     'routes-plugin',
   );
   assertEquals(
-    routes.find((r) => r.route.path === '/custom')?.pluginName,
+    routes.find((r) => r.route.pattern === 'custom')?.pluginName,
     'full-plugin',
   );
 });
@@ -576,19 +578,19 @@ Deno.test('PluginRegistry: rejects Worker plugin with routes', () => {
   assertThrows(
     () =>
       registry.register({
-        name: 'worker-with-routes',
+        name: 'worker-with-handler-route',
         worker: new MockWorker() as unknown as Worker,
         filter: 'dangerously-open',
         routes: [
           {
-            path: '/upload',
-            method: 'POST',
-            handler: async () => ({ status: 200 }),
+            pattern: 'upload',
+            methods: ['POST'],
+            handler: async () => 'ok', // Worker routes must use render, not handler
           },
         ],
       } as unknown as PluginConfig),
     PluginValidationError,
-    'cannot have routes',
+    'cannot use handler', // Worker routes must use render instead
   );
 });
 
