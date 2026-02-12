@@ -509,6 +509,7 @@ filter: 'dangerously-open';
 
 - **Transform hooks** (`beforeSave`, `afterRead`): Modify data, always block
 - **Action hooks** (`on.create`, `on.update`, etc.): Side effects, optionally fire-and-forget
+- **UI hooks** (`ui.renderField`): Customize field rendering in admin UI (runs in Workers or in-process; return type is serializable)
 
 **Column Policy Interaction**
 

@@ -394,7 +394,9 @@ Deno.test('FieldUIOverride validation: rejects missing link property', async () 
   assertEquals(result, null);
   assertEquals(errors.length, 1);
   assertEquals(
-    errors[0]!.message.includes("Expected object with 'link' property"),
+    errors[0]!.message.includes(
+      "Expected object with 'link' and/or 'valueSummary'",
+    ),
     true,
   );
 });
@@ -495,6 +497,62 @@ Deno.test('FieldUIOverride validation: rejects unexpected properties on root', a
   assertEquals(errors.length, 1);
   assertEquals(
     errors[0]!.message.includes('Unexpected properties on FieldUIOverride'),
+    true,
+  );
+});
+
+Deno.test('FieldUIOverride validation: accepts valueSummary only (no link)', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: '3 blocks',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, { valueSummary: '3 blocks' });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: accepts link with valueSummary', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Edit', href: '/edit' },
+    valueSummary: '3 blocks',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, {
+    link: { label: 'Edit', href: '/edit' },
+    valueSummary: '3 blocks',
+  });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: rejects valueSummary wrong type', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 123,
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(
+    errors[0]!.message.includes("'valueSummary' to be a string"),
     true,
   );
 });

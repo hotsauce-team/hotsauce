@@ -42,16 +42,62 @@ export function formField(
   const helpText = options.helpText ?? field.helpText;
   const isRequired = field.column.notNull && !field.column.hasDefault;
 
-  // If there's a link override, render a link instead of the input
+  // If there's a link override, render a link (and value display if read-only)
   if (options.override?.link) {
     const { label, href, target } = options.override.link;
+
+    // For read-only fields, show summary (or value) and the link
+    // This allows users to see what the current value is and access the plugin editor
+    const valueSummary = options.override.valueSummary;
+    if (field.readOnly) {
+      return html`
+        <div ${attrs({
+          class: 'cms-field cms-field-readonly',
+        })}>
+          <label ${attrs({ for: id, class: 'cms-label' })}>
+            ${field.label}
+          </label>
+          ${raw(
+            valueSummary
+              ? html`
+                <p class="cms-value-summary">${valueSummary}</p>
+              `
+              : renderFieldInput(field, { ...options, id, disabled: true }),
+          )}
+          <div class="cms-field-override">
+            <a ${attrs({
+              href,
+              target: target ?? '_self',
+              class: 'cms-btn cms-btn-secondary',
+              rel: target === '_blank' ? 'noopener' : undefined,
+            })}>${label}${raw(target === '_blank' ? ' ↗' : '')}</a>
+          </div>
+          ${raw(
+            helpText
+              ? html`
+                <p class="cms-help">${helpText}</p>
+              `
+              : '',
+          )}
+        </div>
+      `;
+    }
+
+    // Non-readonly fields: show summary (if provided) + link (replaces raw input)
     return html`
       <div ${attrs({
-        class: `cms-field ${field.readOnly ? 'cms-field-readonly' : ''}`.trim(),
+        class: 'cms-field',
       })}>
         <label ${attrs({ class: 'cms-label' })}>
           ${field.label}
         </label>
+        ${raw(
+          valueSummary
+            ? html`
+              <p class="cms-value-summary">${valueSummary}</p>
+            `
+            : '',
+        )}
         <div class="cms-field-override">
           <a ${attrs({
             href,
@@ -60,6 +106,27 @@ export function formField(
             rel: target === '_blank' ? 'noopener' : undefined,
           })}>${label}${raw(target === '_blank' ? ' ↗' : '')}</a>
         </div>
+        ${raw(
+          helpText
+            ? html`
+              <p class="cms-help">${helpText}</p>
+            `
+            : '',
+        )}
+      </div>
+    `;
+  }
+
+  // valueSummary without link: show summary for read-only fields (hides raw JSON)
+  if (options.override?.valueSummary && field.readOnly) {
+    return html`
+      <div ${attrs({
+        class: 'cms-field cms-field-readonly',
+      })}>
+        <label ${attrs({ for: id, class: 'cms-label' })}>
+          ${field.label}
+        </label>
+        <p class="cms-value-summary">${options.override.valueSummary}</p>
         ${raw(
           helpText
             ? html`

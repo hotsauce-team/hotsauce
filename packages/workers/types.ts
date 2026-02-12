@@ -183,10 +183,15 @@ export interface UIRenderFieldContext {
  * Return from renderField hook to customize how a field is rendered:
  * - `null` or `undefined`: Show the default input
  * - `{ link: ... }`: Replace the input with a link (e.g., to an external editor)
+ * - `{ valueSummary: ... }`: Replace raw value display with human-readable text
  */
 export type FieldUIOverride =
   | null
-  | { link: { label: string; href: string; target?: '_blank' } };
+  | {
+    link?: { label: string; href: string; target?: '_blank' };
+    /** Human-readable summary to show instead of raw value (plain text, no HTML) */
+    valueSummary?: string;
+  };
 
 /**
  * UI render field function signature.

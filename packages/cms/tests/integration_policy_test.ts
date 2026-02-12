@@ -1089,9 +1089,9 @@ Deno.test({
           'Title should be unchanged',
         );
         // deno-lint-ignore no-explicit-any
-        const contentType = (updated?.content as any)?.content?.[0]?.type;
+        const updatedBlockType = (updated?.content as any)?.content?.[0]?.type;
         assertEquals(
-          contentType,
+          updatedBlockType,
           'HeadingBlock',
           'Content should be updated',
         );
@@ -1204,10 +1204,9 @@ Deno.test({
         const [created] = await db.select().from(pages).where(sql`id = 1`);
         assertEquals(created?.title, 'New Page via Puck');
         // deno-lint-ignore no-explicit-any
-        const createdContentType = (created?.content as any)?.content?.[0]
-          ?.type;
+        const createdBlockType = (created?.content as any)?.content?.[0]?.type;
         assertEquals(
-          createdContentType,
+          createdBlockType,
           'HeadingBlock',
         );
       },

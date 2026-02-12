@@ -135,6 +135,32 @@ selectInput({
 formField(cmsField, record.title, { relationOptions });
 ```
 
+#### FormFieldOptions
+
+```typescript
+interface FormFieldOptions {
+  /** Field value */
+  value?: unknown;
+  /** Unique ID for the input element */
+  id?: string;
+  /** Validation error message */
+  error?: string;
+  /** Help text override */
+  helpText?: string;
+  /** Force disabled state */
+  disabled?: boolean;
+  /** Relation options for FK fields */
+  relationOptions?: RelationOption[];
+  /** UI override from plugin (e.g., link to external editor) */
+  override?: FieldUIOverride;
+}
+```
+
+The `override` option is provided by plugin `renderField` hooks. When present:
+
+- **`link`**: Renders a button linking to an external editor
+- **`valueSummary`**: Replaces raw value with human-readable text (e.g., "3 blocks" instead of JSON)
+
 #### File inputs
 
 For fields marked as file fields (via `@hotsauce/core` `$cms({ file: true })` metadata), the UI renders:

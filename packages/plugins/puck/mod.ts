@@ -242,8 +242,18 @@ export function createPuckPlugin(
           if (ctx.field.plugin && ctx.recordId) {
             const href =
               `${opts.basePath}/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`;
+
+            // Parse Puck data to generate summary
+            let valueSummary = '0 blocks';
+            if (ctx.value && typeof ctx.value === 'object') {
+              const data = ctx.value as { content?: unknown[] };
+              const count = data.content?.length ?? 0;
+              valueSummary = count === 1 ? '1 block' : `${count} blocks`;
+            }
+
             return {
               link: { href, label: 'Edit with Puck', target: '_blank' },
+              valueSummary,
             };
           }
           return null;
@@ -279,29 +289,6 @@ export function createPuckPlugin(
         pattern: ':table/:id/:column',
         methods: ['GET'],
         handler: (ctx) => renderEditorPage(ctx, opts),
-      },
-      {
-        // Save endpoint (placeholder)
-        pattern: ':table/:id/:column',
-        methods: ['POST'],
-        handler: (ctx) => {
-          // TODO: Implement POST support when plugin routes get request body access
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: 'Save not implemented - POST route support pending',
-              context: {
-                table: ctx.table,
-                recordId: ctx.recordId,
-                column: ctx.column,
-              },
-            }),
-            {
-              status: 501,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          );
-        },
       },
     ],
   };

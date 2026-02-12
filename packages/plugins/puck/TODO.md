@@ -14,18 +14,10 @@
 
 ### High Priority
 
-- [ ] **CMS edit screen → Puck editor navigation**
-  - `policiesFromSchema` now hides plugin-owned columns from CMS edit form
-  - Users need a way to reach Puck editor from CMS UI
-  - Options to consider:
-    1. Add "Edit with Puck" link to detail view (not just edit form)
-    2. Add "Edit with Puck" link to list view actions column
-    3. Show plugin-owned field as read-only with link (currently completely hidden)
-    4. Table-level action button (e.g., "Visual Editor" in page header)
-  - **Related question**: Do we need UI filtering for plugin-owned columns?
-    - Currently: field hidden entirely from edit form
-    - Alternative: show field read-only with "Edit with Puck" link
-    - Trade-off: magic auto-read-only vs explicit schema config
+- [x] **CMS edit screen → Puck editor navigation**
+  - Plugin columns show as read-only with "Edit with Puck" button
+  - `valueSummary` displays block count instead of raw JSON
+  - Implemented via `renderField` UI hook in plugin config
 
 - [ ] **Add more components** — Currently only `HeadingBlock`
   - Text/Paragraph

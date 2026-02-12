@@ -34,15 +34,35 @@ function validateFieldUIOverride(value: unknown): string | null {
 
   // Must be an object
   if (typeof value !== 'object') {
-    return `Expected null or an object with 'link' property, got ${typeof value}`;
+    return `Expected null or an object with 'link' and/or 'valueSummary', got ${typeof value}`;
   }
 
-  // Check for link property
+  // Must have at least link or valueSummary
   const obj = value as Record<string, unknown>;
-  if (!('link' in obj)) {
-    return `Expected object with 'link' property, got: ${
+  if (!('link' in obj) && !('valueSummary' in obj)) {
+    return `Expected object with 'link' and/or 'valueSummary' property, got: ${
       JSON.stringify(Object.keys(obj))
     }`;
+  }
+
+  // valueSummary-only is valid (no link required)
+  if (!('link' in obj)) {
+    // Only valueSummary provided - validate it's a string
+    if (typeof obj.valueSummary !== 'string') {
+      return `Expected 'valueSummary' to be a string, got ${typeof obj
+        .valueSummary}`;
+    }
+    // Check for unexpected properties
+    const allowedRootProps = ['valueSummary'];
+    const unexpectedRootProps = Object.keys(obj).filter(
+      (k) => !allowedRootProps.includes(k),
+    );
+    if (unexpectedRootProps.length > 0) {
+      return `Unexpected properties on FieldUIOverride: ${
+        JSON.stringify(unexpectedRootProps)
+      }`;
+    }
+    return null;
   }
 
   const link = obj.link;
@@ -82,8 +102,14 @@ function validateFieldUIOverride(value: unknown): string | null {
     }`;
   }
 
+  // Optional: valueSummary (must be string if present)
+  if ('valueSummary' in obj && typeof obj.valueSummary !== 'string') {
+    return `Expected 'valueSummary' to be a string, got ${typeof obj
+      .valueSummary}`;
+  }
+
   // Check for unexpected properties on root object
-  const allowedRootProps = ['link'];
+  const allowedRootProps = ['link', 'valueSummary'];
   const unexpectedRootProps = Object.keys(obj).filter(
     (k) => !allowedRootProps.includes(k),
   );

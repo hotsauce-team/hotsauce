@@ -1691,6 +1691,7 @@ Plugins can define two categories of hooks:
 | ------------- | ---------------- | -------- | ------------------------------------- |
 | **Transform** | During data flow | Always   | Modify data before save or after read |
 | **Action**    | After operation  | Optional | Side effects (audit, webhooks, cache) |
+| **UI**        | Rendering forms  | Always   | Customize field display in admin UI   |
 
 ### Transform Hooks
 
@@ -1763,6 +1764,51 @@ const auditPlugin: Plugin = {
 };
 ```
 
+### UI Hooks
+
+UI hooks customize how fields are rendered in the admin interface. They can run either in-process or in Workers (the return type is fully serializable).
+
+```ts
+const puckPlugin: Plugin = {
+  name: 'puck',
+  hooks: {
+    ui: {
+      // Called for each field when rendering edit forms
+      renderField: (ctx) => {
+        // Return null for default rendering
+        if (!ctx.field.plugin) return null;
+
+        // Parse plugin data for human-readable summary
+        const data = ctx.value as { content?: unknown[] };
+        const count = data?.content?.length ?? 0;
+
+        return {
+          // Link button to external editor
+          link: {
+            href: `/admin/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`,
+            label: 'Edit with Puck',
+            target: '_blank',
+          },
+          // Human-readable summary instead of raw JSON
+          valueSummary: count === 1 ? '1 block' : `${count} blocks`,
+        };
+      },
+    },
+  },
+};
+```
+
+**FieldUIOverride return type:**
+
+```ts
+type FieldUIOverride =
+  | null // Use default rendering
+  | {
+    link?: { label: string; href: string; target?: '_blank' };
+    valueSummary?: string; // Plain text only, no HTML
+  };
+```
+
 ### Filter Function
 
 Use `filter` to control which hooks are invoked. This is cleaner than stub hooks and works for both Worker and in-process plugins:
@@ -1793,7 +1839,11 @@ plugins: [
 
 ```ts
 interface FilterContext {
-  hookType: 'transform:beforeSave' | 'transform:afterRead' | 'action';
+  hookType:
+    | 'transform:beforeSave'
+    | 'transform:afterRead'
+    | 'action'
+    | 'ui:renderField';
   table: string;
   action: 'create' | 'read' | 'update' | 'delete' | 'list';
   user?: { sub: string; role?: string };

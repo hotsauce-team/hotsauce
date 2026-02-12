@@ -263,6 +263,21 @@ body {
 .cms-error { color: var(--cms-danger); font-size: 0.875rem; margin: 0.25rem 0 0; }
 .cms-help { color: var(--cms-gray-500); font-size: 0.875rem; margin: 0.25rem 0 0; }
 
+/* Value summary - human-readable replacement for raw data */
+.cms-value-summary {
+  padding: 0.5rem 0.75rem;
+  background: var(--cms-gray-100);
+  border-radius: var(--cms-radius);
+  font-size: 0.875rem;
+  color: var(--cms-gray-600);
+  margin: 0;
+}
+
+/* Field override - plugin-provided link */
+.cms-field-override {
+  margin-top: 0.5rem;
+}
+
 .cms-field-error .cms-input {
   border-color: var(--cms-danger);
 }
