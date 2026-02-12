@@ -142,6 +142,23 @@ export interface PolicyContext {
   };
   /** The original request (for advanced use cases) */
   request: Request;
+  /**
+   * Source of the form submission
+   *
+   * - `'cms'`: Request from CMS core forms
+   * - `'plugin:{name}'`: Request from a plugin (e.g., 'plugin:puck')
+   * - `undefined`: Source token not validated (legacy or no auth)
+   *
+   * Use this in column policies to restrict plugin access:
+   * ```ts
+   * columns: {
+   *   content: {
+   *     write: (ctx) => ctx.source === 'plugin:puck',
+   *   }
+   * }
+   * ```
+   */
+  source?: string;
 }
 
 /**

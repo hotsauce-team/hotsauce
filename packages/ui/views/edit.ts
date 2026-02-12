@@ -24,6 +24,8 @@ export interface EditViewOptions {
   action?: string;
   /** CSRF token to embed in form */
   csrfToken?: string;
+  /** Source token to identify form origin (cms vs plugin) */
+  sourceToken?: string;
   /** Enable multipart form data (for file uploads) */
   multipart?: boolean;
   /** Frontend URL for "View on site" link (null = hide link) */
@@ -105,6 +107,7 @@ export function editView(
           cancelUrl: options.baseUrl,
           class: 'cms-edit-form',
           csrfToken: options.csrfToken,
+          sourceToken: options.sourceToken,
           multipart: options.multipart,
         },
         values,

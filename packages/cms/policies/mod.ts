@@ -71,3 +71,8 @@ export {
   isTablePolicy,
   validateHiddenRequiredColumns,
 } from './apply.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Schema-based Policies - Generate policies from $cms() hints
+// ─────────────────────────────────────────────────────────────
+export { getColumnPluginSources, policiesFromSchema } from './from-schema.ts';

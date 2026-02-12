@@ -538,8 +538,14 @@ export function coerceFormValues(
     // Form fields use propertyName (e.g., authorId)
     const rawValue = formData[column.propertyName];
 
-    // Handle missing values
-    if (rawValue === undefined || rawValue === '') {
+    // Skip columns not present in form data (enables partial updates).
+    // This is distinct from empty string '' which means "user cleared field".
+    if (rawValue === undefined) {
+      continue;
+    }
+
+    // Handle empty strings - set nullable columns to null
+    if (rawValue === '') {
       if (!column.notNull) {
         result[column.propertyName] = null;
       }

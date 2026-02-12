@@ -131,13 +131,17 @@ export function numberInput(
 }
 
 /**
- * Render a checkbox for boolean fields
+ * Render a checkbox for boolean fields.
+ * Includes a hidden input to ensure unchecked state is submitted as 'false'.
  */
 export function booleanInput(
   field: CMSField,
   options: FieldInputOptions = {},
 ): string {
+  // Hidden input ensures form submits 'false' when checkbox is unchecked.
+  // When checkbox is checked, it overrides with 'true'.
   return html`
+    <input type="hidden" name="${field.column.propertyName}" value="false" />
     <input ${attrs({
       type: 'checkbox',
       name: field.column.propertyName,

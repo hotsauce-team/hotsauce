@@ -141,6 +141,23 @@ export {
 } from './csrf.ts';
 
 // ─────────────────────────────────────────────────────────────
+// Source Tokens - Identify CMS vs plugin form submissions
+// ─────────────────────────────────────────────────────────────
+export {
+  generateSourceToken,
+  getPluginName,
+  getSourceTokenFromFormData,
+  isPluginSource,
+  pluginSource,
+  SOURCE,
+  SOURCE_FIELD_NAME,
+  validateSourceToken,
+} from './tokens/mod.ts';
+
+// Import locally for use in handlePluginRoute
+import { generateSourceToken, pluginSource } from './tokens/mod.ts';
+
+// ─────────────────────────────────────────────────────────────
 // Router - URL parsing and route generation
 // ─────────────────────────────────────────────────────────────
 export {
@@ -227,10 +244,13 @@ export {
   createPolicyContext,
   // Action-specific
   forActions,
+  // Schema-based policies
+  getColumnPluginSources,
   never,
   // Ownership
   ownedBy,
   ownedByOrContributor,
+  policiesFromSchema,
   readOnly,
   roleIn,
   // Role-based
@@ -427,6 +447,12 @@ async function handlePluginRoute(
   const csrfSecret = options.csrfSecret;
   const csrfToken = await generateCsrfToken(csrfSecret);
 
+  // Generate source token for this plugin
+  const sourceToken = await generateSourceToken(
+    pluginSource(plugin.name),
+    csrfSecret,
+  );
+
   // Build base context (without record data)
   const baseCtx: Omit<PluginRouteContext, 'record' | 'value' | 'field'> = {
     table: table ?? '',
@@ -439,6 +465,7 @@ async function handlePluginRoute(
       }
       : undefined,
     csrfToken,
+    sourceToken,
     basePath: options.basePath,
     requestUrl: request.url,
     method: request.method,
@@ -630,12 +657,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
   // Validate file column configurations (file: true must be on JSON columns)
   validateFileColumns(introspected);
 
-  // Resolve policies ('dangerously-open' = full access, undefined when auth is disabled)
-  const resolvedPolicies: Policies | undefined = hasRealAuth
-    ? (options.auth.policies === 'dangerously-open'
-      ? {}
-      : options.auth.policies)
-    : undefined;
+  // Resolve policies:
+  // - 'dangerously-open' → {} (full access)
+  // - object → use as-is
+  const resolvedPolicies: Policies = options.policies === 'dangerously-open'
+    ? {}
+    : options.policies;
 
   // Resolve auth options if provided
   const resolvedAuth: ResolvedAuthOptions | undefined = hasRealAuth

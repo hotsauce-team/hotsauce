@@ -16,11 +16,11 @@ const PoliciesSchema = z.union([
   z.literal('dangerously-open'),
   z.any().refine(
     (val) => val != null && typeof val === 'object',
-    { message: 'auth.policies must be an object or "dangerously-open"' },
+    { message: 'policies must be an object or "dangerously-open"' },
   ),
 ], {
   message:
-    "auth.policies is required: provide table policies or 'dangerously-open' to bypass",
+    "policies is required when auth is configured: provide table policies or 'dangerously-open' to bypass",
 });
 
 /**
@@ -40,7 +40,6 @@ const AuthConfigSchema = z.object({
         'auth.provider must be an AuthProvider with an authenticate() method',
     },
   ),
-  policies: PoliciesSchema,
   secret: z.string().min(32, {
     message: 'auth.secret must be at least 32 characters for security',
   }).optional(),
@@ -89,16 +88,19 @@ const BaseOptionsSchema = z.object({
 
 /**
  * Schema for CMS with auth: 'dangerously-open'
+ * Policies are still required (use 'dangerously-open' to bypass)
  */
 const DangerouslyOpenAuthSchema = BaseOptionsSchema.extend({
   auth: z.literal('dangerously-open'),
+  policies: PoliciesSchema,
 });
 
 /**
- * Schema for CMS with auth config (policies required inside auth)
+ * Schema for CMS with auth config (policies required at top level)
  */
 const AuthenticatedSchema = BaseOptionsSchema.extend({
   auth: AuthConfigSchema,
+  policies: PoliciesSchema,
 });
 
 /**

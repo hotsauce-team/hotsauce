@@ -93,6 +93,7 @@ Deno.test('createCmsHandler: returns a function', () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
   });
@@ -104,6 +105,7 @@ Deno.test('createCmsHandler: 404 for unknown routes', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -119,6 +121,7 @@ Deno.test('createCmsHandler: 403 when not authenticated', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -135,6 +138,7 @@ Deno.test('createCmsHandler: renders dashboard on GET /admin', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -157,6 +161,7 @@ Deno.test('createCmsHandler: 405 for POST on dashboard', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -172,6 +177,7 @@ Deno.test('createCmsHandler: custom title appears in dashboard', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -189,6 +195,7 @@ Deno.test('createCmsHandler: async authentication check', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -208,6 +215,7 @@ Deno.test('createCmsHandler: canAccess authorization check', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -226,6 +234,7 @@ Deno.test('createCmsHandler: canAccess allows access when returning true', async
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -245,6 +254,7 @@ Deno.test('createCmsHandler: canAccess receives correct table and action', async
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -273,6 +283,7 @@ Deno.test('createCmsHandler: canAccess with async function', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -292,6 +303,7 @@ Deno.test('createCmsHandler: canAccess can check request headers', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -319,6 +331,7 @@ Deno.test('createCmsHandler: canAccess action-based permissions', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -357,6 +370,7 @@ Deno.test('createCmsHandler: onError callback is called on database error', asyn
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: throwingDb,
     basePath: '/admin',
@@ -395,6 +409,7 @@ Deno.test('createCmsHandler: onError handles non-Error throws', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: throwingDb,
     basePath: '/admin',
@@ -421,6 +436,7 @@ Deno.test('createCmsHandler: plugin routes require authentication', async () => 
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -460,6 +476,7 @@ Deno.test('createCmsHandler: plugin routes allow authenticated users', async () 
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -499,6 +516,7 @@ Deno.test('createCmsHandler: plugin routes respect canAccess for table routes', 
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -541,6 +559,7 @@ Deno.test('createCmsHandler: plugin routes allow access when canAccess returns t
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -580,6 +599,7 @@ Deno.test('createCmsHandler: plugin POST routes return 404 (not yet supported)',
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -628,6 +648,7 @@ Deno.test('createCmsHandler: plugin routes work without auth config', async () =
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -662,6 +683,7 @@ Deno.test('createCmsHandler: plugin routes with async isAuthenticated', async ()
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -704,6 +726,7 @@ Deno.test('createCmsHandler: plugin route filter blocks access to filtered table
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -746,6 +769,7 @@ Deno.test('createCmsHandler: plugin route filter allows unfiltered tables', asyn
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -787,6 +811,7 @@ Deno.test('createCmsHandler: plugin route filter receives correct hookType', asy
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -821,6 +846,7 @@ Deno.test('createCmsHandler: plugin route filter receives correct action for GET
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -855,6 +881,7 @@ Deno.test('createCmsHandler: plugin route dangerously-open filter allows all', a
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -892,6 +919,7 @@ Deno.test('createCmsHandler: plugin route filter receives user context', async (
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -929,6 +957,7 @@ Deno.test('createCmsHandler: plugin route handler errors are caught and reported
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -968,6 +997,7 @@ Deno.test('createCmsHandler: built-in routes take precedence over plugin routes'
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',

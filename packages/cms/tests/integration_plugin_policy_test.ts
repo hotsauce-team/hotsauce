@@ -94,12 +94,12 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            posts: {
-              columns: {
-                // Hide body from all users
-                body: { read: () => false },
-              },
+        },
+        policies: {
+          posts: {
+            columns: {
+              // Hide body from all users
+              body: { read: () => false },
             },
           },
         },
@@ -173,11 +173,11 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-            policies: {
-              posts: {
-                columns: {
-                  body: { read: () => false },
-                },
+          },
+          policies: {
+            posts: {
+              columns: {
+                body: { read: () => false },
               },
             },
           },
@@ -251,10 +251,10 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-            policies: {
-              // Only owner can access their posts
-              posts: ownedBy(posts, 'authorId'),
-            },
+          },
+          policies: {
+            // Only owner can access their posts
+            posts: ownedBy(posts, 'authorId'),
           },
           plugins: [
             {
@@ -320,9 +320,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            posts: ownedBy(posts, 'authorId'),
-          },
+        },
+        policies: {
+          posts: ownedBy(posts, 'authorId'),
         },
         plugins: [
           {
@@ -388,10 +388,10 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-            policies: {
-              // No column restrictions on title
-              posts: {},
-            },
+          },
+          policies: {
+            // No column restrictions on title
+            posts: {},
           },
           plugins: [
             {
@@ -464,10 +464,10 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-            policies: {
-              // adminOr allows admin role to bypass ownership check
-              posts: adminOr(ownedBy(posts, 'authorId')),
-            },
+          },
+          policies: {
+            // adminOr allows admin role to bypass ownership check
+            posts: adminOr(ownedBy(posts, 'authorId')),
           },
           plugins: [
             {
@@ -529,12 +529,12 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            posts: {
-              columns: {
-                // Only admins can see body
-                body: { read: (ctx) => ctx.user?.role === 'admin' },
-              },
+        },
+        policies: {
+          posts: {
+            columns: {
+              // Only admins can see body
+              body: { read: (ctx) => ctx.user?.role === 'admin' },
             },
           },
         },
@@ -612,9 +612,9 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-            policies: {
-              posts: () => false, // Would deny if record fetch happened
-            },
+          },
+          policies: {
+            posts: () => false, // Would deny if record fetch happened
           },
           plugins: [
             {

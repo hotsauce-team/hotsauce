@@ -9,8 +9,10 @@ import { sql } from 'drizzle-orm';
 import {
   createBasicTables,
   createFormData,
+  generateSourceToken,
   posts,
   schema,
+  SOURCE,
   TEST_CSRF_SECRET,
   users,
 } from './integration_helpers.ts';
@@ -38,6 +40,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     return createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',
@@ -86,8 +89,10 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createHandler();
 
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
     const formData = createFormData({
       _csrf: csrfToken,
+      _source: sourceToken,
       email: 'test@example.com',
       name: 'Test User',
       bio: 'A test user',
@@ -185,8 +190,10 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createHandler();
 
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
     const formData = createFormData({
       _csrf: csrfToken,
+      _source: sourceToken,
       email: 'updated@example.com',
       name: 'After Update',
       bio: 'New bio',
@@ -318,8 +325,10 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createHandler();
 
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
     const formData = createFormData({
       _csrf: csrfToken,
+      _source: sourceToken,
       title: 'Test Post',
       body: 'Post content',
       authorId: '1',
@@ -361,6 +370,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',

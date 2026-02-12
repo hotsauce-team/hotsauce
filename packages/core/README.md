@@ -229,6 +229,47 @@ const posts = pgTable('posts', {
 
 > **Note:** `hidden` and `readOnly` are UI hints only. A crafted POST request could still submit values for these columns. To enforce write protection server-side, use column policies with `write: () => false`.
 
+#### Plugin Access Control
+
+Restrict which plugins can write to a column:
+
+```ts
+const pages = pgTable('pages', {
+  // Only the 'puck' plugin can write to this column
+  content: json('content').$cms({ plugins: { puck: true } }),
+
+  // Multiple plugins with explicit permissions
+  metadata: json('metadata').$cms({
+    plugins: {
+      puck: { write: true },
+      'block-editor': { write: true, read: true },
+    },
+  }),
+});
+```
+
+- `plugins?: Record<string, PluginColumnConfig>` — map of plugin names to access config
+
+**`PluginColumnConfig`:**
+
+| Value             | Meaning                                      |
+| ----------------- | -------------------------------------------- |
+| `true`            | Shorthand for `{ write: true }`              |
+| `{ write: true }` | Plugin can write to this column              |
+| `{ read: true }`  | Plugin can read this column (for future use) |
+
+Use with `policiesFromSchema()` from `@hotsauce/cms` to automatically generate column write policies:
+
+```ts
+import { policiesFromSchema } from '@hotsauce/cms';
+
+auth: {
+  policies: policiesFromSchema(schema), // Reads $cms({ plugins }) hints
+}
+```
+
+See the [@hotsauce/cms README](../cms/README.md#schema-derived-policies-policiesfromschema) for details.
+
 #### FileReference Type
 
 File values are stored as a JSON object:

@@ -67,7 +67,16 @@ function renderEditorPage(
   ctx: PluginRouteContext,
   opts: PuckPluginOptions,
 ): string {
-  const { table, recordId, column, value, field, basePath, csrfToken } = ctx;
+  const {
+    table,
+    recordId,
+    column,
+    value,
+    field,
+    basePath,
+    csrfToken,
+    sourceToken,
+  } = ctx;
 
   // Parse initial Puck data from column value.
   // Puck expects: { content: [], root: { props: {} }, zones?: {} }
@@ -112,6 +121,7 @@ function renderEditorPage(
       recordId,
       column,
       csrfToken,
+      sourceToken,
       basePath,
       config: puckConfig,
       data: initialPuckData,

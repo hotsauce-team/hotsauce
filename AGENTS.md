@@ -220,6 +220,17 @@ packages/cms/
 ├── runtime-compat.ts   # Cross-runtime env var utilities (getEnv)
 ├── types.ts            # Handler types (CmsOptions, ErrorContext, etc.)
 ├── auth/               # JWT authentication module
+├── tokens/             # Token generation and validation
+│   ├── crypto.ts       # HMAC-SHA256 primitives (signPayload, verifyPayload)
+│   ├── csrf.ts         # CSRF token (re-exported from ../csrf.ts)
+│   ├── source.ts       # Source tokens (identify CMS vs plugin forms)
+│   └── mod.ts          # Re-export public API
+├── policies/           # Row and column-level security
+│   ├── types.ts        # Policy, TablePolicy, ColumnPolicies types
+│   ├── helpers.ts      # ownedBy, adminOr, readOnly, etc.
+│   ├── apply.ts        # Policy evaluation and application
+│   ├── from-schema.ts  # policiesFromSchema() - generate from $cms() hints
+│   └── mod.ts          # Re-export public API
 └── plugins/            # Plugin registry, service, and types
     ├── types.ts        # Plugin, PluginConfig, re-exports from workers
     ├── registry.ts     # Plugin registration and validation

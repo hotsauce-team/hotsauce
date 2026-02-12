@@ -7,16 +7,25 @@
 - ✅ Watch mode: `deno task build:puck:watch`
 - ✅ One demo component: `HeadingBlock`
 - ✅ Data loads from database column
-- ❌ Saving not implemented (POST route needs request body access)
+- ✅ Saving works (POSTs form data to CMS update endpoint)
+- ✅ **Source tokens + plugin-aware policies** — Secure plugin write access
 
 ## Remaining Tasks
 
 ### High Priority
 
-- [ ] **Implement save functionality** — POST route currently returns 501
-  - Plugin routes need `request` object access to read JSON body
-  - Update `packages/cms/plugins/service.ts` to pass request to route handlers
-  - Then implement save in `mod.ts` POST handler
+- [ ] **CMS edit screen → Puck editor navigation**
+  - `policiesFromSchema` now hides plugin-owned columns from CMS edit form
+  - Users need a way to reach Puck editor from CMS UI
+  - Options to consider:
+    1. Add "Edit with Puck" link to detail view (not just edit form)
+    2. Add "Edit with Puck" link to list view actions column
+    3. Show plugin-owned field as read-only with link (currently completely hidden)
+    4. Table-level action button (e.g., "Visual Editor" in page header)
+  - **Related question**: Do we need UI filtering for plugin-owned columns?
+    - Currently: field hidden entirely from edit form
+    - Alternative: show field read-only with "Edit with Puck" link
+    - Trade-off: magic auto-read-only vs explicit schema config
 
 - [ ] **Add more components** — Currently only `HeadingBlock`
   - Text/Paragraph

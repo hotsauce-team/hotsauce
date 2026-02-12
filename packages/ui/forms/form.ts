@@ -31,6 +31,8 @@ export interface FormOptions {
   multipart?: boolean;
   /** CSRF token to embed as hidden field */
   csrfToken?: string;
+  /** Source token to identify form origin (cms vs plugin) */
+  sourceToken?: string;
 }
 
 /**
@@ -52,6 +54,11 @@ export function form(
       <input type="hidden" name="_csrf" value="${options.csrfToken}" />
     `
     : '';
+  const sourceField = options.sourceToken
+    ? html`
+      <input type="hidden" name="_source" value="${options.sourceToken}" />
+    `
+    : '';
 
   return html`
     <form ${attrs({
@@ -61,7 +68,7 @@ export function form(
       class: `cms-form ${options.class ?? ''}`.trim(),
       enctype: options.multipart ? 'multipart/form-data' : undefined,
     })}>
-      ${raw(csrfField)} ${raw(
+      ${raw(csrfField)}${raw(sourceField)} ${raw(
         formFields(fields, values, errors, relationData, fieldOverrides),
       )} ${raw(extraContent)}
 

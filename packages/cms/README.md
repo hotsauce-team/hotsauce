@@ -936,8 +936,8 @@ const handler = createCmsHandler({
       issuer: 'My App', // shown in authenticator apps
       // challengeSecret reads from CMS_2FA_SECRET env var if not provided
     }),
-    policies: {},
   },
+  policies: {},
 });
 ```
 
@@ -1086,13 +1086,13 @@ const handler = createCmsHandler({
   auth: {
     secret: process.env.JWT_SECRET!,
     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
-    policies: {
-      // Users can only see/edit their own posts
-      posts: ownedBy(schema.posts, 'authorId'),
+  },
+  policies: {
+    // Users can only see/edit their own posts
+    posts: ownedBy(schema.posts, 'authorId'),
 
-      // Admins have full access, others only see their own
-      comments: adminOr(ownedBy(schema.comments, 'userId')),
-    },
+    // Admins have full access, others only see their own
+    comments: adminOr(ownedBy(schema.comments, 'userId')),
   },
 });
 ```
@@ -1135,41 +1135,43 @@ Apply different rules for different CRUD operations:
 ```ts
 import { forActions, always, authenticated, ownedBy, roleIs } from '@hotsauce/cms';
 
+// In createCmsHandler options:
 auth: {
   // ... provider config
-  policies: {
-    posts: forActions({
-      list: always(),                        // Anyone can see list
-      read: always(),                        // Anyone can view
-      create: authenticated(),               // Must be logged in to create
-      update: ownedBy(schema.posts, 'authorId'),  // Only edit own posts
-      delete: roleIs('admin'),               // Only admins can delete
-    }),
-  },
-}
+},
+policies: {
+  posts: forActions({
+    list: always(),                        // Anyone can see list
+    read: always(),                        // Anyone can view
+    create: authenticated(),               // Must be logged in to create
+    update: ownedBy(schema.posts, 'authorId'),  // Only edit own posts
+    delete: roleIs('admin'),               // Only admins can delete
+  }),
+},
 ```
 
 Use `'*'` as a fallback for actions not explicitly defined:
 
 ```ts
+// In createCmsHandler options:
 auth: {
   // ... provider config
-  policies: {
-    // "Deny by default" - only allow what's explicitly permitted
-    posts: forActions({
-      list: always(),
-      read: always(),
-      '*': never(),  // create, update, delete → 403
-    }),
-    
-    // "Admin-only writes" - anyone can read, admins can modify
-    settings: forActions({
-      list: always(),
-      read: always(),
-      '*': roleIs('admin'),  // create, update, delete require admin
-    }),
-  },
-}
+},
+policies: {
+  // "Deny by default" - only allow what's explicitly permitted
+  posts: forActions({
+    list: always(),
+    read: always(),
+    '*': never(),  // create, update, delete → 403
+  }),
+  
+  // "Admin-only writes" - anyone can read, admins can modify
+  settings: forActions({
+    list: always(),
+    read: always(),
+    '*': roleIs('admin'),  // create, update, delete require admin
+  }),
+},
 ```
 
 > **Note:** Without `'*'`, undefined actions get **full access** (no policy = no filter).
@@ -1182,12 +1184,13 @@ Check if user is in a contributors array:
 import { ownedByOrContributor } from '@hotsauce/cms';
 
 // Schema: posts.contributors is text[] containing user IDs
+// In createCmsHandler options:
 auth: {
   // ... provider config
-  policies: {
-    posts: ownedByOrContributor(schema.posts, 'authorId', 'contributors'),
-  },
-}
+},
+policies: {
+  posts: ownedByOrContributor(schema.posts, 'authorId', 'contributors'),
+},
 ```
 
 Generated SQL:
@@ -1266,10 +1269,10 @@ const handler = createCmsHandler({
 
   auth: {
     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
-    // Row-level: filter within allowed tables
-    policies: {
-      posts: ownedBy(schema.posts, 'authorId'),
-    },
+  },
+  // Row-level: filter within allowed tables
+  policies: {
+    posts: ownedBy(schema.posts, 'authorId'),
   },
 });
 ```
@@ -1358,29 +1361,29 @@ const handler = createCmsHandler({
   basePath: '/admin',
   auth: {
     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
-    policies: {
-      users: {
-        // Row-level policy (optional, existing behavior)
-        row: ownedBy(schema.users, 'id'),
+  },
+  policies: {
+    users: {
+      // Row-level policy (optional, existing behavior)
+      row: ownedBy(schema.users, 'id'),
 
-        // Column-level policies (new)
-        columns: {
-          // Salary is hidden from non-admins entirely
-          salary: {
-            read: (ctx) => ctx.user?.role === 'admin',
-            write: (ctx) => ctx.user?.role === 'admin',
-          },
-          // SSN is completely hidden (never readable or writable)
-          ssn: {
-            read: () => false,
-            write: () => false,
-          },
-          // tenantId is auto-injected, never shown to users
-          tenantId: {
-            read: () => false,
-            write: () => false,
-            default: (ctx) => ctx.user?.tenantId, // Auto-inject on create
-          },
+      // Column-level policies (new)
+      columns: {
+        // Salary is hidden from non-admins entirely
+        salary: {
+          read: (ctx) => ctx.user?.role === 'admin',
+          write: (ctx) => ctx.user?.role === 'admin',
+        },
+        // SSN is completely hidden (never readable or writable)
+        ssn: {
+          read: () => false,
+          write: () => false,
+        },
+        // tenantId is auto-injected, never shown to users
+        tenantId: {
+          read: () => false,
+          write: () => false,
+          default: (ctx) => ctx.user?.tenantId, // Auto-inject on create
         },
       },
     },
@@ -1564,6 +1567,78 @@ auth: {
   },
 }
 ```
+
+### Schema-Derived Policies (`policiesFromSchema`)
+
+For columns that should only be writable by specific plugins, use `$cms({ plugins: {...} })` in your schema and `policiesFromSchema()` to generate column policies automatically.
+
+**Schema definition:**
+
+```ts
+// schema.ts
+import '@hotsauce/core/extend';
+import { json, pgTable, serial, text } from 'drizzle-orm/pg-core';
+
+export const pages = pgTable('pages', {
+  id: serial('id').primaryKey(),
+  title: text('title').notNull(),
+  // Only the 'puck' plugin can write to this column
+  content: json('content').$cms({ plugins: { puck: true } }),
+  // Multiple plugins with explicit permissions
+  metadata: json('metadata').$cms({
+    plugins: {
+      puck: { write: true },
+      'block-editor': { write: true },
+    },
+  }),
+});
+```
+
+**Server setup:**
+
+```ts
+import { createCmsHandler, ownedBy, policiesFromSchema } from '@hotsauce/cms';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  auth: {
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+    // policiesFromSchema reads $cms() hints and generates column write policies
+    policies: policiesFromSchema(schema, {
+      // Additional row policies are merged (user policies take precedence)
+      pages: ownedBy(schema.pages, 'authorId'),
+    }),
+  },
+});
+```
+
+**Generated policy:**
+
+For `content: json().$cms({ plugins: { puck: true } })`, the generated policy is:
+
+```ts
+{
+  pages: {
+    columns: {
+      content: {
+        write: (ctx) => ctx.source === 'plugin:puck' || !ctx.source,
+      },
+    },
+  },
+}
+```
+
+- `ctx.source === 'plugin:puck'` — allows the Puck plugin to write
+- `!ctx.source` — allows legacy requests without source tokens (backwards compatible)
+
+**Why use `policiesFromSchema`?**
+
+- **Single source of truth** — plugin permissions live with the column definition
+- **Secure by default** — without explicit `plugins: { ... }`, columns are writable only via CMS core forms
+- **Prevents masquerading** — plugins cannot bypass restrictions by submitting to CMS endpoints
+
+See [Source Tokens](#source-tokens) for how the CMS identifies request origins.
 
 ## Plugins
 
@@ -2001,6 +2076,103 @@ Worker plugins can have routes too, but must use `render` instead of `handler`:
 ```
 
 The Worker receives `{ type: 'route:render', id, payload: { renderType, context } }` and should respond with `{ id, success: true, result: { html: '...' } }`.
+
+### Source Tokens
+
+Source tokens identify the origin of form submissions, preventing plugins from masquerading as CMS core to bypass column write restrictions.
+
+**Problem:** Without source identification, a malicious plugin could render a form that POSTs to CMS endpoints (e.g., `/admin/posts/1/edit`) and bypass `$cms({ plugins: {...} })` restrictions.
+
+**Solution:** Every form submission includes a signed `_source` token:
+
+| Source          | Meaning                             |
+| --------------- | ----------------------------------- |
+| `cms`           | Core CMS form (create/edit screens) |
+| `plugin:{name}` | Plugin form (e.g., `plugin:puck`)   |
+
+**How it works:**
+
+1. **CMS forms** include: `<input name="_source" value="{signed: cms}" />`
+2. **Plugin forms** include: `<input name="_source" value="{signed: plugin:puck}" />`
+3. On POST, CMS validates signature and extracts `ctx.source`
+4. Column policies (from `policiesFromSchema`) check `ctx.source`
+
+**Token format:** `{source}.{timestamp_base36}.{hmac_signature}`
+
+- Signed with the same secret as CSRF tokens
+- 4-hour expiry (same as CSRF)
+- Signature prevents forgery
+
+**Usage with `policiesFromSchema`:**
+
+```ts
+// schema.ts — column only writable by puck plugin
+content: json('content').$cms({ plugins: { puck: true } })
+
+// server.ts — generate policies from schema
+auth: {
+  policies: policiesFromSchema(schema),
+}
+```
+
+The generated policy checks `ctx.source === 'plugin:puck'`.
+
+**Manual source checking:**
+
+```ts
+import { isPluginSource, getPluginName } from '@hotsauce/cms';
+
+auth: {
+  policies: {
+    pages: {
+      columns: {
+        content: {
+          write: (ctx) => {
+            // Only allow puck plugin or CMS core (no source = legacy)
+            if (!ctx.source) return true;
+            return ctx.source === 'cms' || getPluginName(ctx.source) === 'puck';
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+**Exports:**
+
+| Export                                | Purpose                                         |
+| ------------------------------------- | ----------------------------------------------- |
+| `SOURCE`                              | Constants: `SOURCE.CMS`, `SOURCE.PLUGIN_PREFIX` |
+| `SOURCE_FIELD_NAME`                   | Form field name: `'_source'`                    |
+| `pluginSource(name)`                  | Create `'plugin:{name}'` identifier             |
+| `isPluginSource(source)`              | Check if source is a plugin                     |
+| `getPluginName(source)`               | Extract plugin name from source                 |
+| `generateSourceToken(source, secret)` | Create signed token                             |
+| `validateSourceToken(token, secret)`  | Validate and extract source                     |
+| `getSourceTokenFromFormData(data)`    | Extract token from form submission              |
+
+### Policies Without Authentication
+
+For internal tools running without authentication (`auth: 'dangerously-open'`), you can still restrict plugin write access using source-based column policies:
+
+```ts
+// schema.ts — Define which plugins can write to which columns
+content: json('content').$cms({ plugins: { puck: true } });
+
+// server.ts — Use policies without requiring login
+import { createCmsHandler, policiesFromSchema } from '@hotsauce/cms';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  auth: 'dangerously-open', // No login required
+  // Restrict plugin writes even without authentication
+  policies: policiesFromSchema(schema),
+});
+```
+
+**Important:** User-based policies (`ownedBy`, `roleIs`, etc.) won't work without authentication since there's no `ctx.user`. They will deny all access. Only source-based column policies (checking `ctx.source`) work in this mode.
 
 ### Official Plugins
 

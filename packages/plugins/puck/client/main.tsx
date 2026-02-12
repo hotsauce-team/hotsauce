@@ -35,17 +35,21 @@ function init() {
     ? JSON.parse(bootstrapEl.textContent)
     : {};
 
-  // Save handler
+  // Save handler - POST to CMS update endpoint with form data
   const save = (data: unknown) => {
+    // Use standard CMS update endpoint (applies policies, runs plugins)
     const url =
-      `${bootstrap.basePath}/puck/${bootstrap.table}/${bootstrap.recordId}/${bootstrap.column}`;
+      `${bootstrap.basePath}/${bootstrap.table}/${bootstrap.recordId}`;
+
+    // Send as form data - CMS parses JSON strings for json/jsonb columns
+    const formData = new FormData();
+    formData.append(bootstrap.column, JSON.stringify(data));
+    formData.append('_csrf', bootstrap.csrfToken);
+    formData.append('_source', bootstrap.sourceToken);
+
     fetch(url, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-csrf-token': bootstrap.csrfToken,
-      },
-      body: JSON.stringify({ data }),
+      body: formData,
     }).then((res) => {
       if (res.ok) alert('Saved!');
       else alert('Save failed: ' + res.status);

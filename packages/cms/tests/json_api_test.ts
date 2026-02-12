@@ -8,8 +8,10 @@ import { sql } from 'drizzle-orm';
 import {
   createBasicTables,
   createFormData,
+  generateSourceToken,
   posts,
   schema,
+  SOURCE,
   TEST_CSRF_SECRET,
   users,
 } from './integration_helpers.ts';
@@ -50,7 +52,12 @@ async function createFormDataBody(
   data: Record<string, string>,
 ): Promise<{ body: FormData; csrfToken: string }> {
   const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
-  const formData = createFormData({ ...data, _csrf: csrfToken });
+  const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
+  const formData = createFormData({
+    ...data,
+    _csrf: csrfToken,
+    _source: sourceToken,
+  });
   return { body: formData, csrfToken };
 }
 
@@ -70,6 +77,7 @@ Deno.test({
       schema,
       basePath: '/admin',
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
     });
 
     await t.step('create: returns 201 with JSON success response', async () => {

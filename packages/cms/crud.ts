@@ -42,6 +42,12 @@ import {
   validateCsrfToken,
 } from './csrf.ts';
 import {
+  generateSourceToken,
+  getSourceTokenFromFormData,
+  SOURCE,
+  validateSourceToken,
+} from './tokens/mod.ts';
+import {
   buildNavItems,
   fetchAllRelationOptions,
   fetchManyToManyData,
@@ -685,6 +691,55 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       );
     }
 
+    // Validate source token and get source identifier
+    const sourceTokenValue = getSourceTokenFromFormData(formData);
+    const source = await validateSourceToken(
+      sourceTokenValue,
+      options.csrfSecret,
+    );
+
+    // Source token is required for all write operations
+    // Without a valid source token, no fields can be modified
+    if (!source) {
+      if (isJsonRequest) {
+        return jsonValidationError('create', table.name, {
+          _form: 'Invalid or missing source token. Please reload the form.',
+        });
+      }
+      return await renderCreateForm(
+        ctx,
+        columnResult,
+        recordToValues(formData),
+        'Invalid or missing source token. Please reload the form.',
+      );
+    }
+
+    // Re-evaluate column policies with source context for write operations
+    // This allows policies to check ctx.source for plugin-specific write permissions
+    const policyCtxWithSource = createPolicyContext(request, authUser, source);
+    const columnResultWithSource = await evaluateColumnPolicies(
+      columnPolicies,
+      table.columns,
+      policyCtxWithSource,
+    );
+
+    // Validate that all required columns are writable or have defaults (with source context)
+    const hiddenErrorsWithSource = validateHiddenRequiredColumns(
+      table.columns,
+      columnResultWithSource,
+    );
+    if (hiddenErrorsWithSource.length > 0) {
+      const errorMessages = hiddenErrorsWithSource.map((e) => e.message).join(
+        ' ',
+      );
+      return await renderCreateForm(
+        ctx,
+        columnResult,
+        recordToValues(formData),
+        `Configuration error: ${errorMessages}`,
+      );
+    }
+
     // Check for file upload errors
     if (Object.keys(fileErrors).length > 0) {
       if (isJsonRequest) {
@@ -699,16 +754,16 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       );
     }
 
-    // Only process columns the user can write to
+    // Only process columns the user can write to (based on source-aware policies)
     const editableColumns = getEditableColumns(table).filter(
-      (col) => columnResult.writableColumns.includes(col.name),
+      (col) => columnResultWithSource.writableColumns.includes(col.name),
     );
     let values = coerceFormValues(formData, editableColumns);
 
     // Merge in file data for file columns
     for (const [fieldName, fileRef] of Object.entries(fileData)) {
       if (
-        columnResult.writableColumns.includes(
+        columnResultWithSource.writableColumns.includes(
           table.columns.find((c) => c.propertyName === fieldName)?.name ?? '',
         )
       ) {
@@ -716,8 +771,8 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       }
     }
 
-    // Inject default values for non-writable columns
-    values = injectColumnDefaults(values, columnResult.defaults);
+    // Inject default values for non-writable columns (source-aware)
+    values = injectColumnDefaults(values, columnResultWithSource.defaults);
 
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(
@@ -928,6 +983,38 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       );
     }
 
+    // Validate source token and get source identifier
+    const sourceTokenValue = getSourceTokenFromFormData(formData);
+    const source = await validateSourceToken(
+      sourceTokenValue,
+      options.csrfSecret,
+    );
+
+    // Source token is required for all write operations
+    // Without a valid source token, no fields can be modified
+    if (!source) {
+      if (isJsonRequest) {
+        return jsonValidationError('update', table.name, {
+          _form: 'Invalid or missing source token. Please reload the form.',
+        }, recordId);
+      }
+      return await renderEditForm(
+        ctx,
+        columnResult,
+        recordToValues(formData),
+        'Invalid or missing source token. Please reload the form.',
+      );
+    }
+
+    // Re-evaluate column policies with source context for write operations
+    // This allows policies to check ctx.source for plugin-specific write permissions
+    const policyCtxWithSource = createPolicyContext(request, authUser, source);
+    const columnResultWithSource = await evaluateColumnPolicies(
+      columnPolicies,
+      table.columns,
+      policyCtxWithSource,
+    );
+
     // Check for file upload errors
     if (Object.keys(fileErrors).length > 0) {
       if (isJsonRequest) {
@@ -942,9 +1029,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       );
     }
 
-    // Only process columns the user can write to
+    // Only process columns the user can write to (based on source-aware policies)
     const editableColumns = getEditableColumns(table).filter(
-      (col) => columnResult.writableColumns.includes(col.name),
+      (col) => columnResultWithSource.writableColumns.includes(col.name),
     );
     const values = coerceFormValues(formData, editableColumns);
 
@@ -962,7 +1049,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     // Merge in file data for file columns (only if a new file was uploaded)
     for (const [fieldName, fileRef] of Object.entries(fileData)) {
       if (
-        columnResult.writableColumns.includes(
+        columnResultWithSource.writableColumns.includes(
           table.columns.find((c) => c.propertyName === fieldName)?.name ?? '',
         )
       ) {
@@ -1283,8 +1370,9 @@ async function renderCreateForm(
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, undefined);
 
-  // Generate CSRF token
+  // Generate CSRF and source tokens
   const csrfToken = await generateCsrfToken(options.csrfSecret);
+  const sourceToken = await generateSourceToken(SOURCE.CMS, options.csrfSecret);
 
   // Check if any writable fields are file fields
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
@@ -1321,6 +1409,7 @@ async function renderCreateForm(
     baseUrl: cmsUrl(basePath, table.name),
     action: cmsUrl(basePath, table.name) + '/new',
     csrfToken,
+    sourceToken,
     multipart: hasFileFields,
   };
 
@@ -1376,8 +1465,9 @@ async function renderEditForm(
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, recordId);
 
-  // Generate CSRF token
+  // Generate CSRF and source tokens
   const csrfToken = await generateCsrfToken(options.csrfSecret);
+  const sourceToken = await generateSourceToken(SOURCE.CMS, options.csrfSecret);
 
   // Check if any writable fields are file fields
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
@@ -1418,6 +1508,7 @@ async function renderEditForm(
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
     csrfToken,
+    sourceToken,
     multipart: hasFileFields,
     frontendUrl,
   };

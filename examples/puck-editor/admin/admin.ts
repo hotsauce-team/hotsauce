@@ -1,5 +1,5 @@
 // CMS admin configuration
-import { createCmsHandler } from '@hotsauce/cms';
+import { createCmsHandler, policiesFromSchema } from '@hotsauce/cms';
 import { createPuckPlugin } from '@hotsauce/plugins/puck';
 
 import type { Database } from '../db.ts';
@@ -14,6 +14,9 @@ export function createAdminHandler(db: Database) {
     schema,
     basePath: '/admin',
     auth: 'dangerously-open',
+    // Generate policies from $cms() hints - this restricts 'content' column writes
+    // to requests with a valid puck source token
+    policies: policiesFromSchema(schema),
     parsers,
     plugins: [createPuckPlugin('/admin')],
     onError: (error, context) =>

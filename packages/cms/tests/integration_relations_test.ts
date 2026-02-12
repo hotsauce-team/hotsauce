@@ -7,8 +7,10 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import {
   createBasicTables,
+  generateSourceToken,
   posts,
   schema,
+  SOURCE,
   TEST_CSRF_SECRET,
   users,
 } from './integration_helpers.ts';
@@ -30,6 +32,7 @@ Deno.test('integration: foreign key relations', async (t) => {
     return createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',
@@ -190,9 +193,14 @@ Deno.test('integration: foreign key relations', async (t) => {
 
       const handler = createHandler();
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
 
       const formData = new FormData();
       formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
       formData.append('title', 'Updated Post');
       formData.append('body', 'Updated Content');
       formData.append('authorId', '2'); // Change to Bob
@@ -232,9 +240,14 @@ Deno.test('integration: foreign key relations', async (t) => {
 
       const handler = createHandler();
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
 
       const formData = new FormData();
       formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
       formData.append('title', 'Updated Post');
       formData.append('body', 'Content');
       // Don't include authorId - should set to null if optional

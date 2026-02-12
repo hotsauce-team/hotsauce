@@ -311,6 +311,8 @@ export interface PluginRouteContext {
   };
   /** CSRF token for forms */
   csrfToken: string;
+  /** Source token for forms (identifies request origin - CMS vs plugin) */
+  sourceToken: string;
   /** CMS base path (e.g., '/admin') */
   basePath: string;
   /** Full request URL */

@@ -55,6 +55,7 @@ Deno.test('integration: plugin afterRead transform', async (t) => {
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',
@@ -80,6 +81,7 @@ Deno.test('integration: plugin afterRead transform', async (t) => {
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',
@@ -105,6 +107,7 @@ Deno.test('integration: plugin afterRead transform', async (t) => {
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',

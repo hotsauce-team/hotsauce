@@ -161,19 +161,15 @@ export interface CmsOptionsBase {
 
 /**
  * CMS options with authentication enabled.
- * Policies are REQUIRED inside auth to ensure explicit authorization decisions.
  *
  * @example
  * ```ts
  * createCmsHandler({
  *   db,
  *   schema,
- *   auth: {
- *     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
- *     // Required! Use {} for full access to all authenticated users
- *     policies: {
- *       posts: ownedBy(schema.posts, 'authorId'),
- *     },
+ *   auth: { provider: new PasswordProvider({ db, usersTable: schema.adminUsers }) },
+ *   policies: {
+ *     posts: ownedBy(schema.posts, 'authorId'),
  *   },
  * });
  * ```
@@ -184,9 +180,18 @@ export interface CmsOptionsWithAuth extends CmsOptionsBase {
    *
    * When provided, the CMS requires login to access.
    * Includes automatic /login and /logout routes.
-   * Policies are configured within this object.
    */
   auth: CmsAuthOptions;
+
+  /**
+   * Row and column-level security policies (REQUIRED).
+   *
+   * You must explicitly choose an authorization strategy:
+   * - `policies: { table: policy, ... }` - Apply row/column policies
+   * - `policies: {}` - Full access for all authenticated users
+   * - `policies: 'dangerously-open'` - Bypass all policy checks
+   */
+  policies: Policies | 'dangerously-open';
 }
 
 /**
@@ -200,30 +205,54 @@ export interface CmsOptionsWithoutAuth extends CmsOptionsBase {
    * This string literal forces developers to consciously opt-in to running
    * the CMS without any authentication, preventing accidental exposure.
    *
-   * Without authentication, there's no user context for policies to evaluate.
-   * If you need policies, configure proper authentication instead.
-   *
    * @example
    * ```ts
    * createCmsHandler({
    *   db,
    *   schema,
-   *   auth: 'dangerously-open', // I understand this is insecure
+   *   auth: 'dangerously-open',
+   *   policies: 'dangerously-open', // or policiesFromSchema(schema)
    * });
    * ```
    */
   auth: 'dangerously-open';
+
+  /**
+   * Row and column-level security policies (REQUIRED).
+   *
+   * Even without authentication, policies are required to make
+   * authorization explicit. User-based policies (ownedBy, roleIs)
+   * won't work since there's no `ctx.user`, but source-based
+   * column policies (from `policiesFromSchema`) still work.
+   *
+   * Use `'dangerously-open'` to bypass all policy checks.
+   */
+  policies: Policies | 'dangerously-open';
 }
 
 /**
  * Options for creating the CMS handler.
  *
- * Authentication is required by design:
- * - Provide `auth: { provider: ..., policies: ... }` for proper authentication
- * - Or use `auth: 'dangerously-open'` to explicitly run without auth
+ * Both `auth` and `policies` are required to make security decisions explicit:
+ * - `auth`: Either `{ provider: ... }` for login, or `'dangerously-open'`
+ * - `policies`: Either `{ table: policy, ... }`, `{}`, or `'dangerously-open'`
  *
- * When `auth` is a configuration object, `policies` is required inside it to ensure explicit authorization.
- * Use `policies: {}` to grant full access to all authenticated users.
+ * @example
+ * ```ts
+ * // With authentication
+ * createCmsHandler({
+ *   db, schema,
+ *   auth: { provider: new PasswordProvider(...) },
+ *   policies: { posts: ownedBy(schema.posts, 'authorId') },
+ * });
+ *
+ * // Without authentication (internal tool)
+ * createCmsHandler({
+ *   db, schema,
+ *   auth: 'dangerously-open',
+ *   policies: 'dangerously-open',
+ * });
+ * ```
  */
 export type CmsOptions = CmsOptionsWithAuth | CmsOptionsWithoutAuth;
 
@@ -241,38 +270,6 @@ export interface CmsAuthOptions {
 
   /** Auth provider for login (e.g., PasswordProvider) */
   provider: AuthProvider;
-
-  /**
-   * Row-level security policies.
-   *
-   * Policies return SQL conditions that filter queries atomically.
-   * This prevents TOCTOU race conditions - the permission check IS the query.
-   *
-   * Tables without an explicit policy get full access (like 'dangerously-open').
-   * Use `'dangerously-open'` or `{}` to grant full access to all tables.
-   *
-   * @example
-   * ```ts
-   * import { ownedBy, adminOr, readOnly } from '@hotsauce/cms';
-   *
-   * policies: {
-   *   // Users can only edit their own posts
-   *   posts: ownedBy(schema.posts, 'authorId'),
-   *
-   *   // Admins have full access, others only see their own
-   *   comments: adminOr(ownedBy(schema.comments, 'userId')),
-   *
-   *   // Everyone can read, no one can modify
-   *   audit_logs: readOnly(),
-   *
-   *   // Tables not listed here get full access
-   * }
-   *
-   * // Or bypass policies entirely:
-   * policies: 'dangerously-open'
-   * ```
-   */
-  policies: Policies | 'dangerously-open';
 
   /** Token lifetime in seconds (default: 8 hours) */
   maxAge?: number;
@@ -320,8 +317,8 @@ export interface ResolvedCmsOptions {
   onError?: (error: Error, context: ErrorContext) => void;
   /** Custom parsers for validation */
   parsers: Parsers;
-  /** Row-level security policies (undefined if auth is disabled) */
-  policies?: Policies;
+  /** Row-level security policies */
+  policies: Policies;
   /** JWT auth config (resolved) - undefined if auth disabled */
   auth?: ResolvedAuthOptions;
   /** Plugin registry (undefined if no plugins configured) */

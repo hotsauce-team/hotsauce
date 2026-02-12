@@ -12,6 +12,7 @@ const validOptions = {
   db: { query: () => {} },
   schema: { users: { name: 'users' } },
   auth: 'dangerously-open' as const,
+  policies: 'dangerously-open' as const,
 };
 
 Deno.test('validateCmsOptions: accepts valid config', () => {
@@ -33,6 +34,7 @@ Deno.test('validateCmsOptions: requires db', () => {
       validateCmsOptions({
         schema: { users: {} },
         auth: 'dangerously-open',
+        policies: 'dangerously-open',
       }),
     CmsConfigError,
     'db is required',
@@ -46,6 +48,7 @@ Deno.test('validateCmsOptions: requires schema with tables', () => {
         db: {},
         schema: {},
         auth: 'dangerously-open',
+        policies: 'dangerously-open',
       }),
     CmsConfigError,
     'at least one table',
@@ -74,54 +77,56 @@ Deno.test("validateCmsOptions: accepts auth: 'dangerously-open'", () => {
   validateCmsOptions({
     ...validOptions,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
   });
 });
 
-Deno.test('validateCmsOptions: accepts auth config object with policies inside auth', () => {
-  // Should not throw - policies required inside auth
+Deno.test('validateCmsOptions: accepts auth config object with policies at top level', () => {
+  // Should not throw - policies required at top level now
   validateCmsOptions({
     ...validOptions,
     auth: {
       provider: { authenticate: () => {} },
-      policies: { users: () => undefined },
     },
+    policies: { users: () => undefined },
   });
 });
 
-Deno.test("validateCmsOptions: accepts auth.policies: 'dangerously-open'", () => {
+Deno.test("validateCmsOptions: accepts policies: 'dangerously-open'", () => {
   // Should not throw
   validateCmsOptions({
     ...validOptions,
     auth: {
       provider: { authenticate: () => {} },
-      policies: 'dangerously-open',
     },
+    policies: 'dangerously-open',
   });
 });
 
-Deno.test('validateCmsOptions: requires auth.policies when auth is config object', () => {
+Deno.test('validateCmsOptions: requires policies at top level', () => {
   assertThrows(
     () =>
       validateCmsOptions({
-        ...validOptions,
+        db: { query: () => {} },
+        schema: { users: { name: 'users' } },
         auth: {
           provider: { authenticate: () => {} },
-          // policies missing
         },
+        // policies missing
       }),
     CmsConfigError,
     'policies',
   );
 });
 
-Deno.test('validateCmsOptions: accepts empty auth.policies object (full access)', () => {
+Deno.test('validateCmsOptions: accepts empty policies object (full access)', () => {
   // Empty policies {} is equivalent to 'dangerously-open' - full access to all tables
   validateCmsOptions({
     ...validOptions,
     auth: {
       provider: { authenticate: () => {} },
-      policies: {},
     },
+    policies: {},
   });
 });
 
@@ -130,10 +135,8 @@ Deno.test('validateCmsOptions: validates auth.provider is required', () => {
     () =>
       validateCmsOptions({
         ...validOptions,
-        auth: { policies: 'dangerously-open' } as {
-          provider: unknown;
-          policies: 'dangerously-open';
-        },
+        auth: {} as { provider: unknown },
+        policies: 'dangerously-open',
       }),
     CmsConfigError,
     'auth.provider must be an AuthProvider',
@@ -148,8 +151,8 @@ Deno.test('validateCmsOptions: validates auth.secret length', () => {
         auth: {
           provider: { authenticate: () => {} },
           secret: 'short',
-          policies: 'dangerously-open',
         },
+        policies: 'dangerously-open',
       }),
     CmsConfigError,
     'at least 32 characters',
