@@ -8,7 +8,7 @@
  *
  * Build with: deno task build:components
  *
- * The export must be named "config" - an object mapping component names to definitions.
+ * The export must be named "config" - a full Puck Config with components and optional root.
  */
 
 import type {
@@ -284,14 +284,33 @@ const Space: ComponentConfig = {
 };
 
 // ============================================================================
-// Export - must be named "config"
+// Export - must be named "config" and be a full Puck Config
 // ============================================================================
 
-export const config: Config['components'] = {
-  Section,
-  Heading,
-  Text,
-  Button,
-  Image,
-  Space,
+export const config: Config = {
+  // Page-level fields editable in sidebar, rendered as wrapper
+  root: {
+    fields: {
+      title: { type: 'text', label: 'Page Title' },
+      description: { type: 'textarea', label: 'Meta Description' },
+    },
+    defaultProps: {
+      title: '',
+      description: '',
+    },
+    // deno-lint-ignore no-explicit-any
+    render: ({ children, title }: any) => (
+      <main data-page-title={title}>
+        {children}
+      </main>
+    ),
+  },
+  components: {
+    Section,
+    Heading,
+    Text,
+    Button,
+    Image,
+    Space,
+  },
 };

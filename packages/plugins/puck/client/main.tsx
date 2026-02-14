@@ -40,9 +40,9 @@ export interface PuckEditorOptions {
   };
 }
 
-// User's components module shape
+// User's components module exports a full Puck Config
 interface UserComponentsModule {
-  config: Config['components'];
+  config: Config;
 }
 
 /**
@@ -77,12 +77,15 @@ export async function initPuckEditor(
     return;
   }
 
-  if (!userModule.config) {
+  if (!userModule.config || !userModule.config.components) {
     // deno-lint-ignore no-console
-    console.error('[Puck] Components module must export "config"');
+    console.error(
+      '[Puck] Components module must export "config" with "components"',
+    );
     rootEl.innerHTML = `<div style="color: red; padding: 2rem;">
       <h2>Invalid components module</h2>
-      <p>The components file must export a "config" object.</p>
+      <p>The components file must export a "config" object with a "components" property.</p>
+      <pre>export const config: Config = { components: { ... }, root: { ... } };</pre>
     </div>`;
     return;
   }
@@ -122,7 +125,7 @@ export async function initPuckEditor(
   // Render Puck editor
   createRoot(rootEl).render(
     <Puck
-      config={{ components: userModule.config }}
+      config={userModule.config}
       data={options.data}
       onPublish={handlePublish}
     />,
