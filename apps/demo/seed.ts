@@ -103,8 +103,7 @@ await db.execute(sql`
     id SERIAL PRIMARY KEY,
     title VARCHAR(255) NOT NULL,
     slug VARCHAR(255) NOT NULL UNIQUE,
-    content TEXT NOT NULL,
-    content_html TEXT,
+    content JSONB,
     published BOOLEAN DEFAULT FALSE NOT NULL,
     sort_order INTEGER DEFAULT 0 NOT NULL,
     created_at TIMESTAMP DEFAULT NOW() NOT NULL,
@@ -290,17 +289,17 @@ function getMediaUrl(mediaItem: typeof media.$inferSelect): string {
   return file.url || '';
 }
 
-/** Helper to create page data with pre-rendered HTML */
-function pageData(data: {
-  title: string;
-  slug: string;
-  content: string;
-  published: boolean;
-  sortOrder: number;
-}) {
+/** Helper to create Puck page content */
+function puckContent(
+  blocks: Array<{ type: string; props: Record<string, unknown> }>,
+) {
   return {
-    ...data,
-    contentHtml: sanitizeHtml(parseMarkdown(data.content)),
+    root: { props: {} },
+    content: blocks.map((block, i) => ({
+      type: block.type,
+      props: { id: `block-${i}`, ...block.props },
+    })),
+    zones: {},
   };
 }
 
@@ -455,64 +454,119 @@ More content coming soon...`,
   })).onConflictDoNothing();
 }
 
-// Pages
-await db.insert(pages).values(pageData({
+// Pages (visual content with Puck editor)
+await db.insert(pages).values({
   title: 'About',
   slug: 'about',
-  content: `Welcome to The Hono Blog!
-
-This is a demo site showcasing how to build a complete blog with hotsauce-cms and Hono.
-
-What is this?
-
-This example demonstrates a "Backend for Frontend" (BFF) architecture where:
-
-- The public-facing blog is rendered server-side using Hono
-- The admin interface is powered by hotsauce-cms
-- Both share the same database and Drizzle schema
-
-Technology Stack:
-
-- Hono - Lightweight web framework with zero dependencies
-- Drizzle ORM - Type-safe database toolkit
-- hotsauce-cms - Headless CMS with automatic admin UI
-- PGlite - In-process PostgreSQL for development
-
-This architecture gives you complete control over your frontend while benefiting from the automatic admin interface that hotsauce-cms provides.
-
-Get Started:
-
-Want to build something similar? Check out the source code in the examples/hono-frontend directory.`,
+  content: puckContent([
+    {
+      type: 'Heading',
+      props: {
+        text: 'Welcome to The Hono Blog!',
+        level: 'h1',
+        align: 'center',
+      },
+    },
+    {
+      type: 'Text',
+      props: {
+        text:
+          'This is a demo site showcasing how to build a complete blog with hotsauce-cms and Hono.',
+        align: 'center',
+        size: 'large',
+      },
+    },
+    { type: 'Space', props: { size: 'large' } },
+    {
+      type: 'Heading',
+      props: { text: 'What is this?', level: 'h2', align: 'left' },
+    },
+    {
+      type: 'Text',
+      props: {
+        text:
+          'This example demonstrates a "Backend for Frontend" (BFF) architecture where the public-facing blog is rendered server-side using Hono, the admin interface is powered by hotsauce-cms, and both share the same database and Drizzle schema.',
+        align: 'left',
+        size: 'medium',
+      },
+    },
+    { type: 'Space', props: { size: 'medium' } },
+    {
+      type: 'Heading',
+      props: { text: 'Technology Stack', level: 'h2', align: 'left' },
+    },
+    {
+      type: 'Text',
+      props: {
+        text:
+          'Hono - Lightweight web framework with zero dependencies. Drizzle ORM - Type-safe database toolkit. hotsauce-cms - Headless CMS with automatic admin UI. PGlite - In-process PostgreSQL for development.',
+        align: 'left',
+        size: 'medium',
+      },
+    },
+    { type: 'Space', props: { size: 'medium' } },
+    {
+      type: 'Button',
+      props: {
+        label: 'View Source Code →',
+        href: 'https://github.com/example/hotsauce-cms',
+        variant: 'primary',
+      },
+    },
+  ]),
   published: true,
   sortOrder: 1,
-})).onConflictDoNothing();
+}).onConflictDoNothing();
 
-await db.insert(pages).values(pageData({
+await db.insert(pages).values({
   title: 'Contact',
   slug: 'contact',
-  content: `Get in Touch
-
-We'd love to hear from you! Here's how you can reach us:
-
-Email: hello@example.com
-
-GitHub: Check out the project repository for issues and discussions.
-
-Twitter: Follow us for updates and announcements.
-
-Contributing:
-
-Interested in contributing to hotsauce-cms? We welcome contributions of all kinds:
-
-- Bug reports and feature requests
-- Documentation improvements
-- Code contributions
-- Sharing your projects built with hotsauce-cms
-
-Please read our contributing guidelines before submitting a pull request.`,
+  content: puckContent([
+    {
+      type: 'Heading',
+      props: { text: 'Get in Touch', level: 'h1', align: 'center' },
+    },
+    {
+      type: 'Text',
+      props: {
+        text: "We'd love to hear from you! Here's how you can reach us.",
+        align: 'center',
+        size: 'medium',
+      },
+    },
+    { type: 'Space', props: { size: 'large' } },
+    { type: 'Heading', props: { text: 'Email', level: 'h3', align: 'left' } },
+    {
+      type: 'Text',
+      props: { text: 'hello@example.com', align: 'left', size: 'medium' },
+    },
+    { type: 'Space', props: { size: 'small' } },
+    {
+      type: 'Heading',
+      props: { text: 'Contributing', level: 'h3', align: 'left' },
+    },
+    {
+      type: 'Text',
+      props: {
+        text:
+          'Interested in contributing to hotsauce-cms? We welcome bug reports, documentation improvements, code contributions, and sharing your projects.',
+        align: 'left',
+        size: 'medium',
+      },
+    },
+    { type: 'Space', props: { size: 'medium' } },
+    {
+      type: 'Button',
+      props: {
+        label: 'View on GitHub',
+        href: 'https://github.com/example/hotsauce-cms',
+        variant: 'secondary',
+      },
+    },
+  ]),
   published: true,
   sortOrder: 2,
-})).onConflictDoNothing();
+}).onConflictDoNothing();
 
 // ─────────────────────────────────────────────────────────────
 // Done

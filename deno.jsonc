@@ -16,10 +16,11 @@
     "./packages/workers",
     "./packages/plugins",
 
-    // Examples
-    "./examples/deno-server",
-    "./examples/hono-fullstack",
-    "./examples/puck-editor"
+    // Apps (full applications)
+    "./apps/demo",
+
+    // Examples (minimal references)
+    "./examples/deno-server"
   ],
 
   // Shared import map for all packages
@@ -40,6 +41,7 @@
     "@hotsauce/plugins/audit-log": "./packages/plugins/audit-log/mod.ts",
     "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
     "@hotsauce/plugins/puck": "./packages/plugins/puck/mod.ts",
+    "@hotsauce/plugins/puck/types": "./packages/plugins/puck/types.ts",
 
     // Optional peer dependency for 2FA QR code generation
     "qrcode-generator": "npm:qrcode-generator@^2.0.4",
@@ -71,16 +73,12 @@
     "example:dev": "deno task -f example-deno-server dev",
     "example:dev:watch": "deno task -f example-deno-server dev:watch",
     "example:dev:debug": "deno task -f example-deno-server dev:debug",
-    "hono:seed": "deno task -f hono-fullstack-example seed",
-    "hono:dev": "deno task -f hono-fullstack-example dev",
-    "hono:dev:watch": "deno task -f hono-fullstack-example dev:watch",
-    "hono:dev:debug": "deno task -f hono-fullstack-example dev:debug",
-    "puck:seed": "deno task -f puck-editor-example seed",
-    "puck:dev": "deno task -f puck-editor-example dev",
-    "puck:dev:watch": "deno task -f puck-editor-example dev:watch",
-    // Build tasks
-    "build:puck": "deno run --unstable-bundle --allow-read --allow-write --allow-net packages/plugins/puck/build.ts",
-    "build:puck:watch": "deno run --unstable-bundle --allow-read --allow-write --allow-net --watch=packages/plugins/puck/client/ packages/plugins/puck/build.ts"
+    "demo:seed": "deno task -f demo-app seed",
+    "demo:dev": "deno task -f demo-app dev",
+    "demo:dev:watch": "deno task -f demo-app dev:watch",
+    "demo:dev:debug": "deno task -f demo-app dev:debug",
+    "demo:build:components": "deno task -f demo-app build:components",
+    "puck:build": "deno task -f @hotsauce/plugins build:puck"
   },
 
   // Test configuration with fine-grained permissions

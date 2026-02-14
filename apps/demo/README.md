@@ -1,4 +1,4 @@
-# Hono Fullstack Example
+# Demo App
 
 A complete blog site with a server-rendered public frontend (Hono) and a headless CMS admin interface (hotsauce-cms) sharing the same database.
 
@@ -42,6 +42,10 @@ A complete blog site with a server-rendered public frontend (Hono) and a headles
                └─────────────────┘
 ```
 
+## Serverless Optimization
+
+The CMS admin handler is lazy-loaded using dynamic `import()` — it's only loaded on the first `/admin/*` request. Public site requests skip the CMS import entirely, keeping cold starts fast.
+
 ## Quick Start
 
 1. **Seed the database:**
@@ -71,17 +75,19 @@ deno task dev
 ## Project Structure
 
 ```
-examples/hono-fullstack/
+apps/demo/
 │
 ├── server.ts       # Entry point - wires site + admin together
 ├── security.ts     # CSP and security headers
 ├── db.ts           # Database connection (shared)
 ├── schema.ts       # Drizzle schema (shared)
 ├── seed.ts         # Database seeding script
+├── components.tsx  # Puck visual editor components (React)
 ├── deno.jsonc      # Deno configuration
 │
 ├── admin/          # CMS admin (admin only)
 │   ├── admin.ts    # CMS handler configuration
+│   ├── components.js # Built Puck components bundle
 │   └── markdown-worker.ts # Worker plugin for markdown
 │
 ├── lib/            # Shared code (used by admin + site)
@@ -92,39 +98,58 @@ examples/hono-fullstack/
 ├── site/           # Public frontend (site only)
 │   ├── routes.ts   # Hono routes for public pages
 │   ├── templates.ts # HTML templates
+│   ├── puck-render.tsx # Server-side Puck content renderer
 │   └── static/     # Static assets
-│       └── styles.css
+│       ├── styles.css      # Site styles
+│       └── components.css  # Puck component styles (BEM)
 │
 └── data/           # PGlite database (created on first run)
 ```
 
 ### File Responsibilities
 
-| File                       | Used By    | Purpose                             |
-| -------------------------- | ---------- | ----------------------------------- |
-| `server.ts`                | Both       | Entry point, combines site + admin  |
-| `security.ts`              | Server     | CSP middleware                      |
-| `db.ts`                    | Both       | Database connection                 |
-| `schema.ts`                | Both       | Drizzle tables & relations          |
-| `admin/admin.ts`           | Admin only | CMS handler configuration           |
-| `admin/markdown-worker.ts` | Admin only | Markdown Worker plugin              |
-| `lib/markdown.ts`          | Both       | Markdown parser wrapper (micromark) |
-| `lib/sanitize.ts`          | Both       | Allowlist HTML sanitizer            |
-| `site/routes.ts`           | Site only  | Public page routes                  |
-| `site/templates.ts`        | Site only  | HTML rendering                      |
-| `site/static/styles.css`   | Site only  | Stylesheet                          |
-| `seed.ts`                  | Setup      | Initial data population             |
+| File                         | Used By    | Purpose                             |
+| ---------------------------- | ---------- | ----------------------------------- |
+| `server.ts`                  | Both       | Entry point, combines site + admin  |
+| `security.ts`                | Server     | CSP middleware                      |
+| `db.ts`                      | Both       | Database connection                 |
+| `schema.ts`                  | Both       | Drizzle tables & relations          |
+| `components.tsx`             | Both       | Puck component definitions (React)  |
+| `admin/admin.ts`             | Admin only | CMS handler configuration           |
+| `admin/components.js`        | Admin only | Built Puck components bundle        |
+| `admin/markdown-worker.ts`   | Admin only | Markdown Worker plugin              |
+| `lib/markdown.ts`            | Both       | Markdown parser wrapper (micromark) |
+| `lib/sanitize.ts`            | Both       | Allowlist HTML sanitizer            |
+| `site/routes.ts`             | Site only  | Public page routes                  |
+| `site/templates.ts`          | Site only  | HTML rendering                      |
+| `site/puck-render.tsx`       | Site only  | Server-side Puck content renderer   |
+| `site/static/styles.css`     | Site only  | Site stylesheet                     |
+| `site/static/components.css` | Site only  | Puck component styles (BEM)         |
+| `seed.ts`                    | Setup      | Initial data population             |
 
 ## Security
 
 The site uses a strict Content Security Policy (CSP) that:
 
 - **No inline scripts** (`script-src 'none'`) — Pure server-rendered HTML
-- **No inline styles** — All CSS served from `/static/styles.css`
+- **No inline styles** — All CSS served from `/static/*.css` (BEM classes instead of inline `style` attributes)
 - **Same-origin forms** — Form submissions restricted to same origin
 - **No iframes** — Cannot be embedded in other sites
 
 The CSP middleware in [security.ts](security.ts) applies to all public site routes but **skips `/admin/*`** to avoid overriding hotsauce-cms response headers.
+
+### Puck Components & CSP
+
+Puck components use **BEM CSS classes** instead of React inline styles to comply with strict CSP:
+
+```tsx
+// components.tsx - uses className, not style={{}}
+render: (({ align }) => (
+  <h1 className={`heading heading--align-${align}`}>...</h1>
+));
+```
+
+Styles are defined in `site/static/components.css` and served as an external stylesheet.
 
 This example also includes a **public** media route (`GET /files/media/:id`) for rendering images/files on the public site.
 It’s separate from hotsauce-cms’s protected file route (`GET {basePath}/files/{table}/{column}/{id}`), which enforces auth + row/column policies.
@@ -162,9 +187,10 @@ The example includes these tables:
 | Table         | Purpose                                                              |
 | ------------- | -------------------------------------------------------------------- |
 | `posts`       | Blog posts with title, content, contentHtml, excerpt, publish status |
-| `pages`       | Static pages with content and contentHtml                            |
+| `pages`       | Visual pages edited with Puck (JSON content)                         |
 | `authors`     | Content creators with bio                                            |
 | `categories`  | Post organization                                                    |
+| `media`       | File uploads (images stored as base64 in JSONB)                      |
 | `settings`    | Key-value site configuration                                         |
 | `admin_users` | CMS authentication                                                   |
 

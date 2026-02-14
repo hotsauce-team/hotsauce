@@ -1363,9 +1363,28 @@ async function renderCreateForm(
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
   // Filter CMS fields to only include writable columns
-  const cmsFields = tableToCmsFields(table, true).filter(
-    (field) => columnResult.writableColumns.includes(field.column.name),
-  );
+  // Also include plugin-controlled columns as read-only (so plugins can add custom UI like "Edit with Puck")
+  const allCmsFields = tableToCmsFields(table, true);
+  const cmsFields = allCmsFields
+    .filter((field) => {
+      // Always include writable columns
+      if (columnResult.writableColumns.includes(field.column.name)) return true;
+      // Include readable columns that have plugin configuration (show as read-only)
+      if (
+        columnResult.readableColumns.includes(field.column.name) &&
+        field.column.cmsOptions?.plugins
+      ) {
+        return true;
+      }
+      return false;
+    })
+    .map((field) => {
+      // Mark non-writable columns as read-only
+      if (!columnResult.writableColumns.includes(field.column.name)) {
+        return { ...field, readOnly: true };
+      }
+      return field;
+    });
 
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, undefined);
@@ -1458,9 +1477,28 @@ async function renderEditForm(
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
   // Filter CMS fields to only include writable columns
-  const cmsFields = tableToCmsFields(table, true).filter(
-    (field) => columnResult.writableColumns.includes(field.column.name),
-  );
+  // Also include plugin-controlled columns as read-only (so plugins can add custom UI like "Edit with Puck")
+  const allCmsFields = tableToCmsFields(table, true);
+  const cmsFields = allCmsFields
+    .filter((field) => {
+      // Always include writable columns
+      if (columnResult.writableColumns.includes(field.column.name)) return true;
+      // Include readable columns that have plugin configuration (show as read-only)
+      if (
+        columnResult.readableColumns.includes(field.column.name) &&
+        field.column.cmsOptions?.plugins
+      ) {
+        return true;
+      }
+      return false;
+    })
+    .map((field) => {
+      // Mark non-writable columns as read-only
+      if (!columnResult.writableColumns.includes(field.column.name)) {
+        return { ...field, readOnly: true };
+      }
+      return field;
+    });
 
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, recordId);

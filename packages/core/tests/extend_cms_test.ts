@@ -87,6 +87,19 @@ Deno.test('$cms(): chaining .notNull().default() does not drop metadata', async 
   assertEquals(metadata.hasDefault, true);
 });
 
+Deno.test('$cms(): plugins config is preserved in introspection', async () => {
+  const { pgTable, jsonb } = await import('drizzle-orm/pg-core');
+
+  const pages = pgTable('pages', {
+    content: jsonb('content').$cms({ plugins: { puck: true } }),
+  });
+
+  const meta = introspectTable(pages);
+  const content = meta.columns.find((c) => c.propertyName === 'content');
+  assertExists(content);
+  assertEquals(content.cmsOptions, { plugins: { puck: true } });
+});
+
 // ─────────────────────────────────────────────────────────────
 // Table-level $cms() tests
 // ─────────────────────────────────────────────────────────────

@@ -3,12 +3,13 @@
 import { createCmsHandler, PasswordProvider, readOnly } from '@hotsauce/cms';
 import type { FilterContext, WorkerPluginConfig } from '@hotsauce/cms';
 import type { TransformHooks } from '@hotsauce/workers';
+import { createPuckPlugin } from '@hotsauce/plugins/puck';
 
 import type { Database } from '../db.ts';
 import { adminUsers, parsers, schema } from '../schema.ts';
 
-/** Tables that have content/contentHtml columns */
-const MARKDOWN_TABLES = ['posts', 'pages'];
+/** Tables that have content/contentHtml columns (markdown) */
+const MARKDOWN_TABLES = ['posts']; // pages now use Puck visual editor
 
 /** Hooks that the markdown plugin handles */
 const TRANSFORM_HOOKS: (keyof TransformHooks)[] = [
@@ -57,7 +58,14 @@ export function createAdminHandler(db: Database) {
       settings: readOnly(),
     },
     parsers,
-    plugins: [markdownPlugin],
+    plugins: [
+      markdownPlugin,
+      createPuckPlugin({
+        basePath: '/admin',
+        componentsJs: '/admin/components.js',
+        componentsCss: '/static/components.css',
+      }),
+    ],
     onError: (error, context) =>
       // deno-lint-ignore no-console
       console.error('CMS Error:', { error, context }),

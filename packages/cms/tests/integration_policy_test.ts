@@ -1260,7 +1260,7 @@ Deno.test({
     );
 
     await t.step(
-      'content field not shown in edit form for cms source',
+      'content field shown as read-only in edit form for cms source',
       async () => {
         await resetDb();
 
@@ -1286,14 +1286,20 @@ Deno.test({
         assertEquals(editRes.status, 200);
         const html = await editRes.text();
 
-        // Title field should be present
+        // Title field should be present and editable
         assertStringIncludes(html, 'name="title"');
 
-        // Content field should NOT be present (not writable for cms source)
-        assertEquals(
-          html.includes('name="content"'),
-          false,
-          'Content field should not be in the edit form for CMS source',
+        // Content field should be present but disabled (plugin-controlled)
+        // Plugin-configured columns appear as read-only so plugins can add custom UI
+        assertStringIncludes(
+          html,
+          'name="content"',
+          'Content field should be present for plugin UI',
+        );
+        assertStringIncludes(
+          html,
+          'disabled',
+          'Content field should be disabled (read-only)',
         );
       },
     );

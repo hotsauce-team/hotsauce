@@ -3,46 +3,16 @@
 ## Current Status
 
 - ✅ Basic Puck editor renders at `/admin/puck/:table/:id/:column`
-- ✅ Bundle embedded (882KB JS, 72KB CSS) via `deno task build:puck`
-- ✅ Watch mode: `deno task build:puck:watch`
-- ✅ One demo component: `HeadingBlock`
-- ✅ Data loads from database column
+- ✅ **Version-agnostic** — users provide their own Puck bundle and CSS
+- ✅ Data loads from database column via bootstrap JSON
 - ✅ Saving works (POSTs form data to CMS update endpoint)
 - ✅ **Source tokens + plugin-aware policies** — Secure plugin write access
+- ✅ "Edit with Puck" button in CMS edit screens
+- ✅ `valueSummary` displays block count instead of raw JSON
 
 ## Remaining Tasks
 
-### High Priority
-
-- [x] **CMS edit screen → Puck editor navigation**
-  - Plugin columns show as read-only with "Edit with Puck" button
-  - `valueSummary` displays block count instead of raw JSON
-  - Implemented via `renderField` UI hook in plugin config
-
-- [ ] **Add more components** — Currently only `HeadingBlock`
-  - Text/Paragraph
-  - Image
-  - Button
-  - Container/Columns
-  - See Puck docs: https://puckeditor.com/docs/components
-
 ### Medium Priority
-
-- [ ] **Custom component config via plugin options**
-  - Allow users to pass their own `config.components` when calling `createPuckPlugin()`
-  - Merge with defaults or replace entirely
-
-- [ ] **User-provided React component library**
-  - Users should be able to bring their own React components (buttons, cards, heroes, etc.)
-  - These components are used both in Puck editor AND on the frontend
-  - Need a way to register components that works for both contexts:
-    - Editor: needs field definitions + render functions
-    - Frontend: just needs render functions
-  - Consider: component library as separate bundle? Or inline in user's app?
-
-- [ ] **Load saved data into editor**
-  - Currently hardcoded to empty canvas in client
-  - Should use `bootstrap.data` from server
 
 - [ ] **Preview/Render mode**
   - Add route for rendering saved Puck content (read-only)
@@ -63,17 +33,14 @@
 ## Files
 
 - `packages/plugins/puck/mod.ts` — Plugin entry, routes, HTML template
-- `packages/plugins/puck/client/main.tsx` — React client (bundled)
-- `packages/plugins/puck/build.ts` — Bundle script using `Deno.bundle()`
-- `packages/plugins/puck/bundle-embedded.ts` — Auto-generated JS bundle
-- `packages/plugins/puck/css-embedded.ts` — Auto-generated CSS
-- `examples/puck-editor/` — Demo app
+- `apps/demo/` — Demo app with user-built Puck bundle
+- `apps/demo/components.tsx` — Example user-defined Puck components
+- `apps/demo/admin/admin.ts` — CMS handler with Puck plugin
 
 ## Commands
 
 ```bash
-deno task build:puck        # Build bundle once
-deno task build:puck:watch  # Watch and rebuild
-deno task puck:dev          # Run example server
-deno task puck:seed         # Seed example database
+deno task demo:build:components  # Build Puck components bundle
+deno task demo:dev               # Run demo server
+deno task demo:seed              # Seed demo database
 ```

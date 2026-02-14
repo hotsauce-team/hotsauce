@@ -239,7 +239,58 @@ Deno.test('coerceFormValues: handles array values', () => {
 
   const result = coerceFormValues(formData, columns);
 
-  assertEquals(result.tags, 'one'); // Uses first value
+  // Uses last value - supports hidden+checkbox pattern where
+  // hidden sends 'false' and checked checkbox sends 'true' after it
+  assertEquals(result.tags, 'two');
+});
+
+Deno.test('coerceFormValues: hidden+checkbox boolean pattern', () => {
+  // HTML forms with hidden input fallback send both values when checkbox is checked:
+  // <input type="hidden" name="published" value="false" />
+  // <input type="checkbox" name="published" value="true" checked />
+  // The array order is ['false', 'true'] - we must use the last value
+  const formData = {
+    published: ['false', 'true'], // Checkbox checked: hidden='false', checkbox='true'
+  };
+
+  const columns: IntrospectedColumn[] = [
+    {
+      name: 'published',
+      propertyName: 'published',
+      columnType: 'PgBoolean',
+      dataType: 'boolean',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+  ];
+
+  const result = coerceFormValues(formData, columns);
+  assertEquals(result.published, true);
+});
+
+Deno.test('coerceFormValues: hidden+checkbox unchecked sends only false', () => {
+  // When checkbox is unchecked, only the hidden input value is sent
+  const formData = {
+    published: 'false',
+  };
+
+  const columns: IntrospectedColumn[] = [
+    {
+      name: 'published',
+      propertyName: 'published',
+      columnType: 'PgBoolean',
+      dataType: 'boolean',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+  ];
+
+  const result = coerceFormValues(formData, columns);
+  assertEquals(result.published, false);
 });
 
 Deno.test('coerceFormValues: uses propertyName for form lookup and output', () => {

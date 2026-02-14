@@ -1,0 +1,210 @@
+/**
+ * Puck Component Styles (BEM)
+ *
+ * CSP-compliant styles for Puck visual editor components.
+ * All styles use classes instead of inline styles.
+ */
+
+/* ==========================================================================
+   Heading Block
+   ========================================================================== */
+
+.heading {
+  margin: 0.5em 0;
+}
+
+/* Alignment Modifiers */
+.heading--align-left {
+  text-align: left;
+}
+
+.heading--align-center {
+  text-align: center;
+}
+
+.heading--align-right {
+  text-align: right;
+}
+
+/* ==========================================================================
+   Text Block
+   ========================================================================== */
+
+.text {
+  line-height: 1.6;
+  margin: 0.5em 0;
+}
+
+/* Alignment Modifiers */
+.text--align-left {
+  text-align: left;
+}
+
+.text--align-center {
+  text-align: center;
+}
+
+.text--align-right {
+  text-align: right;
+}
+
+/* Size Modifiers */
+.text--size-small {
+  font-size: 0.875rem;
+}
+
+.text--size-medium {
+  font-size: 1rem;
+}
+
+.text--size-large {
+  font-size: 1.25rem;
+}
+
+/* ==========================================================================
+   Button Block
+   ========================================================================== */
+
+.button {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* Variant Modifiers */
+.button--primary {
+  border: none;
+  background-color: #0066cc;
+  color: #fff;
+}
+
+.button--secondary {
+  border: 2px solid currentColor;
+  background-color: transparent;
+  color: #0066cc;
+}
+
+/* ==========================================================================
+   Image Block
+   ========================================================================== */
+
+.image {
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+  display: block;
+}
+
+/* Aspect Ratio Modifiers */
+.image--ratio-auto {
+  aspect-ratio: auto;
+}
+
+.image--ratio-16-9 {
+  aspect-ratio: 16 / 9;
+}
+
+.image--ratio-4-3 {
+  aspect-ratio: 4 / 3;
+}
+
+.image--ratio-1-1 {
+  aspect-ratio: 1 / 1;
+}
+
+/* ==========================================================================
+   Section Block
+   ========================================================================== */
+
+.section {
+  width: 100%;
+}
+
+/* Padding Modifiers */
+.section--padding-none {
+  padding: 0;
+}
+
+.section--padding-small {
+  padding: 1rem;
+}
+
+.section--padding-medium {
+  padding: 2rem;
+}
+
+.section--padding-large {
+  padding: 4rem;
+}
+
+/* Background Modifiers */
+.section--bg-transparent {
+  background-color: transparent;
+}
+
+.section--bg-light {
+  background-color: #f5f5f5;
+}
+
+.section--bg-dark {
+  background-color: #1a1a1a;
+  color: #fff;
+}
+
+.section--bg-primary {
+  background-color: #0066cc;
+  color: #fff;
+}
+
+/* Width Modifiers */
+.section--width-full {
+  max-width: none;
+}
+
+.section--width-large {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.section--width-medium {
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.section--width-small {
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Inner container for content */
+.section__inner {
+  width: 100%;
+}
+
+/* ==========================================================================
+   Space Block
+   ========================================================================== */
+
+.space {
+  display: block;
+}
+
+/* Size Modifiers */
+.space--size-small {
+  height: 1rem;
+}
+
+.space--size-medium {
+  height: 2rem;
+}
+
+.space--size-large {
+  height: 4rem;
+}

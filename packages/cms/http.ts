@@ -552,9 +552,10 @@ export function coerceFormValues(
       continue;
     }
 
-    // Get string value (use first if array)
+    // Get string value (use last if array - supports hidden+checkbox pattern
+    // where hidden sends 'false' and checked checkbox sends 'true' after it)
     const value: string = Array.isArray(rawValue)
-      ? (rawValue[0] ?? '')
+      ? (rawValue[rawValue.length - 1] ?? '')
       : rawValue;
 
     // Skip empty strings for non-nullable columns

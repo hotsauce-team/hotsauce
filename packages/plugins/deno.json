@@ -5,7 +5,11 @@
     ".": "./mod.ts",
     "./audit-log": "./audit-log/mod.ts",
     "./audit-log/worker": "./audit-log/worker.ts",
-    "./puck": "./puck/mod.ts"
+    "./puck": "./puck/mod.ts",
+    "./puck/types": "./puck/types.ts"
+  },
+  "tasks": {
+    "build:puck": "deno run --unstable-bundle --allow-read --allow-write --allow-net puck/build.ts"
   },
   "publish": {
     "include": [
