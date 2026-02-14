@@ -154,13 +154,46 @@ Styles are defined in `site/static/components.css` and served as an external sty
 This example also includes a **public** media route (`GET /files/media/:id`) for rendering images/files on the public site.
 It’s separate from hotsauce-cms’s protected file route (`GET {basePath}/files/{table}/{column}/{id}`), which enforces auth + row/column policies.
 
+## Plugin Column Roles
+
+Plugins use schema metadata to discover which columns they should operate on. The `$cms()` method marks columns with plugin configuration:
+
+```ts
+// schema.ts
+
+// Puck visual editor - role defaults to 'data'
+content: jsonb('content').$cms({ plugins: { puck: true } }),
+
+// Markdown transform - source + output columns
+content: text('content').$cms({
+  plugins: { markdown: { role: 'source', output: 'contentHtml' } },
+}),
+contentHtml: text('content_html').$cms({
+  plugins: { markdown: { role: 'output' } },
+}),
+```
+
+### Role Types
+
+| Role     | Form Behavior                              | Example                |
+| -------- | ------------------------------------------ | ---------------------- |
+| `data`   | Show in form, plugin may provide custom UI | Puck JSON column       |
+| `source` | Show in form, triggers transform           | Markdown `content`     |
+| `output` | Hidden from form (computed)                | Markdown `contentHtml` |
+
+- **`data`** (default when `true` or no role specified) — the authoritative data column, may have custom editor UI
+- **`source`** — user-editable input that gets transformed to an output column
+- **`output`** — automatically hidden; populated by plugin transforms
+
+This pattern is forward-compatible with other transform plugins (slugify, search indexing, image thumbnails, etc.).
+
 ## Markdown Rendering
 
-Markdown is rendered to HTML **at save time** using a CMS Worker plugin, not at read time:
+Markdown is rendered to HTML **at save time** using an in-process plugin:
 
-1. **Markdown parser** — [lib/markdown.ts](lib/markdown.ts) wraps `micromark` to render markdown to HTML
-2. **HTML sanitizer** — [lib/sanitize.ts](lib/sanitize.ts) uses an allowlist approach (like WordPress wp_kses) to prevent XSS
-3. **Worker isolation** — Plugin runs in a Web Worker with limited permissions for security
+1. **Schema-driven scoping** — CMS passes only declared columns via `ctx.columns`
+2. **Markdown parser** — [lib/markdown.ts](lib/markdown.ts) wraps `micromark` to render markdown to HTML
+3. **HTML sanitizer** — [lib/sanitize.ts](lib/sanitize.ts) uses an allowlist approach (like WordPress wp_kses) to prevent XSS
 4. **CMS plugin** — `beforeSave` transform populates `contentHtml` column automatically
 5. **Fast reads** — Templates use pre-rendered `contentHtml` column
 
@@ -178,7 +211,7 @@ This approach:
 
 - Parses markdown once (not on every page view)
 - Keeps the rendering logic easy to audit (simple wrapper + sanitizer)
-- Demonstrates Worker plugin pattern for isolation
+- Demonstrates schema-driven plugin discovery
 
 ## Schema
 

@@ -204,16 +204,15 @@ Deno.test('PluginRegistry: rejects plugin with invalid name format', () => {
   );
 });
 
-Deno.test('PluginRegistry: rejects plugin without filter', () => {
+Deno.test('PluginRegistry: accepts plugin without filter (schema-driven)', () => {
   const registry = new PluginRegistry();
-  // Cast to bypass TypeScript - simulates runtime JS usage
-  const badPlugin = { name: 'no-filter' } as PluginConfig;
+  // Without filter, plugin uses schema-driven scoping
+  const schemaPlugin = { name: 'schema-driven' } as PluginConfig;
 
-  assertThrows(
-    () => registry.register(badPlugin),
-    PluginValidationError,
-    'filter is required',
-  );
+  // Should NOT throw - filter is now optional
+  registry.register(schemaPlugin);
+  const registered = registry.get('schema-driven');
+  assertEquals(registered?.plugin.name, 'schema-driven');
 });
 
 Deno.test('PluginRegistry: rejects plugin with invalid filter type', () => {

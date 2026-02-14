@@ -366,6 +366,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       table.name,
       records,
       getPluginUser(ctx),
+      table,
     );
   }
 
@@ -376,6 +377,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       'list',
       undefined,
       getPluginUser(ctx),
+      undefined,
+      undefined,
+      table,
     );
   }
 
@@ -516,6 +520,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
       'read',
       filteredRecord,
       getPluginUser(ctx),
+      table,
     );
   }
 
@@ -532,6 +537,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
       getPluginUser(ctx),
       undefined,
       transformedRecord,
+      table,
     );
   }
 
@@ -807,6 +813,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
           'create',
           dataToInsert,
           pluginUser,
+          table,
         );
       }
 
@@ -832,6 +839,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
           pluginUser,
           undefined,
           newRecord,
+          table,
         );
       }
 
@@ -1090,6 +1098,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           'update',
           dataToUpdate,
           pluginUser,
+          table,
         );
       }
 
@@ -1145,6 +1154,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           pluginUser,
           record,
           { ...record, ...dataToUpdate },
+          table,
         );
       }
 
@@ -1187,6 +1197,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       'read',
       filteredRecord,
       getPluginUser(ctx),
+      table,
     );
   }
 
@@ -1313,6 +1324,7 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
         pluginUser,
         recordToDelete,
         undefined,
+        table,
       );
     }
 

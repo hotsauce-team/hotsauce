@@ -196,16 +196,10 @@ export class PluginRegistry {
       );
     }
 
-    // Filter is required (security: controls data flow to plugins)
-    if (plugin.filter === undefined) {
-      throw new PluginValidationError(
-        plugin.name,
-        "filter is required. Use a function to control data flow, or 'dangerously-open' to allow all data.",
-      );
-    }
-
-    // Validate filter type
+    // Validate filter type if provided
+    // (schema-driven scoping is default when filter is omitted)
     if (
+      plugin.filter !== undefined &&
       plugin.filter !== 'dangerously-open' &&
       typeof plugin.filter !== 'function'
     ) {

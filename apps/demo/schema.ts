@@ -79,8 +79,14 @@ export const posts = pgTable('posts', {
   title: varchar('title', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   excerpt: text('excerpt'),
-  content: text('content').notNull(),
-  contentHtml: text('content_html').$cms({ hidden: true }), // Rendered markdown (populated by plugin)
+  // Markdown content - transformed to HTML by markdown plugin
+  content: text('content').notNull().$cms({
+    plugins: { markdown: { role: 'source', output: 'contentHtml' } },
+  }),
+  // Rendered HTML - populated automatically by markdown plugin
+  contentHtml: text('content_html').$cms({
+    plugins: { markdown: { role: 'output' } },
+  }),
   published: boolean('published').default(false).notNull(),
   authorId: integer('author_id')
     .notNull()

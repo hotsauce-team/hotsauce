@@ -160,6 +160,25 @@ export type CmsTableOptions = {
    * Icon identifier for the sidebar (future use).
    */
   icon?: string;
+
+  /**
+   * Table-level plugin configuration, keyed by plugin name.
+   * Plugins declared here receive the full record for transform/action hooks.
+   *
+   * @example
+   * ```ts
+   * // Audit log receives full record on create/update/delete
+   * pgTable('posts', { ... }).$cms({
+   *   plugins: { 'audit-log': { level: 'full' } }
+   * });
+   *
+   * // Encryption plugin receives full record for encrypt/decrypt transforms
+   * pgTable('secrets', { ... }).$cms({
+   *   plugins: { encryption: { algorithm: 'aes-256-gcm' } }
+   * });
+   * ```
+   */
+  plugins?: Record<string, PluginColumnConfig>;
 };
 
 /** Symbol used to store CMS table options on Drizzle table objects. */

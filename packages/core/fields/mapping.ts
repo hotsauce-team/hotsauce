@@ -143,6 +143,21 @@ export function mapColumnToField(column: IntrospectedColumn): CMSField {
     field.readOnly = true;
   }
 
+  // Auto-hide columns with role: 'output' (computed by plugins)
+  // Check all plugins for role: 'output'
+  const plugins = column.cmsOptions?.plugins;
+  if (plugins) {
+    for (const pluginConfig of Object.values(plugins)) {
+      if (
+        pluginConfig && typeof pluginConfig === 'object' &&
+        (pluginConfig as { role?: string }).role === 'output'
+      ) {
+        field.hidden = true;
+        break;
+      }
+    }
+  }
+
   // Auto-hide primary keys and timestamps
   if (column.isPrimaryKey) {
     field.hidden = true;

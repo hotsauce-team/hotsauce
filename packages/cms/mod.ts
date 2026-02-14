@@ -434,7 +434,8 @@ async function handlePluginRoute(
   };
 
   // Check filter - must explicitly allow route access
-  if (pluginFilter !== 'dangerously-open') {
+  // (plugin filter is optional for schema-driven scoping, but routes are always explicit)
+  if (pluginFilter !== undefined && pluginFilter !== 'dangerously-open') {
     const allowed = pluginFilter(filterCtx);
     if (!allowed) {
       return new Response('Plugin route not allowed for this table', {

@@ -68,6 +68,23 @@ export interface PluginContext {
     /** User role (if provided in JWT) */
     role?: string;
   };
+  /**
+   * Plugin-specific configuration for each column opted-in to this plugin.
+   * Keyed by column name, value is the config from `$cms({ plugins: { pluginName: config } })`.
+   *
+   * For **column-scoped plugins**: Contains only columns with this plugin declared.
+   * For **table-scoped plugins**: Contains the table-level plugin config (keyed by special `_table` key).
+   *
+   * @example
+   * ```ts
+   * // Column-scoped: only markdown columns
+   * // columns = { content: { role: 'source', output: 'contentHtml' }, contentHtml: { role: 'output' } }
+   *
+   * // Table-scoped: table config
+   * // columns = { _table: { level: 'full' } }
+   * ```
+   */
+  columns?: Record<string, Serializable>;
 }
 
 /**
