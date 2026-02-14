@@ -80,6 +80,87 @@ interface AuditEntry {
 }
 ```
 
+### Puck Visual Editor
+
+Integrates the [Puck](https://github.com/measuredco/puck) visual editor for JSON content columns. The plugin bundles React + Puck and serves them automatically — you only provide your own components.
+
+```typescript
+import { createPuckPlugin } from '@hotsauce/plugins/puck';
+import { createCmsHandler } from '@hotsauce/cms';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  plugins: [
+    createPuckPlugin({
+      basePath: '/admin',
+      componentsJs: '/admin/components.js',
+      componentsCss: '/admin/components.css', // Optional
+    }),
+  ],
+});
+```
+
+#### Schema Setup
+
+Mark JSON columns with `.$cms({ plugins: { puck: true } })` to enable the editor:
+
+```typescript
+import { jsonb, pgTable, serial, text } from 'drizzle-orm/pg-core';
+
+export const pages = pgTable('pages', {
+  id: serial('id').primaryKey(),
+  title: text('title').notNull(),
+  content: jsonb('content').$cms({ plugins: { puck: true } }),
+});
+```
+
+Columns marked with Puck will show an "Edit with Puck" link in the CMS that opens the visual editor.
+
+#### Configuration Options
+
+| Option          | Type     | Description                                    |
+| --------------- | -------- | ---------------------------------------------- |
+| `basePath`      | `string` | Base path of the CMS admin (e.g., `/admin`)    |
+| `componentsJs`  | `string` | URL to your components ES module bundle        |
+| `componentsCss` | `string` | Optional URL to CSS for your custom components |
+
+#### Components Bundle
+
+Your components bundle must export a `config` object mapping component names to Puck component definitions. Use `globalThis.React` provided by the editor:
+
+```typescript
+// components.tsx
+const React = globalThis.React;
+
+export const config = {
+  components: {
+    Heading: {
+      fields: {
+        text: { type: 'text' },
+        level: {
+          type: 'select',
+          options: [
+            { label: 'H1', value: 'h1' },
+            { label: 'H2', value: 'h2' },
+          ],
+        },
+      },
+      render: ({ text, level: Tag = 'h1' }) => <Tag>{text}</Tag>,
+    },
+    Paragraph: {
+      fields: {
+        content: { type: 'textarea' },
+      },
+      render: ({ content }) => <p>{content}</p>,
+    },
+  },
+};
+```
+
+See the [Puck documentation](https://puckeditor.com/docs) for component configuration options.
+
 ## Creating Custom Plugins
 
 Plugins run in isolated Web Workers. You provide the Worker instance, giving full control over permissions. See the [handlers README](../handlers/README.md#plugins) for detailed documentation.
