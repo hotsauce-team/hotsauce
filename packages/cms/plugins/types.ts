@@ -9,16 +9,21 @@ export type {
   ActionHookConfig,
   ActionHooks,
   CrudAction,
+  FieldUIOverride,
   PluginContext,
   PluginHooks,
-  PluginRequest,
-  PluginResponse,
   PluginRoute,
+  PluginRouteContext,
+  PluginRouteHandler,
   Serializable,
   SerializableObject,
   SerializableValue,
   TransformFn,
   TransformHooks,
+  UIFieldInfo,
+  UIHooks,
+  UIRenderFieldContext,
+  UIRenderFieldFn,
 } from '@hotsauce/workers';
 
 // Import for use in local type definitions
@@ -28,6 +33,7 @@ import type {
   PluginHooks,
   PluginRoute,
   TransformHooks,
+  UIHooks,
 } from '@hotsauce/workers';
 
 // ─────────────────────────────────────────────────────────────
@@ -53,6 +59,11 @@ export interface PluginCapabilities {
   transforms?: (keyof TransformHooks)[];
 
   /**
+   * UI hooks the plugin uses
+   */
+  ui?: (keyof UIHooks)[];
+
+  /**
    * Action hooks the plugin uses
    */
   actions?: (keyof ActionHooks)[];
@@ -76,7 +87,9 @@ export type { PluginErrorContext, PluginErrorHandler } from '@hotsauce/workers';
 export type HookType =
   | 'transform:beforeSave'
   | 'transform:afterRead'
-  | 'action';
+  | 'ui:renderField'
+  | 'action'
+  | 'route';
 
 /**
  * Context passed to the filter function.
@@ -127,6 +140,12 @@ export interface WorkerHookDeclaration {
   transform?: (keyof TransformHooks)[];
 
   /**
+   * UI hooks the Worker handles.
+   * @example ['renderField']
+   */
+  ui?: (keyof UIHooks)[];
+
+  /**
    * Action hooks the Worker handles.
    * @example ['create', 'update', 'delete']
    */
@@ -148,27 +167,28 @@ interface PluginConfigBase {
   description?: string;
 
   /**
-   * Filter function to control when hooks are invoked and what data flows to the plugin.
+   * Optional filter to control when hooks are invoked.
    *
-   * **REQUIRED** - This is a security feature to prevent unintentional data exposure.
-   * Use `'dangerously-open'` to explicitly allow all data to flow to the plugin.
+   * **Schema-driven by default**: When omitted, the plugin only receives data for
+   * tables/columns that declare `$cms({ plugins: { [pluginName]: ... } })`.
+   * This is secure-by-default - plugins never see undeclared data.
+   *
+   * When provided, it adds additional filtering on top of schema-driven scoping.
+   * Use `'dangerously-open'` to bypass all filtering (receive all data).
    *
    * @example
    * ```ts
-   * // Only handle action hooks (skip transforms)
-   * filter: (ctx) => ctx.hookType === 'action'
+   * // Schema-driven (default): only receive declared columns/tables
+   * // No filter needed
    *
-   * // Skip certain tables (e.g., sensitive data)
-   * filter: (ctx) => !['users', 'sessions', 'payments'].includes(ctx.table)
+   * // Skip certain tables even if they declare the plugin
+   * filter: (ctx) => ctx.table !== 'sessions'
    *
-   * // Multiple conditions
-   * filter: (ctx) => ctx.hookType === 'action' && ['create', 'update', 'delete'].includes(ctx.action)
-   *
-   * // Allow all data (use with caution)
+   * // Allow all data (bypass schema-driven scoping)
    * filter: 'dangerously-open'
    * ```
    */
-  filter: PluginFilter;
+  filter?: PluginFilter;
 
   /** Declared capabilities (for documentation and validation) */
   capabilities?: PluginCapabilities;
@@ -212,8 +232,12 @@ export interface WorkerPluginConfig extends PluginConfigBase {
    */
   hooks?: WorkerHookDeclaration;
 
-  /** Routes not supported for Worker plugins (they'd need main-thread access) */
-  routes?: never;
+  /**
+   * Routes handled by this Worker plugin.
+   * Worker routes MUST use `render` (message type), not `handler`.
+   * Routes are namespaced: /admin/{pluginName}/{pattern}
+   */
+  routes?: PluginRoute[];
 }
 
 /**

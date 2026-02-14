@@ -7,8 +7,10 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import {
   createProfilesTable,
+  generateSourceToken,
   profiles,
   schemaWithFiles,
+  SOURCE,
   TEST_CSRF_SECRET,
   TEST_PDF_HEADER,
   TEST_PNG_1X1_RED,
@@ -30,6 +32,7 @@ Deno.test('integration: file upload tests', async (t) => {
     return createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema: schemaWithFiles,
       basePath: '/admin',
@@ -68,9 +71,11 @@ Deno.test('integration: file upload tests', async (t) => {
 
     const handler = createHandler();
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
 
     const formData = new FormData();
     formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
     formData.append('name', 'Profile with Avatar');
     formData.append(
       'avatar',
@@ -175,10 +180,12 @@ Deno.test('integration: file upload tests', async (t) => {
 
     const handler = createHandler();
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
 
     // Submit with _clear_avatar=1
     const formData = new FormData();
     formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
     formData.append('name', 'Profile to Clear');
     formData.append('_clear_avatar', '1');
 
@@ -200,12 +207,14 @@ Deno.test('integration: file upload tests', async (t) => {
 
     const handler = createHandler();
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
 
     // Document field has maxSize of 1MB, create a larger file
     const largeContent = new Uint8Array(1024 * 1024 + 1); // 1MB + 1 byte
 
     const formData = new FormData();
     formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
     formData.append('name', 'Profile with Large Doc');
     formData.append(
       'document',
@@ -230,10 +239,12 @@ Deno.test('integration: file upload tests', async (t) => {
 
     const handler = createHandler();
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
 
     // Document field accepts only PDF
     const formData = new FormData();
     formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
     formData.append('name', 'Profile with Wrong Type');
     formData.append(
       'document',
@@ -258,9 +269,11 @@ Deno.test('integration: file upload tests', async (t) => {
 
     const handler = createHandler();
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
 
     const formData = new FormData();
     formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
     formData.append('name', 'Profile with PDF');
     formData.append(
       'document',

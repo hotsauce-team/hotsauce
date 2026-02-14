@@ -36,8 +36,36 @@ const mockTable: IntrospectedTable = {
   table: {},
 };
 
+const mockPostsTable: IntrospectedTable = {
+  name: 'posts',
+  columns: [
+    {
+      name: 'id',
+      propertyName: 'id',
+      columnType: 'PgSerial',
+      dataType: 'number',
+      notNull: true,
+      hasDefault: true,
+      isPrimaryKey: true,
+      isUnique: false,
+    },
+    {
+      name: 'title',
+      propertyName: 'title',
+      columnType: 'PgVarchar',
+      dataType: 'string',
+      notNull: true,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+    },
+  ],
+  primaryKey: ['id'],
+  table: {},
+};
+
 const mockSchema: IntrospectedSchema = {
-  tables: [mockTable],
+  tables: [mockTable, mockPostsTable],
   relations: [],
   junctions: [],
 };
@@ -65,6 +93,7 @@ Deno.test('createCmsHandler: returns a function', () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
   });
@@ -76,6 +105,7 @@ Deno.test('createCmsHandler: 404 for unknown routes', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -91,6 +121,7 @@ Deno.test('createCmsHandler: 403 when not authenticated', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -107,6 +138,7 @@ Deno.test('createCmsHandler: renders dashboard on GET /admin', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -129,6 +161,7 @@ Deno.test('createCmsHandler: 405 for POST on dashboard', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -144,6 +177,7 @@ Deno.test('createCmsHandler: custom title appears in dashboard', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -161,6 +195,7 @@ Deno.test('createCmsHandler: async authentication check', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -180,6 +215,7 @@ Deno.test('createCmsHandler: canAccess authorization check', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -198,6 +234,7 @@ Deno.test('createCmsHandler: canAccess allows access when returning true', async
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -217,6 +254,7 @@ Deno.test('createCmsHandler: canAccess receives correct table and action', async
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -245,6 +283,7 @@ Deno.test('createCmsHandler: canAccess with async function', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -264,6 +303,7 @@ Deno.test('createCmsHandler: canAccess can check request headers', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -291,6 +331,7 @@ Deno.test('createCmsHandler: canAccess action-based permissions', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: mockDb,
     basePath: '/admin',
@@ -329,6 +370,7 @@ Deno.test('createCmsHandler: onError callback is called on database error', asyn
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: throwingDb,
     basePath: '/admin',
@@ -367,6 +409,7 @@ Deno.test('createCmsHandler: onError handles non-Error throws', async () => {
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     schema: mockSchema,
     db: throwingDb,
     basePath: '/admin',
@@ -381,4 +424,617 @@ Deno.test('createCmsHandler: onError handles non-Error throws', async () => {
   assertEquals(response.status, 500);
   assertEquals(capturedError instanceof Error, true);
   assertEquals(capturedError!.message, 'string error');
+});
+
+// =============================================================================
+// Plugin Route Auth Tests
+// =============================================================================
+
+Deno.test('createCmsHandler: plugin routes require authentication', async () => {
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => false, // User is NOT authenticated
+    plugins: [
+      {
+        name: 'test-plugin',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'action',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/test-plugin/action');
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(
+    handlerCalled,
+    false,
+    'Handler should NOT be called when unauthenticated',
+  );
+});
+
+Deno.test('createCmsHandler: plugin routes allow authenticated users', async () => {
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true, // User IS authenticated
+    plugins: [
+      {
+        name: 'test-plugin',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'action',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/test-plugin/action');
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(
+    handlerCalled,
+    true,
+    'Handler should be called when authenticated',
+  );
+});
+
+Deno.test('createCmsHandler: plugin routes respect canAccess for table routes', async () => {
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, table) => table.name !== 'users', // Block access to users table
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: ':table/:id',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  // Request to users table should be denied
+  const request = new Request('http://localhost/admin/editor/users/123');
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(
+    handlerCalled,
+    false,
+    'Handler should NOT be called when canAccess returns false',
+  );
+});
+
+Deno.test('createCmsHandler: plugin routes allow access when canAccess returns true', async () => {
+  let handlerCalled = false;
+  let capturedParams: Record<string, string> | undefined;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: () => true, // Allow all access
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            // Route without :table param - no canAccess check needed
+            pattern: 'settings/:section',
+            handler: (ctx) => {
+              handlerCalled = true;
+              capturedParams = ctx.params;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/editor/settings/general');
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(handlerCalled, true);
+  assertEquals(capturedParams?.section, 'general');
+});
+
+Deno.test('createCmsHandler: plugin POST routes return 404 (not yet supported)', async () => {
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    plugins: [
+      {
+        name: 'test-plugin',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'submit',
+            methods: ['POST'],
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const formData = new FormData();
+  formData.append('data', 'test');
+
+  const request = new Request('http://localhost/admin/test-plugin/submit', {
+    method: 'POST',
+    body: formData,
+  });
+  const response = await handler(request);
+
+  // POST to plugin routes is not yet supported - returns 404
+  assertEquals(response.status, 404);
+  assertEquals(
+    handlerCalled,
+    false,
+    'Handler should NOT be called for POST (not supported)',
+  );
+});
+
+Deno.test('createCmsHandler: plugin routes work without auth config', async () => {
+  let handlerCalled = false;
+
+  // No isAuthenticated configured = open access
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    plugins: [
+      {
+        name: 'test-plugin',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'action',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/test-plugin/action');
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(handlerCalled, true);
+});
+
+Deno.test('createCmsHandler: plugin routes with async isAuthenticated', async () => {
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      return false; // Async check returns not authenticated
+    },
+    plugins: [
+      {
+        name: 'test-plugin',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'action',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/test-plugin/action');
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(handlerCalled, false);
+});
+
+// =============================================================================
+// Plugin Route Filter Security Tests
+// =============================================================================
+
+Deno.test('createCmsHandler: plugin route filter blocks access to filtered tables', async () => {
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        // Filter blocks routes to 'users' table
+        filter: (ctx) => ctx.table !== 'users',
+        routes: [
+          {
+            pattern: ':table/:id',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  // Attempt to access users table via plugin route
+  const request = new Request('http://localhost/admin/editor/users/123');
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(
+    handlerCalled,
+    false,
+    'Handler should NOT be called when filter blocks the table',
+  );
+});
+
+Deno.test('createCmsHandler: plugin route filter allows unfiltered tables', async () => {
+  let handlerCalled = false;
+  let capturedTable: string | undefined;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        // Filter blocks only 'users' table
+        filter: (ctx) => ctx.table !== 'users',
+        routes: [
+          {
+            // Use a pattern that captures table but doesn't trigger record fetch
+            // (no :id means table/recordId won't both be present)
+            pattern: 'browse/:table',
+            handler: (ctx) => {
+              handlerCalled = true;
+              capturedTable = ctx.params.table;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  // Access posts table (not blocked by filter)
+  const request = new Request('http://localhost/admin/editor/browse/posts');
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(handlerCalled, true);
+  assertEquals(capturedTable, 'posts');
+});
+
+Deno.test('createCmsHandler: plugin route filter receives correct hookType', async () => {
+  let capturedHookType: string | undefined;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    plugins: [
+      {
+        name: 'test-plugin',
+        hooks: {},
+        filter: (ctx) => {
+          capturedHookType = ctx.hookType;
+          return true;
+        },
+        routes: [
+          {
+            pattern: 'action',
+            handler: () => new Response('OK'),
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/test-plugin/action');
+  await handler(request);
+
+  assertEquals(capturedHookType, 'route');
+});
+
+Deno.test('createCmsHandler: plugin route filter receives correct action for GET', async () => {
+  let capturedAction: string | undefined;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    plugins: [
+      {
+        name: 'test-plugin',
+        hooks: {},
+        filter: (ctx) => {
+          capturedAction = ctx.action;
+          return true;
+        },
+        routes: [
+          {
+            pattern: 'action',
+            handler: () => new Response('OK'),
+          },
+        ],
+      },
+    ],
+  });
+
+  // GET request should have action 'read'
+  const getRequest = new Request('http://localhost/admin/test-plugin/action');
+  await handler(getRequest);
+  assertEquals(capturedAction, 'read');
+});
+
+Deno.test('createCmsHandler: plugin route dangerously-open filter allows all', async () => {
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open', // Explicit opt-in to all data
+        routes: [
+          {
+            // Use pattern that doesn't trigger record fetch
+            pattern: 'browse/:table',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  // Should allow access with dangerously-open
+  const request = new Request('http://localhost/admin/editor/browse/users');
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(handlerCalled, true);
+});
+
+Deno.test('createCmsHandler: plugin route filter receives user context', async () => {
+  let capturedUser: { sub: string; role?: string } | undefined;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    plugins: [
+      {
+        name: 'test-plugin',
+        hooks: {},
+        filter: (ctx) => {
+          capturedUser = ctx.user;
+          // Simulate role-based filtering
+          return ctx.user?.role === 'admin';
+        },
+        routes: [
+          {
+            pattern: 'action',
+            handler: () => new Response('OK'),
+          },
+        ],
+      },
+    ],
+  });
+
+  // Without JWT auth, user context won't have role - filter should reject
+  const request = new Request('http://localhost/admin/test-plugin/action');
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(capturedUser, undefined);
+});
+
+Deno.test('createCmsHandler: plugin route handler errors are caught and reported', async () => {
+  let capturedError: Error | undefined;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    onError: (error) => {
+      capturedError = error;
+    },
+    plugins: [
+      {
+        name: 'buggy-plugin',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'crash',
+            handler: () => {
+              throw new Error('Plugin route crashed!');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/buggy-plugin/crash');
+  const response = await handler(request);
+
+  // Should return 500, not crash
+  assertEquals(response.status, 500);
+  // Error should be reported via onError
+  assertEquals(capturedError?.message, 'Plugin route crashed!');
+});
+
+Deno.test('createCmsHandler: built-in routes take precedence over plugin routes', async () => {
+  let pluginHandlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    plugins: [
+      {
+        // Plugin named same as a table - should NOT shadow CRUD routes
+        name: 'users',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: ':id',
+            handler: () => {
+              pluginHandlerCalled = true;
+              return new Response('Plugin hijacked!');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  // /admin/users/123 should go to built-in CRUD, not plugin
+  const request = new Request('http://localhost/admin/users/123');
+  const response = await handler(request);
+
+  // Built-in route returns HTML for record view (or 404 if record not found)
+  // The key assertion is that plugin handler was NOT called
+  assertEquals(
+    pluginHandlerCalled,
+    false,
+    'Plugin should NOT shadow built-in table routes',
+  );
+  // Response should be from built-in handler (HTML content type)
+  assertEquals(
+    response.headers.get('Content-Type')?.includes('text/html'),
+    true,
+  );
 });

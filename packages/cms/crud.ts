@@ -16,17 +16,22 @@ import {
   getPagination,
   getSort,
   htmlResponse,
+  jsonError,
+  jsonSuccess,
+  jsonValidationError,
   notFound,
   parseFlashFromUrl,
   parseFormData,
   parseMultipartFormData,
   redirect,
   redirectWithFlash,
+  wantsJson,
 } from './http.ts';
 import { cmsUrl, formatTableName } from './router.ts';
 import type {
   DetailViewOptions,
   EditViewOptions,
+  FieldUIOverride,
   LayoutOptions,
   ListViewOptions,
   NavItem,
@@ -36,6 +41,12 @@ import {
   getCsrfTokenFromFormData,
   validateCsrfToken,
 } from './csrf.ts';
+import {
+  generateSourceToken,
+  getSourceTokenFromFormData,
+  SOURCE,
+  validateSourceToken,
+} from './tokens/mod.ts';
 import {
   buildNavItems,
   fetchAllRelationOptions,
@@ -68,6 +79,29 @@ import {
   validateHiddenRequiredColumns,
 } from './policies/mod.ts';
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
+import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
+import type { CMSField } from '@hotsauce/core';
+
+/**
+ * Convert CMSField to serializable UIFieldInfo for plugin hooks
+ */
+function toUIFieldInfo(field: CMSField): UIFieldInfo {
+  const plugins = field.column.cmsOptions?.plugins as
+    | Record<string, unknown>
+    | undefined;
+  return {
+    name: field.column.name,
+    label: field.label,
+    fieldType: field.fieldType,
+    columnType: field.column.columnType,
+    required: field.column.notNull && !field.column.hasDefault,
+    readOnly: field.readOnly ?? false,
+    // Pass all plugin configs; executor extracts per-plugin
+    _plugins: plugins as
+      | Record<string, import('@hotsauce/workers').Serializable>
+      | undefined,
+  };
+}
 
 /**
  * Get plugin user context from RouteContext
@@ -332,6 +366,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       table.name,
       records,
       getPluginUser(ctx),
+      table,
     );
   }
 
@@ -342,6 +377,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       'list',
       undefined,
       getPluginUser(ctx),
+      undefined,
+      undefined,
+      table,
     );
   }
 
@@ -482,6 +520,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
       'read',
       filteredRecord,
       getPluginUser(ctx),
+      table,
     );
   }
 
@@ -498,6 +537,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
       getPluginUser(ctx),
       undefined,
       transformedRecord,
+      table,
     );
   }
 
@@ -566,10 +606,17 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
   const table = route.table!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  const isJsonRequest = wantsJson(request);
 
   // Apply row policy for create action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
+    if (isJsonRequest) {
+      return jsonError(
+        'forbidden',
+        'You do not have permission to create records in this table.',
+      );
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
   }
   const tablePolicy = options.policies?.[table.name];
@@ -579,6 +626,12 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
 
   // For create, policy can only allow or deny (no filtering)
   if (!policyResult.allowed) {
+    if (isJsonRequest) {
+      return jsonError(
+        'forbidden',
+        'You do not have permission to create records in this table.',
+      );
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'create_forbidden');
   }
 
@@ -631,6 +684,11 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
+      if (isJsonRequest) {
+        return jsonValidationError('create', table.name, {
+          _form: 'Invalid or expired form. Please try again.',
+        });
+      }
       return await renderCreateForm(
         ctx,
         columnResult,
@@ -639,8 +697,60 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       );
     }
 
+    // Validate source token and get source identifier
+    const sourceTokenValue = getSourceTokenFromFormData(formData);
+    const source = await validateSourceToken(
+      sourceTokenValue,
+      options.csrfSecret,
+    );
+
+    // Source token is required for all write operations
+    // Without a valid source token, no fields can be modified
+    if (!source) {
+      if (isJsonRequest) {
+        return jsonValidationError('create', table.name, {
+          _form: 'Invalid or missing source token. Please reload the form.',
+        });
+      }
+      return await renderCreateForm(
+        ctx,
+        columnResult,
+        recordToValues(formData),
+        'Invalid or missing source token. Please reload the form.',
+      );
+    }
+
+    // Re-evaluate column policies with source context for write operations
+    // This allows policies to check ctx.source for plugin-specific write permissions
+    const policyCtxWithSource = createPolicyContext(request, authUser, source);
+    const columnResultWithSource = await evaluateColumnPolicies(
+      columnPolicies,
+      table.columns,
+      policyCtxWithSource,
+    );
+
+    // Validate that all required columns are writable or have defaults (with source context)
+    const hiddenErrorsWithSource = validateHiddenRequiredColumns(
+      table.columns,
+      columnResultWithSource,
+    );
+    if (hiddenErrorsWithSource.length > 0) {
+      const errorMessages = hiddenErrorsWithSource.map((e) => e.message).join(
+        ' ',
+      );
+      return await renderCreateForm(
+        ctx,
+        columnResult,
+        recordToValues(formData),
+        `Configuration error: ${errorMessages}`,
+      );
+    }
+
     // Check for file upload errors
     if (Object.keys(fileErrors).length > 0) {
+      if (isJsonRequest) {
+        return jsonValidationError('create', table.name, fileErrors);
+      }
       return await renderCreateForm(
         ctx,
         columnResult,
@@ -650,16 +760,16 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       );
     }
 
-    // Only process columns the user can write to
+    // Only process columns the user can write to (based on source-aware policies)
     const editableColumns = getEditableColumns(table).filter(
-      (col) => columnResult.writableColumns.includes(col.name),
+      (col) => columnResultWithSource.writableColumns.includes(col.name),
     );
     let values = coerceFormValues(formData, editableColumns);
 
     // Merge in file data for file columns
     for (const [fieldName, fileRef] of Object.entries(fileData)) {
       if (
-        columnResult.writableColumns.includes(
+        columnResultWithSource.writableColumns.includes(
           table.columns.find((c) => c.propertyName === fieldName)?.name ?? '',
         )
       ) {
@@ -667,8 +777,8 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       }
     }
 
-    // Inject default values for non-writable columns
-    values = injectColumnDefaults(values, columnResult.defaults);
+    // Inject default values for non-writable columns (source-aware)
+    values = injectColumnDefaults(values, columnResultWithSource.defaults);
 
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(
@@ -679,6 +789,11 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       'insert',
     );
     if (!validation.success) {
+      if (isJsonRequest) {
+        const errors: Record<string, string> = { ...validation.errors };
+        if (validation.formError) errors._form = validation.formError;
+        return jsonValidationError('create', table.name, errors);
+      }
       return await renderCreateForm(
         ctx,
         columnResult,
@@ -698,6 +813,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
           'create',
           dataToInsert,
           pluginUser,
+          table,
         );
       }
 
@@ -723,13 +839,27 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
           pluginUser,
           undefined,
           newRecord,
+          table,
         );
       }
 
+      if (isJsonRequest) {
+        return jsonSuccess(
+          'create',
+          table.name,
+          newId,
+          cmsUrl(basePath, table.name, newId),
+        );
+      }
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'create');
+      if (isJsonRequest) {
+        return jsonValidationError('create', table.name, {
+          _form: safeMessage,
+        });
+      }
       return await renderCreateForm(ctx, columnResult, values, safeMessage);
     }
   }
@@ -747,10 +877,17 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  const isJsonRequest = wantsJson(request);
 
   // Apply row policy for update action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
+    if (isJsonRequest) {
+      return jsonError(
+        'forbidden',
+        'You do not have permission to update this record.',
+      );
+    }
     return redirectWithFlash(
       cmsUrl(basePath, table.name, recordId),
       'update_forbidden',
@@ -762,6 +899,12 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'update');
 
   if (!policyResult.allowed) {
+    if (isJsonRequest) {
+      return jsonError(
+        'forbidden',
+        'You do not have permission to update this record.',
+      );
+    }
     return redirectWithFlash(
       cmsUrl(basePath, table.name, recordId),
       'update_forbidden',
@@ -794,10 +937,19 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       recordId,
     );
     if (exists) {
+      if (isJsonRequest) {
+        return jsonError(
+          'forbidden',
+          'You do not have permission to update this record.',
+        );
+      }
       return redirectWithFlash(
         cmsUrl(basePath, table.name),
         'update_forbidden',
       );
+    }
+    if (isJsonRequest) {
+      return jsonError('not_found', 'Record not found.');
     }
     return notFound(`Record not found`);
   }
@@ -826,6 +978,11 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     // Validate CSRF token
     const csrfToken = getCsrfTokenFromFormData(formData);
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
+      if (isJsonRequest) {
+        return jsonValidationError('update', table.name, {
+          _form: 'Invalid or expired form. Please try again.',
+        }, recordId);
+      }
       return await renderEditForm(
         ctx,
         columnResult,
@@ -834,8 +991,43 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       );
     }
 
+    // Validate source token and get source identifier
+    const sourceTokenValue = getSourceTokenFromFormData(formData);
+    const source = await validateSourceToken(
+      sourceTokenValue,
+      options.csrfSecret,
+    );
+
+    // Source token is required for all write operations
+    // Without a valid source token, no fields can be modified
+    if (!source) {
+      if (isJsonRequest) {
+        return jsonValidationError('update', table.name, {
+          _form: 'Invalid or missing source token. Please reload the form.',
+        }, recordId);
+      }
+      return await renderEditForm(
+        ctx,
+        columnResult,
+        recordToValues(formData),
+        'Invalid or missing source token. Please reload the form.',
+      );
+    }
+
+    // Re-evaluate column policies with source context for write operations
+    // This allows policies to check ctx.source for plugin-specific write permissions
+    const policyCtxWithSource = createPolicyContext(request, authUser, source);
+    const columnResultWithSource = await evaluateColumnPolicies(
+      columnPolicies,
+      table.columns,
+      policyCtxWithSource,
+    );
+
     // Check for file upload errors
     if (Object.keys(fileErrors).length > 0) {
+      if (isJsonRequest) {
+        return jsonValidationError('update', table.name, fileErrors, recordId);
+      }
       return await renderEditForm(
         ctx,
         columnResult,
@@ -845,9 +1037,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       );
     }
 
-    // Only process columns the user can write to
+    // Only process columns the user can write to (based on source-aware policies)
     const editableColumns = getEditableColumns(table).filter(
-      (col) => columnResult.writableColumns.includes(col.name),
+      (col) => columnResultWithSource.writableColumns.includes(col.name),
     );
     const values = coerceFormValues(formData, editableColumns);
 
@@ -865,7 +1057,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
     // Merge in file data for file columns (only if a new file was uploaded)
     for (const [fieldName, fileRef] of Object.entries(fileData)) {
       if (
-        columnResult.writableColumns.includes(
+        columnResultWithSource.writableColumns.includes(
           table.columns.find((c) => c.propertyName === fieldName)?.name ?? '',
         )
       ) {
@@ -882,6 +1074,11 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       'update',
     );
     if (!validation.success) {
+      if (isJsonRequest) {
+        const errors: Record<string, string> = { ...validation.errors };
+        if (validation.formError) errors._form = validation.formError;
+        return jsonValidationError('update', table.name, errors, recordId);
+      }
       return await renderEditForm(
         ctx,
         columnResult,
@@ -901,6 +1098,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           'update',
           dataToUpdate,
           pluginUser,
+          table,
         );
       }
 
@@ -923,10 +1121,19 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           recordId,
         );
         if (exists) {
+          if (isJsonRequest) {
+            return jsonError(
+              'forbidden',
+              'You do not have permission to update this record.',
+            );
+          }
           return redirectWithFlash(
             cmsUrl(basePath, table.name),
             'update_forbidden',
           );
+        }
+        if (isJsonRequest) {
+          return jsonError('not_found', 'Record not found.');
         }
         return redirectWithFlash(
           cmsUrl(basePath, table.name),
@@ -947,13 +1154,30 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           pluginUser,
           record,
           { ...record, ...dataToUpdate },
+          table,
         );
       }
 
+      if (isJsonRequest) {
+        return jsonSuccess(
+          'update',
+          table.name,
+          recordId,
+          cmsUrl(basePath, table.name, recordId),
+        );
+      }
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'update');
+      if (isJsonRequest) {
+        return jsonValidationError(
+          'update',
+          table.name,
+          { _form: safeMessage },
+          recordId,
+        );
+      }
       return await renderEditForm(ctx, columnResult, values, safeMessage);
     }
   }
@@ -973,6 +1197,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       'read',
       filteredRecord,
       getPluginUser(ctx),
+      table,
     );
   }
 
@@ -995,10 +1220,17 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const drizzleTable = table.table;
+  const isJsonRequest = wantsJson(request);
 
   // Apply row policy for delete action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
+    if (isJsonRequest) {
+      return jsonError(
+        'forbidden',
+        'You do not have permission to delete this record.',
+      );
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
   }
   const tablePolicy = options.policies?.[table.name];
@@ -1007,6 +1239,12 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'delete');
 
   if (!policyResult.allowed) {
+    if (isJsonRequest) {
+      return jsonError(
+        'forbidden',
+        'You do not have permission to delete this record.',
+      );
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_forbidden');
   }
 
@@ -1015,6 +1253,11 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
     const formData = await parseFormData(request);
     const csrfToken = getCsrfTokenFromFormData(formData);
     if (!await validateCsrfToken(csrfToken, options.csrfSecret)) {
+      if (isJsonRequest) {
+        return jsonValidationError('delete', table.name, {
+          _form: 'Invalid or expired form. Please try again.',
+        }, recordId);
+      }
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
     }
   }
@@ -1050,12 +1293,21 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       );
       if (exists) {
         // Record exists but policy denied access
+        if (isJsonRequest) {
+          return jsonError(
+            'forbidden',
+            'You do not have permission to delete this record.',
+          );
+        }
         return redirectWithFlash(
           cmsUrl(basePath, table.name),
           'delete_forbidden',
         );
       }
       // Record doesn't exist
+      if (isJsonRequest) {
+        return jsonError('not_found', 'Record not found.');
+      }
       return redirectWithFlash(
         cmsUrl(basePath, table.name),
         'delete_not_found',
@@ -1072,16 +1324,36 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
         pluginUser,
         recordToDelete,
         undefined,
+        table,
       );
     }
 
+    if (isJsonRequest) {
+      return jsonSuccess(
+        'delete',
+        table.name,
+        recordId,
+        cmsUrl(basePath, table.name),
+      );
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');
   } catch (error) {
     // Use helper to check for FK violation
     if (isForeignKeyViolation(error)) {
+      if (isJsonRequest) {
+        return jsonValidationError('delete', table.name, {
+          _form:
+            'Cannot delete this record because it is referenced by other records. Remove those references first.',
+        }, recordId);
+      }
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_fk_error');
     }
 
+    if (isJsonRequest) {
+      return jsonValidationError('delete', table.name, {
+        _form: 'Failed to delete record. Please try again.',
+      }, recordId);
+    }
     return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
   }
 }
@@ -1097,29 +1369,78 @@ async function renderCreateForm(
   formError?: string,
   fieldErrors: Record<string, string> = {},
 ): Promise<Response> {
-  const { options, route } = ctx;
+  const { options, route, pluginService } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
   // Filter CMS fields to only include writable columns
-  const cmsFields = tableToCmsFields(table, true).filter(
-    (field) => columnResult.writableColumns.includes(field.column.name),
-  );
+  // Also include plugin-controlled columns as read-only (so plugins can add custom UI like "Edit with Puck")
+  const allCmsFields = tableToCmsFields(table, true);
+  const cmsFields = allCmsFields
+    .filter((field) => {
+      // Always include writable columns
+      if (columnResult.writableColumns.includes(field.column.name)) return true;
+      // Include readable columns that have plugin configuration (show as read-only)
+      if (
+        columnResult.readableColumns.includes(field.column.name) &&
+        field.column.cmsOptions?.plugins
+      ) {
+        return true;
+      }
+      return false;
+    })
+    .map((field) => {
+      // Mark non-writable columns as read-only
+      if (!columnResult.writableColumns.includes(field.column.name)) {
+        return { ...field, readOnly: true };
+      }
+      return field;
+    });
 
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, undefined);
 
-  // Generate CSRF token
+  // Generate CSRF and source tokens
   const csrfToken = await generateCsrfToken(options.csrfSecret);
+  const sourceToken = await generateSourceToken(SOURCE.CMS, options.csrfSecret);
 
   // Check if any writable fields are file fields
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
+
+  // Get field UI overrides from plugins (parallel for performance)
+  const fieldOverrides: Record<string, FieldUIOverride> = {};
+  if (pluginService) {
+    const user = getPluginUser(ctx);
+    const results = await Promise.all(
+      cmsFields.map(async (field) => {
+        const uiCtx: UIRenderFieldContext = {
+          table: table.name,
+          field: toUIFieldInfo(field),
+          value:
+            (values[field.column.propertyName] ?? null) as UIRenderFieldContext[
+              'value'
+            ],
+          recordId: undefined, // create view has no record ID
+          view: 'create',
+          user,
+        };
+        return {
+          name: field.column.propertyName,
+          override: await pluginService.renderField(uiCtx),
+        };
+      }),
+    );
+    for (const { name, override } of results) {
+      if (override) fieldOverrides[name] = override;
+    }
+  }
 
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     action: cmsUrl(basePath, table.name) + '/new',
     csrfToken,
+    sourceToken,
     multipart: hasFileFields,
   };
 
@@ -1141,6 +1462,7 @@ async function renderCreateForm(
     errors,
     relationData,
     manyToManyData,
+    fieldOverrides,
   );
 
   const page = layout(
@@ -1160,22 +1482,42 @@ async function renderEditForm(
   /** Original record for computing frontendUrl (optional - uses values if not provided) */
   record?: Record<string, unknown>,
 ): Promise<Response> {
-  const { options, route } = ctx;
+  const { options, route, pluginService } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
   // Filter CMS fields to only include writable columns
-  const cmsFields = tableToCmsFields(table, true).filter(
-    (field) => columnResult.writableColumns.includes(field.column.name),
-  );
+  // Also include plugin-controlled columns as read-only (so plugins can add custom UI like "Edit with Puck")
+  const allCmsFields = tableToCmsFields(table, true);
+  const cmsFields = allCmsFields
+    .filter((field) => {
+      // Always include writable columns
+      if (columnResult.writableColumns.includes(field.column.name)) return true;
+      // Include readable columns that have plugin configuration (show as read-only)
+      if (
+        columnResult.readableColumns.includes(field.column.name) &&
+        field.column.cmsOptions?.plugins
+      ) {
+        return true;
+      }
+      return false;
+    })
+    .map((field) => {
+      // Mark non-writable columns as read-only
+      if (!columnResult.writableColumns.includes(field.column.name)) {
+        return { ...field, readOnly: true };
+      }
+      return field;
+    });
 
   const relationData = await fetchAllRelationOptions(options, table);
   const manyToManyData = await fetchManyToManyData(options, table, recordId);
 
-  // Generate CSRF token
+  // Generate CSRF and source tokens
   const csrfToken = await generateCsrfToken(options.csrfSecret);
+  const sourceToken = await generateSourceToken(SOURCE.CMS, options.csrfSecret);
 
   // Check if any writable fields are file fields
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
@@ -1184,10 +1526,39 @@ async function renderEditForm(
   // Use provided record if available, fall back to values (which may be form data or record)
   const frontendUrl = getFrontendUrl(ctx, table, record ?? values, 'update');
 
+  // Get field UI overrides from plugins (parallel for performance)
+  const fieldOverrides: Record<string, FieldUIOverride> = {};
+  if (pluginService) {
+    const user = getPluginUser(ctx);
+    const results = await Promise.all(
+      cmsFields.map(async (field) => {
+        const uiCtx: UIRenderFieldContext = {
+          table: table.name,
+          field: toUIFieldInfo(field),
+          value:
+            (values[field.column.propertyName] ?? null) as UIRenderFieldContext[
+              'value'
+            ],
+          recordId: recordId,
+          view: 'edit',
+          user,
+        };
+        return {
+          name: field.column.propertyName,
+          override: await pluginService.renderField(uiCtx),
+        };
+      }),
+    );
+    for (const { name, override } of results) {
+      if (override) fieldOverrides[name] = override;
+    }
+  }
+
   const editOptions: EditViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
     csrfToken,
+    sourceToken,
     multipart: hasFileFields,
     frontendUrl,
   };
@@ -1210,6 +1581,7 @@ async function renderEditForm(
     errors,
     relationData,
     manyToManyData,
+    fieldOverrides,
   );
 
   const page = layout(

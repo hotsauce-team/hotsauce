@@ -1,9 +1,16 @@
 // Edit view - form for creating/editing records
 
 import { attrs, html, raw } from '../html.ts';
-import { form, type RelationOption } from '../forms/form.ts';
+import {
+  type FieldUIOverride,
+  form,
+  type RelationOption,
+} from '../forms/form.ts';
 import { checkboxListInput, type ManyToManyData } from '../forms/inputs.ts';
 import type { CMSField } from '@hotsauce/core';
+
+// Re-export FieldUIOverride for convenience
+export type { FieldUIOverride } from '../forms/form.ts';
 
 /**
  * Options for edit view
@@ -17,6 +24,8 @@ export interface EditViewOptions {
   action?: string;
   /** CSRF token to embed in form */
   csrfToken?: string;
+  /** Source token to identify form origin (cms vs plugin) */
+  sourceToken?: string;
   /** Enable multipart form data (for file uploads) */
   multipart?: boolean;
   /** Frontend URL for "View on site" link (null = hide link) */
@@ -57,6 +66,7 @@ export function editView(
   errors: Record<string, string> = {},
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: ManyToManyData[] = [],
+  fieldOverrides: Record<string, FieldUIOverride> = {},
 ): string {
   const isEdit = options.id !== undefined;
   const action = options.action ??
@@ -97,12 +107,14 @@ export function editView(
           cancelUrl: options.baseUrl,
           class: 'cms-edit-form',
           csrfToken: options.csrfToken,
+          sourceToken: options.sourceToken,
           multipart: options.multipart,
         },
         values,
         errors,
         relationData,
         m2mSections,
+        fieldOverrides,
       ))}
     </div>
   `;
@@ -119,6 +131,7 @@ export function createView(
   errors: Record<string, string> = {},
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: ManyToManyData[] = [],
+  fieldOverrides: Record<string, FieldUIOverride> = {},
 ): string {
   return editView(
     title,
@@ -128,5 +141,6 @@ export function createView(
     errors,
     relationData,
     manyToManyData,
+    fieldOverrides,
   );
 }

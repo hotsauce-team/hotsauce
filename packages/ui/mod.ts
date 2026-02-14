@@ -5,7 +5,16 @@
 // ─────────────────────────────────────────────────────────────
 // HTML Utilities - XSS-safe template literals and helpers
 // ─────────────────────────────────────────────────────────────
-export { attrs, escapeHtml, html, join, raw, SafeHtml, when } from './html.ts';
+export {
+  attrs,
+  escapeHtml,
+  escapeUrlPath,
+  html,
+  join,
+  raw,
+  SafeHtml,
+  when,
+} from './html.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Form Inputs - Individual input renderers by field type
@@ -37,7 +46,7 @@ export {
 // ─────────────────────────────────────────────────────────────
 // Form Fields - Field wrappers with labels and errors
 // ─────────────────────────────────────────────────────────────
-export type { FormFieldOptions } from './forms/field.ts';
+export type { FieldUIOverride, FormFieldOptions } from './forms/field.ts';
 export { formField, formFields } from './forms/field.ts';
 
 // ─────────────────────────────────────────────────────────────

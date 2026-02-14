@@ -220,6 +220,17 @@ packages/cms/
 ├── runtime-compat.ts   # Cross-runtime env var utilities (getEnv)
 ├── types.ts            # Handler types (CmsOptions, ErrorContext, etc.)
 ├── auth/               # JWT authentication module
+├── tokens/             # Token generation and validation
+│   ├── crypto.ts       # HMAC-SHA256 primitives (signPayload, verifyPayload)
+│   ├── csrf.ts         # CSRF token (re-exported from ../csrf.ts)
+│   ├── source.ts       # Source tokens (identify CMS vs plugin forms)
+│   └── mod.ts          # Re-export public API
+├── policies/           # Row and column-level security
+│   ├── types.ts        # Policy, TablePolicy, ColumnPolicies types
+│   ├── helpers.ts      # ownedBy, adminOr, readOnly, etc.
+│   ├── apply.ts        # Policy evaluation and application
+│   ├── from-schema.ts  # policiesFromSchema() - generate from $cms() hints
+│   └── mod.ts          # Re-export public API
 └── plugins/            # Plugin registry, service, and types
     ├── types.ts        # Plugin, PluginConfig, re-exports from workers
     ├── registry.ts     # Plugin registration and validation
@@ -498,6 +509,27 @@ filter: 'dangerously-open';
 
 - **Transform hooks** (`beforeSave`, `afterRead`): Modify data, always block
 - **Action hooks** (`on.create`, `on.update`, etc.): Side effects, optionally fire-and-forget
+- **UI hooks** (`ui.renderField`): Customize field rendering in admin UI (runs in Workers or in-process; return type is serializable)
+
+**Schema-Driven Scoping (Security)**
+
+Plugins are **schema-driven by default**: they only receive data for tables/columns that declare them via `$cms({ plugins: { pluginName: ... } })`. This is secure-by-default — plugins never see undeclared data.
+
+- **Column-scoped**: Plugin declared on columns → receives only those columns' values
+- **Table-scoped**: Plugin declared on table → receives full record
+- `filter: 'dangerously-open'` bypasses scoping (receive all data)
+
+Plugins receive `ctx.columns` with configuration for each declared column:
+
+```typescript
+// Schema
+content: text('content').$cms({ plugins: { markdown: { role: 'source', output: 'contentHtml' } } }),
+contentHtml: text('content_html').$cms({ plugins: { markdown: { role: 'output' } } }),
+
+// Plugin beforeSave receives:
+// ctx.columns = { content: { role: 'source', output: 'contentHtml' }, contentHtml: { role: 'output' } }
+// data = { content: "# Hello", contentHtml: null }  (only declared columns)
+```
 
 **Column Policy Interaction**
 
@@ -515,18 +547,26 @@ Worker plugins use **declarative hooks** (arrays of hook names), while in-proces
   hooks: {
     on: ['create', 'update', 'delete'],  // Array of action names
   },
-  filter: (ctx) => !['sessions', 'audit_logs'].includes(ctx.table),  // Skip noisy/recursive tables
+  // No filter needed - schema-driven by table declaration
 }
 
 // In-process plugin: function hooks (run in main thread)
 {
-  name: 'format-names',
+  name: 'markdown',
   hooks: {
     transform: {
-      beforeSave: async (ctx, data) => ({ ...data, name: data.name.toUpperCase() }),
+      beforeSave: (ctx, data) => {
+        // ctx.columns has per-column config
+        for (const [col, config] of Object.entries(ctx.columns)) {
+          if (config.role === 'source' && config.output) {
+            data[config.output] = transform(data[col]);
+          }
+        }
+        return data;
+      },
     },
   },
-  filter: (ctx) => ctx.table === 'users',  // Applies to all hook types for this table
+  // No filter needed - schema-driven by column declarations
 }
 ```
 
@@ -545,12 +585,57 @@ This distinction is enforced at registration time:
 
 When creating plugins:
 
-1. **Keep Worker module self-contained** — it cannot import from main thread modules
-2. **Use `createPlugin(config)` factory** — receives serialized config from CMS options
-3. **Declare capabilities** — network hosts, actions needed (for documentation and validation)
-4. **Use `blocking: false`** for logging/analytics that shouldn't block requests
-5. **Use declarative hooks for Workers** — `hooks: { on: ['create'] }` instead of functions
-6. **Test without Worker first** — easier to debug, then verify Worker isolation works
+1. **Use schema-driven scoping** — no `filter` needed; declare columns/tables in schema with `$cms({ plugins: { yourPlugin: config } })`
+2. **Read config from `ctx.columns`** — each declared column's config is available at hook time
+3. **Keep Worker module self-contained** — it cannot import from main thread modules
+4. **Declare capabilities** — network hosts, actions needed (for documentation and validation)
+5. **Use `blocking: false`** for logging/analytics that shouldn't block requests
+6. **Use declarative hooks for Workers** — `hooks: { on: ['create'] }` instead of functions
+7. **Use `'dangerously-open'`** only for plugins that truly need all data (audit logging)
+
+### Plugin Column Roles Convention
+
+Plugins discover which columns to operate on via schema metadata. The `$cms()` method marks columns with plugin configuration:
+
+```typescript
+// Puck visual editor - role defaults to 'data' (the authoritative data column)
+content: jsonb('content').$cms({ plugins: { puck: true } });
+
+// Markdown transform - source column with reference to output
+content: text('content').$cms({
+  plugins: { markdown: { role: 'source', output: 'contentHtml' } },
+});
+
+// Output column - automatically hidden from forms
+contentHtml: text('content_html').$cms({
+  plugins: { markdown: { role: 'output' } },
+});
+```
+
+**Role Types:**
+
+| Role     | Form Behavior                              | Use Case             |
+| -------- | ------------------------------------------ | -------------------- |
+| `data`   | Show in form, plugin may provide custom UI | Puck JSON, rich text |
+| `source` | Show in form, triggers transform           | Markdown input       |
+| `output` | Hidden from form (computed)                | Rendered HTML, slugs |
+
+**CMS Behavior:**
+
+- `role: 'output'` columns are automatically hidden (like `$cms({ hidden: true })`)
+- `role: 'source'` with `output` allows plugins to discover transform pairs
+- `role: 'data'` (default) means the plugin owns the column's editing experience
+
+**Forward Compatibility:**
+
+This pattern works for any transform plugin (slugify, search indexing, image thumbnails):
+
+```typescript
+title: text().$cms({
+  plugins: { slugify: { role: 'source', output: 'slug' } },
+});
+slug: text().$cms({ plugins: { slugify: { role: 'output' } } });
+```
 
 ### Uploads: What belongs in core vs plugin
 

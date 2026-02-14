@@ -21,6 +21,9 @@ import { relations } from 'drizzle-orm';
 // Import extend module for side effects (patches Drizzle prototypes)
 import '@hotsauce/core/extend';
 
+// Re-export source token utilities for tests
+export { generateSourceToken, pluginSource, SOURCE } from '../tokens/source.ts';
+
 // Test secrets (long enough to pass validation)
 export const TEST_CSRF_SECRET =
   'test-csrf-secret-for-integration-tests-min-32-chars';
@@ -81,10 +84,19 @@ export const profiles = pgTable('profiles', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Schema with plugin-configured columns
+export const pages = pgTable('pages', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 200 }).notNull(),
+  content: json('content').$cms({ plugins: { puck: true } }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 // Combined schemas
 export const schema = { users, posts, usersRelations, postsRelations };
 export const schemaWithAuth = { ...schema, adminUsers };
 export const schemaWithFiles = { profiles };
+export const schemaWithPlugins = { pages };
 
 // ============================================================================
 // Database Setup Helpers
@@ -150,6 +162,20 @@ export async function createProfilesTable(db: AnyDb): Promise<void> {
       name VARCHAR(100) NOT NULL,
       avatar JSON,
       document JSON,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+/**
+ * Create pages table for plugin policy tests
+ */
+export async function createPagesTable(db: AnyDb): Promise<void> {
+  await db.execute(sql`
+    CREATE TABLE pages (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      content JSON,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);

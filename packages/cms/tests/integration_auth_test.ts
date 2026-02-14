@@ -49,8 +49,8 @@ Deno.test('integration: JWT auth tests', async (t) => {
           passwordColumn: 'passwordHash',
           roleColumn: 'role',
         }),
-        policies: 'dangerously-open',
       },
+      policies: 'dangerously-open',
       ...extraOptions,
     });
   }

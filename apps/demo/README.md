@@ -1,4 +1,4 @@
-# Hono Fullstack Example
+# Demo App
 
 A complete blog site with a server-rendered public frontend (Hono) and a headless CMS admin interface (hotsauce-cms) sharing the same database.
 
@@ -42,6 +42,10 @@ A complete blog site with a server-rendered public frontend (Hono) and a headles
                └─────────────────┘
 ```
 
+## Serverless Optimization
+
+The CMS admin handler is lazy-loaded using dynamic `import()` — it's only loaded on the first `/admin/*` request. Public site requests skip the CMS import entirely, keeping cold starts fast.
+
 ## Quick Start
 
 1. **Seed the database:**
@@ -71,17 +75,19 @@ deno task dev
 ## Project Structure
 
 ```
-examples/hono-fullstack/
+apps/demo/
 │
 ├── server.ts       # Entry point - wires site + admin together
 ├── security.ts     # CSP and security headers
 ├── db.ts           # Database connection (shared)
 ├── schema.ts       # Drizzle schema (shared)
 ├── seed.ts         # Database seeding script
+├── components.tsx  # Puck visual editor components (React)
 ├── deno.jsonc      # Deno configuration
 │
 ├── admin/          # CMS admin (admin only)
 │   ├── admin.ts    # CMS handler configuration
+│   ├── components.js # Built Puck components bundle
 │   └── markdown-worker.ts # Worker plugin for markdown
 │
 ├── lib/            # Shared code (used by admin + site)
@@ -92,50 +98,102 @@ examples/hono-fullstack/
 ├── site/           # Public frontend (site only)
 │   ├── routes.ts   # Hono routes for public pages
 │   ├── templates.ts # HTML templates
+│   ├── puck-render.tsx # Server-side Puck content renderer
 │   └── static/     # Static assets
-│       └── styles.css
+│       ├── styles.css      # Site styles
+│       └── components.css  # Puck component styles (BEM)
 │
 └── data/           # PGlite database (created on first run)
 ```
 
 ### File Responsibilities
 
-| File                       | Used By    | Purpose                             |
-| -------------------------- | ---------- | ----------------------------------- |
-| `server.ts`                | Both       | Entry point, combines site + admin  |
-| `security.ts`              | Server     | CSP middleware                      |
-| `db.ts`                    | Both       | Database connection                 |
-| `schema.ts`                | Both       | Drizzle tables & relations          |
-| `admin/admin.ts`           | Admin only | CMS handler configuration           |
-| `admin/markdown-worker.ts` | Admin only | Markdown Worker plugin              |
-| `lib/markdown.ts`          | Both       | Markdown parser wrapper (micromark) |
-| `lib/sanitize.ts`          | Both       | Allowlist HTML sanitizer            |
-| `site/routes.ts`           | Site only  | Public page routes                  |
-| `site/templates.ts`        | Site only  | HTML rendering                      |
-| `site/static/styles.css`   | Site only  | Stylesheet                          |
-| `seed.ts`                  | Setup      | Initial data population             |
+| File                         | Used By    | Purpose                             |
+| ---------------------------- | ---------- | ----------------------------------- |
+| `server.ts`                  | Both       | Entry point, combines site + admin  |
+| `security.ts`                | Server     | CSP middleware                      |
+| `db.ts`                      | Both       | Database connection                 |
+| `schema.ts`                  | Both       | Drizzle tables & relations          |
+| `components.tsx`             | Both       | Puck component definitions (React)  |
+| `admin/admin.ts`             | Admin only | CMS handler configuration           |
+| `admin/components.js`        | Admin only | Built Puck components bundle        |
+| `admin/markdown-worker.ts`   | Admin only | Markdown Worker plugin              |
+| `lib/markdown.ts`            | Both       | Markdown parser wrapper (micromark) |
+| `lib/sanitize.ts`            | Both       | Allowlist HTML sanitizer            |
+| `site/routes.ts`             | Site only  | Public page routes                  |
+| `site/templates.ts`          | Site only  | HTML rendering                      |
+| `site/puck-render.tsx`       | Site only  | Server-side Puck content renderer   |
+| `site/static/styles.css`     | Site only  | Site stylesheet                     |
+| `site/static/components.css` | Site only  | Puck component styles (BEM)         |
+| `seed.ts`                    | Setup      | Initial data population             |
 
 ## Security
 
 The site uses a strict Content Security Policy (CSP) that:
 
 - **No inline scripts** (`script-src 'none'`) — Pure server-rendered HTML
-- **No inline styles** — All CSS served from `/static/styles.css`
+- **No inline styles** — All CSS served from `/static/*.css` (BEM classes instead of inline `style` attributes)
 - **Same-origin forms** — Form submissions restricted to same origin
 - **No iframes** — Cannot be embedded in other sites
 
 The CSP middleware in [security.ts](security.ts) applies to all public site routes but **skips `/admin/*`** to avoid overriding hotsauce-cms response headers.
 
+### Puck Components & CSP
+
+Puck components use **BEM CSS classes** instead of React inline styles to comply with strict CSP:
+
+```tsx
+// components.tsx - uses className, not style={{}}
+render: (({ align }) => (
+  <h1 className={`heading heading--align-${align}`}>...</h1>
+));
+```
+
+Styles are defined in `site/static/components.css` and served as an external stylesheet.
+
 This example also includes a **public** media route (`GET /files/media/:id`) for rendering images/files on the public site.
 It’s separate from hotsauce-cms’s protected file route (`GET {basePath}/files/{table}/{column}/{id}`), which enforces auth + row/column policies.
 
+## Plugin Column Roles
+
+Plugins use schema metadata to discover which columns they should operate on. The `$cms()` method marks columns with plugin configuration:
+
+```ts
+// schema.ts
+
+// Puck visual editor - role defaults to 'data'
+content: jsonb('content').$cms({ plugins: { puck: true } }),
+
+// Markdown transform - source + output columns
+content: text('content').$cms({
+  plugins: { markdown: { role: 'source', output: 'contentHtml' } },
+}),
+contentHtml: text('content_html').$cms({
+  plugins: { markdown: { role: 'output' } },
+}),
+```
+
+### Role Types
+
+| Role     | Form Behavior                              | Example                |
+| -------- | ------------------------------------------ | ---------------------- |
+| `data`   | Show in form, plugin may provide custom UI | Puck JSON column       |
+| `source` | Show in form, triggers transform           | Markdown `content`     |
+| `output` | Hidden from form (computed)                | Markdown `contentHtml` |
+
+- **`data`** (default when `true` or no role specified) — the authoritative data column, may have custom editor UI
+- **`source`** — user-editable input that gets transformed to an output column
+- **`output`** — automatically hidden; populated by plugin transforms
+
+This pattern is forward-compatible with other transform plugins (slugify, search indexing, image thumbnails, etc.).
+
 ## Markdown Rendering
 
-Markdown is rendered to HTML **at save time** using a CMS Worker plugin, not at read time:
+Markdown is rendered to HTML **at save time** using an in-process plugin:
 
-1. **Markdown parser** — [lib/markdown.ts](lib/markdown.ts) wraps `micromark` to render markdown to HTML
-2. **HTML sanitizer** — [lib/sanitize.ts](lib/sanitize.ts) uses an allowlist approach (like WordPress wp_kses) to prevent XSS
-3. **Worker isolation** — Plugin runs in a Web Worker with limited permissions for security
+1. **Schema-driven scoping** — CMS passes only declared columns via `ctx.columns`
+2. **Markdown parser** — [lib/markdown.ts](lib/markdown.ts) wraps `micromark` to render markdown to HTML
+3. **HTML sanitizer** — [lib/sanitize.ts](lib/sanitize.ts) uses an allowlist approach (like WordPress wp_kses) to prevent XSS
 4. **CMS plugin** — `beforeSave` transform populates `contentHtml` column automatically
 5. **Fast reads** — Templates use pre-rendered `contentHtml` column
 
@@ -153,7 +211,7 @@ This approach:
 
 - Parses markdown once (not on every page view)
 - Keeps the rendering logic easy to audit (simple wrapper + sanitizer)
-- Demonstrates Worker plugin pattern for isolation
+- Demonstrates schema-driven plugin discovery
 
 ## Schema
 
@@ -162,9 +220,10 @@ The example includes these tables:
 | Table         | Purpose                                                              |
 | ------------- | -------------------------------------------------------------------- |
 | `posts`       | Blog posts with title, content, contentHtml, excerpt, publish status |
-| `pages`       | Static pages with content and contentHtml                            |
+| `pages`       | Visual pages edited with Puck (JSON content)                         |
 | `authors`     | Content creators with bio                                            |
 | `categories`  | Post organization                                                    |
+| `media`       | File uploads (images stored as base64 in JSONB)                      |
 | `settings`    | Key-value site configuration                                         |
 | `admin_users` | CMS authentication                                                   |
 
@@ -280,3 +339,40 @@ const db = drizzle(client, { schema });
 - PGlite data is persisted to `./data` directory
 - The CMS handles all authentication - no separate auth needed for the frontend
 - Settings are read-only for non-admin users (configured via `auth.policies`)
+
+## CMS Features Demonstrated
+
+This demo showcases many hotsauce-cms capabilities:
+
+### Shown
+
+| Feature                      | Where                                             |
+| ---------------------------- | ------------------------------------------------- |
+| Password authentication      | `admin.ts` — `PasswordProvider`                   |
+| Transform plugins            | `markdown-plugin.ts` — `beforeSave` hook          |
+| Schema-driven plugin scoping | `schema.ts` — `$cms({ plugins: { markdown } })`   |
+| Puck visual editor plugin    | `schema.ts` — `$cms({ plugins: { puck: true } })` |
+| File uploads                 | `schema.ts` — `$cms({ file: true })`              |
+| Frontend URL links           | `schema.ts` — `$cms({ frontendUrl })`             |
+| Relations (FK dropdowns)     | `schema.ts` — `authorId`, `categoryId`            |
+| Custom Zod parsers           | `schema.ts` — `parsers` object                    |
+| Read-only policy             | `admin.ts` — `settings: readOnly()`               |
+| Lazy CMS loading             | `server.ts` — dynamic `import()`                  |
+| Custom error handler         | `admin.ts` — `onError` callback                   |
+| Content Security Policy      | `security.ts` — CSP headers                       |
+
+### Not Shown (potential additions)
+
+| Feature                | Description                                                |
+| ---------------------- | ---------------------------------------------------------- |
+| Row-level policies     | `ownedBy()` — users only see their own records             |
+| Column-level policies  | Hide `salary` from non-admins, inject `tenantId` on create |
+| Role-based access      | `roleIs('admin')`, `roleIn(['editor', 'admin'])`           |
+| Multi-tenant isolation | `ownedBy` + column default for `tenantId`                  |
+| Two-factor auth (TOTP) | QR code setup, TOTP verification                           |
+| Worker plugins         | Isolated plugin execution in Web Workers                   |
+| Action hooks           | `on.create`, `on.delete` for audit logging                 |
+| JSON API               | `Accept: application/json` for headless use                |
+| Many-to-many relations | Junction tables with `$cms({ junction: true })`            |
+
+See `packages/cms/tests/` for examples of these features.

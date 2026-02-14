@@ -1,13 +1,16 @@
 // Plugin service - higher-level API for executing plugin hooks
 // Used by CRUD handlers to invoke plugins at the right points
 
+import type { IntrospectedTable } from '@hotsauce/core';
 import type { CrudAction } from '../types.ts';
 import type {
   ActionContext,
+  FieldUIOverride,
   FilterContext,
   HookType,
   PluginContext,
   Serializable,
+  UIRenderFieldContext,
 } from './types.ts';
 import type { PluginRegistry, RegisteredPlugin } from './registry.ts';
 import { WorkerExecutor } from '@hotsauce/workers';
@@ -15,6 +18,117 @@ import type { PluginErrorHandler } from '@hotsauce/workers';
 
 // Re-export for convenience
 export type { PluginErrorHandler } from '@hotsauce/workers';
+
+// ─────────────────────────────────────────────────────────────
+// Plugin scope extraction
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Plugin scope info extracted from schema metadata.
+ * Determines what data a plugin can access.
+ */
+interface PluginScope {
+  /** Column configs for this plugin, keyed by column name */
+  columns: Record<string, Serializable>;
+  /** True if this is table-scoped (plugin declared on table, not columns) */
+  isTableScoped: boolean;
+}
+
+/**
+ * Extract plugin scope from introspected table metadata.
+ * Returns column configs for columns that declare this plugin.
+ *
+ * @param tableInfo - Introspected table metadata
+ * @param pluginName - Name of the plugin
+ * @returns Plugin scope or null if no declarations found
+ */
+function extractPluginScope(
+  tableInfo: IntrospectedTable | undefined,
+  pluginName: string,
+): PluginScope | null {
+  if (!tableInfo) return null;
+
+  // Check for table-level plugin declaration
+  const tablePlugins = tableInfo.cmsOptions?.plugins;
+  if (tablePlugins && pluginName in tablePlugins) {
+    return {
+      columns: { _table: tablePlugins[pluginName] as Serializable },
+      isTableScoped: true,
+    };
+  }
+
+  // Check for column-level plugin declarations
+  const columnConfigs: Record<string, Serializable> = {};
+  for (const col of tableInfo.columns) {
+    const colPlugins = col.cmsOptions?.plugins;
+    if (colPlugins && pluginName in colPlugins) {
+      // Use propertyName (camelCase) to match Drizzle data keys
+      columnConfigs[col.propertyName] = colPlugins[pluginName] as Serializable;
+    }
+  }
+
+  if (Object.keys(columnConfigs).length === 0) {
+    return null;
+  }
+
+  return {
+    columns: columnConfigs,
+    isTableScoped: false,
+  };
+}
+
+/**
+ * Scope data to only columns declared for this plugin.
+ * For table-scoped plugins, returns full data.
+ *
+ * @param data - Full record data
+ * @param scope - Plugin scope info
+ * @returns Scoped data subset
+ */
+function scopeData(
+  data: Record<string, unknown>,
+  scope: PluginScope,
+): Record<string, unknown> {
+  // Table-scoped: full data access
+  if (scope.isTableScoped) return data;
+
+  // Column-scoped: only declared columns
+  const scoped: Record<string, unknown> = {};
+  for (const colName of Object.keys(scope.columns)) {
+    if (colName in data) {
+      scoped[colName] = data[colName];
+    }
+  }
+  return scoped;
+}
+
+/**
+ * Merge scoped data back into full data.
+ * For table-scoped plugins, returns the full result.
+ * For column-scoped plugins, only merges declared columns.
+ *
+ * @param fullData - Original full record data
+ * @param scopedResult - Result from plugin (scoped or full)
+ * @param scope - Plugin scope info
+ * @returns Merged data
+ */
+function mergeScopedData(
+  fullData: Record<string, unknown>,
+  scopedResult: Record<string, unknown>,
+  scope: PluginScope,
+): Record<string, unknown> {
+  // Table-scoped: plugin can modify anything
+  if (scope.isTableScoped) return scopedResult;
+
+  // Column-scoped: only merge declared columns
+  const merged = { ...fullData };
+  for (const colName of Object.keys(scope.columns)) {
+    if (colName in scopedResult) {
+      merged[colName] = scopedResult[colName];
+    }
+  }
+  return merged;
+}
 
 /**
  * Plugin service provides a convenient API for executing plugin hooks.
@@ -91,6 +205,8 @@ export class PluginService {
 
     return plugins.filter((registered) => {
       const filter = registered.plugin.filter;
+      // No filter = schema-driven (handled by caller checking scope)
+      if (filter === undefined) return true;
       // 'dangerously-open' = include all
       if (filter === 'dangerously-open') return true;
       // Apply filter function
@@ -102,6 +218,16 @@ export class PluginService {
    * Execute beforeSave transform for all plugins.
    * Called before insert/update operations.
    *
+   * With schema-driven scoping (tableInfo provided):
+   * - Only calls plugins for tables/columns that declare them
+   * - Passes scoped data (only declared columns)
+   * - Merges results back safely
+   *
+   * @param table - Table name
+   * @param action - 'create' or 'update'
+   * @param data - Record data to transform
+   * @param user - Authenticated user info
+   * @param tableInfo - Introspected table for schema-driven scoping
    * @returns Transformed data
    */
   async beforeSave(
@@ -109,6 +235,7 @@ export class PluginService {
     action: 'create' | 'update',
     data: Record<string, unknown>,
     user?: { sub: string; role?: string },
+    tableInfo?: IntrospectedTable,
   ): Promise<Record<string, unknown>> {
     const allPlugins = this.registry.getPluginsWithTransform('beforeSave');
     if (allPlugins.length === 0) return data;
@@ -125,23 +252,61 @@ export class PluginService {
 
     await this.ensureInitialized();
 
-    const ctx: PluginContext = {
-      table,
-      action,
-      user,
-    };
+    let result = data;
 
-    return await this.executor.executeBeforeSave(
-      plugins,
-      ctx,
-      data as Record<string, Serializable>,
-    );
+    // Process each plugin with scoping
+    for (const registered of plugins) {
+      const { plugin } = registered;
+
+      // Extract schema-driven scope for this plugin
+      const scope = extractPluginScope(tableInfo, plugin.name);
+
+      // Skip if schema-driven mode and no declarations (unless filter is dangerously-open)
+      if (tableInfo && !scope && plugin.filter !== 'dangerously-open') {
+        continue;
+      }
+
+      // Build context with column configs
+      const ctx: PluginContext = {
+        table,
+        action,
+        user,
+        columns: scope?.columns,
+      };
+
+      // Scope data if schema-driven
+      const inputData = scope ? scopeData(result, scope) : result;
+
+      // Execute single plugin
+      const pluginResult = await this.executor.executeBeforeSave(
+        [registered],
+        ctx,
+        inputData as Record<string, Serializable>,
+      );
+
+      // Merge result back (scoped or full)
+      result = scope
+        ? mergeScopedData(result, pluginResult, scope)
+        : pluginResult;
+    }
+
+    return result;
   }
 
   /**
    * Execute afterRead transform for all plugins.
    * Called after fetching records from database.
    *
+   * With schema-driven scoping (tableInfo provided):
+   * - Only calls plugins for tables/columns that declare them
+   * - Passes scoped data (only declared columns)
+   * - Merges results back safely
+   *
+   * @param table - Table name
+   * @param action - 'read' or 'list'
+   * @param data - Record data to transform
+   * @param user - Authenticated user info
+   * @param tableInfo - Introspected table for schema-driven scoping
    * @returns Transformed data
    */
   async afterRead(
@@ -149,6 +314,7 @@ export class PluginService {
     action: 'read' | 'list',
     data: Record<string, unknown>,
     user?: { sub: string; role?: string },
+    tableInfo?: IntrospectedTable,
   ): Promise<Record<string, unknown>> {
     const allPlugins = this.registry.getPluginsWithTransform('afterRead');
     if (allPlugins.length === 0) return data;
@@ -165,29 +331,62 @@ export class PluginService {
 
     await this.ensureInitialized();
 
-    const ctx: PluginContext = {
-      table,
-      action,
-      user,
-    };
+    let result = data;
 
-    return await this.executor.executeAfterRead(
-      plugins,
-      ctx,
-      data as Record<string, Serializable>,
-    );
+    // Process each plugin with scoping
+    for (const registered of plugins) {
+      const { plugin } = registered;
+
+      // Extract schema-driven scope for this plugin
+      const scope = extractPluginScope(tableInfo, plugin.name);
+
+      // Skip if schema-driven mode and no declarations (unless filter is dangerously-open)
+      if (tableInfo && !scope && plugin.filter !== 'dangerously-open') {
+        continue;
+      }
+
+      // Build context with column configs
+      const ctx: PluginContext = {
+        table,
+        action,
+        user,
+        columns: scope?.columns,
+      };
+
+      // Scope data if schema-driven
+      const inputData = scope ? scopeData(result, scope) : result;
+
+      // Execute single plugin
+      const pluginResult = await this.executor.executeAfterRead(
+        [registered],
+        ctx,
+        inputData as Record<string, Serializable>,
+      );
+
+      // Merge result back (scoped or full)
+      result = scope
+        ? mergeScopedData(result, pluginResult, scope)
+        : pluginResult;
+    }
+
+    return result;
   }
 
   /**
    * Execute afterRead transform for multiple records.
    * Convenience method for list operations.
    *
+   * @param table - Table name
+   * @param records - Array of records to transform
+   * @param user - Authenticated user info
+   * @param tableInfo - Introspected table for schema-driven scoping
    * @returns Array of transformed records
    */
   async afterReadMany(
     table: string,
     records: Record<string, unknown>[],
     user?: { sub: string; role?: string },
+    tableInfo?: IntrospectedTable,
   ): Promise<Record<string, unknown>[]> {
     const plugins = this.registry.getPluginsWithTransform('afterRead');
     if (plugins.length === 0) return records;
@@ -195,7 +394,13 @@ export class PluginService {
     // Transform each record through the pipeline
     const results: Record<string, unknown>[] = [];
     for (const record of records) {
-      const transformed = await this.afterRead(table, 'list', record, user);
+      const transformed = await this.afterRead(
+        table,
+        'list',
+        record,
+        user,
+        tableInfo,
+      );
       results.push(transformed);
     }
     return results;
@@ -204,6 +409,18 @@ export class PluginService {
   /**
    * Execute action hooks after a CRUD operation completes.
    * Respects fireAndForget settings per plugin.
+   *
+   * With schema-driven scoping (tableInfo provided):
+   * - Only calls plugins for tables that declare them
+   * - Passes scoped data (only declared columns)
+   *
+   * @param table - Table name
+   * @param action - CRUD action
+   * @param recordId - Primary key of affected record
+   * @param user - Authenticated user info
+   * @param oldData - Previous record state (for update/delete)
+   * @param newData - New record state (for create/update)
+   * @param tableInfo - Introspected table for schema-driven scoping
    */
   async onAction(
     table: string,
@@ -212,6 +429,7 @@ export class PluginService {
     user?: { sub: string; role?: string },
     oldData?: Record<string, unknown>,
     newData?: Record<string, unknown>,
+    tableInfo?: IntrospectedTable,
   ): Promise<void> {
     const allPlugins = this.registry.getPluginsWithAction(action);
     if (allPlugins.length === 0) return;
@@ -222,17 +440,90 @@ export class PluginService {
 
     await this.ensureInitialized();
 
-    const ctx: ActionContext = {
-      table,
-      action,
-      user,
-      recordId,
-      oldData: oldData as Serializable | undefined,
-      newData: newData as Serializable | undefined,
-      timestamp: new Date().toISOString(),
-    };
+    // Process each plugin with scoping
+    for (const registered of plugins) {
+      const { plugin } = registered;
 
-    await this.executor.executeAction(plugins, action, ctx);
+      // Extract schema-driven scope for this plugin
+      const scope = extractPluginScope(tableInfo, plugin.name);
+
+      // Skip if schema-driven mode and no declarations (unless filter is dangerously-open)
+      if (tableInfo && !scope && plugin.filter !== 'dangerously-open') {
+        continue;
+      }
+
+      // Scope data if schema-driven
+      const scopedOldData = scope && oldData
+        ? scopeData(oldData, scope)
+        : oldData;
+      const scopedNewData = scope && newData
+        ? scopeData(newData, scope)
+        : newData;
+
+      const ctx: ActionContext = {
+        table,
+        action,
+        user,
+        recordId,
+        oldData: scopedOldData as Serializable | undefined,
+        newData: scopedNewData as Serializable | undefined,
+        timestamp: new Date().toISOString(),
+        columns: scope?.columns,
+      };
+
+      await this.executor.executeAction([registered], action, ctx);
+    }
+  }
+
+  /**
+   * Execute UI renderField hook for all plugins.
+   * Called when rendering edit/create forms.
+   * Returns first non-null override, or null for default rendering.
+   *
+   * @returns Field UI override or null
+   */
+  async renderField(
+    ctx: UIRenderFieldContext,
+  ): Promise<FieldUIOverride> {
+    const allPlugins = this.registry.getPluginsWithUI('renderField');
+    if (allPlugins.length === 0) return null;
+
+    // Apply plugin filters
+    // Use 'read' action for UI hooks since we're rendering a view
+    const plugins = this.applyFilter(
+      allPlugins,
+      'ui:renderField',
+      ctx.table,
+      ctx.view === 'edit' ? 'read' : 'create',
+      ctx.user,
+    );
+    if (plugins.length === 0) return null;
+
+    await this.ensureInitialized();
+
+    return await this.executor.executeRenderField(plugins, ctx);
+  }
+
+  /**
+   * Execute a plugin route render in Worker.
+   * Called when a plugin route with `render` is matched.
+   *
+   * @param pluginName - Name of the plugin that owns the route
+   * @param renderType - Message type to send to Worker (from route.render)
+   * @param context - Route context with record data, user info, etc.
+   * @returns HTML string from Worker
+   */
+  async executeRouteRender(
+    pluginName: string,
+    renderType: string,
+    context: import('./types.ts').PluginRouteContext,
+  ): Promise<string> {
+    await this.ensureInitialized();
+    return await this.executor.executeRouteRender(
+      pluginName,
+      renderType,
+      context,
+    );
   }
 
   /**

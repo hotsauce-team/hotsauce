@@ -10,19 +10,23 @@
     "vendored"
   ],
   "chat.tools.terminal.autoApprove": {
+    "/^deno task \\w+ 2>&1( \\| (head|tail) -\\d+)?$/": {
+      "approve": true,
+      "matchCommandLine": true
+    },
     "/^deno test -P$/": {
       "approve": true,
       "matchCommandLine": true
     },
-    "/^deno test -P [\\w.\\/*-]+ 2>&1 \\| tail -\\d+$/": {
+    "/^deno test -P (?!.*\\.\\.)[\\w.\\/-]+\\.ts 2>&1( \\| (head|tail) -\\d+)?$/": {
       "approve": true,
       "matchCommandLine": true
     },
-    "/^deno test -P 2>&1 \\| tail -\\d+$/": {
+    "/^deno test -P 2>&1 \\| (head|tail) -\\d+$/": {
       "approve": true,
       "matchCommandLine": true
     },
-    "/^deno check [\\w.\\/*-\\s]+ 2>&1 \\| tail -\\d+$/": {
+    "/^deno check [\\w.\\/*-\\s]+ 2>&1 \\| (head|tail) -\\d+$/": {
       "approve": true,
       "matchCommandLine": true
     },
@@ -30,10 +34,9 @@
       "approve": true,
       "matchCommandLine": true
     },
-    "/^deno check 2>&1 \\| tail -\\d+$/": {
+    "/^deno check 2>&1 \\| (head|tail) -\\d+$/": {
       "approve": true,
       "matchCommandLine": true
-    },
-    "deno": true
+    }
   }
 }

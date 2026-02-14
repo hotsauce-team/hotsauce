@@ -1,6 +1,36 @@
 // Types for CMS-specific metadata stored on Drizzle column builders/columns and tables.
 
 // ─────────────────────────────────────────────────────────────
+// Plugin column configuration
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Configuration for a plugin's access to a column.
+ *
+ * - `true`: Shorthand for `{ write: true, read: true }` (full access)
+ * - Object: Explicit permissions and future extension point
+ *
+ * @example
+ * ```ts
+ * // Shorthand: puck can read + write this column
+ * content: json().$cms({ plugins: { puck: true } })
+ *
+ * // Explicit: puck can only write, not read
+ * content: json().$cms({ plugins: { puck: { write: true } } })
+ * ```
+ */
+export type PluginColumnConfig =
+  | true
+  | {
+    /** Whether the plugin can write to this column (default: false) */
+    write?: boolean;
+    /** Whether the plugin can read this column (default: true if write is true) */
+    read?: boolean;
+    /** Extension point for future plugin-specific options */
+    [key: string]: unknown;
+  };
+
+// ─────────────────────────────────────────────────────────────
 // Column-level CMS options
 // ─────────────────────────────────────────────────────────────
 
@@ -19,6 +49,23 @@ export type CmsColumnOptions = {
   hidden?: boolean;
   /** Show this field but prevent editing. */
   readOnly?: boolean;
+  /**
+   * Plugin-specific configuration, keyed by plugin name.
+   * Controls which plugins can read/write this column.
+   *
+   * @example
+   * ```ts
+   * // Puck editor can write to this column
+   * content: json().$cms({ plugins: { puck: true } })
+   *
+   * // Multiple plugins
+   * content: json().$cms({ plugins: {
+   *   puck: true,
+   *   'block-editor': { write: true },
+   * }})
+   * ```
+   */
+  plugins?: Record<string, PluginColumnConfig>;
 };
 
 /** Default accept filter for file inputs */
@@ -113,6 +160,25 @@ export type CmsTableOptions = {
    * Icon identifier for the sidebar (future use).
    */
   icon?: string;
+
+  /**
+   * Table-level plugin configuration, keyed by plugin name.
+   * Plugins declared here receive the full record for transform/action hooks.
+   *
+   * @example
+   * ```ts
+   * // Audit log receives full record on create/update/delete
+   * pgTable('posts', { ... }).$cms({
+   *   plugins: { 'audit-log': { level: 'full' } }
+   * });
+   *
+   * // Encryption plugin receives full record for encrypt/decrypt transforms
+   * pgTable('secrets', { ... }).$cms({
+   *   plugins: { encryption: { algorithm: 'aes-256-gcm' } }
+   * });
+   * ```
+   */
+  plugins?: Record<string, PluginColumnConfig>;
 };
 
 /** Symbol used to store CMS table options on Drizzle table objects. */

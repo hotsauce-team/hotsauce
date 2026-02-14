@@ -209,6 +209,10 @@ Internal handlers for each CRUD operation. These are called by the main handler.
 | `coerceFormValues(data, columns)` | Convert form strings to types |
 | `getPagination(url)`              | Extract page/limit from URL   |
 | `getSort(url, columns)`           | Extract sort column/direction |
+| `wantsJson(request)`              | Check if request wants JSON   |
+| `jsonSuccess(...)`                | JSON success response         |
+| `jsonValidationError(...)`        | JSON validation error         |
+| `jsonError(...)`                  | JSON error (forbidden/404)    |
 
 **Example:**
 
@@ -229,6 +233,132 @@ redirect('/admin/posts'); // 302 redirect
 const formData = await parseFormData(request);
 const values = coerceFormValues(formData, table.columns);
 // { title: 'Hello', published: true, authorId: 1 }
+```
+
+### JSON API for CRUD Operations
+
+CRUD endpoints (`create`, `update`, `delete`) support JSON responses when the request includes `Accept: application/json`. This enables programmatic access and integration with external editors.
+
+**Request:**
+
+```ts
+// Option 1: CSRF token in FormData
+const response = await fetch('/admin/posts/1', {
+  method: 'POST',
+  headers: { 'Accept': 'application/json' },
+  body: formData, // FormData with _csrf field
+});
+
+// Option 2: CSRF token in header (useful for JSON payloads)
+const response = await fetch('/admin/posts/1', {
+  method: 'POST',
+  headers: {
+    'Accept': 'application/json',
+    'X-CSRF-Token': csrfToken,
+  },
+  body: formData,
+});
+```
+
+**Response formats:**
+
+| Scenario         | HTTP Status | Response Type                 |
+| ---------------- | ----------- | ----------------------------- |
+| Create success   | 201         | `JsonSuccessResponse`         |
+| Update success   | 200         | `JsonSuccessResponse`         |
+| Delete success   | 200         | `JsonSuccessResponse`         |
+| Validation error | 400         | `JsonValidationErrorResponse` |
+| Forbidden        | 403         | `JsonErrorResponse`           |
+| Not found        | 404         | `JsonErrorResponse`           |
+
+**Success response:**
+
+```ts
+interface JsonSuccessResponse {
+  success: true;
+  action: 'create' | 'update' | 'delete';
+  table: string;
+  id: string;  // Always string (from URL or stringified PK)
+  redirect: string; // Where HTML response would redirect
+}
+
+// Example:
+{
+  "success": true,
+  "action": "update",
+  "table": "posts",
+  "id": "1",
+  "redirect": "/admin/posts/1"
+}
+```
+
+**Validation error response:**
+
+```ts
+interface JsonValidationErrorResponse {
+  success: false;
+  action: 'create' | 'update' | 'delete';
+  table: string;
+  id?: string;  // Present for update/delete, absent for create
+  errors: {
+    _form?: string[];  // Form-level errors (CSRF, general)
+    [field: string]: string[] | undefined;  // Field-level errors
+  };
+}
+
+// Example:
+{
+  "success": false,
+  "action": "create",
+  "table": "posts",
+  "errors": {
+    "title": ["Required"],
+    "body": ["Must be at least 10 characters"]
+  }
+}
+```
+
+**Error response (forbidden/not found):**
+
+```ts
+interface JsonErrorResponse {
+  success: false;
+  error: 'forbidden' | 'not_found';
+  message: string;
+}
+
+// Example:
+{
+  "success": false,
+  "error": "not_found",
+  "message": "Record not found."
+}
+```
+
+**Use case: External editors**
+
+The JSON API enables plugins like visual editors to save data without page reloads:
+
+```ts
+// In Puck editor (client-side)
+const handlePublish = async (data) => {
+  const formData = new FormData();
+  formData.append('content', JSON.stringify(data));
+  formData.append('_csrf', csrfToken);
+
+  const response = await fetch(`/admin/pages/${pageId}`, {
+    method: 'POST',
+    headers: { 'Accept': 'application/json' },
+    body: formData,
+  });
+
+  const result = await response.json();
+  if (result.success) {
+    window.location.href = result.redirect;
+  } else {
+    showErrors(result.errors);
+  }
+};
 ```
 
 ### File uploads (MVP)
@@ -275,6 +405,7 @@ Notes:
 | `generateCsrfToken(secret)`        | Generate HMAC-SHA256 signed token (4-hour expiry) |
 | `validateCsrfToken(token, secret)` | Validate signature and check expiry               |
 | `getCsrfTokenFromFormData(data)`   | Extract `_csrf` field from form                   |
+| `getCsrfTokenFromHeader(request)`  | Extract `X-CSRF-Token` header from request        |
 
 **Token Format:** `timestamp.random.signature`
 
@@ -805,8 +936,8 @@ const handler = createCmsHandler({
       issuer: 'My App', // shown in authenticator apps
       // challengeSecret reads from CMS_2FA_SECRET env var if not provided
     }),
-    policies: {},
   },
+  policies: {},
 });
 ```
 
@@ -955,13 +1086,13 @@ const handler = createCmsHandler({
   auth: {
     secret: process.env.JWT_SECRET!,
     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
-    policies: {
-      // Users can only see/edit their own posts
-      posts: ownedBy(schema.posts, 'authorId'),
+  },
+  policies: {
+    // Users can only see/edit their own posts
+    posts: ownedBy(schema.posts, 'authorId'),
 
-      // Admins have full access, others only see their own
-      comments: adminOr(ownedBy(schema.comments, 'userId')),
-    },
+    // Admins have full access, others only see their own
+    comments: adminOr(ownedBy(schema.comments, 'userId')),
   },
 });
 ```
@@ -1004,41 +1135,43 @@ Apply different rules for different CRUD operations:
 ```ts
 import { forActions, always, authenticated, ownedBy, roleIs } from '@hotsauce/cms';
 
+// In createCmsHandler options:
 auth: {
   // ... provider config
-  policies: {
-    posts: forActions({
-      list: always(),                        // Anyone can see list
-      read: always(),                        // Anyone can view
-      create: authenticated(),               // Must be logged in to create
-      update: ownedBy(schema.posts, 'authorId'),  // Only edit own posts
-      delete: roleIs('admin'),               // Only admins can delete
-    }),
-  },
-}
+},
+policies: {
+  posts: forActions({
+    list: always(),                        // Anyone can see list
+    read: always(),                        // Anyone can view
+    create: authenticated(),               // Must be logged in to create
+    update: ownedBy(schema.posts, 'authorId'),  // Only edit own posts
+    delete: roleIs('admin'),               // Only admins can delete
+  }),
+},
 ```
 
 Use `'*'` as a fallback for actions not explicitly defined:
 
 ```ts
+// In createCmsHandler options:
 auth: {
   // ... provider config
-  policies: {
-    // "Deny by default" - only allow what's explicitly permitted
-    posts: forActions({
-      list: always(),
-      read: always(),
-      '*': never(),  // create, update, delete → 403
-    }),
-    
-    // "Admin-only writes" - anyone can read, admins can modify
-    settings: forActions({
-      list: always(),
-      read: always(),
-      '*': roleIs('admin'),  // create, update, delete require admin
-    }),
-  },
-}
+},
+policies: {
+  // "Deny by default" - only allow what's explicitly permitted
+  posts: forActions({
+    list: always(),
+    read: always(),
+    '*': never(),  // create, update, delete → 403
+  }),
+  
+  // "Admin-only writes" - anyone can read, admins can modify
+  settings: forActions({
+    list: always(),
+    read: always(),
+    '*': roleIs('admin'),  // create, update, delete require admin
+  }),
+},
 ```
 
 > **Note:** Without `'*'`, undefined actions get **full access** (no policy = no filter).
@@ -1051,12 +1184,13 @@ Check if user is in a contributors array:
 import { ownedByOrContributor } from '@hotsauce/cms';
 
 // Schema: posts.contributors is text[] containing user IDs
+// In createCmsHandler options:
 auth: {
   // ... provider config
-  policies: {
-    posts: ownedByOrContributor(schema.posts, 'authorId', 'contributors'),
-  },
-}
+},
+policies: {
+  posts: ownedByOrContributor(schema.posts, 'authorId', 'contributors'),
+},
 ```
 
 Generated SQL:
@@ -1135,10 +1269,10 @@ const handler = createCmsHandler({
 
   auth: {
     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
-    // Row-level: filter within allowed tables
-    policies: {
-      posts: ownedBy(schema.posts, 'authorId'),
-    },
+  },
+  // Row-level: filter within allowed tables
+  policies: {
+    posts: ownedBy(schema.posts, 'authorId'),
   },
 });
 ```
@@ -1227,29 +1361,29 @@ const handler = createCmsHandler({
   basePath: '/admin',
   auth: {
     provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
-    policies: {
-      users: {
-        // Row-level policy (optional, existing behavior)
-        row: ownedBy(schema.users, 'id'),
+  },
+  policies: {
+    users: {
+      // Row-level policy (optional, existing behavior)
+      row: ownedBy(schema.users, 'id'),
 
-        // Column-level policies (new)
-        columns: {
-          // Salary is hidden from non-admins entirely
-          salary: {
-            read: (ctx) => ctx.user?.role === 'admin',
-            write: (ctx) => ctx.user?.role === 'admin',
-          },
-          // SSN is completely hidden (never readable or writable)
-          ssn: {
-            read: () => false,
-            write: () => false,
-          },
-          // tenantId is auto-injected, never shown to users
-          tenantId: {
-            read: () => false,
-            write: () => false,
-            default: (ctx) => ctx.user?.tenantId, // Auto-inject on create
-          },
+      // Column-level policies (new)
+      columns: {
+        // Salary is hidden from non-admins entirely
+        salary: {
+          read: (ctx) => ctx.user?.role === 'admin',
+          write: (ctx) => ctx.user?.role === 'admin',
+        },
+        // SSN is completely hidden (never readable or writable)
+        ssn: {
+          read: () => false,
+          write: () => false,
+        },
+        // tenantId is auto-injected, never shown to users
+        tenantId: {
+          read: () => false,
+          write: () => false,
+          default: (ctx) => ctx.user?.tenantId, // Auto-inject on create
         },
       },
     },
@@ -1434,6 +1568,78 @@ auth: {
 }
 ```
 
+### Schema-Derived Policies (`policiesFromSchema`)
+
+For columns that should only be writable by specific plugins, use `$cms({ plugins: {...} })` in your schema and `policiesFromSchema()` to generate column policies automatically.
+
+**Schema definition:**
+
+```ts
+// schema.ts
+import '@hotsauce/core/extend';
+import { json, pgTable, serial, text } from 'drizzle-orm/pg-core';
+
+export const pages = pgTable('pages', {
+  id: serial('id').primaryKey(),
+  title: text('title').notNull(),
+  // Only the 'puck' plugin can write to this column
+  content: json('content').$cms({ plugins: { puck: true } }),
+  // Multiple plugins with explicit permissions
+  metadata: json('metadata').$cms({
+    plugins: {
+      puck: { write: true },
+      'block-editor': { write: true },
+    },
+  }),
+});
+```
+
+**Server setup:**
+
+```ts
+import { createCmsHandler, ownedBy, policiesFromSchema } from '@hotsauce/cms';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  auth: {
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+    // policiesFromSchema reads $cms() hints and generates column write policies
+    policies: policiesFromSchema(schema, {
+      // Additional row policies are merged (user policies take precedence)
+      pages: ownedBy(schema.pages, 'authorId'),
+    }),
+  },
+});
+```
+
+**Generated policy:**
+
+For `content: json().$cms({ plugins: { puck: true } })`, the generated policy is:
+
+```ts
+{
+  pages: {
+    columns: {
+      content: {
+        write: (ctx) => ctx.source === 'plugin:puck' || !ctx.source,
+      },
+    },
+  },
+}
+```
+
+- `ctx.source === 'plugin:puck'` — allows the Puck plugin to write
+- `!ctx.source` — allows legacy requests without source tokens (backwards compatible)
+
+**Why use `policiesFromSchema`?**
+
+- **Single source of truth** — plugin permissions live with the column definition
+- **Secure by default** — without explicit `plugins: { ... }`, columns are writable only via CMS core forms
+- **Prevents masquerading** — plugins cannot bypass restrictions by submitting to CMS endpoints
+
+See [Source Tokens](#source-tokens) for how the CMS identifies request origins.
+
 ## Plugins
 
 Plugins extend CMS functionality with custom hooks that run during CRUD operations. Plugins are isolated in Web Workers for security, ensuring untrusted code cannot access your database or server internals.
@@ -1485,6 +1691,7 @@ Plugins can define two categories of hooks:
 | ------------- | ---------------- | -------- | ------------------------------------- |
 | **Transform** | During data flow | Always   | Modify data before save or after read |
 | **Action**    | After operation  | Optional | Side effects (audit, webhooks, cache) |
+| **UI**        | Rendering forms  | Always   | Customize field display in admin UI   |
 
 ### Transform Hooks
 
@@ -1557,6 +1764,51 @@ const auditPlugin: Plugin = {
 };
 ```
 
+### UI Hooks
+
+UI hooks customize how fields are rendered in the admin interface. They can run either in-process or in Workers (the return type is fully serializable).
+
+```ts
+const puckPlugin: Plugin = {
+  name: 'puck',
+  hooks: {
+    ui: {
+      // Called for each field when rendering edit forms
+      renderField: (ctx) => {
+        // Return null for default rendering
+        if (!ctx.field.plugin) return null;
+
+        // Parse plugin data for human-readable summary
+        const data = ctx.value as { content?: unknown[] };
+        const count = data?.content?.length ?? 0;
+
+        return {
+          // Link button to external editor
+          link: {
+            href: `/admin/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`,
+            label: 'Edit with Puck',
+            target: '_blank',
+          },
+          // Human-readable summary instead of raw JSON
+          valueSummary: count === 1 ? '1 block' : `${count} blocks`,
+        };
+      },
+    },
+  },
+};
+```
+
+**FieldUIOverride return type:**
+
+```ts
+type FieldUIOverride =
+  | null // Use default rendering
+  | {
+    link?: { label: string; href: string; target?: '_blank' };
+    valueSummary?: string; // Plain text only, no HTML
+  };
+```
+
 ### Filter Function
 
 Use `filter` to control which hooks are invoked. This is cleaner than stub hooks and works for both Worker and in-process plugins:
@@ -1587,7 +1839,11 @@ plugins: [
 
 ```ts
 interface FilterContext {
-  hookType: 'transform:beforeSave' | 'transform:afterRead' | 'action';
+  hookType:
+    | 'transform:beforeSave'
+    | 'transform:afterRead'
+    | 'action'
+    | 'ui:renderField';
   table: string;
   action: 'create' | 'read' | 'update' | 'delete' | 'list';
   user?: { sub: string; role?: string };
@@ -1728,6 +1984,245 @@ This is intentional for security:
 - If you need full record access, use `beforeSave` (which runs before filtering matters)
 
 If you have a trusted plugin that needs full record access for `afterRead`, consider running it in-process and fetching the data directly via `db` in your handler layer instead.
+
+### Plugin Routes
+
+Plugins can register custom routes under their namespace (`/admin/{pluginName}/...`). This enables plugins like visual editors to provide their own UI:
+
+```ts
+plugins: [
+  {
+    name: 'puck',
+    filter: (ctx) =>
+      ctx.hookType === 'ui:renderField' || ctx.hookType === 'route',
+    hooks: {
+      ui: {
+        renderField: (ctx) => {
+          // Add "Edit with Puck" link if column has puck config
+          if (ctx.field.plugin && ctx.recordId) {
+            return {
+              link: {
+                label: 'Edit with Puck',
+                href:
+                  `/admin/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`,
+              },
+            };
+          }
+          return null;
+        },
+      },
+    },
+    routes: [
+      {
+        // Matches: /admin/puck/:table/:id/:column
+        pattern: ':table/:id/:column',
+        methods: ['GET'],
+        handler: (ctx) => {
+          // ctx has record data, user info, CSRF token
+          return `<!DOCTYPE html>
+            <html>
+              <body>
+                <h1>Editing ${ctx.table}/${ctx.recordId}/${ctx.column}</h1>
+                <pre>${JSON.stringify(ctx.value, null, 2)}</pre>
+              </body>
+            </html>`;
+        },
+      },
+    ],
+  },
+];
+```
+
+> ℹ️ **POST routes:** Currently, plugin routes only support GET. POST support (with access to request body, FormData, etc.) is planned for a future release.
+
+**Route Pattern Syntax:**
+
+- `:param` - Captures a URL segment (e.g., `:table/:id`)
+- Common patterns: `table`, `id`, `column` are automatically extracted
+- Routes are matched in order; **first match wins**
+
+> ⚠️ **Validate Custom Params:** URL params are decoded with `decodeURIComponent`, which means encoded slashes (`%2F`) become literal `/` in the value. The built-in params (`:table`, `:id`, `:column`) are validated against your schema, but **custom params must be validated by your handler**. Never use raw params in file paths, shell commands, or SQL without validation.
+
+> ⚠️ **Route Ordering Matters:** Routes with static prefixes should come BEFORE generic parameter routes, otherwise the generic route will capture everything:
+>
+> ```ts
+> // ❌ BAD: generic route swallows specific routes
+> routes: [
+>   { pattern: ':table/:id/:column', ... },  // Matches 'preview/posts/1' as table=preview!
+>   { pattern: 'preview/:table/:id', ... },  // Never reached
+> ]
+>
+> // ✅ GOOD: static-prefix routes first
+> routes: [
+>   { pattern: 'preview/:table/:id', ... },  // Checked first
+>   { pattern: ':table/:id/:column', ... },  // Fallback
+> ]
+> ```
+
+**PluginRouteContext:**
+
+```ts
+interface PluginRouteContext {
+  table: string; // From :table param (empty if not in URL)
+  recordId: string; // From :id param
+  column?: string; // From :column param
+  record: Record<string, Serializable>; // Full record (column-policy filtered)
+  value: Serializable; // record[column] shortcut
+  field?: { // Field info if column specified
+    name: string;
+    type: string; // CMS field type
+    config: Record<string, Serializable>; // From .$cms() hints
+  };
+  user?: { sub: string; role?: string }; // Auth user
+  csrfToken: string; // For forms
+  basePath: string; // e.g., '/admin'
+  requestUrl: string; // Full URL
+  method: string; // 'GET' | 'POST'
+  params: Record<string, string>; // All URL params
+}
+```
+
+**Security:**
+
+- Routes require authentication (same as built-in CMS routes)
+- **Plugin filter is checked BEFORE fetching data** — routes respect the same `filter` function as hooks
+- Filter receives `hookType: 'route'` so you can handle routes separately from hooks
+- If `:table` param references a known table, `canAccess` is checked
+- POST requests validate CSRF tokens automatically
+- Row policies filter which records are accessible
+- Column policies filter which fields are visible in `ctx.record`
+
+**Important:** Plugin routes are subject to the same `filter` function as hooks. If your filter blocks a table, routes to that table will return 403 without fetching any data. This prevents data exfiltration via plugin routes:
+
+```ts
+{
+  name: 'untrusted-plugin',
+  filter: (ctx) => {
+    // Block sensitive tables from ALL plugin access (hooks AND routes)
+    if (['users', 'payments', 'api_keys'].includes(ctx.table)) return false;
+    // Allow routes and action hooks, but not transform hooks
+    return ctx.hookType === 'route' || ctx.hookType === 'action';
+  },
+  routes: [/* ... */],
+}
+```
+
+**Worker Routes:**
+
+Worker plugins can have routes too, but must use `render` instead of `handler`:
+
+```ts
+{
+  name: 'worker-plugin',
+  worker: myWorker,
+  routes: [
+    {
+      pattern: ':table/:id',
+      methods: ['GET'],
+      render: 'render:editor', // Message type sent to Worker
+    },
+  ],
+}
+```
+
+The Worker receives `{ type: 'route:render', id, payload: { renderType, context } }` and should respond with `{ id, success: true, result: { html: '...' } }`.
+
+### Source Tokens
+
+Source tokens identify the origin of form submissions, preventing plugins from masquerading as CMS core to bypass column write restrictions.
+
+**Problem:** Without source identification, a malicious plugin could render a form that POSTs to CMS endpoints (e.g., `/admin/posts/1/edit`) and bypass `$cms({ plugins: {...} })` restrictions.
+
+**Solution:** Every form submission includes a signed `_source` token:
+
+| Source          | Meaning                             |
+| --------------- | ----------------------------------- |
+| `cms`           | Core CMS form (create/edit screens) |
+| `plugin:{name}` | Plugin form (e.g., `plugin:puck`)   |
+
+**How it works:**
+
+1. **CMS forms** include: `<input name="_source" value="{signed: cms}" />`
+2. **Plugin forms** include: `<input name="_source" value="{signed: plugin:puck}" />`
+3. On POST, CMS validates signature and extracts `ctx.source`
+4. Column policies (from `policiesFromSchema`) check `ctx.source`
+
+**Token format:** `{source}.{timestamp_base36}.{hmac_signature}`
+
+- Signed with the same secret as CSRF tokens
+- 4-hour expiry (same as CSRF)
+- Signature prevents forgery
+
+**Usage with `policiesFromSchema`:**
+
+```ts
+// schema.ts — column only writable by puck plugin
+content: json('content').$cms({ plugins: { puck: true } })
+
+// server.ts — generate policies from schema
+auth: {
+  policies: policiesFromSchema(schema),
+}
+```
+
+The generated policy checks `ctx.source === 'plugin:puck'`.
+
+**Manual source checking:**
+
+```ts
+import { isPluginSource, getPluginName } from '@hotsauce/cms';
+
+auth: {
+  policies: {
+    pages: {
+      columns: {
+        content: {
+          write: (ctx) => {
+            // Only allow puck plugin or CMS core (no source = legacy)
+            if (!ctx.source) return true;
+            return ctx.source === 'cms' || getPluginName(ctx.source) === 'puck';
+          },
+        },
+      },
+    },
+  },
+}
+```
+
+**Exports:**
+
+| Export                                | Purpose                                         |
+| ------------------------------------- | ----------------------------------------------- |
+| `SOURCE`                              | Constants: `SOURCE.CMS`, `SOURCE.PLUGIN_PREFIX` |
+| `SOURCE_FIELD_NAME`                   | Form field name: `'_source'`                    |
+| `pluginSource(name)`                  | Create `'plugin:{name}'` identifier             |
+| `isPluginSource(source)`              | Check if source is a plugin                     |
+| `getPluginName(source)`               | Extract plugin name from source                 |
+| `generateSourceToken(source, secret)` | Create signed token                             |
+| `validateSourceToken(token, secret)`  | Validate and extract source                     |
+| `getSourceTokenFromFormData(data)`    | Extract token from form submission              |
+
+### Policies Without Authentication
+
+For internal tools running without authentication (`auth: 'dangerously-open'`), you can still restrict plugin write access using source-based column policies:
+
+```ts
+// schema.ts — Define which plugins can write to which columns
+content: json('content').$cms({ plugins: { puck: true } });
+
+// server.ts — Use policies without requiring login
+import { createCmsHandler, policiesFromSchema } from '@hotsauce/cms';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  auth: 'dangerously-open', // No login required
+  // Restrict plugin writes even without authentication
+  policies: policiesFromSchema(schema),
+});
+```
+
+**Important:** User-based policies (`ownedBy`, `roleIs`, etc.) won't work without authentication since there's no `ctx.user`. They will deny all access. Only source-based column policies (checking `ctx.source`) work in this mode.
 
 ### Official Plugins
 

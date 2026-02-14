@@ -11,8 +11,10 @@ import {
   createAdminUsersTable,
   createBasicTables,
   createFormData,
+  generateSourceToken,
   posts,
   schemaWithAuth,
+  SOURCE,
   TEST_CSRF_SECRET,
   users,
 } from './integration_helpers.ts';
@@ -96,9 +98,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            posts: ownedBy(posts, 'authorId'),
-          },
+        },
+        policies: {
+          posts: ownedBy(posts, 'authorId'),
         },
       });
 
@@ -154,9 +156,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            posts: adminOr(ownedBy(posts, 'authorId')),
-          },
+        },
+        policies: {
+          posts: adminOr(ownedBy(posts, 'authorId')),
         },
       });
 
@@ -205,9 +207,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            posts: ownedBy(posts, 'authorId'),
-          },
+        },
+        policies: {
+          posts: ownedBy(posts, 'authorId'),
         },
       });
 
@@ -255,9 +257,9 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            posts: ownedBy(posts, 'authorId'),
-          },
+        },
+        policies: {
+          posts: ownedBy(posts, 'authorId'),
         },
       });
 
@@ -265,6 +267,10 @@ Deno.test({
       const bobPayload = createJwtPayload('2');
       const bobToken = await signJwt(bobPayload, AUTH_SECRET);
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
 
       // Bob tries to update Alice's post
       const formData = createFormData({
@@ -272,6 +278,7 @@ Deno.test({
         body: 'Malicious content',
         authorId: '1',
         _csrf: csrfToken,
+        _source: sourceToken,
       });
 
       const request = new Request('http://localhost/admin/posts/1/edit', {
@@ -341,11 +348,11 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            users: {
-              columns: {
-                email: { read: () => false }, // Hide email from all users
-              },
+        },
+        policies: {
+          users: {
+            columns: {
+              email: { read: () => false }, // Hide email from all users
             },
           },
         },
@@ -405,11 +412,11 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            users: {
-              columns: {
-                email: { read: () => false },
-              },
+        },
+        policies: {
+          users: {
+            columns: {
+              email: { read: () => false },
             },
           },
         },
@@ -462,11 +469,11 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            users: {
-              columns: {
-                email: { read: () => false },
-              },
+        },
+        policies: {
+          users: {
+            columns: {
+              email: { read: () => false },
             },
           },
         },
@@ -530,12 +537,12 @@ Deno.test({
         auth: {
           secret: AUTH_SECRET,
           provider: new PasswordProvider({ db, usersTable: adminUsers }),
-          policies: {
-            users: {
-              columns: {
-                // Only admins can see email
-                email: { read: (ctx) => ctx.user?.role === 'admin' },
-              },
+        },
+        policies: {
+          users: {
+            columns: {
+              // Only admins can see email
+              email: { read: (ctx) => ctx.user?.role === 'admin' },
             },
           },
         },
@@ -603,12 +610,12 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-            policies: {
-              users: {
-                columns: {
-                  // Email is read-only (can see but not edit)
-                  email: { write: () => false },
-                },
+          },
+          policies: {
+            users: {
+              columns: {
+                // Email is read-only (can see but not edit)
+                email: { write: () => false },
               },
             },
           },
@@ -617,12 +624,17 @@ Deno.test({
         const payload = createJwtPayload('1');
         const token = await signJwt(payload, AUTH_SECRET);
         const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+        const sourceToken = await generateSourceToken(
+          SOURCE.CMS,
+          TEST_CSRF_SECRET,
+        );
 
         // Try to update with new email (should be ignored)
         const formData = createFormData({
           name: 'Updated Name',
           email: 'hacked@example.com', // This should be ignored!
           _csrf: csrfToken,
+          _source: sourceToken,
         });
 
         const request = new Request('http://localhost/admin/users/1/edit', {
@@ -668,12 +680,12 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-            policies: {
-              users: {
-                columns: {
-                  // Email is hidden from writing with NO default
-                  email: { write: () => false },
-                },
+          },
+          policies: {
+            users: {
+              columns: {
+                // Email is hidden from writing with NO default
+                email: { write: () => false },
               },
             },
           },
@@ -726,13 +738,13 @@ Deno.test({
           auth: {
             secret: AUTH_SECRET,
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
-            policies: {
-              users: {
-                columns: {
-                  email: {
-                    write: () => false,
-                    default: () => 'auto-generated@example.com',
-                  },
+          },
+          policies: {
+            users: {
+              columns: {
+                email: {
+                  write: () => false,
+                  default: () => 'auto-generated@example.com',
                 },
               },
             },
@@ -742,11 +754,16 @@ Deno.test({
         const payload = createJwtPayload('1');
         const token = await signJwt(payload, AUTH_SECRET);
         const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+        const sourceToken = await generateSourceToken(
+          SOURCE.CMS,
+          TEST_CSRF_SECRET,
+        );
 
         // Create user without email (it should be auto-filled)
         const formData = createFormData({
           name: 'New User',
           _csrf: csrfToken,
+          _source: sourceToken,
         });
 
         const request = new Request('http://localhost/admin/users/new', {
@@ -871,6 +888,7 @@ Deno.test({
           schema: schemaWithAuth,
           basePath: '/admin',
           auth: 'dangerously-open',
+          policies: 'dangerously-open',
         });
 
         const request = new Request('http://localhost/admin/users');
@@ -892,6 +910,7 @@ Deno.test({
           schema: schemaWithAuth,
           basePath: '/admin',
           auth: 'dangerously-open',
+          policies: 'dangerously-open',
         });
 
         // Test list
@@ -915,6 +934,530 @@ Deno.test({
         assertEquals(editRes.status, 200);
       },
     );
+
+    await client.close();
+  },
+});
+
+// ============================================================================
+// policiesFromSchema Integration Tests
+// ============================================================================
+
+import { policiesFromSchema } from '../policies/from-schema.ts';
+import {
+  createPagesTable,
+  pages,
+  pluginSource,
+  schemaWithPlugins,
+} from './integration_helpers.ts';
+
+Deno.test({
+  name: 'integration: policiesFromSchema with plugin-configured columns',
+  sanitizeOps: false,
+  fn: async (t) => {
+    const client = new PGlite();
+    const db = drizzle(client, { schema: schemaWithPlugins });
+
+    await createPagesTable(db);
+
+    async function resetDb() {
+      await db.execute(sql`TRUNCATE TABLE pages RESTART IDENTITY CASCADE`);
+    }
+
+    await t.step(
+      'puck plugin source can write to plugin-configured column',
+      async () => {
+        await resetDb();
+
+        // Create a page first
+        await db.insert(pages).values({
+          title: 'Test Page',
+          content: { blocks: [] },
+        });
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithPlugins,
+          basePath: '/admin',
+          auth: 'dangerously-open',
+          policies: policiesFromSchema(schemaWithPlugins),
+        });
+
+        // Generate a plugin source token
+        const puckSourceToken = await generateSourceToken(
+          pluginSource('puck'),
+          TEST_CSRF_SECRET,
+        );
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        // Update with puck plugin source - should succeed
+        const formData = createFormData({
+          _csrf: csrfToken,
+          _source: puckSourceToken,
+          _method: 'PATCH',
+          title: 'Updated Page',
+          content: JSON.stringify({
+            blocks: [{ type: 'heading', text: 'Hello' }],
+          }),
+        });
+
+        const updateReq = new Request('http://localhost/admin/pages/1', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const updateRes = await handler(updateReq);
+
+        // Should redirect to detail page on success
+        assertEquals(updateRes.status, 303);
+        const location = updateRes.headers.get('Location');
+        assertStringIncludes(location ?? '', '/admin/pages/1');
+        assertEquals(location?.includes('_flash=update_error'), false);
+
+        // Verify the content was actually updated
+        const [updated] = await db.select().from(pages).where(sql`id = 1`);
+        assertEquals(updated?.title, 'Updated Page');
+        // deno-lint-ignore no-explicit-any
+        assertEquals((updated?.content as any)?.blocks?.[0]?.type, 'heading');
+      },
+    );
+
+    await t.step(
+      'puck client: sending ONLY content column with plugin source',
+      async () => {
+        await resetDb();
+
+        // Create a page first with existing content
+        await db.insert(pages).values({
+          title: 'My Page Title',
+          content: { content: [], root: { props: {} } },
+        });
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithPlugins,
+          basePath: '/admin',
+          auth: 'dangerously-open',
+          policies: policiesFromSchema(schemaWithPlugins),
+        });
+
+        // Generate tokens exactly like Puck client
+        const puckSourceToken = await generateSourceToken(
+          pluginSource('puck'),
+          TEST_CSRF_SECRET,
+        );
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        // Send ONLY content field - exactly what Puck client does
+        // Note: NO _method, NO title, only content
+        const formData = createFormData({
+          _csrf: csrfToken,
+          _source: puckSourceToken,
+          content: JSON.stringify({
+            content: [{
+              type: 'HeadingBlock',
+              props: { id: 'test-id', children: 'Hello World' },
+            }],
+            root: { props: {} },
+          }),
+        });
+
+        const updateReq = new Request('http://localhost/admin/pages/1', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const updateRes = await handler(updateReq);
+
+        // Should succeed (redirect or 2xx)
+        assertEquals(updateRes.status, 303, 'Should redirect on success');
+        const location = updateRes.headers.get('Location');
+        assertStringIncludes(location ?? '', '/admin/pages/1');
+        assertEquals(
+          location?.includes('_flash=update_error'),
+          false,
+          'Should not have error flash',
+        );
+
+        // Verify ONLY content was updated, title preserved
+        const [updated] = await db.select().from(pages).where(sql`id = 1`);
+        assertEquals(
+          updated?.title,
+          'My Page Title',
+          'Title should be unchanged',
+        );
+        // deno-lint-ignore no-explicit-any
+        const updatedBlockType = (updated?.content as any)?.content?.[0]?.type;
+        assertEquals(
+          updatedBlockType,
+          'HeadingBlock',
+          'Content should be updated',
+        );
+      },
+    );
+
+    await t.step(
+      'cms source cannot write to plugin-configured column',
+      async () => {
+        await resetDb();
+
+        // Create a page first
+        await db.insert(pages).values({
+          title: 'Original Title',
+          content: { blocks: [] },
+        });
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithPlugins,
+          basePath: '/admin',
+          auth: 'dangerously-open',
+          policies: policiesFromSchema(schemaWithPlugins),
+        });
+
+        // Generate a CMS source token (not plugin)
+        const cmsSourceToken = await generateSourceToken(
+          'cms',
+          TEST_CSRF_SECRET,
+        );
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        // Update with CMS source - content should NOT be writable
+        const formData = createFormData({
+          _csrf: csrfToken,
+          _source: cmsSourceToken,
+          _method: 'PATCH',
+          title: 'CMS Updated Title',
+          content: JSON.stringify({ blocks: [{ type: 'should-not-save' }] }),
+        });
+
+        const updateReq = new Request('http://localhost/admin/pages/1', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const updateRes = await handler(updateReq);
+
+        // Should still redirect (title update succeeds)
+        assertEquals(updateRes.status, 303);
+
+        // Verify title was updated but content was NOT (column not writable for cms source)
+        const [updated] = await db.select().from(pages).where(sql`id = 1`);
+        assertEquals(updated?.title, 'CMS Updated Title');
+        // Content should still be the original value
+        // deno-lint-ignore no-explicit-any
+        assertEquals((updated?.content as any)?.blocks?.length, 0);
+      },
+    );
+
+    await t.step(
+      'create: plugin source can set plugin-protected column',
+      async () => {
+        await resetDb();
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithPlugins,
+          basePath: '/admin',
+          auth: 'dangerously-open',
+          policies: policiesFromSchema(schemaWithPlugins),
+        });
+
+        // Generate a plugin source token
+        const puckSourceToken = await generateSourceToken(
+          pluginSource('puck'),
+          TEST_CSRF_SECRET,
+        );
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        // Create with puck plugin source - should include content
+        const formData = createFormData({
+          _csrf: csrfToken,
+          _source: puckSourceToken,
+          title: 'New Page via Puck',
+          content: JSON.stringify({
+            content: [{
+              type: 'HeadingBlock',
+              props: { id: 'new-id', children: 'Created by Puck' },
+            }],
+            root: { props: {} },
+          }),
+        });
+
+        const createReq = new Request('http://localhost/admin/pages/new', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const createRes = await handler(createReq);
+
+        // Should redirect on success
+        assertEquals(createRes.status, 303);
+        const location = createRes.headers.get('Location');
+        assertStringIncludes(location ?? '', '/admin/pages/');
+
+        // Verify both title and content were saved
+        const [created] = await db.select().from(pages).where(sql`id = 1`);
+        assertEquals(created?.title, 'New Page via Puck');
+        // deno-lint-ignore no-explicit-any
+        const createdBlockType = (created?.content as any)?.content?.[0]?.type;
+        assertEquals(
+          createdBlockType,
+          'HeadingBlock',
+        );
+      },
+    );
+
+    await t.step(
+      'create: cms source cannot set plugin-protected column',
+      async () => {
+        await resetDb();
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithPlugins,
+          basePath: '/admin',
+          auth: 'dangerously-open',
+          policies: policiesFromSchema(schemaWithPlugins),
+        });
+
+        // Generate a CMS source token (not plugin)
+        const cmsSourceToken = await generateSourceToken(
+          'cms',
+          TEST_CSRF_SECRET,
+        );
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        // Create with CMS source - content should be ignored
+        const formData = createFormData({
+          _csrf: csrfToken,
+          _source: cmsSourceToken,
+          title: 'New Page via CMS',
+          content: JSON.stringify({ blocks: [{ type: 'should-not-save' }] }),
+        });
+
+        const createReq = new Request('http://localhost/admin/pages/new', {
+          method: 'POST',
+          body: formData,
+        });
+
+        const createRes = await handler(createReq);
+
+        // Should redirect on success (title is valid)
+        assertEquals(createRes.status, 303);
+
+        // Verify title was saved but content was NOT (column not writable for cms source)
+        const [created] = await db.select().from(pages).where(sql`id = 1`);
+        assertEquals(created?.title, 'New Page via CMS');
+        // Content should be null (not saved)
+        assertEquals(created?.content, null);
+      },
+    );
+
+    await t.step(
+      'content field shown as read-only in edit form for cms source',
+      async () => {
+        await resetDb();
+
+        // Create a page
+        await db.insert(pages).values({
+          title: 'Test Page',
+          content: { blocks: [{ type: 'text' }] },
+        });
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithPlugins,
+          basePath: '/admin',
+          auth: 'dangerously-open',
+          policies: policiesFromSchema(schemaWithPlugins),
+        });
+
+        // Get the edit form (uses cms source)
+        const editReq = new Request('http://localhost/admin/pages/1/edit');
+        const editRes = await handler(editReq);
+
+        assertEquals(editRes.status, 200);
+        const html = await editRes.text();
+
+        // Title field should be present and editable
+        assertStringIncludes(html, 'name="title"');
+
+        // Content field should be present but disabled (plugin-controlled)
+        // Plugin-configured columns appear as read-only so plugins can add custom UI
+        assertStringIncludes(
+          html,
+          'name="content"',
+          'Content field should be present for plugin UI',
+        );
+        assertStringIncludes(
+          html,
+          'disabled',
+          'Content field should be disabled (read-only)',
+        );
+      },
+    );
+
+    await client.close();
+  },
+});
+
+// ============================================================================
+// Source Token Enforcement Tests (Handler Level)
+// ============================================================================
+
+Deno.test({
+  name: 'integration: handler blocks writes without source token',
+  sanitizeOps: false,
+  fn: async (t) => {
+    const client = new PGlite();
+    const db = drizzle(client, { schema: schemaWithAuth });
+
+    await createBasicTables(db);
+
+    async function resetDb() {
+      await db.execute(
+        sql`TRUNCATE TABLE posts, users RESTART IDENTITY CASCADE`,
+      );
+    }
+
+    await t.step('create blocked when _source missing', async () => {
+      await resetDb();
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithAuth,
+        basePath: '/admin',
+        auth: 'dangerously-open',
+        policies: {},
+      });
+
+      // Generate valid CSRF but no _source
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+      // Simulate form submission without _source field
+      const formData = createFormData({
+        _csrf: csrfToken,
+        // NO _source field - this should be blocked
+        title: 'Test Post',
+        body: 'Some content',
+      });
+
+      const req = new Request('http://localhost/admin/posts/new', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const res = await handler(req);
+
+      // Should return 200 with form errors (not redirect)
+      assertEquals(res.status, 200);
+      const html = await res.text();
+      assertStringIncludes(html, 'Invalid or missing source token');
+
+      // Verify nothing was created
+      const allPosts = await db.select().from(posts);
+      assertEquals(allPosts.length, 0);
+    });
+
+    await t.step('update blocked when _source missing', async () => {
+      await resetDb();
+
+      // Create a user and post first
+      await db.insert(users).values({
+        name: 'Test User',
+        email: 'test@example.com',
+      });
+      await db.insert(posts).values({
+        title: 'Original Title',
+        body: 'Original body',
+        authorId: 1,
+      });
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithAuth,
+        basePath: '/admin',
+        auth: 'dangerously-open',
+        policies: {},
+      });
+
+      // Generate valid CSRF but no _source
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+      // Simulate form submission without _source field
+      const formData = createFormData({
+        _csrf: csrfToken,
+        _method: 'PUT',
+        // NO _source field - this should be blocked
+        title: 'Modified Title',
+        body: 'Modified body',
+      });
+
+      const req = new Request('http://localhost/admin/posts/1', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const res = await handler(req);
+
+      // Should return 200 with form errors (not redirect)
+      assertEquals(res.status, 200);
+      const html = await res.text();
+      assertStringIncludes(html, 'Invalid or missing source token');
+
+      // Verify nothing was modified
+      const [post] = await db.select().from(posts);
+      assertEquals(post?.title, 'Original Title');
+      assertEquals(post?.body, 'Original body');
+    });
+
+    await t.step('create blocked when _source is invalid', async () => {
+      await resetDb();
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithAuth,
+        basePath: '/admin',
+        auth: 'dangerously-open',
+        policies: {},
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+      // Submit with invalid/tampered _source
+      const formData = createFormData({
+        _csrf: csrfToken,
+        _source: 'cms.abc123.tampered_signature',
+        title: 'Test Post',
+        body: 'Some content',
+      });
+
+      const req = new Request('http://localhost/admin/posts/new', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const res = await handler(req);
+
+      // Should return 200 with form errors (not redirect)
+      assertEquals(res.status, 200);
+      const html = await res.text();
+      assertStringIncludes(html, 'Invalid or missing source token');
+
+      // Verify nothing was created
+      const allPosts = await db.select().from(posts);
+      assertEquals(allPosts.length, 0);
+    });
 
     await client.close();
   },

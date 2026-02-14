@@ -89,6 +89,7 @@ async function setupTestDb(): Promise<TestContext> {
     basePath: '/admin',
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
   });
 
   return { client, db, handler };

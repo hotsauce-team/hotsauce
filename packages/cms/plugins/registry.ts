@@ -6,6 +6,7 @@ import type {
   PluginConfig,
   PluginRoute,
   TransformHooks,
+  UIHooks,
   WorkerPluginConfig,
 } from './types.ts';
 
@@ -88,6 +89,13 @@ export class PluginRegistry {
   }
 
   /**
+   * Get all plugin configurations (without registration metadata)
+   */
+  getPluginConfigs(): PluginConfig[] {
+    return this.getAll().map((rp) => rp.plugin);
+  }
+
+  /**
    * Get all plugins that have transform hooks
    * Worker plugins without hooks declared are included (hooks discovered at runtime)
    */
@@ -130,6 +138,28 @@ export class PluginRegistry {
   }
 
   /**
+   * Get all plugins that have UI hooks.
+   * Worker plugins MUST explicitly declare UI hooks (no runtime discovery).
+   * This prevents sending ui:renderField messages to Workers that don't handle them.
+   */
+  getPluginsWithUI(hook: keyof UIHooks): RegisteredPlugin[] {
+    return this.getAll().filter((p) => {
+      // Worker plugins: require explicit UI hook declaration
+      if (p.isWorker) {
+        const workerConfig = p.plugin as WorkerPluginConfig;
+        // UI hooks require explicit declaration - no "include all" fallback
+        // (unlike transform/action hooks which have runtime discovery)
+        if (!workerConfig.hooks?.ui) return false;
+        return workerConfig.hooks.ui.includes(hook);
+      }
+
+      // In-process plugins: check for actual function
+      const inProcessConfig = p.plugin as InProcessPluginConfig;
+      return inProcessConfig.hooks?.ui?.[hook] !== undefined;
+    });
+  }
+
+  /**
    * Get all routes from all plugins
    */
   getAllRoutes(): Array<{ pluginName: string; route: PluginRoute }> {
@@ -166,16 +196,10 @@ export class PluginRegistry {
       );
     }
 
-    // Filter is required (security: controls data flow to plugins)
-    if (plugin.filter === undefined) {
-      throw new PluginValidationError(
-        plugin.name,
-        "filter is required. Use a function to control data flow, or 'dangerously-open' to allow all data.",
-      );
-    }
-
-    // Validate filter type
+    // Validate filter type if provided
+    // (schema-driven scoping is default when filter is omitted)
     if (
+      plugin.filter !== undefined &&
       plugin.filter !== 'dangerously-open' &&
       typeof plugin.filter !== 'function'
     ) {
@@ -245,14 +269,36 @@ export class PluginRegistry {
           }
         }
       }
+
+      // Check UI hooks are arrays, not objects
+      if (plugin.hooks.ui !== undefined) {
+        if (!Array.isArray(plugin.hooks.ui)) {
+          throw new PluginValidationError(
+            plugin.name,
+            'Worker plugins must use declarative hooks (arrays), not functions. Use { ui: ["renderField"] } instead of { ui: { renderField: fn } }',
+          );
+        }
+        // Validate each entry is a valid UI hook name
+        const validUIHooks = ['renderField'];
+        for (const hook of plugin.hooks.ui) {
+          if (!validUIHooks.includes(hook)) {
+            throw new PluginValidationError(
+              plugin.name,
+              `Invalid UI hook "${hook}". Valid hooks: ${
+                validUIHooks.join(', ')
+              }`,
+            );
+          }
+        }
+      }
     }
 
     // Worker plugins cannot have routes (they'd need main-thread access)
     if (plugin.routes !== undefined) {
-      throw new PluginValidationError(
-        plugin.name,
-        'Worker plugins cannot have routes. Routes must run in the main thread.',
-      );
+      // Worker plugins CAN have routes, but only with `render` (not `handler`)
+      for (const route of plugin.routes) {
+        this.validateWorkerRoute(plugin.name, route);
+      }
     }
   }
 
@@ -302,6 +348,26 @@ export class PluginRegistry {
             throw new PluginValidationError(
               plugin.name,
               `Action hook "${actionName}" must be a function or { handler, blocking? } object`,
+            );
+          }
+        }
+      }
+
+      // Check UI hooks are functions
+      if (plugin.hooks.ui !== undefined) {
+        if (
+          typeof plugin.hooks.ui !== 'object' || Array.isArray(plugin.hooks.ui)
+        ) {
+          throw new PluginValidationError(
+            plugin.name,
+            'In-process plugins must use function hooks, not declarative arrays',
+          );
+        }
+        for (const [hookName, fn] of Object.entries(plugin.hooks.ui)) {
+          if (typeof fn !== 'function') {
+            throw new PluginValidationError(
+              plugin.name,
+              `UI hook "${hookName}" must be a function`,
             );
           }
         }
@@ -378,28 +444,93 @@ export class PluginRegistry {
    * Validate a plugin route
    */
   private validateRoute(pluginName: string, route: PluginRoute): void {
-    // Path must start with /
-    if (!route.path.startsWith('/')) {
+    // Pattern is required
+    if (!route.pattern || typeof route.pattern !== 'string') {
       throw new PluginValidationError(
         pluginName,
-        `Route path must start with /: ${route.path}`,
+        'Route must have a pattern string',
       );
     }
 
-    // Method must be valid
-    const validMethods = ['GET', 'POST', 'PUT', 'DELETE'];
-    if (!validMethods.includes(route.method)) {
+    // Methods must be valid (if provided)
+    if (route.methods) {
+      const validMethods = ['GET', 'POST'];
+      for (const method of route.methods) {
+        if (!validMethods.includes(method)) {
+          throw new PluginValidationError(
+            pluginName,
+            `Invalid route method "${method}". Valid methods: ${
+              validMethods.join(', ')
+            }`,
+          );
+        }
+      }
+    }
+
+    // Must have exactly one of handler or render
+    if (route.handler && route.render) {
       throw new PluginValidationError(
         pluginName,
-        `Invalid route method: ${route.method}`,
+        `Route "${route.pattern}" cannot have both handler and render`,
+      );
+    }
+    if (!route.handler && !route.render) {
+      throw new PluginValidationError(
+        pluginName,
+        `Route "${route.pattern}" must have either handler or render`,
       );
     }
 
-    // Handler must be a function
-    if (typeof route.handler !== 'function') {
+    // In-process plugin routes must use handler
+    if (route.handler && typeof route.handler !== 'function') {
       throw new PluginValidationError(
         pluginName,
-        `Route handler must be a function: ${route.path}`,
+        `Route "${route.pattern}" handler must be a function`,
+      );
+    }
+
+    // Worker routes are validated separately
+  }
+
+  /**
+   * Validate a Worker plugin route (must use render, not handler)
+   */
+  private validateWorkerRoute(pluginName: string, route: PluginRoute): void {
+    // Pattern is required
+    if (!route.pattern || typeof route.pattern !== 'string') {
+      throw new PluginValidationError(
+        pluginName,
+        'Route must have a pattern string',
+      );
+    }
+
+    // Methods must be valid (if provided)
+    if (route.methods) {
+      const validMethods = ['GET', 'POST'];
+      for (const method of route.methods) {
+        if (!validMethods.includes(method)) {
+          throw new PluginValidationError(
+            pluginName,
+            `Invalid route method "${method}". Valid methods: ${
+              validMethods.join(', ')
+            }`,
+          );
+        }
+      }
+    }
+
+    // Worker routes MUST use render, not handler
+    if (route.handler) {
+      throw new PluginValidationError(
+        pluginName,
+        `Worker plugin route "${route.pattern}" cannot use handler. Use render instead (message type for Worker).`,
+      );
+    }
+
+    if (!route.render || typeof route.render !== 'string') {
+      throw new PluginValidationError(
+        pluginName,
+        `Worker plugin route "${route.pattern}" must have a render string (message type for Worker)`,
       );
     }
   }

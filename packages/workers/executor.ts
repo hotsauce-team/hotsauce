@@ -8,13 +8,119 @@ import type {
   ActionHook,
   ActionHookConfig,
   CrudAction,
+  FieldUIOverride,
   PluginContext,
   PluginHooks,
-  PluginRequest,
-  PluginResponse,
+  PluginRouteContext,
   Serializable,
+  UIRenderFieldContext,
+  UIRenderFieldFn,
 } from './types.ts';
 import { validateSerializable } from './validate.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Validation helpers
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Validate that a value is a valid FieldUIOverride.
+ * Returns a descriptive error message if invalid, null if valid.
+ */
+function validateFieldUIOverride(value: unknown): string | null {
+  // null and undefined are valid (means "use default")
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  // Must be an object
+  if (typeof value !== 'object') {
+    return `Expected null or an object with 'link' and/or 'valueSummary', got ${typeof value}`;
+  }
+
+  // Must have at least link or valueSummary
+  const obj = value as Record<string, unknown>;
+  if (!('link' in obj) && !('valueSummary' in obj)) {
+    return `Expected object with 'link' and/or 'valueSummary' property, got: ${
+      JSON.stringify(Object.keys(obj))
+    }`;
+  }
+
+  // valueSummary-only is valid (no link required)
+  if (!('link' in obj)) {
+    // Only valueSummary provided - validate it's a string
+    if (typeof obj.valueSummary !== 'string') {
+      return `Expected 'valueSummary' to be a string, got ${typeof obj
+        .valueSummary}`;
+    }
+    // Check for unexpected properties
+    const allowedRootProps = ['valueSummary'];
+    const unexpectedRootProps = Object.keys(obj).filter(
+      (k) => !allowedRootProps.includes(k),
+    );
+    if (unexpectedRootProps.length > 0) {
+      return `Unexpected properties on FieldUIOverride: ${
+        JSON.stringify(unexpectedRootProps)
+      }`;
+    }
+    return null;
+  }
+
+  const link = obj.link;
+  if (typeof link !== 'object' || link === null) {
+    return `Expected 'link' to be an object, got ${
+      link === null ? 'null' : typeof link
+    }`;
+  }
+
+  const linkObj = link as Record<string, unknown>;
+
+  // Required: label (string)
+  if (typeof linkObj.label !== 'string') {
+    return `Expected 'link.label' to be a string, got ${typeof linkObj.label}`;
+  }
+
+  // Required: href (string)
+  if (typeof linkObj.href !== 'string') {
+    return `Expected 'link.href' to be a string, got ${typeof linkObj.href}`;
+  }
+
+  // Optional: target (must be '_blank' if present)
+  if ('target' in linkObj && linkObj.target !== '_blank') {
+    return `Expected 'link.target' to be '_blank' or undefined, got ${
+      JSON.stringify(linkObj.target)
+    }`;
+  }
+
+  // Check for unexpected properties on link
+  const allowedLinkProps = ['label', 'href', 'target'];
+  const unexpectedLinkProps = Object.keys(linkObj).filter(
+    (k) => !allowedLinkProps.includes(k),
+  );
+  if (unexpectedLinkProps.length > 0) {
+    return `Unexpected properties on 'link': ${
+      JSON.stringify(unexpectedLinkProps)
+    }`;
+  }
+
+  // Optional: valueSummary (must be string if present)
+  if ('valueSummary' in obj && typeof obj.valueSummary !== 'string') {
+    return `Expected 'valueSummary' to be a string, got ${typeof obj
+      .valueSummary}`;
+  }
+
+  // Check for unexpected properties on root object
+  const allowedRootProps = ['link', 'valueSummary'];
+  const unexpectedRootProps = Object.keys(obj).filter(
+    (k) => !allowedRootProps.includes(k),
+  );
+  if (unexpectedRootProps.length > 0) {
+    return `Unexpected properties on FieldUIOverride: ${
+      JSON.stringify(unexpectedRootProps)
+    }`;
+  }
+
+  return null;
+}
 
 // ─────────────────────────────────────────────────────────────
 // Worker message protocol
@@ -27,8 +133,9 @@ type WorkerMessageType =
   | 'init'
   | 'transform:beforeSave'
   | 'transform:afterRead'
+  | 'ui:renderField'
   | 'action'
-  | 'route';
+  | 'route:render';
 
 /**
  * Message sent to Worker
@@ -91,6 +198,7 @@ export interface PluginConfig {
  */
 export interface WorkerHookDeclaration {
   transform?: ('beforeSave' | 'afterRead')[];
+  ui?: ('renderField')[];
   on?: ('create' | 'read' | 'update' | 'delete' | 'list')[];
 }
 
@@ -115,7 +223,13 @@ export interface PluginErrorContext {
   /** Plugin name that failed */
   plugin: string;
   /** Type of operation that failed */
-  operation: 'init' | 'transform:beforeSave' | 'transform:afterRead' | 'action';
+  operation:
+    | 'init'
+    | 'transform:beforeSave'
+    | 'transform:afterRead'
+    | 'ui:renderField'
+    | 'action'
+    | 'route:render';
   /** CRUD action (for action hooks) */
   action?: CrudAction;
 }
@@ -304,6 +418,99 @@ export class WorkerExecutor {
   }
 
   /**
+   * Execute UI renderField hook for all plugins.
+   * Returns first non-null override from any plugin, or null for default.
+   */
+  async executeRenderField(
+    plugins: RegisteredPlugin[],
+    ctx: UIRenderFieldContext,
+  ): Promise<FieldUIOverride> {
+    for (const registered of plugins) {
+      const { plugin, isWorker } = registered;
+
+      // Create plugin-specific context with this plugin's config extracted
+      const pluginCtx: UIRenderFieldContext = {
+        ...ctx,
+        field: {
+          ...ctx.field,
+          // Extract this plugin's config from _plugins
+          plugin: ctx.field._plugins?.[plugin.name],
+          // Remove internal field - plugins shouldn't see other plugins' configs
+          _plugins: undefined,
+        },
+      };
+
+      if (isWorker) {
+        // Send to Worker
+        const response = await this.sendToWorker(
+          plugin.name,
+          'ui:renderField',
+          pluginCtx as unknown as Serializable,
+        );
+
+        // Validate response
+        const validationError = validateFieldUIOverride(response);
+        if (validationError) {
+          this.onError?.(
+            new Error(
+              `Plugin '${plugin.name}' returned invalid FieldUIOverride: ${validationError}`,
+            ),
+            { plugin: plugin.name, operation: 'ui:renderField' },
+          );
+          // Skip this plugin, continue to next
+          continue;
+        }
+
+        // If response is non-null override, return it
+        if (response !== null && response !== undefined) {
+          return response as FieldUIOverride;
+        }
+      } else {
+        // Execute in-process hook
+        const hook = this.getInProcessUIHook(plugin.hooks, 'renderField');
+        if (hook) {
+          const result = await hook(pluginCtx);
+
+          // Validate result
+          const validationError = validateFieldUIOverride(result);
+          if (validationError) {
+            this.onError?.(
+              new Error(
+                `Plugin '${plugin.name}' returned invalid FieldUIOverride: ${validationError}`,
+              ),
+              { plugin: plugin.name, operation: 'ui:renderField' },
+            );
+            // Skip this plugin, continue to next
+            continue;
+          }
+
+          // If non-null override, return it
+          if (result !== null && result !== undefined) {
+            return result;
+          }
+        }
+      }
+    }
+
+    // No plugin returned an override
+    return null;
+  }
+
+  /**
+   * Get a UI hook from in-process plugin hooks (function form)
+   */
+  private getInProcessUIHook(
+    hooks: PluginConfig['hooks'],
+    hookName: 'renderField',
+  ): UIRenderFieldFn | undefined {
+    if (!hooks) return undefined;
+    // Check if it's in-process hooks (object with functions, not array)
+    const uiHooks = hooks.ui;
+    if (!uiHooks || Array.isArray(uiHooks)) return undefined;
+    return (uiHooks as Record<string, UIRenderFieldFn>)[hookName];
+  }
+
+  /**
    * Execute action hooks for a specific CRUD action.
    * Respects fireAndForget configuration per hook.
    */
@@ -404,23 +611,45 @@ export class WorkerExecutor {
   }
 
   /**
-   * Execute a plugin route handler
+   * Execute a plugin route render in Worker.
+   * Sends context to Worker, receives HTML string back.
+   *
+   * @param pluginName - Plugin that owns the route
+   * @param renderType - Message type to send (from route.render)
+   * @param context - Route context with record data, user, etc.
+   * @returns HTML string from Worker
    */
-  async executeRoute(
+  async executeRouteRender(
     pluginName: string,
-    routePath: string,
-    request: PluginRequest,
-  ): Promise<PluginResponse> {
-    const response = await this.sendToWorker(pluginName, 'route', {
-      path: routePath,
-      request,
-    } as unknown as Serializable);
+    renderType: string,
+    context: PluginRouteContext,
+  ): Promise<string> {
+    const response = await this.sendToWorker(
+      pluginName,
+      'route:render',
+      {
+        renderType,
+        context,
+      } as unknown as Serializable,
+    );
 
-    if (response && typeof response === 'object' && 'status' in response) {
-      return response as unknown as PluginResponse;
+    // Worker should return { html: string }
+    if (
+      response &&
+      typeof response === 'object' &&
+      'html' in response &&
+      typeof (response as { html: unknown }).html === 'string'
+    ) {
+      return (response as { html: string }).html;
     }
 
-    return { status: 500, body: { error: 'Invalid route response' } };
+    // Invalid response
+    const err = new Error(
+      `Plugin '${pluginName}' route render '${renderType}' returned invalid response. ` +
+        `Expected { html: string }, got: ${JSON.stringify(response)}`,
+    );
+    this.onError?.(err, { plugin: pluginName, operation: 'route:render' });
+    throw err;
   }
 
   /**

@@ -1,14 +1,14 @@
 # @hotsauce/workers
 
-Worker sandbox execution for CMS plugins. Provides isolated execution environment for untrusted plugin code.
+Plugin execution infrastructure for HotSauce CMS. Despite the name, this package handles **all plugin execution**—both isolated Worker plugins and in-process plugins.
 
 ## Overview
 
-This package handles the Worker-based isolation layer for plugins:
-
-- **Worker execution**: Runs plugin hooks in isolated Web Workers
-- **Message passing**: Serializable-only communication with plugins
-- **User-provided Workers**: You create Workers with desired permissions
+- **Plugin executor**: Runs hooks for both Worker and in-process plugins
+- **Worker isolation**: Optional sandboxing via Web Workers for untrusted code
+- **Type definitions**: Plugin hooks, contexts, and route types
+- **Validation utilities**: Serialization checks for Worker-boundary data
+- **Guard utilities**: Let plugin authors verify their execution context
 - **Cross-runtime**: Compatible with Deno and Node.js 20+
 
 ## Installation
@@ -32,80 +32,84 @@ import type { RegisteredPlugin } from '@hotsauce/workers';
 // Create executor
 const executor = new WorkerExecutor();
 
-// User creates Worker with explicit permissions
-const worker = new Worker(
-  import.meta.resolve('./my-plugin.worker.ts'),
-  {
-    type: 'module',
-    deno: { permissions: { net: ['api.example.com'] } }, // Deno-specific
-  },
-);
-
-// Initialize a plugin
-const registered: RegisteredPlugin = {
+// Register an in-process plugin
+const inProcessPlugin: RegisteredPlugin = {
   plugin: {
     name: 'my-plugin',
+    hooks: {
+      on: {
+        create: async (ctx) => console.log('Created:', ctx.recordId),
+      },
+    },
+  },
+  initialized: true,
+  isWorker: false,
+};
+
+// Register a Worker plugin
+const worker = new Worker(import.meta.resolve('./audit.worker.ts'), {
+  type: 'module',
+  deno: { permissions: { net: ['audit.example.com'] } },
+});
+
+const workerPlugin: RegisteredPlugin = {
+  plugin: {
+    name: 'audit',
     worker: worker,
+    hooks: { on: ['create', 'update', 'delete'] }, // Declarative for Workers
   },
   initialized: false,
   isWorker: true,
 };
 
-await executor.initPlugin(registered);
+await executor.initPlugin(workerPlugin);
 
-// Execute hooks
-const transformedData = await executor.executeBeforeSave(
-  [registered],
-  ctx,
-  data,
-);
-await executor.executeAction([registered], 'create', actionCtx);
+// Execute hooks (handles both plugin types transparently)
+await executor.executeAction([inProcessPlugin, workerPlugin], 'create', ctx);
 
 // Cleanup
 executor.terminate();
 ```
 
-## User-Provided Workers
+## Plugin Types
 
-You provide the Worker instance, giving full control over isolation:
+### In-Process Plugins
+
+Plugins without a `worker` property run in the main thread with function hooks:
 
 ```typescript
-// Create Worker with your desired permissions
-const myWorker = new Worker(
-  import.meta.resolve('@hotsauce/plugins/audit-log/worker'),
-  {
-    type: 'module',
-    // Deno: restrict permissions
-    deno: { permissions: { net: ['audit.example.com'] } },
+const plugin = {
+  name: 'format-names',
+  hooks: {
+    transform: {
+      beforeSave: async (ctx, data) => ({
+        ...data,
+        name: data.name?.toUpperCase(),
+      }),
+    },
   },
-);
+};
 ```
 
-> **Deno:** When using `deno.permissions` in Worker constructors, you must run with `--unstable-worker-options`:
->
-> ```bash
-> deno run --unstable-worker-options --permission-set=your-permission-set server.ts
-> ```
+### Worker Plugins
+
+Plugins with a `worker` property run isolated with declarative hooks:
 
 ```typescript
-// Use in plugin config
-{
+const worker = new Worker(import.meta.resolve('./my-plugin.worker.ts'), {
+  type: 'module',
+  deno: { permissions: { net: ['api.example.com'] } },
+});
+
+const plugin = {
   name: 'audit-log',
-  worker: myWorker,
-  filter: (ctx) => ctx.hookType === 'action',
+  worker: worker,
+  hooks: { on: ['create', 'update', 'delete'] }, // Array, not functions
   config: { webhookUrl: 'https://audit.example.com' },
-}
+};
 ```
 
-Benefits:
-
-- **Security**: You control what each plugin can access
-- **Isolation**: Plugin code runs entirely in the Worker
-- **Flexibility**: Use Deno permissions, Node policies, etc.
-
-## Writing Plugin Worker Modules
-
-Plugin modules loaded by Workers must export a `createPlugin` factory:
+Worker modules must export a `createPlugin` factory:
 
 ```typescript
 // my-plugin.worker.ts
@@ -116,7 +120,10 @@ export function createPlugin(config: Serializable): { hooks: PluginHooks } {
     hooks: {
       on: {
         create: async (ctx) => {
-          console.log('Record created:', ctx.table, ctx.recordId);
+          await fetch(config.webhookUrl, {
+            method: 'POST',
+            body: JSON.stringify(ctx),
+          });
         },
       },
     },
@@ -124,9 +131,117 @@ export function createPlugin(config: Serializable): { hooks: PluginHooks } {
 }
 ```
 
-## Serializable Constraint
+## Validation Utilities
 
-All data crossing the Worker boundary must be JSON-serializable:
+Check if data is serializable (safe for Worker boundary):
 
-✅ **Allowed**: strings, numbers, booleans, null, arrays, plain objects, Date\
-❌ **Not allowed**: functions, class instances, symbols, circular references
+```typescript
+import {
+  isSerializable,
+  SerializationError,
+  validateSerializable,
+} from '@hotsauce/workers';
+
+// Boolean check
+if (isSerializable(data)) {
+  // Safe to send to Worker
+}
+
+// Throws with path to problem
+try {
+  validateSerializable(data);
+} catch (e) {
+  if (e instanceof SerializationError) {
+    console.error('Invalid at:', e.path); // e.g., "data.user.save"
+  }
+}
+```
+
+**Serializable types**: strings, numbers, booleans, null, arrays, plain objects, Date\
+**Not serializable**: functions, class instances, symbols, circular references
+
+## Guard Utilities
+
+For plugin authors to verify execution context:
+
+```typescript
+import { assertWorkerContext, isWorkerContext } from '@hotsauce/workers';
+
+// Check if running in a Worker
+if (isWorkerContext()) {
+  // Safe to use Worker-only APIs
+}
+
+// Throw if not in Worker (for security-critical plugins)
+assertWorkerContext(); // Throws if running in main thread
+```
+
+## UI Hooks
+
+Plugins can customize field rendering via `renderField`. This returns a `FieldUIOverride`:
+
+```typescript
+type FieldUIOverride =
+  | null // Use default rendering
+  | {
+    link?: { label: string; href: string; target?: '_blank' };
+    valueSummary?: string; // Plain text, no HTML
+  };
+```
+
+Example:
+
+```typescript
+hooks: {
+  ui: {
+    renderField: (ctx) => {
+      if (ctx.field.plugin?.puck && ctx.recordId) {
+        const data = ctx.value as { content?: unknown[] };
+        const count = data?.content?.length ?? 0;
+
+        return {
+          link: {
+            href: `/admin/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`,
+            label: 'Edit with Puck',
+            target: '_blank',
+          },
+          valueSummary: count === 1 ? '1 block' : `${count} blocks`,
+        };
+      }
+      return null;
+    },
+  },
+}
+```
+
+> **Note**: UI hooks can run in Workers or in-process. Worker plugins use the `'ui:renderField'` message type. The return type (`FieldUIOverride`) is fully serializable.
+
+## Exported Types
+
+Key types for plugin authors:
+
+```typescript
+import type {
+  ActionContext,
+  ActionHooks,
+  CrudAction,
+  FieldUIOverride,
+  // Context types
+  PluginContext,
+  // Hook types
+  PluginHooks,
+  // Route types
+  PluginRoute,
+  PluginRouteContext,
+  PluginRouteHandler,
+  // Data types
+  Serializable,
+  TransformHooks,
+  UIHooks,
+  UIRenderFieldContext,
+} from '@hotsauce/workers';
+```
+
+## Why "workers"?
+
+The package is named for its primary differentiator—Worker-based isolation—but it handles all plugin execution. Think of it as the plugin runtime that _can_ use Workers when you need isolation.

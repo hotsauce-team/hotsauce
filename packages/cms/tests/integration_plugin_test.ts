@@ -29,9 +29,10 @@ Deno.test('integration: plugin afterRead transform', async (t) => {
   const hookCalls: string[] = [];
 
   // In-process plugin with afterRead transform
+  // Uses 'dangerously-open' to receive all data (no schema declaration needed)
   const testPlugin = {
     name: 'test-afterread',
-    filter: () => true,
+    filter: 'dangerously-open' as const,
     hooks: {
       transform: {
         afterRead: (_ctx: unknown, data: Record<string, unknown>) => {
@@ -55,6 +56,7 @@ Deno.test('integration: plugin afterRead transform', async (t) => {
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',
@@ -80,6 +82,7 @@ Deno.test('integration: plugin afterRead transform', async (t) => {
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',
@@ -105,6 +108,7 @@ Deno.test('integration: plugin afterRead transform', async (t) => {
     const handler = createCmsHandler({
       csrfSecret: TEST_CSRF_SECRET,
       auth: 'dangerously-open',
+      policies: 'dangerously-open',
       db,
       schema,
       basePath: '/admin',

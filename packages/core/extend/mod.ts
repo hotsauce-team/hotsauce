@@ -99,5 +99,6 @@ export type {
   CmsTableOptions,
   FileReference,
   FrontendUrlFn,
+  PluginColumnConfig,
 } from './types.ts';
 export { CMS_TABLE_OPTIONS } from './types.ts';

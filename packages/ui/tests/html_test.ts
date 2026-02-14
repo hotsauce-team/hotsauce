@@ -1,7 +1,16 @@
 // Tests for HTML utilities
 
 import { assertEquals } from '@std/assert';
-import { attrs, escapeHtml, html, join, raw, SafeHtml, when } from '../html.ts';
+import {
+  attrs,
+  escapeHtml,
+  escapeUrlPath,
+  html,
+  join,
+  raw,
+  SafeHtml,
+  when,
+} from '../html.ts';
 
 // escapeHtml tests
 Deno.test('escapeHtml: escapes HTML special characters', () => {
@@ -19,6 +28,30 @@ Deno.test('escapeHtml: handles null and undefined', () => {
 Deno.test('escapeHtml: converts non-strings to string', () => {
   assertEquals(escapeHtml(123), '123');
   assertEquals(escapeHtml(true), 'true');
+});
+
+// escapeUrlPath tests
+Deno.test('escapeUrlPath: encodes special URL characters', () => {
+  assertEquals(escapeUrlPath('hello world'), 'hello%20world');
+  assertEquals(escapeUrlPath('a/b'), 'a%2Fb');
+  assertEquals(escapeUrlPath('a?b=c'), 'a%3Fb%3Dc');
+  assertEquals(escapeUrlPath('table"name'), 'table%22name');
+});
+
+Deno.test('escapeUrlPath: handles path traversal attempts', () => {
+  assertEquals(escapeUrlPath('../etc/passwd'), '..%2Fetc%2Fpasswd');
+  assertEquals(escapeUrlPath('..'), '..');
+  assertEquals(escapeUrlPath('.'), '.');
+});
+
+Deno.test('escapeUrlPath: handles null and undefined', () => {
+  assertEquals(escapeUrlPath(null), '');
+  assertEquals(escapeUrlPath(undefined), '');
+});
+
+Deno.test('escapeUrlPath: converts non-strings to string', () => {
+  assertEquals(escapeUrlPath(123), '123');
+  assertEquals(escapeUrlPath(true), 'true');
 });
 
 // html tagged template tests

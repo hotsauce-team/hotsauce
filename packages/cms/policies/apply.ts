@@ -300,10 +300,15 @@ export async function deleteWithPolicy(
 /**
  * Create a PolicyContext from route context
  * Extracts user info from JWT payload
+ *
+ * @param request - The HTTP request
+ * @param authUser - Authenticated user from JWT (optional)
+ * @param source - Source of the form submission (optional, validated from _source token)
  */
 export function createPolicyContext(
   request: Request,
   authUser?: { id: string; role?: string },
+  source?: string,
 ): PolicyContext {
   return {
     request,
@@ -313,6 +318,7 @@ export function createPolicyContext(
         role: authUser.role,
       }
       : undefined,
+    source,
   };
 }
 

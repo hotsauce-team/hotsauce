@@ -12,6 +12,7 @@ import {
   posts,
   settings,
 } from '../schema.ts';
+import { renderPuckContent } from './puck-render.tsx';
 
 import {
   type AuthorDetail,
@@ -27,7 +28,7 @@ import {
   postPage,
   type PostSummary,
   type SiteSettings,
-  staticPage,
+  visualPage,
 } from './templates.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -172,9 +173,10 @@ export function createSiteRoutes(db: Database): Hono {
   });
 
   /**
-   * Static page (about, contact, etc.)
+   * Visual page (Puck editor content)
+   * Pages are now edited with Puck visual editor and stored as JSON
    */
-  app.get('/page/:slug', async (c) => {
+  app.get('/:slug', async (c) => {
     const slug = c.req.param('slug');
 
     const page = await db.query.pages.findFirst({
@@ -187,12 +189,16 @@ export function createSiteRoutes(db: Database): Hono {
       return htmlResponse(html, 404);
     }
 
-    const content = staticPage({
+    // Render Puck JSON content to HTML server-side
+    const renderedHtml = await renderPuckContent(
+      page.content as Record<string, unknown> | null,
+    );
+
+    const content = visualPage({
       id: page.id,
       title: page.title,
       slug: page.slug,
-      content: page.content,
-      contentHtml: page.contentHtml,
+      renderedHtml,
     });
     const html = await renderPage(db, content, page.title);
     return htmlResponse(html);

@@ -46,6 +46,7 @@ async function createTestHandler(
   const handler = createCmsHandler({
     csrfSecret: TEST_CSRF_SECRET,
     auth: 'dangerously-open',
+    policies: 'dangerously-open',
     db,
     schema,
     basePath: '/admin',

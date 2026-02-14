@@ -39,8 +39,8 @@ export interface PageDetail {
   id: number;
   title: string;
   slug: string;
-  content: string;
-  contentHtml: string | null;
+  /** Pre-rendered HTML from Puck content */
+  renderedHtml: string;
 }
 
 export interface CategoryWithCount {
@@ -85,6 +85,7 @@ export function layout(
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <title>${title} | ${settings.siteName}</title>
         <link rel="stylesheet" href="/static/styles.css" />
+        <link rel="stylesheet" href="/static/components.css" />
       </head>
       <body>
         <header class="site-header">
@@ -98,7 +99,7 @@ export function layout(
               ${raw(
                 navPages.map((p) =>
                   html`
-                    <a href="/page/${p.slug}">${p.title}</a>
+                    <a href="/${p.slug}">${p.title}</a>
                   `
                 ).join(''),
               )}
@@ -243,14 +244,14 @@ export function postPage(post: PostDetail): string {
 }
 
 /**
- * Static page
+ * Visual page (Puck editor)
  */
-export function staticPage(page: PageDetail): string {
+export function visualPage(page: PageDetail): string {
   return html`
     <article class="page">
       <h1>${page.title}</h1>
-      <div class="page-content">
-        ${raw(safeHtml(page.contentHtml, page.content))}
+      <div class="page-content puck-content">
+        ${raw(page.renderedHtml)}
       </div>
     </article>
   `;

@@ -1,11 +1,15 @@
 // Form wrapper component
 
 import { attrs, html, raw } from '../html.ts';
-import { formFields, type RelationOption } from './field.ts';
+import {
+  type FieldUIOverride,
+  formFields,
+  type RelationOption,
+} from './field.ts';
 import type { CMSField } from '@hotsauce/core';
 
-// Re-export RelationOption for convenience
-export type { RelationOption } from './field.ts';
+// Re-export RelationOption and FieldUIOverride for convenience
+export type { FieldUIOverride, RelationOption } from './field.ts';
 
 /**
  * Options for rendering a form
@@ -27,6 +31,8 @@ export interface FormOptions {
   multipart?: boolean;
   /** CSRF token to embed as hidden field */
   csrfToken?: string;
+  /** Source token to identify form origin (cms vs plugin) */
+  sourceToken?: string;
 }
 
 /**
@@ -39,12 +45,18 @@ export function form(
   errors: Record<string, string> = {},
   relationData: Record<string, RelationOption[]> = {},
   extraContent: string = '',
+  fieldOverrides: Record<string, FieldUIOverride> = {},
 ): string {
   const method = options.method ?? 'POST';
   const submitText = options.submitText ?? 'Save';
   const csrfField = options.csrfToken
     ? html`
       <input type="hidden" name="_csrf" value="${options.csrfToken}" />
+    `
+    : '';
+  const sourceField = options.sourceToken
+    ? html`
+      <input type="hidden" name="_source" value="${options.sourceToken}" />
     `
     : '';
 
@@ -56,8 +68,8 @@ export function form(
       class: `cms-form ${options.class ?? ''}`.trim(),
       enctype: options.multipart ? 'multipart/form-data' : undefined,
     })}>
-      ${raw(csrfField)} ${raw(
-        formFields(fields, values, errors, relationData),
+      ${raw(csrfField)}${raw(sourceField)} ${raw(
+        formFields(fields, values, errors, relationData, fieldOverrides),
       )} ${raw(extraContent)}
 
       <div class="cms-form-actions">

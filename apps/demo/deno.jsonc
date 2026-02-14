@@ -1,18 +1,19 @@
 {
-  "name": "hono-fullstack-example",
+  "name": "demo-app",
   "version": "0.0.1",
 
   "tasks": {
-    "dev": "deno run --unstable-worker-options --env-file=.env.example --permission-set=hono-fullstack server.ts",
-    "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno run --unstable-worker-options --env-file=.env.example --permission-set=hono-fullstack server.ts",
-    "dev:watch": "deno run --unstable-worker-options --env-file=.env.example --watch --permission-set=hono-fullstack server.ts",
-    "seed": "deno run --permission-set=hono-fullstack seed.ts"
+    "dev": "deno run --unstable-worker-options --env-file=.env.example --permission-set=demo server.ts",
+    "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno run --unstable-worker-options --env-file=.env.example --permission-set=demo server.ts",
+    "dev:watch": "deno run --unstable-worker-options --env-file=.env.example --watch --permission-set=demo server.ts",
+    "seed": "deno run --permission-set=demo seed.ts",
+    "build:components": "deno bundle --platform browser --minify components.tsx -o admin/components.js"
   },
 
   "exports": "./server.ts",
 
   "permissions": {
-    "hono-fullstack": {
+    "demo": {
       "read": [
         "./admin",
         "./data",
@@ -28,6 +29,7 @@
         "127.0.0.1:3000"
       ],
       "env": [
+        "NODE_ENV",
         "CMS_CSRF_SECRET",
         "CMS_JWT_SECRET"
       ]
