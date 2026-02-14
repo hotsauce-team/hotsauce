@@ -6,8 +6,8 @@
  *   deno run --allow-read --allow-write scripts/update_package_versions.ts --version 1.0.0
  */
 
-const PACKAGES_DIR = new URL('../packages', import.meta.url).pathname;
-const ROOT_DENO_JSONC = new URL('../deno.jsonc', import.meta.url).pathname;
+const PACKAGES_DIR = new URL('../../packages', import.meta.url).pathname;
+const ROOT_DENO_JSONC = new URL('../../deno.jsonc', import.meta.url).pathname;
 
 interface DenoJson {
   name: string;
@@ -71,7 +71,7 @@ if (import.meta.main) {
   const args = Deno.args;
   if (args.length !== 2 || args[0] !== '--version') {
     console.error(
-      'Usage: deno run --allow-read --allow-write scripts/update_package_versions.ts --version <version>',
+      'Usage: deno run --allow-read --allow-write scripts/jsr/update_package_versions.ts --version <version>',
     );
     Deno.exit(1);
   }
