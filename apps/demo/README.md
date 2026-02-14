@@ -339,3 +339,40 @@ const db = drizzle(client, { schema });
 - PGlite data is persisted to `./data` directory
 - The CMS handles all authentication - no separate auth needed for the frontend
 - Settings are read-only for non-admin users (configured via `auth.policies`)
+
+## CMS Features Demonstrated
+
+This demo showcases many hotsauce-cms capabilities:
+
+### Shown
+
+| Feature                      | Where                                             |
+| ---------------------------- | ------------------------------------------------- |
+| Password authentication      | `admin.ts` — `PasswordProvider`                   |
+| Transform plugins            | `markdown-plugin.ts` — `beforeSave` hook          |
+| Schema-driven plugin scoping | `schema.ts` — `$cms({ plugins: { markdown } })`   |
+| Puck visual editor plugin    | `schema.ts` — `$cms({ plugins: { puck: true } })` |
+| File uploads                 | `schema.ts` — `$cms({ file: true })`              |
+| Frontend URL links           | `schema.ts` — `$cms({ frontendUrl })`             |
+| Relations (FK dropdowns)     | `schema.ts` — `authorId`, `categoryId`            |
+| Custom Zod parsers           | `schema.ts` — `parsers` object                    |
+| Read-only policy             | `admin.ts` — `settings: readOnly()`               |
+| Lazy CMS loading             | `server.ts` — dynamic `import()`                  |
+| Custom error handler         | `admin.ts` — `onError` callback                   |
+| Content Security Policy      | `security.ts` — CSP headers                       |
+
+### Not Shown (potential additions)
+
+| Feature                | Description                                                |
+| ---------------------- | ---------------------------------------------------------- |
+| Row-level policies     | `ownedBy()` — users only see their own records             |
+| Column-level policies  | Hide `salary` from non-admins, inject `tenantId` on create |
+| Role-based access      | `roleIs('admin')`, `roleIn(['editor', 'admin'])`           |
+| Multi-tenant isolation | `ownedBy` + column default for `tenantId`                  |
+| Two-factor auth (TOTP) | QR code setup, TOTP verification                           |
+| Worker plugins         | Isolated plugin execution in Web Workers                   |
+| Action hooks           | `on.create`, `on.delete` for audit logging                 |
+| JSON API               | `Accept: application/json` for headless use                |
+| Many-to-many relations | Junction tables with `$cms({ junction: true })`            |
+
+See `packages/cms/tests/` for examples of these features.
