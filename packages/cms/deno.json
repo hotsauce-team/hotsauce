@@ -8,6 +8,7 @@
       "*.ts",
       "plugins/",
       "policies/",
+      "tokens/",
       "README.md",
       "LICENSE"
     ],
