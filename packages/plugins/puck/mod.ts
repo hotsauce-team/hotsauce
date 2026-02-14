@@ -45,7 +45,10 @@ export interface PuckPluginOptions {
 
   /**
    * URL to the user's components bundle (ES module).
-   * This bundle must export `config` - an object mapping component names to definitions.
+   * This bundle must export `config` - a full Puck Config object with:
+   * - `components`: Object mapping component names to definitions
+   * - `root` (optional): Root configuration with fields and render for page-level data
+   *
    * Components should use `globalThis.React` provided by the editor bundle.
    *
    * @example '/admin/components.js'
