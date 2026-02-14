@@ -70,11 +70,11 @@ jobs:
 
       # Publish packages in dependency order:
       # 1. core (no internal deps)
-      # 2. ui (no internal deps)
-      # 3. workers (no internal deps)
-      # 4. auth (depends on nothing internal)
-      # 5. plugins (depends on workers)
-      # 6. cms (depends on core, ui, workers, auth, plugins)
+      # 2. workers (no internal deps)
+      # 3. ui (depends on core, workers)
+      # 4. auth (depends on ui)
+      # 5. cms (depends on core, ui, auth, workers)
+      # 6. plugins (depends on cms, ui, workers)
 
       - name: Publish @hotsauce/core
         run: deno publish --allow-dirty
@@ -83,10 +83,6 @@ jobs:
       - name: Publish @hotsauce/workers
         run: deno publish --allow-dirty
         working-directory: packages/workers
-
-      - name: Publish @hotsauce/plugins
-        run: deno publish --allow-dirty
-        working-directory: packages/plugins
 
       - name: Publish @hotsauce/ui
         run: deno publish --allow-dirty
@@ -99,3 +95,7 @@ jobs:
       - name: Publish @hotsauce/cms
         run: deno publish --allow-dirty
         working-directory: packages/cms
+
+      - name: Publish @hotsauce/plugins
+        run: deno publish --allow-dirty
+        working-directory: packages/plugins
