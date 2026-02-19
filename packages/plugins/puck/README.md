@@ -24,90 +24,76 @@ const handler = createCmsHandler({
   plugins: [
     createPuckPlugin({
       basePath: '/admin',
-      clientBundle: '/admin/puck-bundle.js', // Your bundle
-      clientCss: '/admin/puck-bundle.css', // Your CSS
+      componentsJs: '/admin/components.js', // Your bundled components
+      componentsCss: '/admin/components.css', // Optional: custom styles
     }),
   ],
 });
 ```
 
-## User-Provided Bundle
+## User-Provided Components
 
-You build your own Puck client bundle that includes:
+You provide a components file that exports `puckProps` containing:
 
-- React and ReactDOM
-- `@puckeditor/core`
-- Your component definitions
-- Initialization code that reads bootstrap data
+- Your Puck `config` with component definitions
+- Any additional Puck props (viewports, permissions, overrides, etc.)
 
-### Example Client Entry
+The plugin automatically includes React, ReactDOM, and Puck's editor bundle.
+
+### Example Components File
+
+Export a `puckProps` object containing your Puck configuration:
 
 ```tsx
-// admin/puck-client.tsx
-import { createRoot } from 'react-dom/client';
-import { Puck } from '@puckeditor/core';
-import { components } from '../components'; // Your components
+// components.tsx
+import type { ComponentConfig, PuckProps } from '@hotsauce/plugins/puck';
+import { DropZone, React } from '@hotsauce/plugins/puck/client/globals';
 
-interface Bootstrap {
-  table: string;
-  recordId: string;
-  column: string;
-  csrfToken: string;
-  sourceToken: string;
-  basePath: string;
-  data: { content: unknown[]; root: { props: Record<string, unknown> } };
-}
+// Define your components
+const Heading: ComponentConfig = {
+  fields: { text: { type: 'text' } },
+  render: ({ text }) => <h1>{text}</h1>,
+};
 
-function init() {
-  const bootstrap: Bootstrap = JSON.parse(
-    document.getElementById('puck-bootstrap')!.textContent!,
-  );
+const Columns: ComponentConfig = {
+  render: () => (
+    <div style={{ display: 'flex', gap: '1rem' }}>
+      <div style={{ flex: 1 }}>
+        <DropZone zone='left' />
+      </div>
+      <div style={{ flex: 1 }}>
+        <DropZone zone='right' />
+      </div>
+    </div>
+  ),
+};
 
-  createRoot(document.getElementById('puck-root')!).render(
-    <Puck
-      config={{ components }}
-      data={bootstrap.data}
-      onPublish={async (data) => {
-        const form = new FormData();
-        form.append(bootstrap.column, JSON.stringify(data));
-        form.append('_csrf', bootstrap.csrfToken);
-        form.append('_source', bootstrap.sourceToken);
-        await fetch(
-          `${bootstrap.basePath}/${bootstrap.table}/${bootstrap.recordId}`,
-          { method: 'POST', body: form },
-        );
-      }}
-    />,
-  );
-}
-
-document.readyState === 'loading'
-  ? document.addEventListener('DOMContentLoaded', init)
-  : init();
+// Export puckProps with config and any Puck props you want
+export const puckProps: PuckProps = {
+  config: {
+    components: { Heading, Columns },
+  },
+  // Optional: customize Puck behavior
+  viewports: [
+    { width: 1440, label: 'Desktop', icon: 'Monitor' },
+    { width: 768, label: 'Tablet', icon: 'Tablet' },
+    { width: 375, label: 'Mobile', icon: 'Smartphone' },
+  ],
+  // iframe: { enabled: true },
+  // onPublish: async (data) => { ... }, // Override save behavior
+};
 ```
+
+The `globals.ts` helper provides pre-typed React and DropZone from `globalThis`, so you don't need to set up React imports manually.
 
 ### Build with Deno
 
-```ts
-// build-puck.ts
-const result = await Deno.bundle({
-  entrypoints: ['./admin/puck-client.tsx'],
-  platform: 'browser',
-  minify: true,
-});
-await Deno.writeTextFile(
-  './admin/puck-bundle.js',
-  result.outputFiles[0].text(),
-);
-
-// Also fetch Puck CSS
-const css =
-  await (await fetch('https://esm.sh/@puckeditor/core@0.21.1/puck.css')).text();
-await Deno.writeTextFile('./admin/puck-bundle.css', css);
-```
-
 ```bash
-deno run --unstable-bundle --allow-read --allow-write --allow-net build-puck.ts
+# Bundle components for browser
+deno bundle --platform browser --minify components.tsx -o admin/components.js
+
+# Fetch Puck CSS (or bundle your own)
+curl -o admin/puck.css https://esm.sh/@puckeditor/core@0.21.1/puck.css
 ```
 
 ## Schema Setup
@@ -158,6 +144,31 @@ export const pages = sqliteTable('pages', {
 | Route                                | Description                   |
 | ------------------------------------ | ----------------------------- |
 | `GET /admin/puck/:table/:id/:column` | Puck editor page (HTML shell) |
+
+## Frontend Rendering (SSR)
+
+For server-side rendering of Puck content, use the `/rsc` export to avoid browser dependencies:
+
+```tsx
+// site/render.tsx
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { type Config, type Data } from '@puckeditor/core';
+import { Render } from '@puckeditor/core/rsc';
+
+// Set globalThis.React before importing components
+(globalThis as any).React = React;
+
+export async function renderPuckContent(
+  data: Data,
+  config: Config,
+): Promise<string> {
+  const element = <Render config={config} data={data} />;
+  return renderToStaticMarkup(element);
+}
+```
+
+The `/rsc` export is lighter and doesn't pull in browser-only dependencies like `happy-dom`.
 
 ## Example Project
 

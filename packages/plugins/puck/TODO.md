@@ -9,6 +9,9 @@
 - ✅ **Source tokens + plugin-aware policies** — Secure plugin write access
 - ✅ "Edit with Puck" button in CMS edit screens
 - ✅ `valueSummary` displays block count instead of raw JSON
+- ✅ **Pass-through Puck props** — Export `puckProps` from components module to pass any prop to `<Puck />`
+  - User can override `onPublish` (takes full control of saving)
+  - Types exported: `Viewport`, `Permissions`, `IframeConfig`, `History`, `Plugin`, `Overrides`, etc.
 
 ## Remaining Tasks
 

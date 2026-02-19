@@ -40,7 +40,7 @@ const cmsHandler = createCmsHandler({
   // Row-level security policies (atomic authorization in WHERE clauses)
   policies: {
     posts: adminOr(ownedBy(posts, 'authorId')), // Admins see all, users see own
-    categories: (readOnly()), // Admins: full access, others: read-only
+    categories: readOnly(), // Admins: full access, others: read-only
     users: {
       columns: {
         password_hash: { read: () => false }, // Hide password hashes

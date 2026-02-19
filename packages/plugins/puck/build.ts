@@ -71,7 +71,14 @@ const puckCssUrl = 'https://esm.sh/@puckeditor/core@0.21.1/puck.css';
 console.log(`Fetching Puck CSS from: ${puckCssUrl}`);
 const cssRes = await fetch(puckCssUrl);
 if (cssRes.ok) {
-  const cssContent = await cssRes.text();
+  let cssContent = await cssRes.text();
+
+  // Strip external font import for privacy (avoid requests to rsms.me).
+  // Puck's --puck-font-family has fallback fonts defined, so the UI still looks fine.
+  cssContent = cssContent.replace(
+    /@import\s+["']https:\/\/rsms\.me\/inter\/inter\.css["'];\s*/g,
+    '/* @import removed for privacy - Inter font loads from rsms.me */\n',
+  );
 
   // Write to dist for serving
   await Deno.writeTextFile(`${DIST_DIR}/puck.css`, cssContent);

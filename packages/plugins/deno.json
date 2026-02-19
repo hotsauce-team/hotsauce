@@ -6,7 +6,8 @@
     "./audit-log": "./audit-log/mod.ts",
     "./audit-log/worker": "./audit-log/worker.ts",
     "./puck": "./puck/mod.ts",
-    "./puck/types": "./puck/types.ts"
+    "./puck/types": "./puck/types.ts",
+    "./puck/client/globals": "./puck/client/globals.ts"
   },
   "tasks": {
     "build:puck": "deno run --unstable-bundle --allow-read --allow-write --allow-net puck/build.ts"
