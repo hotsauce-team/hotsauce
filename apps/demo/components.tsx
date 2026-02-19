@@ -4,24 +4,13 @@
  * User Puck Components
  *
  * This file is built separately from the CMS editor bundle.
- * It uses globalThis.React which is exposed by puck-editor.js.
- *
  * Build with: deno task build:components
  *
- * The export must be named "config" - a full Puck Config with components and optional root.
+ * Export `puckProps` with `config` inside it — all Puck props in one place.
  */
 
-import type {
-  ComponentConfig,
-  Config,
-  React as ReactType,
-} from '@hotsauce/plugins/puck/types';
-
-// Use React and Puck components from the CMS bundle (exposed globally)
-// deno-lint-ignore no-explicit-any
-const React = (globalThis as any).React as typeof ReactType;
-// deno-lint-ignore no-explicit-any
-const DropZone = (globalThis as any).PuckDropZone as React.FC<{ zone: string }>;
+import { DropZone, React } from '@hotsauce/plugins/puck/client/globals';
+import type { ComponentConfig, PuckProps } from '@hotsauce/plugins/puck/types';
 
 // ============================================================================
 // Heading
@@ -284,33 +273,60 @@ const Space: ComponentConfig = {
 };
 
 // ============================================================================
-// Export - must be named "config" and be a full Puck Config
+// RichText (rich text editor component using contentEditable)
 // ============================================================================
 
-export const config: Config = {
-  // Page-level fields editable in sidebar, rendered as wrapper
-  root: {
-    fields: {
-      title: { type: 'text', label: 'Page Title' },
-      description: { type: 'textarea', label: 'Meta Description' },
-    },
-    defaultProps: {
-      title: '',
-      description: '',
-    },
-    // deno-lint-ignore no-explicit-any
-    render: ({ children, title }: any) => (
-      <main data-page-title={title}>
-        {children}
-      </main>
-    ),
+const RichText: ComponentConfig = {
+  label: 'RichText',
+  fields: {
+    richtext: { type: 'richtext', contentEditable: true, label: 'Rich Text' },
   },
-  components: {
-    Section,
-    Heading,
-    Text,
-    Button,
-    Image,
-    Space,
+  render: (props) => {
+    const { richtext, puck: { isEditing } } = props;
+
+    if (isEditing) {
+      return <div>{richtext}</div>;
+    }
+
+    return <div dangerouslySetInnerHTML={{ __html: richtext as string }} />;
+  },
+};
+
+// ============================================================================
+// Export puckProps - all Puck configuration in one place
+// ============================================================================
+
+export const puckProps: PuckProps = {
+  headerTitle: 'Page Builder',
+  iframe: {
+    waitForStyles: false, // For the RichText component.
+  },
+  config: {
+    // Page-level fields editable in sidebar, rendered as wrapper
+    root: {
+      fields: {
+        title: { type: 'text', label: 'Page Title' },
+        description: { type: 'textarea', label: 'Meta Description' },
+      },
+      defaultProps: {
+        title: '',
+        description: '',
+      },
+      // deno-lint-ignore no-explicit-any
+      render: ({ children, title }: any) => (
+        <main data-page-title={title}>
+          {children}
+        </main>
+      ),
+    },
+    components: {
+      Section,
+      Heading,
+      Text,
+      Button,
+      Image,
+      Space,
+      RichText,
+    },
   },
 };

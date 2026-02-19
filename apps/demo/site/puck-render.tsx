@@ -5,11 +5,15 @@
  *
  * Renders Puck JSON content to HTML using Puck's Render component
  * and React's renderToString. No client-side JavaScript needed.
+ *
+ * Uses the RSC (React Server Components) export to avoid loading
+ * browser-only dependencies like happy-dom/ws.
  */
 
 import React from 'npm:react@18.2.0';
 import { renderToStaticMarkup } from 'npm:react-dom@18.2.0/server';
-import { type Config, Render } from 'npm:@puckeditor/core@0.21.1';
+import { type Config, type Data } from 'npm:@puckeditor/core@0.21.1';
+import { Render } from 'npm:@puckeditor/core@0.21.1/rsc';
 
 // Set globalThis.React BEFORE any dynamic imports
 // deno-lint-ignore no-explicit-any
@@ -21,53 +25,32 @@ import { type Config, Render } from 'npm:@puckeditor/core@0.21.1';
   </div>
 );
 
-// Puck data structure
-interface PuckData {
-  root?: { props?: Record<string, unknown> };
-  content?: Array<{
-    type: string;
-    props: Record<string, unknown>;
-  }>;
-  zones?: Record<
-    string,
-    Array<{
-      type: string;
-      props: Record<string, unknown>;
-    }>
-  >;
-}
-
-// Cache for components config (loaded once)
-let componentsConfig: Config['components'] | null = null;
+// Cache for puck config (loaded once)
+let puckConfig: Config | null = null;
 
 /**
  * Load components dynamically (after globalThis.React is set)
  */
-async function getComponentsConfig(): Promise<Config['components']> {
-  if (componentsConfig) return componentsConfig;
+async function getPuckConfig(): Promise<Config> {
+  if (puckConfig) return puckConfig;
 
   // Dynamic import ensures globalThis.React is set before module evaluation
   const mod = await import('../components.tsx');
-  componentsConfig = mod.config;
-  return componentsConfig;
+  puckConfig = mod.puckProps.config;
+  return puckConfig;
 }
 
 /**
  * Render Puck JSON content to HTML string
  */
 export async function renderPuckContent(
-  data: PuckData | null,
+  data: Data | null,
 ): Promise<string> {
   if (!data || !data.content || data.content.length === 0) {
     return '<p>No content</p>';
   }
 
-  const components = await getComponentsConfig();
-
-  // Build Puck config with user components
-  const config: Config = {
-    components,
-  };
+  const config = await getPuckConfig();
 
   // Use Puck's Render component to generate React elements, then render to static HTML
   const element = <Render config={config} data={data} />;

@@ -1,3 +1,5 @@
+/// <reference lib="dom" />
+
 /**
  * Puck Editor - CMS Bundle
  *
@@ -8,8 +10,11 @@
  */
 
 import React from 'npm:react@18.2.0';
+import type { ComponentProps } from 'npm:react@18.2.0';
 import { createRoot } from 'npm:react-dom@18.2.0/client';
-import { type Config, DropZone, Puck } from 'npm:@puckeditor/core@0.21.1';
+import { type Data, DropZone, Puck } from 'npm:@puckeditor/core@0.21.1';
+
+type _PuckProps = ComponentProps<typeof Puck>;
 
 // Expose React and Puck components globally so user components can access them
 // deno-lint-ignore no-explicit-any
@@ -34,15 +39,16 @@ export interface PuckEditorOptions {
   /** CMS base path (e.g., '/admin') */
   basePath: string;
   /** Initial Puck data */
-  data: {
-    content: unknown[];
-    root: { props: Record<string, unknown> };
-  };
+  data: Partial<Data>;
 }
 
-// User's components module exports a full Puck Config
+// User's puckProps type (mirrors PuckProps from types.ts)
+type PuckProps = Partial<_PuckProps> & { config: _PuckProps['config'] };
+
+// User's components module exports puckProps with config inside
 interface UserComponentsModule {
-  config: Config;
+  /** Puck props including config, viewports, permissions, etc. */
+  puckProps: PuckProps;
 }
 
 /**
@@ -77,15 +83,16 @@ export async function initPuckEditor(
     return;
   }
 
-  if (!userModule.config || !userModule.config.components) {
+  const { puckProps } = userModule;
+  if (!puckProps?.config?.components) {
     // deno-lint-ignore no-console
     console.error(
-      '[Puck] Components module must export "config" with "components"',
+      '[Puck] Components module must export "puckProps" with "config.components"',
     );
     rootEl.innerHTML = `<div style="color: red; padding: 2rem;">
       <h2>Invalid components module</h2>
-      <p>The components file must export a "config" object with a "components" property.</p>
-      <pre>export const config: Config = { components: { ... }, root: { ... } };</pre>
+      <p>The components file must export "puckProps" with a "config" containing "components".</p>
+      <pre>export const puckProps = { config: { components: { ... } } } satisfies Partial&lt;PuckProps&gt;;</pre>
     </div>`;
     return;
   }
@@ -122,12 +129,15 @@ export async function initPuckEditor(
     }
   };
 
-  // Render Puck editor
+  // Use user's onPublish if provided, otherwise use our save handler
+  const onPublish = puckProps.onPublish ?? handlePublish;
+
+  // Render Puck editor with user's props spread
   createRoot(rootEl).render(
     <Puck
-      config={userModule.config}
+      {...puckProps}
       data={options.data}
-      onPublish={handlePublish}
+      onPublish={onPublish}
     />,
   );
 }
