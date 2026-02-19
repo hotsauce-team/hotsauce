@@ -1,7 +1,7 @@
 {
   // Workspace configuration for hotsauce-cms monorepo
   "name": "@hotsauce/workspace",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "exports": "./packages/core/mod.ts",
 
   // Use local node_modules for npm packages (enables fine-grained permissions)
