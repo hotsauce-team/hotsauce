@@ -8,45 +8,21 @@ A complete blog site with a server-rendered public frontend (Hono) and a headles
 - **CMS Admin** - Full admin interface powered by hotsauce-cms
 - **Shared Database** - Both frontend and admin use the same Drizzle schema
 - **Minimal Dependencies** - Hono via JSR + a small markdown parser for the example plugin
+- **Visual Block Editor** - Optional Puck integration for drag-and-drop page building
 
-## Architecture
+## Super Quick Start with Docker
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Single Deno Server                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│   ┌─────────────────┐         ┌─────────────────────────┐  │
-│   │  Public Routes  │         │    Admin Routes         │  │
-│   │    (Hono)       │         │    (hotsauce-cms)        │  │
-│   │                 │         │                         │  │
-│   │  GET /          │         │  /admin/* → cmsHandler  │  │
-│   │  GET /post/:id  │         │  /admin/login           │  │
-│   │  GET /page/:id  │         │  /admin/posts           │  │
-│   │  GET /category  │         │  /admin/pages           │  │
-│   │  GET /author    │         │  ...                    │  │
-│   └────────┬────────┘         └────────────┬────────────┘  │
-│            │                               │               │
-│            └───────────┬───────────────────┘               │
-│                        ▼                                   │
-│              ┌─────────────────┐                           │
-│              │  Drizzle ORM    │                           │
-│              │  (shared schema)│                           │
-│              └────────┬────────┘                           │
-│                       │                                    │
-└───────────────────────┼────────────────────────────────────┘
-                        ▼
-               ┌─────────────────┐
-               │    PostgreSQL   │
-               │    (PGlite)     │
-               └─────────────────┘
+No Deno installation required:
+
+```bash
+docker compose up
 ```
 
-## Serverless Optimization
+This automatically bundles components, seeds the database on first run, and starts the server. Data persists in a Docker volume.
 
-The CMS admin handler is lazy-loaded using dynamic `import()` — it's only loaded on the first `/admin/*` request. Public site requests skip the CMS import entirely, keeping cold starts fast.
+> **For IDE support:** If you want TypeScript types in your editor, install Deno locally and run `deno install` in `apps/demo/`.
 
-## Quick Start
+## Quick Start - I have Deno installed
 
 1. **Seed the database:**
 
@@ -54,13 +30,13 @@ The CMS admin handler is lazy-loaded using dynamic `import()` — it's only load
 deno task seed
 ```
 
-2. **Run the server:**
+2. **Start the server in watch mode:**
 
 ```bash
-deno task dev
+deno task all:watch
 ```
 
-> **Note:** The dev task uses `--unstable-worker-options` to enable Worker permissions for the markdown plugin. This flag is required when using `deno.permissions` in Worker constructors.
+This bundles Puck components and starts the server with file watching.
 
 3. **Open the site:**
 
@@ -71,6 +47,43 @@ deno task dev
 
 - **Email:** `admin@example.com`
 - **Password:** `admin123`
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Single Deno Server                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│   ┌─────────────────┐         ┌─────────────────────────┐   │
+│   │  Public Routes  │         │    Admin Routes         │   │
+│   │    (Hono)       │         │    (hotsauce-cms)       │   │
+│   │                 │         │                         │   │
+│   │  GET /          │         │  /admin/* → cmsHandler  │   │
+│   │  GET /post/:id  │         │  /admin/login           │   │
+│   │  GET /page/:id  │         │  /admin/posts           │   │
+│   │  GET /category  │         │  /admin/pages           │   │
+│   │  GET /author    │         │  ...                    │   │
+│   └────────┬────────┘         └────────────┬────────────┘   │
+│            │                               │                │
+│            └───────────┬───────────────────┘                │
+│                        ▼                                    │
+│              ┌─────────────────┐                            │
+│              │  Drizzle ORM    │                            │
+│              │  (shared schema)│                            │
+│              └────────┬────────┘                            │
+│                       │                                     │
+└───────────────────────┼─────────────────────────────────────┘
+                        ▼
+               ┌─────────────────┐
+               │    PostgreSQL   │
+               │    (PGlite)     │
+               └─────────────────┘
+```
+
+## Serverless Optimization
+
+The CMS admin handler is lazy-loaded using dynamic `import()` — it's only loaded on the first `/admin/*` request. Public site requests skip the CMS import entirely, keeping cold starts fast.
 
 ## Project Structure
 
@@ -87,11 +100,11 @@ apps/demo/
 │
 ├── admin/          # CMS admin (admin only)
 │   ├── admin.ts    # CMS handler configuration
-│   ├── components.js # Built Puck components bundle
-│   └── markdown-worker.ts # Worker plugin for markdown
+│   └── components.js # Built Puck components bundle
 │
 ├── lib/            # Shared code (used by admin + site)
 │   ├── markdown.ts # Markdown parser wrapper (micromark)
+│   ├── markdown-plugin.ts # Markdown transform plugin (in-process)
 │   ├── sanitize.ts # Allowlist HTML sanitizer (XSS prevention)
 │   └── sanitize_test.ts # Sanitizer test suite
 │
@@ -117,8 +130,8 @@ apps/demo/
 | `components.tsx`             | Both       | Puck component definitions (React)  |
 | `admin/admin.ts`             | Admin only | CMS handler configuration           |
 | `admin/components.js`        | Admin only | Built Puck components bundle        |
-| `admin/markdown-worker.ts`   | Admin only | Markdown Worker plugin              |
 | `lib/markdown.ts`            | Both       | Markdown parser wrapper (micromark) |
+| `lib/markdown-plugin.ts`     | Admin only | Markdown transform plugin           |
 | `lib/sanitize.ts`            | Both       | Allowlist HTML sanitizer            |
 | `site/routes.ts`             | Site only  | Public page routes                  |
 | `site/templates.ts`          | Site only  | HTML rendering                      |
@@ -144,9 +157,10 @@ Puck components use **BEM CSS classes** instead of React inline styles to comply
 
 ```tsx
 // components.tsx - uses className, not style={{}}
-render: (({ align }) => (
-  <h1 className={`heading heading--align-${align}`}>...</h1>
-));
+render: (({ text, level, align }) => {
+  const Tag = level as keyof React.JSX.IntrinsicElements;
+  return <Tag className={`heading heading--align-${align}`}>{text}</Tag>;
+});
 ```
 
 Styles are defined in `site/static/components.css` and served as an external stylesheet.
@@ -349,7 +363,7 @@ This demo showcases many hotsauce-cms capabilities:
 | Feature                      | Where                                             |
 | ---------------------------- | ------------------------------------------------- |
 | Password authentication      | `admin.ts` — `PasswordProvider`                   |
-| Transform plugins            | `markdown-plugin.ts` — `beforeSave` hook          |
+| Transform plugins            | `lib/markdown-plugin.ts` — `beforeSave` hook      |
 | Schema-driven plugin scoping | `schema.ts` — `$cms({ plugins: { markdown } })`   |
 | Puck visual editor plugin    | `schema.ts` — `$cms({ plugins: { puck: true } })` |
 | File uploads                 | `schema.ts` — `$cms({ file: true })`              |

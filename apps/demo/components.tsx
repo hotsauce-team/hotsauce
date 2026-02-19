@@ -4,7 +4,7 @@
  * User Puck Components
  *
  * This file is built separately from the CMS editor bundle.
- * Build with: deno task build:components
+ * Build with: deno task bundle
  *
  * Export `puckProps` with `config` inside it — all Puck props in one place.
  */
@@ -285,10 +285,15 @@ const RichText: ComponentConfig = {
     const { richtext, puck: { isEditing } } = props;
 
     if (isEditing) {
-      return <div>{richtext}</div>;
+      return <div className='richtext'>{richtext}</div>;
     }
 
-    return <div dangerouslySetInnerHTML={{ __html: richtext as string }} />;
+    return (
+      <div
+        className='richtext'
+        dangerouslySetInnerHTML={{ __html: richtext as string }}
+      />
+    );
   },
 };
 

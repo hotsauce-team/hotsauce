@@ -1,0 +1,19 @@
+services:
+  demo:
+    image: denoland/deno:alpine
+    working_dir: /app/apps/demo
+    ports:
+      - '127.0.0.1:3000:3000'
+    volumes:
+      # Mount the entire workspace (needed for workspace package resolution)
+      - ../../:/app
+      # Persist database between restarts
+      - demo-data:/app/apps/demo/data
+    environment:
+      - HOST=0.0.0.0
+      - CMS_CSRF_SECRET=demo-csrf-secret-at-least-32-characters-long
+      - CMS_JWT_SECRET=demo-jwt-secret-at-least-32-characters-long
+    entrypoint: ['/bin/sh', '/app/apps/demo/docker-entrypoint.sh']
+
+volumes:
+  demo-data:

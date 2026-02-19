@@ -1656,6 +1656,7 @@
       "apps/demo": {
         "dependencies": [
           "jsr:@hono/hono@^4.11.5",
+          "npm:@electric-sql/pglite@~0.3.15",
           "npm:micromark@4.0.2"
         ]
       }

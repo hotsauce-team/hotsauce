@@ -72,9 +72,10 @@ app.route('/', siteRoutes);
 // ─────────────────────────────────────────────────────────────
 
 const PORT = 3000;
+const HOST = Deno.env.get('HOST') || '127.0.0.1';
 
 console.log(`🚀 Site running at http://localhost:${PORT}`);
 console.log(`📝 CMS admin at http://localhost:${PORT}/admin`);
 console.log(`   Run 'deno task seed' first to set up the database`);
 
-Deno.serve({ port: PORT, hostname: '127.0.0.1' }, app.fetch);
+Deno.serve({ port: PORT, hostname: HOST }, app.fetch);
