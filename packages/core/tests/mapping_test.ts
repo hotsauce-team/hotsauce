@@ -135,6 +135,41 @@ Deno.test('mapColumnToFieldType: long text types map to textarea', () => {
   assertEquals(mapColumnToFieldType(sqliteColumn), 'textarea');
 });
 
+Deno.test('mapColumnToFieldType: SQLite text with maxLength maps to text (not textarea)', () => {
+  // SQLite uses SQLiteText for all text columns, but columns with a short maxLength
+  // (e.g., title with 200 chars) should map to 'text' so they show in list views
+  const shortTextColumn = createMockColumn({
+    dataType: 'string',
+    columnType: 'SQLiteText',
+    maxLength: 200,
+  });
+  assertEquals(mapColumnToFieldType(shortTextColumn), 'text');
+
+  // maxLength at boundary (255) should still be text
+  const boundaryColumn = createMockColumn({
+    dataType: 'string',
+    columnType: 'SQLiteText',
+    maxLength: 255,
+  });
+  assertEquals(mapColumnToFieldType(boundaryColumn), 'text');
+
+  // maxLength > 255 should be textarea (too long for list view)
+  const mediumTextColumn = createMockColumn({
+    dataType: 'string',
+    columnType: 'SQLiteText',
+    maxLength: 500,
+  });
+  assertEquals(mapColumnToFieldType(mediumTextColumn), 'textarea');
+
+  // But unlimited text (no maxLength) should still be textarea
+  const longTextColumn = createMockColumn({
+    dataType: 'string',
+    columnType: 'SQLiteText',
+    // no maxLength
+  });
+  assertEquals(mapColumnToFieldType(longTextColumn), 'textarea');
+});
+
 Deno.test('mapColumnToFieldType: uuid columns map to uuid', () => {
   const column = createMockColumn({
     dataType: 'string',
