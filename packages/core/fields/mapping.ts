@@ -103,6 +103,11 @@ export function mapColumnToFieldType(column: IntrospectedColumn): CMSFieldType {
       // columnType patterns for long text (database-agnostic patterns)
       const longTextPatterns = /Text|Clob|MediumText|LongText/i;
       if (longTextPatterns.test(column.columnType)) {
+        // If column has a short maxLength (≤255), treat as short text (shows in list views)
+        // This handles SQLite where all text columns are SQLiteText regardless of length
+        if (column.maxLength !== undefined && column.maxLength <= 255) {
+          return 'text';
+        }
         return 'textarea';
       }
     }
