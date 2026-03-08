@@ -36,11 +36,10 @@ docker run --rm \
   -w /workspace \
   "$IMAGE_NAME" \
   deno run --no-lock \
-    --allow-env \
-    --allow-read \
-    --allow-write \
-    --allow-net \
-    --allow-run=npm \
+    --ignore-env \
+    --allow-env="DENO_DIR,HOME" \
+    --allow-read="/workspace,/root/.npmrc" \
+    --allow-write="/workspace" \
     scripts/npm/build_npm.ts
 
 # Step 2: Run tests in Node.js
