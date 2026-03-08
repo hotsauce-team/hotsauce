@@ -317,8 +317,9 @@ export const puckProps: PuckProps = {
         title: '',
         description: '',
       },
-      // deno-lint-ignore no-explicit-any
-      render: ({ children, title }: any) => (
+      render: (
+        { children, title }: { children: React.ReactNode; title: string },
+      ) => (
         <main data-page-title={title}>
           {children}
         </main>
