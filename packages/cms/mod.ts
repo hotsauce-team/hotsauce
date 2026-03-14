@@ -1351,7 +1351,8 @@ async function handleFileServing(
   // Check row read policy
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'read');
   if (!policyResult.allowed) {
-    return forbidden('Access denied');
+    // Return 404 (not 403) to avoid leaking existence of records
+    return notFound('Not found');
   }
 
   // Check column read policy
@@ -1361,7 +1362,8 @@ async function handleFileServing(
     policyCtx,
   );
   if (!columnResult.readableColumns.includes(column.name)) {
-    return forbidden('Access denied to this column');
+    // Return 404 (not 403) to avoid leaking existence of columns
+    return notFound('Not found');
   }
 
   // Fetch the record
@@ -1407,10 +1409,12 @@ async function handleFileServing(
       if (
         redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:'
       ) {
-        return forbidden('Invalid file URL');
+        // Return 404 (not 403) to avoid leaking file existence
+        return notFound('Not found');
       }
     } catch {
-      return forbidden('Invalid file URL');
+      // Return 404 (not 403) to avoid leaking file existence
+      return notFound('Not found');
     }
 
     return new Response(null, {

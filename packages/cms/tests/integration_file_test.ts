@@ -6,6 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import {
+  AUTH_SECRET,
   createProfilesTable,
   generateSourceToken,
   profiles,
@@ -15,8 +16,16 @@ import {
   TEST_PDF_HEADER,
   TEST_PNG_1X1_RED,
 } from './integration_helpers.ts';
-import { createCmsHandler } from '../mod.ts';
+import { createCmsHandler, createJwtPayload, signJwt } from '../mod.ts';
 import { generateCsrfToken } from '../csrf.ts';
+import type { AuthProvider } from '@hotsauce/auth';
+
+/** Minimal no-op AuthProvider — just enables JWT auth without needing a users table */
+const noopAuthProvider: AuthProvider = {
+  authenticate() {
+    return Promise.resolve(null);
+  },
+};
 
 Deno.test('integration: file upload tests', async (t) => {
   const client = new PGlite();
@@ -319,6 +328,503 @@ Deno.test('integration: file upload tests', async (t) => {
     const response = await handler(request);
 
     assertEquals(response.status, 404);
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // URL redirect tests (file serving when FileReference.url exists)
+  // ──────────────────────────────────────────────────────────
+
+  await t.step('redirects to url when FileReference has url', async () => {
+    await resetDb();
+
+    await db.insert(profiles).values({
+      name: 'Profile with URL',
+      avatar: {
+        filename: 'remote.png',
+        contentType: 'image/png',
+        size: 1024,
+        url: 'https://cdn.example.com/images/remote.png',
+      },
+    });
+
+    const handler = createHandler();
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 302);
+    assertEquals(
+      response.headers.get('Location'),
+      'https://cdn.example.com/images/remote.png',
+    );
+  });
+
+  await t.step(
+    'returns 404 for unsafe url protocol (javascript:)',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'Malicious URL',
+        avatar: {
+          filename: 'evil.png',
+          contentType: 'image/png',
+          size: 100,
+          url: 'javascript:alert(1)',
+        },
+      });
+
+      const handler = createHandler();
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+      );
+      const response = await handler(request);
+
+      // Must be 404 (not 403) to avoid leaking file existence
+      assertEquals(response.status, 404);
+    },
+  );
+
+  await t.step('returns 404 for unsafe url protocol (ftp:)', async () => {
+    await resetDb();
+
+    await db.insert(profiles).values({
+      name: 'FTP URL',
+      avatar: {
+        filename: 'file.png',
+        contentType: 'image/png',
+        size: 100,
+        url: 'ftp://evil.example.com/file.png',
+      },
+    });
+
+    const handler = createHandler();
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 404);
+  });
+
+  await t.step('returns 404 for malformed url', async () => {
+    await resetDb();
+
+    await db.insert(profiles).values({
+      name: 'Bad URL',
+      avatar: {
+        filename: 'broken.png',
+        contentType: 'image/png',
+        size: 100,
+        url: 'not-a-valid-url',
+      },
+    });
+
+    const handler = createHandler();
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 404);
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // File replacement on update
+  // ──────────────────────────────────────────────────────────
+
+  await t.step('replaces existing file with new upload', async () => {
+    await resetDb();
+
+    // Create profile with initial avatar
+    const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+    await db.insert(profiles).values({
+      name: 'Replace Test',
+      avatar: {
+        filename: 'old.png',
+        contentType: 'image/png',
+        size: TEST_PNG_1X1_RED.length,
+        data: base64Data,
+      },
+    });
+
+    const handler = createHandler();
+    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
+
+    // Upload a new avatar (PDF pretending to be image for size difference)
+    const formData = new FormData();
+    formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
+    formData.append('name', 'Replace Test');
+    formData.append(
+      'avatar',
+      new Blob([new Uint8Array([1, 2, 3, 4, 5])], { type: 'image/png' }),
+      'new-avatar.png',
+    );
+
+    const request = new Request('http://localhost/admin/profiles/1', {
+      method: 'POST',
+      body: formData,
+    });
+    const response = await handler(request);
+
+    assertEquals(response.status, 303);
+
+    // Verify file was replaced
+    const [profile] = await db.select().from(profiles);
+    const avatar = profile?.avatar as {
+      filename: string;
+      contentType: string;
+      size: number;
+      data: string;
+    } | null;
+    assertEquals(avatar?.filename, 'new-avatar.png');
+    assertEquals(avatar?.size, 5);
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // CSRF rejection
+  // ──────────────────────────────────────────────────────────
+
+  await t.step('rejects file upload without CSRF token', async () => {
+    await resetDb();
+
+    const handler = createHandler();
+
+    const formData = new FormData();
+    // Deliberately omit _csrf and _source
+    formData.append('name', 'Should Fail');
+    formData.append(
+      'avatar',
+      new Blob([TEST_PNG_1X1_RED], { type: 'image/png' }),
+      'test.png',
+    );
+
+    const request = new Request('http://localhost/admin/profiles/new', {
+      method: 'POST',
+      body: formData,
+    });
+    const response = await handler(request);
+
+    // CSRF failure re-renders form with error message (not 303 redirect)
+    assertEquals(response.status, 200);
+    const html = await response.text();
+    assertStringIncludes(html, 'Invalid or expired form');
+
+    // Verify no profile was created
+    const allProfiles = await db.select().from(profiles);
+    assertEquals(allProfiles.length, 0);
+  });
+
+  await t.step('rejects file upload with invalid CSRF token', async () => {
+    await resetDb();
+
+    const handler = createHandler();
+
+    const formData = new FormData();
+    formData.append('_csrf', 'completely-invalid-token');
+    formData.append('_source', 'also-invalid');
+    formData.append('name', 'Should Fail');
+    formData.append(
+      'avatar',
+      new Blob([TEST_PNG_1X1_RED], { type: 'image/png' }),
+      'test.png',
+    );
+
+    const request = new Request('http://localhost/admin/profiles/new', {
+      method: 'POST',
+      body: formData,
+    });
+    const response = await handler(request);
+
+    // CSRF failure re-renders form with error message (not 303 redirect)
+    assertEquals(response.status, 200);
+    const html = await response.text();
+    assertStringIncludes(html, 'Invalid or expired form');
+
+    // Verify no profile was created
+    const allProfiles = await db.select().from(profiles);
+    assertEquals(allProfiles.length, 0);
+  });
+
+  // ──────────────────────────────────────────────────────────
+  // Additional file serving edge cases
+  // ──────────────────────────────────────────────────────────
+
+  await t.step('returns 404 for non-file column', async () => {
+    await resetDb();
+
+    await db.insert(profiles).values({ name: 'Test' });
+
+    const handler = createHandler();
+    // 'name' is not a file column
+    const request = new Request(
+      'http://localhost/admin/files/profiles/name/1',
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 404);
+  });
+
+  await t.step('returns 404 for non-existent table in file route', async () => {
+    const handler = createHandler();
+    const request = new Request(
+      'http://localhost/admin/files/nonexistent/avatar/1',
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 404);
+  });
+
+  await t.step(
+    'returns 404 for non-existent column in file route',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({ name: 'Test' });
+
+      const handler = createHandler();
+      const request = new Request(
+        'http://localhost/admin/files/profiles/nonexistent/1',
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 404);
+    },
+  );
+
+  await t.step('serves SVG as attachment (not inline)', async () => {
+    await resetDb();
+
+    const svgContent = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
+    const base64Data = btoa(svgContent);
+    await db.insert(profiles).values({
+      name: 'SVG Test',
+      avatar: {
+        filename: 'icon.svg',
+        contentType: 'image/svg+xml',
+        size: svgContent.length,
+        data: base64Data,
+      },
+    });
+
+    const handler = createHandler();
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const disposition = response.headers.get('Content-Disposition');
+    assertStringIncludes(disposition ?? '', 'attachment');
+  });
+
+  await t.step('sets strict CSP on served files', async () => {
+    await resetDb();
+
+    const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+    await db.insert(profiles).values({
+      name: 'CSP Test',
+      avatar: {
+        filename: 'test.png',
+        contentType: 'image/png',
+        size: TEST_PNG_1X1_RED.length,
+        data: base64Data,
+      },
+    });
+
+    const handler = createHandler();
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const csp = response.headers.get('Content-Security-Policy');
+    assertStringIncludes(csp ?? '', "script-src 'none'");
+    assertStringIncludes(csp ?? '', 'sandbox');
+  });
+
+  await t.step('sets Cache-Control on served files', async () => {
+    await resetDb();
+
+    const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+    await db.insert(profiles).values({
+      name: 'Cache Test',
+      avatar: {
+        filename: 'test.png',
+        contentType: 'image/png',
+        size: TEST_PNG_1X1_RED.length,
+        data: base64Data,
+      },
+    });
+
+    const handler = createHandler();
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const cacheControl = response.headers.get('Cache-Control');
+    assertStringIncludes(cacheControl ?? '', 'private');
+  });
+
+  await t.step(
+    'returns 404 for FileReference with no data or url',
+    async () => {
+      await resetDb();
+
+      // Insert a FileReference that has neither data nor url
+      await db.insert(profiles).values({
+        name: 'No Data Test',
+        avatar: {
+          filename: 'ghost.png',
+          contentType: 'image/png',
+          size: 1024,
+          // no data, no url — just metadata
+        },
+      });
+
+      const handler = createHandler();
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 404);
+    },
+  );
+
+  await client.close();
+});
+
+// ============================================================================
+// Policy-gated file serving tests
+// ============================================================================
+
+Deno.test('integration: policy-gated file serving', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithFiles });
+
+  await createProfilesTable(db);
+
+  async function resetDb() {
+    await db.execute(sql`TRUNCATE TABLE profiles RESTART IDENTITY CASCADE`);
+  }
+
+  // Insert a profile with a file for all sub-tests
+  async function seedProfile() {
+    await resetDb();
+    const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+    await db.insert(profiles).values({
+      name: 'Policy Test',
+      avatar: {
+        filename: 'secret.png',
+        contentType: 'image/png',
+        size: TEST_PNG_1X1_RED.length,
+        data: base64Data,
+      },
+    });
+  }
+
+  await t.step('row policy denial returns 404 (not 403)', async () => {
+    await seedProfile();
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: noopAuthProvider,
+      },
+      policies: {
+        // Deny all reads on profiles
+        profiles: { read: () => false as const },
+      },
+    });
+
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+      { headers: { Cookie: `cms_token=${token}` } },
+    );
+    const response = await handler(request);
+
+    // Must be 404, not 403 — avoid leaking that the record exists
+    assertEquals(response.status, 404);
+  });
+
+  await t.step('column policy denial returns 404 (not 403)', async () => {
+    await seedProfile();
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: noopAuthProvider,
+      },
+      policies: {
+        profiles: {
+          columns: {
+            // Hide avatar column from all users
+            avatar: { read: () => false },
+          },
+        },
+      },
+    });
+
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+      { headers: { Cookie: `cms_token=${token}` } },
+    );
+    const response = await handler(request);
+
+    // Must be 404, not 403 — avoid leaking that the column has data
+    assertEquals(response.status, 404);
+  });
+
+  await t.step('allowed policy serves file normally', async () => {
+    await seedProfile();
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: noopAuthProvider,
+      },
+      policies: {
+        // Allow all reads
+        profiles: { read: () => undefined },
+      },
+    });
+
+    const payload = createJwtPayload('1');
+    const token = await signJwt(payload, AUTH_SECRET);
+
+    const request = new Request(
+      'http://localhost/admin/files/profiles/avatar/1',
+      { headers: { Cookie: `cms_token=${token}` } },
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    assertEquals(response.headers.get('Content-Type'), 'image/png');
   });
 
   await client.close();
