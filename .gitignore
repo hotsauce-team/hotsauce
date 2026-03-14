@@ -36,5 +36,8 @@ Thumbs.db
 # Agent reference (AI assistant artifacts)
 agent-reference/
 
+# Agent working documents
+SPEC-GPT25.md
+
 # Example data
 examples/deno-server/data/
