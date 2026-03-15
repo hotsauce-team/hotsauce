@@ -52,13 +52,13 @@ function validateFieldUIOverride(value: unknown): string | null {
       return `Expected 'valueSummary' to be a string, got ${typeof obj
         .valueSummary}`;
     }
-    // Optional: imagePreviewUrl (must be string if present)
-    if ('imagePreviewUrl' in obj && typeof obj.imagePreviewUrl !== 'string') {
-      return `Expected 'imagePreviewUrl' to be a string, got ${typeof obj
-        .imagePreviewUrl}`;
+    // Optional: imageUrl (must be string if present)
+    if ('imageUrl' in obj && typeof obj.imageUrl !== 'string') {
+      return `Expected 'imageUrl' to be a string, got ${typeof obj
+        .imageUrl}`;
     }
     // Check for unexpected properties
-    const allowedRootProps = ['valueSummary', 'imagePreviewUrl'];
+    const allowedRootProps = ['valueSummary', 'imageUrl'];
     const unexpectedRootProps = Object.keys(obj).filter(
       (k) => !allowedRootProps.includes(k),
     );
@@ -113,14 +113,14 @@ function validateFieldUIOverride(value: unknown): string | null {
       .valueSummary}`;
   }
 
-  // Optional: imagePreviewUrl (must be string if present)
-  if ('imagePreviewUrl' in obj && typeof obj.imagePreviewUrl !== 'string') {
-    return `Expected 'imagePreviewUrl' to be a string, got ${typeof obj
-      .imagePreviewUrl}`;
+  // Optional: imageUrl (must be string if present)
+  if ('imageUrl' in obj && typeof obj.imageUrl !== 'string') {
+    return `Expected 'imageUrl' to be a string, got ${typeof obj
+      .imageUrl}`;
   }
 
   // Check for unexpected properties on root object
-  const allowedRootProps = ['link', 'valueSummary', 'imagePreviewUrl'];
+  const allowedRootProps = ['link', 'valueSummary', 'imageUrl'];
   const unexpectedRootProps = Object.keys(obj).filter(
     (k) => !allowedRootProps.includes(k),
   );

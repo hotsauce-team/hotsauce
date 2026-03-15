@@ -300,7 +300,7 @@ export function createS3StoragePlugin(
 
           // Generate summary of current file and preview URL for images
           let valueSummary = 'No file';
-          let imagePreviewUrl: string | undefined;
+          let imageUrl: string | undefined;
           if (ctx.value && typeof ctx.value === 'object') {
             const file = ctx.value as {
               filename?: string;
@@ -316,7 +316,7 @@ export function createS3StoragePlugin(
 
               // For images stored in S3, provide preview URL via CMS file serving endpoint
               if (file.key && file.contentType?.startsWith('image/')) {
-                imagePreviewUrl =
+                imageUrl =
                   `${options.basePath}/files/${ctx.table}/${ctx.field.name}/${ctx.recordId}`;
               }
             }
@@ -325,84 +325,13 @@ export function createS3StoragePlugin(
           return {
             link: { href, label: 'Upload via S3', target: '_blank' },
             valueSummary,
-            imagePreviewUrl,
+            imageUrl,
           };
         },
       },
     },
 
     routes: [
-      // Presign endpoint (POST /admin/s3-storage/presign)
-      {
-        pattern: 'presign',
-        methods: ['POST'],
-        handler: async (ctx) => {
-          // Request body should be JSON
-          let body: {
-            table: string;
-            column: string;
-            recordId: string;
-            filename: string;
-            contentType: string;
-            size: number;
-          };
-
-          try {
-            if (!ctx.body) {
-              throw new Error('No request body');
-            }
-            body = JSON.parse(ctx.body);
-          } catch {
-            return new Response(
-              JSON.stringify({ error: 'Invalid JSON body' }),
-              {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' },
-              },
-            );
-          }
-
-          // Validate required fields
-          if (
-            !body.table || !body.column || !body.recordId ||
-            !body.filename || !body.contentType || !body.size
-          ) {
-            return new Response(
-              JSON.stringify({ error: 'Missing required fields' }),
-              {
-                status: 400,
-                headers: { 'Content-Type': 'application/json' },
-              },
-            );
-          }
-
-          // Generate presigned upload URL
-          const presignResult = await storageProvider.presignUpload!({
-            request: new Request(ctx.requestUrl),
-            user: ctx.user ?? null,
-            table: body.table,
-            column: body.column,
-            action: 'update',
-            recordId: body.recordId,
-            filename: body.filename,
-            contentType: body.contentType,
-            size: body.size,
-          });
-
-          return new Response(
-            JSON.stringify({
-              storage: options.storageId,
-              key: presignResult.key,
-              upload: presignResult.upload,
-            }),
-            {
-              status: 200,
-              headers: { 'Content-Type': 'application/json' },
-            },
-          );
-        },
-      },
-
       // Upload page (GET /admin/s3-storage/:table/:id/:column)
       {
         pattern: ':table/:id/:column',
@@ -548,17 +477,14 @@ export function createS3StoragePlugin(
       progressBar.style.display = 'none';
 
       try {
-        // Step 1: Get presigned URL
-        const presignRes = await fetch(config.basePath + '/s3-storage/presign', {
+        // Step 1: Get presigned URL (POST to same URL)
+        const presignRes = await fetch(window.location.href, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'X-CSRF-Token': config.csrfToken,
           },
           body: JSON.stringify({
-            table: config.table,
-            column: config.column,
-            recordId: config.recordId,
             filename: file.name,
             contentType: file.type || 'application/octet-stream',
             size: file.size,
@@ -655,6 +581,74 @@ export function createS3StoragePlugin(
               'Content-Type': 'text/html; charset=utf-8',
             },
           });
+        },
+      },
+      // Presign endpoint (POST /admin/s3-storage/:table/:id/:column)
+      // Same URL as upload page, different method - CMS handles policy checks
+      {
+        pattern: ':table/:id/:column',
+        methods: ['POST'],
+        handler: async (ctx) => {
+          const { table, id, column } = ctx.params;
+
+          // Request body should be JSON with file info only
+          // (table/id/column come from URL params, which CMS has policy-checked)
+          let body: {
+            filename: string;
+            contentType: string;
+            size: number;
+          };
+
+          try {
+            if (!ctx.body) {
+              throw new Error('No request body');
+            }
+            body = JSON.parse(ctx.body);
+          } catch {
+            return new Response(
+              JSON.stringify({ error: 'Invalid JSON body' }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+
+          // Validate required fields
+          if (!body.filename || !body.contentType || !body.size) {
+            return new Response(
+              JSON.stringify({ error: 'Missing required fields' }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+
+          // Generate presigned upload URL
+          const presignResult = await storageProvider.presignUpload!({
+            request: new Request(ctx.requestUrl),
+            user: ctx.user ?? null,
+            table,
+            column,
+            action: 'update',
+            recordId: id,
+            filename: body.filename,
+            contentType: body.contentType,
+            size: body.size,
+          });
+
+          return new Response(
+            JSON.stringify({
+              storage: options.storageId,
+              key: presignResult.key,
+              upload: presignResult.upload,
+            }),
+            {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            },
+          );
         },
       },
     ],

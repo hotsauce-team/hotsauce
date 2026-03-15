@@ -124,20 +124,16 @@ Deno.test('plugin route context: body is undefined for GET requests', () => {
 
 Deno.test('presign handler: validates JSON body structure', () => {
   // Simulate the validation logic in the presign route handler
+  // Note: table/id/column come from URL params (handled by CMS policy checks)
+  // Body only contains file info
   const validBody = {
-    table: 'media',
-    column: 'file',
-    recordId: '123',
     filename: 'test.png',
     contentType: 'image/png',
     size: 1024,
   };
 
   // All required fields present
-  const hasRequired = validBody.table &&
-    validBody.column &&
-    validBody.recordId &&
-    validBody.filename &&
+  const hasRequired = validBody.filename &&
     validBody.contentType &&
     validBody.size;
 
@@ -145,14 +141,13 @@ Deno.test('presign handler: validates JSON body structure', () => {
 
   // Missing field should fail validation
   const invalidBody = {
-    table: 'media',
-    column: 'file',
-    // missing recordId, filename, contentType, size
+    filename: 'test.png',
+    // missing contentType, size
   };
 
-  const missingRequired = !invalidBody.table ||
-    !('recordId' in invalidBody) ||
-    !('filename' in invalidBody);
+  const missingRequired = !invalidBody.filename ||
+    !('contentType' in invalidBody) ||
+    !('size' in invalidBody);
 
   assertEquals(missingRequired, true);
 });

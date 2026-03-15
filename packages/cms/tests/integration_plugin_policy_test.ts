@@ -19,6 +19,7 @@ import {
   adminOr,
   createCmsHandler,
   createJwtPayload,
+  generateCsrfToken,
   ownedBy,
   signJwt,
 } from '../mod.ts';
@@ -646,6 +647,265 @@ Deno.test({
         assertEquals(response.status, 200);
         // Record should be empty object (no fetch happened)
         assertEquals(capturedRecord, {});
+      },
+    );
+
+    // ─────────────────────────────────────────────────────────────
+    // POST Plugin Route Policy Tests (presign-style routes)
+    // ─────────────────────────────────────────────────────────────
+
+    await t.step(
+      'POST plugin route allows access when row policy allows',
+      async () => {
+        await resetDb();
+
+        await db.insert(users).values({
+          email: 'alice@example.com',
+          name: 'Alice',
+        });
+
+        // Post owned by Alice (user 1)
+        await db.insert(posts).values({
+          title: 'Alice Post',
+          body: 'Content',
+          authorId: 1,
+        });
+
+        const passwordHash = await getHash('password');
+        await db.insert(adminUsers).values({
+          email: 'admin@example.com',
+          passwordHash,
+        });
+
+        let handlerCalled = false;
+        let receivedBody: string | undefined;
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithAuth,
+          basePath: '/admin',
+          auth: {
+            secret: AUTH_SECRET,
+            provider: new PasswordProvider({ db, usersTable: adminUsers }),
+          },
+          policies: {
+            // Only owner can access their posts
+            posts: ownedBy(posts, 'authorId'),
+          },
+          plugins: [
+            {
+              name: 'storage',
+              hooks: {},
+              filter: 'dangerously-open',
+              routes: [
+                {
+                  pattern: ':table/:id/:column',
+                  methods: ['POST'],
+                  handler: (ctx: PluginRouteContext) => {
+                    handlerCalled = true;
+                    receivedBody = ctx.body;
+                    return new Response(
+                      JSON.stringify({ success: true }),
+                      { headers: { 'Content-Type': 'application/json' } },
+                    );
+                  },
+                },
+              ],
+            },
+          ],
+        });
+
+        // Alice (user 1) accessing her own post (authorId=1)
+        const alicePayload = createJwtPayload('1');
+        const aliceToken = await signJwt(alicePayload, AUTH_SECRET);
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        const request = new Request(
+          'http://localhost/admin/storage/posts/1/body',
+          {
+            method: 'POST',
+            headers: {
+              Cookie: `cms_token=${aliceToken}`,
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify({ filename: 'test.png', size: 1024 }),
+          },
+        );
+        const response = await handler(request);
+
+        assertEquals(response.status, 200);
+        assertEquals(handlerCalled, true);
+        assertEquals(receivedBody, '{"filename":"test.png","size":1024}');
+      },
+    );
+
+    await t.step(
+      'POST plugin route blocked when row policy denies',
+      async () => {
+        await resetDb();
+
+        await db.insert(users).values([
+          { email: 'alice@example.com', name: 'Alice' },
+          { email: 'bob@example.com', name: 'Bob' },
+        ]);
+
+        // Post owned by Bob (user 2)
+        await db.insert(posts).values({
+          title: 'Bob Post',
+          body: 'Content',
+          authorId: 2,
+        });
+
+        const passwordHash = await getHash('password');
+        await db.insert(adminUsers).values({
+          email: 'admin@example.com',
+          passwordHash,
+        });
+
+        let handlerCalled = false;
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithAuth,
+          basePath: '/admin',
+          auth: {
+            secret: AUTH_SECRET,
+            provider: new PasswordProvider({ db, usersTable: adminUsers }),
+          },
+          policies: {
+            // Only owner can access their posts
+            posts: ownedBy(posts, 'authorId'),
+          },
+          plugins: [
+            {
+              name: 'storage',
+              hooks: {},
+              filter: 'dangerously-open',
+              routes: [
+                {
+                  pattern: ':table/:id/:column',
+                  methods: ['POST'],
+                  handler: () => {
+                    handlerCalled = true;
+                    return new Response('OK');
+                  },
+                },
+              ],
+            },
+          ],
+        });
+
+        // Alice (user 1) trying to access Bob's post (authorId=2)
+        const alicePayload = createJwtPayload('1');
+        const aliceToken = await signJwt(alicePayload, AUTH_SECRET);
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        const request = new Request(
+          'http://localhost/admin/storage/posts/1/body',
+          {
+            method: 'POST',
+            headers: {
+              Cookie: `cms_token=${aliceToken}`,
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify({ filename: 'test.png', size: 1024 }),
+          },
+        );
+        const response = await handler(request);
+
+        // Row policy denied access
+        assertEquals(response.status, 403);
+        assertEquals(handlerCalled, false);
+      },
+    );
+
+    await t.step(
+      'POST plugin route blocked when column is not writable',
+      async () => {
+        await resetDb();
+
+        await db.insert(users).values({
+          email: 'alice@example.com',
+          name: 'Alice',
+        });
+
+        await db.insert(posts).values({
+          title: 'Test Post',
+          body: 'Content',
+          authorId: 1,
+        });
+
+        const passwordHash = await getHash('password');
+        await db.insert(adminUsers).values({
+          email: 'admin@example.com',
+          passwordHash,
+        });
+
+        let handlerCalled = false;
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithAuth,
+          basePath: '/admin',
+          auth: {
+            secret: AUTH_SECRET,
+            provider: new PasswordProvider({ db, usersTable: adminUsers }),
+          },
+          policies: {
+            posts: {
+              columns: {
+                // body column is read-only (not writable)
+                body: { write: () => false },
+              },
+            },
+          },
+          plugins: [
+            {
+              name: 'storage',
+              hooks: {},
+              filter: 'dangerously-open',
+              routes: [
+                {
+                  pattern: ':table/:id/:column',
+                  methods: ['POST'],
+                  handler: () => {
+                    handlerCalled = true;
+                    return new Response('OK');
+                  },
+                },
+              ],
+            },
+          ],
+        });
+
+        const payload = createJwtPayload('1');
+        const token = await signJwt(payload, AUTH_SECRET);
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        // POST to body column which is not writable
+        const request = new Request(
+          'http://localhost/admin/storage/posts/1/body',
+          {
+            method: 'POST',
+            headers: {
+              Cookie: `cms_token=${token}`,
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify({ filename: 'test.png', size: 1024 }),
+          },
+        );
+        const response = await handler(request);
+
+        // Column policy denied write access
+        assertEquals(response.status, 403);
+        assertEquals(handlerCalled, false);
+        assertStringIncludes(await response.text(), 'Column not accessible');
       },
     );
 

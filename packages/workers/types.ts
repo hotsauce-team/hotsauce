@@ -215,7 +215,7 @@ export type FieldUIOverride =
     /** Human-readable summary to show instead of raw value (plain text, no HTML) */
     valueSummary?: string;
     /** URL for image preview (for file fields with images) */
-    imagePreviewUrl?: string;
+    imageUrl?: string;
   };
 
 /**

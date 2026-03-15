@@ -563,18 +563,27 @@ async function handlePluginRoute(
 
     // Extract column value and field info (from FILTERED record)
     if (column) {
-      // Check if the requested column is readable
       const columnInfo = tableInfo.columns.find((c) => c.name === column);
-      if (columnInfo && columnResult.readableColumns.includes(column)) {
-        value = record[columnInfo.propertyName] as Serializable;
-        field = {
-          name: columnInfo.name,
-          type: mapColumnToFieldType(columnInfo),
-          config: (columnInfo.cmsOptions ?? {}) as Record<string, Serializable>,
-        };
-      } else if (columnInfo) {
-        // Column exists but user doesn't have read access
-        return new Response('Column not accessible', { status: 403 });
+      if (columnInfo) {
+        // For POST (mutations), check write permission; for GET, check read permission
+        const allowedColumns = request.method === 'POST'
+          ? columnResult.writableColumns
+          : columnResult.readableColumns;
+
+        if (allowedColumns.includes(column)) {
+          value = record[columnInfo.propertyName] as Serializable;
+          field = {
+            name: columnInfo.name,
+            type: mapColumnToFieldType(columnInfo),
+            config: (columnInfo.cmsOptions ?? {}) as Record<
+              string,
+              Serializable
+            >,
+          };
+        } else {
+          // Column exists but user doesn't have access
+          return new Response('Column not accessible', { status: 403 });
+        }
       }
     }
   }
