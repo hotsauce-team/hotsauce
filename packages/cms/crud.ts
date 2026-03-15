@@ -635,6 +635,55 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   // Compute frontend URL from table's $cms() config
   const frontendUrl = getFrontendUrl(ctx, table, transformedRecord, 'read');
 
+  // Get field UI overrides from plugins (parallel for performance)
+  // Only process fields with plugin config for efficiency
+  const fieldOverrides: Record<string, FieldUIOverride> = {};
+  const pluginService = ctx.pluginService;
+  if (pluginService) {
+    const user = getPluginUser(ctx);
+    const pluginFields = cmsFields.filter((f) => f.column.cmsOptions?.plugins);
+    const results = await Promise.all(
+      pluginFields.map(async (field) => {
+        // Compute storageId for file fields
+        // For detail view, use the file's storage field (from existing data)
+        // rather than resolveStorage (which is for write operations)
+        let storageId: string | undefined;
+        if (field.fieldType === 'file' && options.storage) {
+          const fileValue = transformedRecord[field.column.propertyName];
+          if (
+            fileValue && typeof fileValue === 'object' &&
+            'storage' in fileValue
+          ) {
+            // Use the storage ID from the existing file
+            storageId = (fileValue as { storage?: string }).storage;
+          }
+          // Fall back to default if no file or no storage field
+          if (!storageId) {
+            storageId = options.storage.defaultObjectStorageId;
+          }
+        }
+
+        const uiCtx: UIRenderFieldContext = {
+          table: table.name,
+          field: toUIFieldInfo(field),
+          value: (transformedRecord[field.column.propertyName] ??
+            null) as UIRenderFieldContext['value'],
+          recordId: recordId,
+          view: 'detail',
+          user,
+          storageId,
+        };
+        return {
+          name: field.column.propertyName,
+          override: await pluginService.renderField(uiCtx),
+        };
+      }),
+    );
+    for (const { name, override } of results) {
+      if (override) fieldOverrides[name] = override;
+    }
+  }
+
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
@@ -643,11 +692,6 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     showBack: true,
     csrfToken,
     frontendUrl,
-    fileContext: {
-      basePath,
-      tableName: table.name,
-      recordId,
-    },
   };
 
   // Build content with optional flash message
@@ -666,6 +710,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     detailOptions,
     relationData,
     m2mDisplayData,
+    fieldOverrides,
   );
 
   const page = layout(
@@ -1527,11 +1572,13 @@ async function renderCreateForm(
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
 
   // Get field UI overrides from plugins (parallel for performance)
+  // Only process fields with plugin config for efficiency
   const fieldOverrides: Record<string, FieldUIOverride> = {};
   if (pluginService) {
     const user = getPluginUser(ctx);
+    const pluginFields = cmsFields.filter((f) => f.column.cmsOptions?.plugins);
     const results = await Promise.all(
-      cmsFields.map(async (field) => {
+      pluginFields.map(async (field) => {
         // Compute storageId for file fields
         let storageId: string | undefined;
         if (field.fieldType === 'file' && options.storage) {
@@ -1663,11 +1710,13 @@ async function renderEditForm(
   const frontendUrl = getFrontendUrl(ctx, table, record ?? values, 'update');
 
   // Get field UI overrides from plugins (parallel for performance)
+  // Only process fields with plugin config for efficiency
   const fieldOverrides: Record<string, FieldUIOverride> = {};
   if (pluginService) {
     const user = getPluginUser(ctx);
+    const pluginFields = cmsFields.filter((f) => f.column.cmsOptions?.plugins);
     const results = await Promise.all(
-      cmsFields.map(async (field) => {
+      pluginFields.map(async (field) => {
         // Compute storageId for file fields
         let storageId: string | undefined;
         if (field.fieldType === 'file' && options.storage) {
@@ -1715,11 +1764,6 @@ async function renderEditForm(
     sourceToken,
     multipart: hasFileFields,
     frontendUrl,
-    fileContext: {
-      basePath,
-      tableName: table.name,
-      recordId,
-    },
   };
 
   // Merge form-level and field-level errors

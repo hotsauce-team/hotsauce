@@ -183,11 +183,6 @@ export function formFields(
   errors: Record<string, string> = {},
   relationData: Record<string, RelationOption[]> = {},
   fieldOverrides: Record<string, FieldUIOverride> = {},
-  fileContext?: {
-    basePath: string;
-    tableName: string;
-    recordId: string | number;
-  },
 ): string {
   return fields
     .map((field) =>
@@ -196,7 +191,6 @@ export function formFields(
         error: errors[field.column.propertyName],
         relationOptions: relationData[field.column.propertyName],
         override: fieldOverrides[field.column.propertyName],
-        fileContext,
       })
     )
     .join('\n');

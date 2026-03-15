@@ -33,12 +33,6 @@ export interface FormOptions {
   csrfToken?: string;
   /** Source token to identify form origin (cms vs plugin) */
   sourceToken?: string;
-  /** Context for file serving URLs (S3-stored files need this for preview) */
-  fileContext?: {
-    basePath: string;
-    tableName: string;
-    recordId: string | number;
-  };
 }
 
 /**
@@ -81,7 +75,6 @@ export function form(
           errors,
           relationData,
           fieldOverrides,
-          options.fileContext,
         ),
       )} ${raw(extraContent)}
 

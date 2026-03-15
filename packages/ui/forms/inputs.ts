@@ -48,12 +48,6 @@ export interface FieldInputOptions {
   id?: string;
   /** Options for relation fields (FK select dropdowns) */
   relationOptions?: RelationOption[];
-  /** Context for file serving URLs (S3-stored files need this for preview) */
-  fileContext?: {
-    basePath: string;
-    tableName: string;
-    recordId: string | number;
-  };
 }
 
 /**
@@ -448,17 +442,12 @@ export function fileInput(
     // For images, determine preview URL:
     // 1. Direct URL (e.g., from external storage with public URLs)
     // 2. Base64 data (inline storage)
-    // 3. File serving endpoint (S3-stored files with key)
     let previewUrl: string | null = null;
     if (existingFile.url) {
       previewUrl = existingFile.url;
     } else if (existingFile.data) {
       previewUrl =
         `data:${existingFile.contentType};base64,${existingFile.data}`;
-    } else if (existingFile.key && options.fileContext) {
-      // S3-stored file - use CMS file serving endpoint
-      const { basePath, tableName, recordId } = options.fileContext;
-      previewUrl = `${basePath}/files/${tableName}/${propertyName}/${recordId}`;
     }
     const imagePreview = isImage && previewUrl
       ? html`

@@ -37,6 +37,10 @@
     "/^deno check 2>&1 \\| (head|tail) -\\d+$/": {
       "approve": true,
       "matchCommandLine": true
+    },
+    "/^deno task test$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
   },
   "chat.agent.maxRequests": 250

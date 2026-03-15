@@ -282,11 +282,15 @@ export function createS3StoragePlugin(
     hooks: {
       ui: {
         /**
-         * Render "Upload to S3" link for file columns on edit pages.
+         * Render file field UI for edit and detail pages.
+         * - Edit: "Upload to S3" link + file summary + image preview
+         * - Detail: file summary + image preview (no upload link)
          */
         renderField: (ctx) => {
-          // Only show on edit pages (not create - record must exist)
-          if (ctx.view !== 'edit' || !ctx.recordId) return null;
+          // Only for edit/detail pages (not create - record must exist)
+          if ((ctx.view !== 'edit' && ctx.view !== 'detail') || !ctx.recordId) {
+            return null;
+          }
 
           // Only for file fields
           if (ctx.field.fieldType !== 'file') return null;
@@ -294,9 +298,6 @@ export function createS3StoragePlugin(
           // Only render if this field's storage matches this plugin's storageId
           // This respects resolveStorage callback for per-column routing
           if (ctx.storageId !== options.storageId) return null;
-
-          const href =
-            `${options.basePath}/s3-storage/${ctx.table}/${ctx.recordId}/${ctx.field.name}`;
 
           // Generate summary of current file and preview URL for images
           let valueSummary = 'No file';
@@ -321,6 +322,18 @@ export function createS3StoragePlugin(
               }
             }
           }
+
+          // Detail view: no upload link, just summary and preview
+          if (ctx.view === 'detail') {
+            return {
+              valueSummary,
+              imageUrl,
+            };
+          }
+
+          // Edit view: include upload link
+          const href =
+            `${options.basePath}/s3-storage/${ctx.table}/${ctx.recordId}/${ctx.field.name}`;
 
           return {
             link: { href, label: 'Upload via S3', target: '_blank' },

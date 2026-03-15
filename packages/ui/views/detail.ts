@@ -5,6 +5,10 @@ import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import type { RelationOption } from '../forms/inputs.ts';
 import type { ManyToManyDisplayData } from './list.ts';
+import type { FieldUIOverride } from '../forms/form.ts';
+
+// Re-export FieldUIOverride for convenience
+export type { FieldUIOverride } from '../forms/form.ts';
 
 /**
  * Options for detail view
@@ -26,12 +30,6 @@ export interface DetailViewOptions {
   frontendUrl?: string | null;
   /** Additional CSS classes */
   class?: string;
-  /** Context for file serving URLs (S3-stored files need this for preview) */
-  fileContext?: {
-    basePath: string;
-    tableName: string;
-    recordId: string | number;
-  };
 }
 
 /**
@@ -161,20 +159,14 @@ export function detailView(
   options: DetailViewOptions,
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: ManyToManyDisplayData[] = [],
+  fieldOverrides: Record<string, FieldUIOverride> = {},
 ): string {
   const fieldRows = fields
     .filter((f) => !f.hidden)
     .map((f) => {
-      // For file fields with S3 storage, construct file serving URL
-      let fileUrl: string | undefined;
-      if (f.fieldType === 'file' && options.fileContext) {
-        const value = record[f.column.propertyName];
-        if (isValidFileReference(value) && value.key) {
-          const { basePath, tableName, recordId } = options.fileContext;
-          fileUrl =
-            `${basePath}/files/${tableName}/${f.column.propertyName}/${recordId}`;
-        }
-      }
+      // Use imageUrl from plugin override if available
+      const override = fieldOverrides[f.column.propertyName];
+      const fileUrl = override?.imageUrl;
       return detailField(
         f,
         record[f.column.propertyName],

@@ -185,8 +185,8 @@ export interface UIRenderFieldContext {
   value: Serializable;
   /** Record ID (undefined on create) */
   recordId?: string | number;
-  /** View type: 'edit' for edit form, 'create' for create form */
-  view: 'edit' | 'create';
+  /** View type: where the field is being rendered */
+  view: 'edit' | 'create' | 'detail';
   /** Authenticated user info (if available) */
   user?: {
     sub: string;
