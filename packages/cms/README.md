@@ -635,6 +635,7 @@ interface ErrorContext {
   route: ParsedRoute | null; // Route info (if parsed)
   table?: IntrospectedTable; // Table being accessed
   action?: CrudAction | 'dashboard'; // Action attempted
+  requestId?: string; // Correlates error response with logs
 }
 ```
 
@@ -1639,6 +1640,8 @@ For `content: json().$cms({ plugins: { puck: true } })`, the generated policy is
 - **Prevents masquerading** — plugins cannot bypass restrictions by submitting to CMS endpoints
 
 See [Source Tokens](#source-tokens) for how the CMS identifies request origins.
+
+> **TODO:** Consider exposing an API to share the CMS's resolved policies with application developers. This would allow them to reuse the same policy definitions in their application code (e.g., for API routes, GraphQL resolvers) instead of duplicating authorization logic.
 
 ## Plugins
 

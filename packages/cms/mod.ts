@@ -11,6 +11,10 @@ import type {
   ResolvedAuthOptions,
   ResolvedCmsOptions,
   RouteContext,
+  StorageId,
+  StorageOptions,
+  StorageProvider,
+  StorageRegistry,
 } from './types.ts';
 import type { Policies } from './policies/types.ts';
 import {
@@ -433,10 +437,13 @@ async function handlePluginRoute(
       : undefined,
   };
 
-  // Check filter - must explicitly allow route access
-  // (plugin filter is optional for schema-driven scoping, but routes are always explicit)
-  if (pluginFilter !== undefined && pluginFilter !== 'dangerously-open') {
-    const allowed = pluginFilter(filterCtx);
+  // Check filter - plugins with routes MUST have filter (validated at registration)
+  // If filter is 'dangerously-open', skip check; otherwise evaluate the function
+  if (pluginFilter !== 'dangerously-open') {
+    // Filter is guaranteed to be a function here (not undefined)
+    const allowed = (pluginFilter as (ctx: FilterContext) => boolean)(
+      filterCtx,
+    );
     if (!allowed) {
       return new Response('Plugin route not allowed for this table', {
         status: 403,
@@ -454,6 +461,10 @@ async function handlePluginRoute(
     csrfSecret,
   );
 
+  // Body is read lazily after validation to avoid processing large payloads
+  // for requests that will be rejected anyway (invalid table, record, or policy)
+  let body: string | undefined;
+
   // Build base context (without record data)
   const baseCtx: Omit<PluginRouteContext, 'record' | 'value' | 'field'> = {
     table: table ?? '',
@@ -470,6 +481,7 @@ async function handlePluginRoute(
     basePath: options.basePath,
     requestUrl: request.url,
     method: request.method,
+    body,
     params,
   };
 
@@ -567,12 +579,18 @@ async function handlePluginRoute(
     }
   }
 
+  // Read request body for POST requests (deferred until after validation)
+  if (request.method === 'POST') {
+    body = await request.text();
+  }
+
   // Build full context
   const ctx: PluginRouteContext = {
     ...baseCtx,
     record,
     value,
     field,
+    body, // Add body to context (overrides undefined from baseCtx)
   };
 
   // Dispatch based on route type
@@ -588,13 +606,18 @@ async function handlePluginRoute(
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     } catch (error) {
+      // Generate request ID to correlate error logs with user-facing response
+      const requestId = crypto.randomUUID();
       options.onError?.(error as Error, {
         request,
         url: new URL(request.url),
         route: null, // Plugin routes don't use ParsedRoute
         action: 'read',
+        requestId,
       });
-      return new Response('Plugin error', { status: 500 });
+      return new Response(`Plugin error (request: ${requestId})`, {
+        status: 500,
+      });
     }
   }
 
@@ -610,18 +633,92 @@ async function handlePluginRoute(
         headers: { 'Content-Type': 'text/html; charset=utf-8' },
       });
     } catch (error) {
+      // Generate request ID to correlate error logs with user-facing response
+      const requestId = crypto.randomUUID();
       options.onError?.(error as Error, {
         request,
         url: new URL(request.url),
         route: null, // Plugin routes don't use ParsedRoute
         action: 'read',
+        requestId,
       });
-      return new Response('Plugin error', { status: 500 });
+      return new Response(`Plugin error (request: ${requestId})`, {
+        status: 500,
+      });
     }
   }
 
   // No handler or render configured (should be caught by validation)
   return new Response('Route not configured', { status: 500 });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Storage provider extraction
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Extract storage providers from in-process plugins and build a registry.
+ * Only in-process plugins can provide storage providers (Worker plugins cannot).
+ *
+ * @param plugins - Plugin configurations to scan
+ * @param storageOptions - User-provided storage configuration
+ * @returns Storage registry or undefined if no providers
+ */
+function buildStorageRegistry(
+  plugins: import('./plugins/types.ts').PluginConfig[] | undefined,
+  storageOptions: StorageOptions | undefined,
+): StorageRegistry | undefined {
+  const instances = new Map<StorageId, StorageProvider>();
+
+  // Extract providers from plugins
+  if (plugins) {
+    for (const plugin of plugins) {
+      // Only in-process plugins can have storageProvider
+      if (!plugin.worker) {
+        const inProcessPlugin =
+          plugin as import('./plugins/types.ts').InProcessPluginConfig;
+        if (inProcessPlugin.storageProvider) {
+          const provider = inProcessPlugin.storageProvider;
+
+          // Check for duplicate IDs
+          if (instances.has(provider.id)) {
+            throw new Error(
+              `Storage provider "${provider.id}" already registered. ` +
+                `Plugin "${plugin.name}" conflicts with an existing provider.`,
+            );
+          }
+
+          instances.set(provider.id, provider);
+        }
+      }
+    }
+  }
+
+  // If no providers extracted and no storage options, return undefined
+  if (instances.size === 0 && !storageOptions) {
+    return undefined;
+  }
+
+  // Build registry with options
+  const registry: StorageRegistry = {
+    instances,
+    defaultObjectStorageId: storageOptions?.defaultObjectStorageId,
+    resolveStorage: storageOptions?.resolveStorage,
+  };
+
+  // If defaultObjectStorageId is set, validate it exists
+  if (
+    registry.defaultObjectStorageId &&
+    !instances.has(registry.defaultObjectStorageId)
+  ) {
+    throw new Error(
+      `Invalid storage configuration: defaultObjectStorageId "${registry.defaultObjectStorageId}" ` +
+        `does not match any registered storage provider. ` +
+        `Available providers: ${[...instances.keys()].join(', ') || '(none)'}`,
+    );
+  }
+
+  return registry;
 }
 
 export function createCmsHandler(options: CmsOptions): Handler {
@@ -686,6 +783,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
   // Create plugin service (lazy initialization - Workers start on first use)
   const pluginService = createPluginService(pluginRegistry);
 
+  // Build storage registry from plugins and options
+  const storageRegistry = buildStorageRegistry(
+    options.plugins,
+    options.storage,
+  );
+
   // Apply defaults
   const opts: ResolvedCmsOptions = {
     introspected,
@@ -700,6 +803,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     policies: resolvedPolicies,
     auth: resolvedAuth,
     plugins: pluginRegistry,
+    storage: storageRegistry,
   };
 
   // Helper to check if request accepts JSON
@@ -1425,6 +1529,74 @@ async function handleFileServing(
         'Cache-Control': 'private, max-age=3600',
       },
     });
+  }
+
+  // If file has storage + key, get signed URL from provider
+  if (fileData.key) {
+    // Determine storage provider ID using fallback rules:
+    // 1. Use explicit storage field if present
+    // 2. Fall back to defaultObjectStorageId from config
+    const storageId = fileData.storage ??
+      options.storage?.defaultObjectStorageId;
+
+    if (!storageId) {
+      // No way to determine which provider to use
+      return notFound('File storage not configured');
+    }
+
+    const provider = options.storage?.instances.get(storageId);
+    if (!provider) {
+      // Provider not found in registry
+      return notFound('Storage provider not found');
+    }
+
+    if (!provider.signDownloadUrl) {
+      // Provider doesn't support signed downloads
+      return notFound('File serving not supported');
+    }
+
+    try {
+      const signedUrl = await provider.signDownloadUrl({
+        storage: storageId,
+        key: fileData.key,
+        filename: fileData.filename,
+        request,
+        user: jwtPayload
+          ? { sub: jwtPayload.sub, role: jwtPayload.role }
+          : null,
+      });
+
+      // Validate the signed URL
+      try {
+        const redirectUrl = new URL(signedUrl);
+        if (
+          redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:'
+        ) {
+          return notFound('Not found');
+        }
+      } catch {
+        return notFound('Not found');
+      }
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location': signedUrl,
+          ...SECURITY_HEADERS,
+          'Cache-Control': 'private, no-store', // Signed URLs are short-lived
+        },
+      });
+    } catch (error) {
+      // Log error and return generic failure
+      options.onError?.(error as Error, {
+        request,
+        url: new URL(request.url),
+        route: null,
+        table,
+        action: 'read',
+      });
+      return notFound('File not available');
+    }
   }
 
   // If file has base64 data, serve it directly

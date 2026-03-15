@@ -36,6 +36,12 @@ import type {
   UIHooks,
 } from '@hotsauce/workers';
 
+// Import storage types (type-only to avoid circular runtime dependency)
+import type { StorageProvider } from '../types.ts';
+
+// Re-export StorageProvider for consumers
+export type { StorageProvider };
+
 // ─────────────────────────────────────────────────────────────
 // Plugin capabilities - declared permissions
 // ─────────────────────────────────────────────────────────────
@@ -274,6 +280,22 @@ export interface InProcessPluginConfig extends PluginConfigBase {
 
   /** Custom routes (in-process only) */
   routes?: PluginRoute[];
+
+  /**
+   * Optional storage provider registration.
+   * Plugins can contribute storage backends (S3, R2, FS, etc.).
+   * The CMS extracts these during init and builds a storage registry.
+   *
+   * @example
+   * ```ts
+   * createS3StoragePlugin({
+   *   storageId: 's3',
+   *   bucket: 'my-uploads',
+   *   // ...
+   * }) // Returns config with storageProvider set
+   * ```
+   */
+  storageProvider?: StorageProvider;
 }
 
 /**

@@ -26,6 +26,12 @@ export interface DetailViewOptions {
   frontendUrl?: string | null;
   /** Additional CSS classes */
   class?: string;
+  /** Context for file serving URLs (S3-stored files need this for preview) */
+  fileContext?: {
+    basePath: string;
+    tableName: string;
+    recordId: string | number;
+  };
 }
 
 /**
@@ -129,6 +135,7 @@ export function detailField(
   field: CMSField,
   value: unknown,
   relationOptions?: RelationOption[],
+  fileUrl?: string,
 ): string {
   if (field.hidden) {
     return '';
@@ -138,7 +145,7 @@ export function detailField(
     <div class="cms-detail-field">
       <dt class="cms-detail-label">${field.label}</dt>
       <dd class="cms-detail-value">${raw(
-        formatValue(value, field, relationOptions),
+        formatValue(value, field, relationOptions, fileUrl),
       )}</dd>
     </div>
   `;
@@ -157,13 +164,24 @@ export function detailView(
 ): string {
   const fieldRows = fields
     .filter((f) => !f.hidden)
-    .map((f) =>
-      detailField(
+    .map((f) => {
+      // For file fields with S3 storage, construct file serving URL
+      let fileUrl: string | undefined;
+      if (f.fieldType === 'file' && options.fileContext) {
+        const value = record[f.column.propertyName];
+        if (isValidFileReference(value) && value.key) {
+          const { basePath, tableName, recordId } = options.fileContext;
+          fileUrl =
+            `${basePath}/files/${tableName}/${f.column.propertyName}/${recordId}`;
+        }
+      }
+      return detailField(
         f,
         record[f.column.propertyName],
         relationData[f.column.propertyName],
-      )
-    )
+        fileUrl,
+      );
+    })
     .join('\n  ');
 
   // Render M2M fields

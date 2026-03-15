@@ -7,6 +7,214 @@ import type { PluginConfig } from './plugins/types.ts';
 import type { PluginRegistry } from './plugins/registry.ts';
 import type { PluginService } from './plugins/service.ts';
 
+// ─────────────────────────────────────────────────────────────
+// Storage types - for file upload/download providers
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Unique identifier for a storage provider instance.
+ * @example 's3', 'r2', 'minio-backup', 'tenant-uploads'
+ */
+export type StorageId = string;
+
+/**
+ * Context for resolving which storage provider to use for uploads.
+ * Passed to the `resolveStorage` callback during presign operations.
+ */
+export interface ResolveStorageContext {
+  /** The original HTTP request */
+  request: Request;
+  /** Authenticated user info (null if no auth) */
+  user: { sub: string; role?: string; [key: string]: unknown } | null;
+  /** Table name being operated on */
+  table: string;
+  /** Column name for the file field */
+  column: string;
+  /** Action being performed */
+  action: 'create' | 'update';
+  /** Record ID (for updates) */
+  recordId?: string;
+}
+
+/**
+ * Function to determine which storage provider to use for a new upload.
+ * Called during presign operations.
+ *
+ * @example
+ * ```ts
+ * // Route by table
+ * resolveStorage: (ctx) => ctx.table === 'backups' ? 'archive' : 'primary'
+ *
+ * // Route by tenant (from JWT claims)
+ * resolveStorage: (ctx) => `tenant-${ctx.user?.tenantId}`
+ * ```
+ */
+export type ResolveStorageFn = (ctx: ResolveStorageContext) => StorageId;
+
+/**
+ * Context for presigning an upload URL.
+ */
+export interface PresignContext extends ResolveStorageContext {
+  /** Original filename from client */
+  filename: string;
+  /** MIME type */
+  contentType: string;
+  /** File size in bytes */
+  size: number;
+}
+
+/**
+ * Result from presigning an upload URL.
+ */
+export interface PresignResult {
+  /** The generated unique object key */
+  key: string;
+  /** Upload instructions for the client */
+  upload: {
+    /** HTTP method (usually PUT) */
+    method: string;
+    /** Presigned upload URL */
+    url: string;
+    /** Headers the client must send */
+    headers?: Record<string, string>;
+  };
+}
+
+/**
+ * Context for signing a download URL.
+ */
+export interface SignDownloadContext {
+  /** Storage provider ID */
+  storage: StorageId;
+  /** Object key */
+  key: string;
+  /** Optional filename for Content-Disposition */
+  filename?: string;
+  /** Original request (for tenant context if needed) */
+  request?: Request;
+  /** User context (for tenant-aware signing) */
+  user?: { sub: string; role?: string; [key: string]: unknown } | null;
+}
+
+/**
+ * Context for deleting an object from storage.
+ */
+export interface DeleteContext {
+  /** Storage provider ID */
+  storage: StorageId;
+  /** Object key to delete */
+  key: string;
+  /** Original request (for tenant context if needed) */
+  request?: Request;
+  /** User context (for tenant-aware operations) */
+  user?: { sub: string; role?: string; [key: string]: unknown } | null;
+}
+
+/**
+ * Context for cache invalidation.
+ */
+export interface InvalidateContext {
+  /** Storage provider ID */
+  storage: StorageId;
+  /** Object key to invalidate */
+  key: string;
+  /** Public URL (if known) */
+  url?: string;
+}
+
+/**
+ * Storage provider interface.
+ *
+ * Providers implement this interface to enable presigned uploads and signed downloads.
+ * The interface is intentionally storage-agnostic - no S3/bucket concepts in the core type.
+ *
+ * Plugins register providers via `storageProvider` field in their config.
+ * The CMS extracts these during init and builds a registry.
+ *
+ * @example
+ * ```ts
+ * const s3Provider: StorageProvider = {
+ *   id: 's3-uploads',
+ *   kind: 's3',
+ *   presignUpload: async (ctx) => ({ key: '...', upload: { method: 'PUT', url: '...' } }),
+ *   signDownloadUrl: async (ctx) => 'https://...',
+ *   deleteObject: async (ctx) => { ... },
+ * };
+ * ```
+ */
+export interface StorageProvider {
+  /** Unique identifier for this provider instance */
+  id: StorageId;
+
+  /**
+   * Provider kind for documentation/debugging.
+   * Does not affect behavior - just metadata.
+   */
+  kind: 'db-inline' | 's3' | 'custom';
+
+  /**
+   * Generate a presigned upload URL.
+   * Called when preparing for a direct-to-storage upload.
+   * Optional - providers without this use server-side upload.
+   */
+  presignUpload?: (ctx: PresignContext) => Promise<PresignResult>;
+
+  /**
+   * Generate a signed download URL.
+   * Called when serving files via /files/{table}/{column}/{id}.
+   * Optional - providers without this cannot serve files via redirect.
+   */
+  signDownloadUrl?: (ctx: SignDownloadContext) => Promise<string>;
+
+  /**
+   * Delete an object from storage.
+   * Called when file fields are cleared or replaced.
+   * Optional - if not implemented, orphaned files accumulate.
+   */
+  deleteObject?: (ctx: DeleteContext) => Promise<void>;
+
+  /**
+   * Invalidate CDN cache for an object.
+   * Called after deletion/replacement if the provider supports it.
+   * Optional - most providers don't need this with unique keys.
+   */
+  invalidateCache?: (ctx: InvalidateContext) => Promise<void>;
+}
+
+/**
+ * Storage configuration for CMS.
+ */
+export interface StorageOptions {
+  /**
+   * Default storage provider ID for new uploads.
+   * Used when no `resolveStorage` callback is provided,
+   * or for legacy FileReferences with `key` but no `storage`.
+   */
+  defaultObjectStorageId?: StorageId;
+
+  /**
+   * Callback to determine storage provider for new uploads.
+   * Receives request context including user, table, column.
+   *
+   * If not provided, uses `defaultObjectStorageId`.
+   */
+  resolveStorage?: ResolveStorageFn;
+}
+
+/**
+ * Internal storage registry built from plugin providers.
+ */
+export interface StorageRegistry {
+  /** Provider instances keyed by ID */
+  instances: Map<StorageId, StorageProvider>;
+
+  /** Default provider for new uploads */
+  defaultObjectStorageId?: StorageId;
+
+  /** Resolver function */
+  resolveStorage?: ResolveStorageFn;
+}
+
 /**
  * A Web Standard handler function: Request → Response
  */
@@ -54,6 +262,8 @@ export interface ErrorContext {
   table?: IntrospectedTable;
   /** The action being performed (if any) */
   action?: CrudAction | 'dashboard';
+  /** Request ID for correlating logs with user-facing error messages */
+  requestId?: string;
 }
 
 /**
@@ -157,6 +367,28 @@ export interface CmsOptionsBase {
    * ```
    */
   plugins?: PluginConfig[];
+
+  /**
+   * Storage configuration for file uploads.
+   *
+   * Storage providers are registered by plugins (e.g., S3 storage plugin).
+   * This option configures which provider to use and how to route uploads.
+   *
+   * @example
+   * ```ts
+   * storage: {
+   *   // Use 's3' as the default for new uploads
+   *   defaultObjectStorageId: 's3',
+   *
+   *   // Or dynamically route based on context
+   *   resolveStorage: (ctx) => {
+   *     if (ctx.table === 'backups') return 'archive';
+   *     return 's3';
+   *   },
+   * }
+   * ```
+   */
+  storage?: StorageOptions;
 }
 
 /**
@@ -323,6 +555,8 @@ export interface ResolvedCmsOptions {
   auth?: ResolvedAuthOptions;
   /** Plugin registry (undefined if no plugins configured) */
   plugins?: PluginRegistry;
+  /** Storage registry (built from plugins) - undefined if no storage providers */
+  storage?: StorageRegistry;
 }
 
 /**

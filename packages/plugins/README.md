@@ -219,3 +219,15 @@ filter: ((ctx) => ctx.user?.role !== 'admin');
 ```
 
 FilterContext contains: `{ hookType, table, action, user }`
+
+## Future Considerations
+
+### Client-Side Error Tracking (`onClientError`)
+
+Allow integrators to inject client-side JavaScript for error tracking (e.g., Sentry, LogRocket, Datadog RUM). This would require:
+
+1. **Configuration option** — `clientScripts.src` (URLs to load) and `clientScripts.init` (inline JS to run)
+2. **CSP modifications** — Integrators would need to allow external script sources and connect-src for the tracking service
+3. **Alternative approach** — Document how to wrap the CMS handler and inject scripts via response transformation, keeping the CMS secure by default
+
+Current workaround: Integrators can wrap responses and inject their own `<script>` tags while managing CSP at their server layer.

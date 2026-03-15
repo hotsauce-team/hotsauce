@@ -32,6 +32,12 @@ export interface EditViewOptions {
   frontendUrl?: string | null;
   /** Additional CSS classes */
   class?: string;
+  /** Context for file serving URLs (S3-stored files need this for preview) */
+  fileContext?: {
+    basePath: string;
+    tableName: string;
+    recordId: string | number;
+  };
 }
 
 /**
@@ -109,6 +115,7 @@ export function editView(
           csrfToken: options.csrfToken,
           sourceToken: options.sourceToken,
           multipart: options.multipart,
+          fileContext: options.fileContext,
         },
         values,
         errors,

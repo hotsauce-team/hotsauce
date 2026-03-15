@@ -91,6 +91,16 @@ export type FileReference = {
   key?: string;
   /** Public URL (CDN/direct access) */
   url?: string;
+  /**
+   * Storage provider instance ID (e.g., 's3', 'r2', 'minio').
+   * Used to route reads/deletes to the correct provider.
+   *
+   * Fallback rules when missing:
+   * - If `data` exists: treat as 'db' (inline storage)
+   * - Else if `url` exists: treat as 'public' (no provider needed)
+   * - Else if `key` exists: use defaultObjectStorageId from config
+   */
+  storage?: string;
 };
 
 /**

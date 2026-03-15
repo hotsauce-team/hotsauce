@@ -46,6 +46,14 @@ export function formField(
   if (options.override?.link) {
     const { label, href, target } = options.override.link;
 
+    // For file fields, show image preview if available
+    const imagePreview = options.override.imagePreviewUrl
+      ? html`
+        <img src="${options.override
+          .imagePreviewUrl}" alt="" class="cms-file-preview" />
+      `
+      : '';
+
     // For read-only fields, show summary (or value) and the link
     // This allows users to see what the current value is and access the plugin editor
     const valueSummary = options.override.valueSummary;
@@ -57,7 +65,7 @@ export function formField(
           <label ${attrs({ for: id, class: 'cms-label' })}>
             ${field.label}
           </label>
-          ${raw(
+          ${raw(imagePreview)} ${raw(
             valueSummary
               ? html`
                 <p class="cms-value-summary">${valueSummary}</p>
@@ -83,7 +91,7 @@ export function formField(
       `;
     }
 
-    // Non-readonly fields: show summary (if provided) + link (replaces raw input)
+    // Non-readonly fields: show preview + summary (if provided) + link (replaces raw input)
     return html`
       <div ${attrs({
         class: 'cms-field',
@@ -91,7 +99,7 @@ export function formField(
         <label ${attrs({ class: 'cms-label' })}>
           ${field.label}
         </label>
-        ${raw(
+        ${raw(imagePreview)} ${raw(
           valueSummary
             ? html`
               <p class="cms-value-summary">${valueSummary}</p>
@@ -175,6 +183,11 @@ export function formFields(
   errors: Record<string, string> = {},
   relationData: Record<string, RelationOption[]> = {},
   fieldOverrides: Record<string, FieldUIOverride> = {},
+  fileContext?: {
+    basePath: string;
+    tableName: string;
+    recordId: string | number;
+  },
 ): string {
   return fields
     .map((field) =>
@@ -183,6 +196,7 @@ export function formFields(
         error: errors[field.column.propertyName],
         relationOptions: relationData[field.column.propertyName],
         override: fieldOverrides[field.column.propertyName],
+        fileContext,
       })
     )
     .join('\n');

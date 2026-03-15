@@ -17,9 +17,14 @@ import { escapeHtml } from '@hotsauce/ui';
  * - X-Frame-Options: Prevents clickjacking
  * - Referrer-Policy: Limits referrer information leakage
  */
+// Hash for: return confirm('Delete this record?')
+// Used in detail.ts and list.ts delete forms
+const CONFIRM_DELETE_HASH =
+  'sha256-DMyhM/CqLLlclBYIzGjtyty6mh3xlFohbXui0n6IhdY=';
+
 export const SECURITY_HEADERS: Record<string, string> = {
   'Content-Security-Policy':
-    "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'",
+    `default-src 'self'; style-src 'self'; script-src 'self' 'unsafe-hashes' '${CONFIRM_DELETE_HASH}'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'`,
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
@@ -185,6 +190,7 @@ export type FlashCode =
   | 'delete_success'
   | 'delete_fk_error'
   | 'delete_error'
+  | 'delete_csrf_error'
   | 'delete_forbidden'
   | 'delete_not_found'
   | 'create_success'
@@ -216,6 +222,10 @@ const FLASH_MESSAGES: Record<
   delete_error: {
     type: 'error',
     message: 'Failed to delete record. Please try again.',
+  },
+  delete_csrf_error: {
+    type: 'error',
+    message: 'Invalid or expired form. Please try again.',
   },
   delete_forbidden: {
     type: 'error',

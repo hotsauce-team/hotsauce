@@ -250,6 +250,57 @@ Deno.test("PluginRegistry: accepts filter 'dangerously-open'", () => {
   assertEquals(registry.get('filter-open')?.plugin.name, 'filter-open');
 });
 
+Deno.test('PluginRegistry: rejects plugin with routes but no filter', () => {
+  const registry = new PluginRegistry();
+  // Plugins with routes MUST have explicit filter
+  // (routes accept URL params like :table which could expose all tables)
+  const pluginWithRoutesNoFilter = {
+    name: 'bad-routes',
+    routes: [
+      { pattern: ':table/:id', methods: ['GET'], handler: async () => 'data' },
+    ],
+    // filter: undefined - NOT specified
+  } as PluginConfig;
+
+  assertThrows(
+    () => registry.register(pluginWithRoutesNoFilter),
+    PluginValidationError,
+    "Plugins with routes must specify a 'filter'",
+  );
+});
+
+Deno.test('PluginRegistry: accepts plugin with routes and filter function', () => {
+  const registry = new PluginRegistry();
+  registry.register({
+    name: 'routes-with-filter',
+    filter: (ctx) => ctx.table === 'posts',
+    routes: [
+      { pattern: ':table/:id', methods: ['GET'], handler: async () => 'data' },
+    ],
+  });
+
+  assertEquals(
+    registry.get('routes-with-filter')?.plugin.name,
+    'routes-with-filter',
+  );
+});
+
+Deno.test("PluginRegistry: accepts plugin with routes and 'dangerously-open'", () => {
+  const registry = new PluginRegistry();
+  registry.register({
+    name: 'routes-dangerously-open',
+    filter: 'dangerously-open',
+    routes: [
+      { pattern: ':table/:id', methods: ['GET'], handler: async () => 'data' },
+    ],
+  });
+
+  assertEquals(
+    registry.get('routes-dangerously-open')?.plugin.name,
+    'routes-dangerously-open',
+  );
+});
+
 Deno.test('PluginRegistry: accepts valid plugin names', () => {
   const registry = new PluginRegistry();
 

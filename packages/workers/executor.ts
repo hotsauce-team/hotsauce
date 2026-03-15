@@ -52,8 +52,13 @@ function validateFieldUIOverride(value: unknown): string | null {
       return `Expected 'valueSummary' to be a string, got ${typeof obj
         .valueSummary}`;
     }
+    // Optional: imagePreviewUrl (must be string if present)
+    if ('imagePreviewUrl' in obj && typeof obj.imagePreviewUrl !== 'string') {
+      return `Expected 'imagePreviewUrl' to be a string, got ${typeof obj
+        .imagePreviewUrl}`;
+    }
     // Check for unexpected properties
-    const allowedRootProps = ['valueSummary'];
+    const allowedRootProps = ['valueSummary', 'imagePreviewUrl'];
     const unexpectedRootProps = Object.keys(obj).filter(
       (k) => !allowedRootProps.includes(k),
     );
@@ -108,8 +113,14 @@ function validateFieldUIOverride(value: unknown): string | null {
       .valueSummary}`;
   }
 
+  // Optional: imagePreviewUrl (must be string if present)
+  if ('imagePreviewUrl' in obj && typeof obj.imagePreviewUrl !== 'string') {
+    return `Expected 'imagePreviewUrl' to be a string, got ${typeof obj
+      .imagePreviewUrl}`;
+  }
+
   // Check for unexpected properties on root object
-  const allowedRootProps = ['link', 'valueSummary'];
+  const allowedRootProps = ['link', 'valueSummary', 'imagePreviewUrl'];
   const unexpectedRootProps = Object.keys(obj).filter(
     (k) => !allowedRootProps.includes(k),
   );

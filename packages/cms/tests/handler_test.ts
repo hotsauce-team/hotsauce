@@ -593,7 +593,7 @@ Deno.test('createCmsHandler: plugin routes allow access when canAccess returns t
   assertEquals(capturedParams?.section, 'general');
 });
 
-Deno.test('createCmsHandler: plugin POST routes return 404 (not yet supported)', async () => {
+Deno.test('createCmsHandler: plugin POST routes work with valid CSRF', async () => {
   let handlerCalled = false;
 
   const handler = createCmsHandler({
@@ -623,8 +623,13 @@ Deno.test('createCmsHandler: plugin POST routes return 404 (not yet supported)',
     ],
   });
 
+  // Generate a valid CSRF token
+  const { generateCsrfToken } = await import('../csrf.ts');
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
   const formData = new FormData();
   formData.append('data', 'test');
+  formData.append('_csrf', csrfToken);
 
   const request = new Request('http://localhost/admin/test-plugin/submit', {
     method: 'POST',
@@ -632,12 +637,12 @@ Deno.test('createCmsHandler: plugin POST routes return 404 (not yet supported)',
   });
   const response = await handler(request);
 
-  // POST to plugin routes is not yet supported - returns 404
-  assertEquals(response.status, 404);
+  // POST to plugin routes now works with valid CSRF
+  assertEquals(response.status, 200);
   assertEquals(
     handlerCalled,
-    false,
-    'Handler should NOT be called for POST (not supported)',
+    true,
+    'Handler should be called for POST with valid CSRF',
   );
 });
 

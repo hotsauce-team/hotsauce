@@ -10,7 +10,7 @@ import { listView } from '@hotsauce/ui';
 import { detailView } from '@hotsauce/ui';
 import { createView, editView } from '@hotsauce/ui';
 import { html, raw } from '@hotsauce/ui';
-import type { RouteContext } from './types.ts';
+import type { RouteContext, StorageRegistry } from './types.ts';
 import {
   coerceFormValues,
   getPagination,
@@ -81,6 +81,75 @@ import {
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
 import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
 import type { CMSField } from '@hotsauce/core';
+import { isValidFileReference } from '@hotsauce/core';
+
+// ─────────────────────────────────────────────────────────────
+// Storage deletion helpers
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Delete file objects from storage when they are cleared or replaced.
+ *
+ * This is called after a successful DB update. Failures are logged but
+ * don't fail the request - orphaned files are a storage leak, not a
+ * data integrity issue.
+ *
+ * @param storage - Storage registry
+ * @param oldRecord - Record before update
+ * @param newValues - Values being written
+ * @param fileColumns - File column metadata
+ * @param request - Original request (for tenant context)
+ * @param authUser - Authenticated user (for tenant context)
+ * @param onError - Error handler for logging
+ */
+async function deleteOldFileObjects(
+  storage: StorageRegistry | undefined,
+  oldRecord: Record<string, unknown>,
+  newValues: Record<string, unknown>,
+  fileColumns: Array<{ propertyName: string; name: string }>,
+  request: Request,
+  authUser: { id: string; role?: string } | undefined,
+  onError?: (error: Error) => void,
+): Promise<void> {
+  if (!storage) return;
+
+  for (const col of fileColumns) {
+    const oldValue = oldRecord[col.propertyName];
+    const newValue = newValues[col.propertyName];
+
+    // Skip if old value wasn't a valid file reference
+    if (!isValidFileReference(oldValue)) continue;
+
+    // Skip if new value is the same (no change)
+    if (newValue && typeof newValue === 'object') {
+      const newRef = newValue as { key?: string; storage?: string };
+      if (newRef.key === oldValue.key && newRef.storage === oldValue.storage) {
+        continue;
+      }
+    }
+
+    // Old file is being cleared or replaced - delete it
+    if (oldValue.key) {
+      const storageId = oldValue.storage ?? storage.defaultObjectStorageId;
+      if (!storageId) continue;
+
+      const provider = storage.instances.get(storageId);
+      if (!provider?.deleteObject) continue;
+
+      try {
+        await provider.deleteObject({
+          storage: storageId,
+          key: oldValue.key,
+          request,
+          user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+        });
+      } catch (error) {
+        // Log error but don't fail the request
+        onError?.(error as Error);
+      }
+    }
+  }
+}
 
 /**
  * Convert CMSField to serializable UIFieldInfo for plugin hooks
@@ -405,6 +474,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     recordIds,
   );
 
+  // Generate CSRF token for delete forms
+  const csrfToken = await generateCsrfToken(options.csrfSecret);
+
   // List view options
   const listOptions: ListViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -412,6 +484,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     showEdit: true,
     showDelete: true,
     showView: true,
+    csrfToken,
   };
 
   // Build content
@@ -570,6 +643,11 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     showBack: true,
     csrfToken,
     frontendUrl,
+    fileContext: {
+      basePath,
+      tableName: table.name,
+      recordId,
+    },
   };
 
   // Build content with optional flash message
@@ -1144,6 +1222,29 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       // Save many-to-many relations
       await saveManyToManyData(options, table, recordId, formData);
 
+      // Delete old file objects from storage (eager delete)
+      // This happens after successful DB write - failures are logged but don't fail the request
+      if (fileColumns.length > 0) {
+        await deleteOldFileObjects(
+          options.storage,
+          record,
+          dataToUpdate,
+          fileColumns,
+          request,
+          authUser,
+          options.onError
+            ? (err) =>
+              options.onError!(err, {
+                request,
+                url: new URL(request.url),
+                route,
+                table,
+                action: 'update',
+              })
+            : undefined,
+        );
+      }
+
       // Fire update action hook (may be fire-and-forget)
       if (ctx.pluginService) {
         const pluginUser = getPluginUser(ctx);
@@ -1258,7 +1359,10 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
           _form: 'Invalid or expired form. Please try again.',
         }, recordId);
       }
-      return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
+      return redirectWithFlash(
+        cmsUrl(basePath, table.name),
+        'delete_csrf_error',
+      );
     }
   }
 
@@ -1349,6 +1453,20 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_fk_error');
     }
 
+    // Log unexpected errors
+    if (options.onError) {
+      options.onError(
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          request,
+          url: new URL(request.url),
+          route: route,
+          table,
+          action: 'delete',
+        },
+      );
+    }
+
     if (isJsonRequest) {
       return jsonValidationError('delete', table.name, {
         _form: 'Failed to delete record. Please try again.',
@@ -1414,6 +1532,23 @@ async function renderCreateForm(
     const user = getPluginUser(ctx);
     const results = await Promise.all(
       cmsFields.map(async (field) => {
+        // Compute storageId for file fields
+        let storageId: string | undefined;
+        if (field.fieldType === 'file' && options.storage) {
+          if (options.storage.resolveStorage) {
+            storageId = options.storage.resolveStorage({
+              request: ctx.request,
+              user: user ?? null,
+              table: table.name,
+              column: field.column.name,
+              action: 'create',
+              recordId: undefined,
+            });
+          } else {
+            storageId = options.storage.defaultObjectStorageId;
+          }
+        }
+
         const uiCtx: UIRenderFieldContext = {
           table: table.name,
           field: toUIFieldInfo(field),
@@ -1424,6 +1559,7 @@ async function renderCreateForm(
           recordId: undefined, // create view has no record ID
           view: 'create',
           user,
+          storageId,
         };
         return {
           name: field.column.propertyName,
@@ -1532,6 +1668,23 @@ async function renderEditForm(
     const user = getPluginUser(ctx);
     const results = await Promise.all(
       cmsFields.map(async (field) => {
+        // Compute storageId for file fields
+        let storageId: string | undefined;
+        if (field.fieldType === 'file' && options.storage) {
+          if (options.storage.resolveStorage) {
+            storageId = options.storage.resolveStorage({
+              request: ctx.request,
+              user: user ?? null,
+              table: table.name,
+              column: field.column.name,
+              action: 'update',
+              recordId: String(recordId),
+            });
+          } else {
+            storageId = options.storage.defaultObjectStorageId;
+          }
+        }
+
         const uiCtx: UIRenderFieldContext = {
           table: table.name,
           field: toUIFieldInfo(field),
@@ -1542,6 +1695,7 @@ async function renderEditForm(
           recordId: recordId,
           view: 'edit',
           user,
+          storageId,
         };
         return {
           name: field.column.propertyName,
@@ -1561,6 +1715,11 @@ async function renderEditForm(
     sourceToken,
     multipart: hasFileFields,
     frontendUrl,
+    fileContext: {
+      basePath,
+      tableName: table.name,
+      recordId,
+    },
   };
 
   // Merge form-level and field-level errors

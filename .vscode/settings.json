@@ -38,5 +38,6 @@
       "approve": true,
       "matchCommandLine": true
     }
-  }
+  },
+  "chat.agent.maxRequests": 250
 }
