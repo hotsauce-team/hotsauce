@@ -164,9 +164,9 @@ export function detailView(
   const fieldRows = fields
     .filter((f) => !f.hidden)
     .map((f) => {
-      // Use imageUrl from plugin override if available
+      // Use fileUrl from plugin override if available
       const override = fieldOverrides[f.column.propertyName];
-      const fileUrl = override?.imageUrl;
+      const fileUrl = override?.fileUrl;
       return detailField(
         f,
         record[f.column.propertyName],

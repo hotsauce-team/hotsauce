@@ -214,8 +214,8 @@ export type FieldUIOverride =
     link?: { label: string; href: string; target?: '_blank' };
     /** Human-readable summary to show instead of raw value (plain text, no HTML) */
     valueSummary?: string;
-    /** URL for image preview (for file fields with images) */
-    imageUrl?: string;
+    /** URL where the file can be fetched (for download link and image preview) */
+    fileUrl?: string;
   };
 
 /**

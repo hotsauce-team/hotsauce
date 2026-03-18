@@ -47,10 +47,10 @@ export function formField(
     const { label, href, target } = options.override.link;
 
     // For file fields, show image preview if available
-    const imagePreview = options.override.imageUrl
+    const imagePreview = options.override.fileUrl
       ? html`
         <img src="${options.override
-          .imageUrl}" alt="" class="cms-file-preview" />
+          .fileUrl}" alt="" class="cms-file-preview" />
       `
       : '';
 

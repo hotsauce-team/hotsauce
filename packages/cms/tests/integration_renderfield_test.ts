@@ -20,7 +20,7 @@ const { pages } = schemaWithPlugins;
 const CUSTOM_LINK_LABEL = 'Edit with Custom Editor';
 const CUSTOM_LINK_HREF = '/custom-editor/pages/1/content';
 const CUSTOM_VALUE_SUMMARY = 'Custom plugin value summary';
-const CUSTOM_IMAGE_URL = 'https://example.com/custom-preview.png';
+const CUSTOM_FILE_URL = 'https://example.com/custom-file.png';
 
 /**
  * Create a test plugin that returns custom UI overrides for fields with plugins config
@@ -29,7 +29,7 @@ function createRenderFieldPlugin(
   name: string,
   options?: {
     onRenderField?: (ctx: UIRenderFieldContext) => void;
-    imageUrl?: string;
+    fileUrl?: string;
     link?: { label: string; href: string; target?: '_blank' };
     valueSummary?: string;
   },
@@ -51,7 +51,7 @@ function createRenderFieldPlugin(
               href: `${CUSTOM_LINK_HREF}`,
             },
             valueSummary: options?.valueSummary ?? CUSTOM_VALUE_SUMMARY,
-            imageUrl: options?.imageUrl ?? CUSTOM_IMAGE_URL,
+            fileUrl: options?.fileUrl ?? CUSTOM_FILE_URL,
           };
         },
       },
@@ -95,10 +95,10 @@ Deno.test('integration: renderField produces fieldOverrides in detail view', asy
     );
 
     assertEquals(response.status, 200);
-    // Detail view uses imageUrl for file fields, but content is JSON not file
+    // Detail view uses fileUrl for file fields, but content is JSON not file
     // For non-file fields, detail view shows the raw value, not the link
-    // The link is for edit forms. Detail view should show imageUrl if available.
-    // Since content is JSON (not file type), the imageUrl isn't used here.
+    // The link is for edit forms. Detail view should show fileUrl if available.
+    // Since content is JSON (not file type), the fileUrl isn't used here.
     // This test verifies the plugin is called - context tests below verify the data flow.
   });
 
@@ -349,21 +349,21 @@ Deno.test('integration: renderField is only called for fields with plugin config
   await client.close();
 });
 
-Deno.test('integration: fieldOverrides imageUrl is passed to detail view', async () => {
+Deno.test('integration: fieldOverrides fileUrl is passed to detail view', async () => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWithPlugins });
   await createPagesTable(db);
 
   await db.execute(sql`TRUNCATE TABLE pages RESTART IDENTITY CASCADE`);
   await db.insert(pages).values({
-    title: 'Image URL Test',
+    title: 'File URL Test',
     content: { hasImage: true },
   });
 
-  const customImageUrl = 'https://cdn.example.com/preview-123.jpg';
+  const customFileUrl = 'https://cdn.example.com/preview-123.jpg';
   let receivedOverride: unknown = null;
 
-  // Create plugin that tracks what imageUrl it returns
+  // Create plugin that tracks what fileUrl it returns
   const plugin: InProcessPluginConfig = {
     name: 'puck',
     filter: 'dangerously-open',
@@ -371,7 +371,7 @@ Deno.test('integration: fieldOverrides imageUrl is passed to detail view', async
       ui: {
         renderField: (ctx: UIRenderFieldContext) => {
           if (ctx.field.name === 'content' && ctx.field.plugin) {
-            const override = { imageUrl: customImageUrl };
+            const override = { fileUrl: customFileUrl };
             receivedOverride = override;
             return override;
           }
@@ -393,10 +393,10 @@ Deno.test('integration: fieldOverrides imageUrl is passed to detail view', async
 
   await handler(new Request('http://localhost/admin/pages/1'));
 
-  // Verify the plugin was called and returned the imageUrl
-  // (The imageUrl is only displayed for file fields in the current UI,
+  // Verify the plugin was called and returned the fileUrl
+  // (The fileUrl is only displayed for file fields in the current UI,
   // but we verify the data flow works correctly)
-  assertEquals(receivedOverride, { imageUrl: customImageUrl });
+  assertEquals(receivedOverride, { fileUrl: customFileUrl });
 
   await client.close();
 });

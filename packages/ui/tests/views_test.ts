@@ -217,6 +217,144 @@ Deno.test('detailField: formats JSON values', () => {
   assertStringIncludes(result, '&quot;key&quot;');
 });
 
+// File field rendering tests
+Deno.test('detailField: renders image file with preview and download link', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: { propertyName: 'avatar', name: 'avatar' } as IntrospectedColumn,
+    label: 'Avatar',
+  });
+
+  const fileValue = {
+    key: 'uploads/avatar.jpg',
+    filename: 'avatar.jpg',
+    contentType: 'image/jpeg',
+    size: 12345,
+    storage: 's3',
+  };
+
+  const fileUrl = 'https://s3.example.com/bucket/avatar.jpg?signed=abc';
+  const result = detailField(field, fileValue, undefined, fileUrl);
+
+  // Should have image preview for image files
+  assertStringIncludes(result, '<img');
+  assertStringIncludes(
+    result,
+    'src="https://s3.example.com/bucket/avatar.jpg?signed=abc"',
+  );
+  assertStringIncludes(result, 'cms-file-preview');
+
+  // Should have download link
+  assertStringIncludes(
+    result,
+    '<a href="https://s3.example.com/bucket/avatar.jpg?signed=abc"',
+  );
+  assertStringIncludes(result, 'Download');
+
+  // Should show file info
+  assertStringIncludes(result, 'avatar.jpg');
+  assertStringIncludes(result, 'image/jpeg');
+});
+
+Deno.test('detailField: renders document file with download link but NO image preview', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: {
+      propertyName: 'document',
+      name: 'document',
+    } as IntrospectedColumn,
+    label: 'Document',
+  });
+
+  const fileValue = {
+    key: 'uploads/report.pdf',
+    filename: 'report.pdf',
+    contentType: 'application/pdf',
+    size: 54321,
+    storage: 's3',
+  };
+
+  const fileUrl = 'https://s3.example.com/bucket/report.pdf?signed=xyz';
+  const result = detailField(field, fileValue, undefined, fileUrl);
+
+  // Should NOT have image preview for documents
+  assertEquals(
+    result.includes('<img'),
+    false,
+    'Document should not have img tag',
+  );
+  assertEquals(
+    result.includes('cms-file-preview'),
+    false,
+    'Document should not have preview class',
+  );
+
+  // Should have download link with fileUrl
+  assertStringIncludes(
+    result,
+    '<a href="https://s3.example.com/bucket/report.pdf?signed=xyz"',
+  );
+  assertStringIncludes(result, 'Download');
+
+  // Should show file info
+  assertStringIncludes(result, 'report.pdf');
+  assertStringIncludes(result, 'application/pdf');
+
+  // Should show document icon, not image icon
+  assertStringIncludes(result, '📄');
+  assertEquals(
+    result.includes('🖼️'),
+    false,
+    'Document should not have image icon',
+  );
+});
+
+Deno.test('detailField: renders file without fileUrl using fallback URL', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: {
+      propertyName: 'document',
+      name: 'document',
+    } as IntrospectedColumn,
+  });
+
+  const fileValue = {
+    key: 'uploads/doc.pdf',
+    filename: 'doc.pdf',
+    contentType: 'application/pdf',
+    size: 1000,
+    url: 'https://cdn.example.com/doc.pdf', // fallback URL in file reference
+  };
+
+  // No fileUrl override - should use value.url
+  const result = detailField(field, fileValue, undefined, undefined);
+
+  assertStringIncludes(result, '<a href="https://cdn.example.com/doc.pdf"');
+  assertStringIncludes(result, 'Download');
+});
+
+Deno.test('detailField: escapes fileUrl to prevent XSS', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: { propertyName: 'doc', name: 'doc' } as IntrospectedColumn,
+  });
+
+  const fileValue = {
+    filename: 'test.pdf',
+    contentType: 'application/pdf',
+    size: 100,
+  };
+
+  // Attempt XSS via fileUrl
+  const maliciousUrl =
+    'https://example.com/file.pdf"><script>alert(1)</script>';
+  const result = detailField(field, fileValue, undefined, maliciousUrl);
+
+  // Should escape the URL
+  assertStringIncludes(result, '&quot;');
+  assertEquals(result.includes('<script>'), false);
+});
+
 // detailView tests
 Deno.test('detailView: renders view with title and fields', () => {
   const fields = [

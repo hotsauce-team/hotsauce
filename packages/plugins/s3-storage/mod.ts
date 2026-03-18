@@ -299,9 +299,9 @@ export function createS3StoragePlugin(
           // This respects resolveStorage callback for per-column routing
           if (ctx.storageId !== options.storageId) return null;
 
-          // Generate summary of current file and preview URL for images
+          // Generate summary of current file and URL for download/preview
           let valueSummary = 'No file';
-          let imageUrl: string | undefined;
+          let fileUrl: string | undefined;
           if (ctx.value && typeof ctx.value === 'object') {
             const file = ctx.value as {
               filename?: string;
@@ -315,19 +315,19 @@ export function createS3StoragePlugin(
               const storage = file.storage ?? 'db';
               valueSummary = `${file.filename} (${sizeKb}KB, ${storage})`;
 
-              // For images stored in S3, provide preview URL via CMS file serving endpoint
-              if (file.key && file.contentType?.startsWith('image/')) {
-                imageUrl =
+              // For files stored in S3, provide URL via CMS file serving endpoint
+              if (file.key) {
+                fileUrl =
                   `${options.basePath}/files/${ctx.table}/${ctx.field.name}/${ctx.recordId}`;
               }
             }
           }
 
-          // Detail view: no upload link, just summary and preview
+          // Detail view: no upload link, just summary and file URL
           if (ctx.view === 'detail') {
             return {
               valueSummary,
-              imageUrl,
+              fileUrl,
             };
           }
 
@@ -338,7 +338,7 @@ export function createS3StoragePlugin(
           return {
             link: { href, label: 'Upload via S3', target: '_blank' },
             valueSummary,
-            imageUrl,
+            fileUrl,
           };
         },
       },
