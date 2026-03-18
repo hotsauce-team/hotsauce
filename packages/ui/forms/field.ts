@@ -125,11 +125,13 @@ export function formField(
     `;
   }
 
-  // valueSummary without link: show summary for read-only fields (hides raw JSON)
-  if (options.override?.valueSummary && field.readOnly) {
+  // valueSummary without link: show summary instead of input
+  // Used for: read-only fields (hides raw JSON), or when plugin wants to replace input with a message
+  // (e.g., S3 plugin on create: "Save record first to upload files via S3")
+  if (options.override?.valueSummary && !options.override?.link) {
     return html`
       <div ${attrs({
-        class: 'cms-field cms-field-readonly',
+        class: `cms-field ${field.readOnly ? 'cms-field-readonly' : ''}`.trim(),
       })}>
         <label ${attrs({ for: id, class: 'cms-label' })}>
           ${field.label}

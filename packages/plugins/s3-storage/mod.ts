@@ -282,22 +282,35 @@ export function createS3StoragePlugin(
     hooks: {
       ui: {
         /**
-         * Render file field UI for edit and detail pages.
+         * Render file field UI for create, edit, and detail pages.
+         * - Create: "Save record first" message (no file input - S3 needs recordId for path)
          * - Edit: "Upload to S3" link + file summary + image preview
          * - Detail: file summary + image preview (no upload link)
          */
         renderField: (ctx) => {
-          // Only for edit/detail pages (not create - record must exist)
-          if ((ctx.view !== 'edit' && ctx.view !== 'detail') || !ctx.recordId) {
+          // Only for file fields
+          if (ctx.field.fieldType !== 'file') {
             return null;
           }
 
-          // Only for file fields
-          if (ctx.field.fieldType !== 'file') return null;
-
           // Only render if this field's storage matches this plugin's storageId
           // This respects resolveStorage callback for per-column routing
-          if (ctx.storageId !== options.storageId) return null;
+          if (ctx.storageId !== options.storageId) {
+            return null;
+          }
+
+          // Create view: no recordId yet, can't generate S3 upload path
+          // Show message instead of file input for consistency with edit view
+          if (ctx.view === 'create' || !ctx.recordId) {
+            return {
+              valueSummary: 'Save record first to upload files via S3',
+            };
+          }
+
+          // Detail view or edit view - proceed with normal rendering
+          if (ctx.view !== 'edit' && ctx.view !== 'detail') {
+            return null;
+          }
 
           // Generate summary of current file and URL for download/preview
           let valueSummary = 'No file';
@@ -327,7 +340,7 @@ export function createS3StoragePlugin(
           if (ctx.view === 'detail') {
             return {
               valueSummary,
-              fileUrl,
+              ...(fileUrl && { fileUrl }),
             };
           }
 
@@ -338,7 +351,7 @@ export function createS3StoragePlugin(
           return {
             link: { href, label: 'Upload via S3', target: '_blank' },
             valueSummary,
-            fileUrl,
+            ...(fileUrl && { fileUrl }),
           };
         },
       },

@@ -636,12 +636,15 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   const frontendUrl = getFrontendUrl(ctx, table, transformedRecord, 'read');
 
   // Get field UI overrides from plugins (parallel for performance)
-  // Only process fields with plugin config for efficiency
+  // Only process fields with plugin config OR file fields when storage is configured
   const fieldOverrides: Record<string, FieldUIOverride> = {};
   const pluginService = ctx.pluginService;
   if (pluginService) {
     const user = getPluginUser(ctx);
-    const pluginFields = cmsFields.filter((f) => f.column.cmsOptions?.plugins);
+    const pluginFields = cmsFields.filter((f) =>
+      f.column.cmsOptions?.plugins ||
+      (f.fieldType === 'file' && options.storage)
+    );
     const results = await Promise.all(
       pluginFields.map(async (field) => {
         // Compute storageId for file fields
@@ -1572,11 +1575,14 @@ async function renderCreateForm(
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
 
   // Get field UI overrides from plugins (parallel for performance)
-  // Only process fields with plugin config for efficiency
+  // Only process fields with plugin config OR file fields when storage is configured
   const fieldOverrides: Record<string, FieldUIOverride> = {};
   if (pluginService) {
     const user = getPluginUser(ctx);
-    const pluginFields = cmsFields.filter((f) => f.column.cmsOptions?.plugins);
+    const pluginFields = cmsFields.filter((f) =>
+      f.column.cmsOptions?.plugins ||
+      (f.fieldType === 'file' && options.storage)
+    );
     const results = await Promise.all(
       pluginFields.map(async (field) => {
         // Compute storageId for file fields
@@ -1710,11 +1716,14 @@ async function renderEditForm(
   const frontendUrl = getFrontendUrl(ctx, table, record ?? values, 'update');
 
   // Get field UI overrides from plugins (parallel for performance)
-  // Only process fields with plugin config for efficiency
+  // Only process fields with plugin config OR file fields when storage is configured
   const fieldOverrides: Record<string, FieldUIOverride> = {};
   if (pluginService) {
     const user = getPluginUser(ctx);
-    const pluginFields = cmsFields.filter((f) => f.column.cmsOptions?.plugins);
+    const pluginFields = cmsFields.filter((f) =>
+      f.column.cmsOptions?.plugins ||
+      (f.fieldType === 'file' && options.storage)
+    );
     const results = await Promise.all(
       pluginFields.map(async (field) => {
         // Compute storageId for file fields

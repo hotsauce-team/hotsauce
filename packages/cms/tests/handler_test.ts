@@ -1043,3 +1043,125 @@ Deno.test('createCmsHandler: built-in routes take precedence over plugin routes'
     true,
   );
 });
+
+Deno.test('createCmsHandler: plugin returning fileUrl: undefined calls console.error', async () => {
+  // Track console.error calls
+  const consoleErrors: Array<{ args: unknown[] }> = [];
+  // deno-lint-ignore no-console
+  const originalError = console.error;
+  // deno-lint-ignore no-console
+  console.error = (...args: unknown[]) => {
+    consoleErrors.push({ args });
+  };
+
+  try {
+    // Create a schema with a column that has plugins config
+    // This ensures renderField is called for this column
+    const tableWithPlugins: IntrospectedTable = {
+      name: 'content',
+      columns: [
+        {
+          name: 'id',
+          propertyName: 'id',
+          columnType: 'PgSerial',
+          dataType: 'number',
+          notNull: true,
+          hasDefault: true,
+          isPrimaryKey: true,
+          isUnique: false,
+        },
+        {
+          name: 'body',
+          propertyName: 'body',
+          columnType: 'PgJsonb',
+          dataType: 'json',
+          notNull: false,
+          hasDefault: false,
+          isPrimaryKey: false,
+          isUnique: false,
+          // This makes renderField get called for this column
+          cmsOptions: {
+            plugins: { 'bad-fileurl-plugin': true },
+          },
+        },
+      ],
+      primaryKey: ['id'],
+      table: {},
+    };
+
+    const schemaWithPlugins: IntrospectedSchema = {
+      tables: [tableWithPlugins],
+      relations: [],
+      junctions: [],
+    };
+
+    // Mock db that returns a record for edit view
+    const mockDbWithRecord = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ id: 1, body: { blocks: [] } }]),
+          }),
+          limit: () => ({ offset: () => Promise.resolve([]) }),
+        }),
+      }),
+      insert: () => ({
+        values: () => ({ returning: () => Promise.resolve([{ id: 1 }]) }),
+      }),
+      update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+      delete: () => ({ where: () => Promise.resolve() }),
+    };
+
+    // Create a plugin that returns invalid data: fileUrl: undefined
+    // This was a real bug - the validation rejects explicit undefined values
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      schema: schemaWithPlugins,
+      db: mockDbWithRecord,
+      basePath: '/admin',
+      isAuthenticated: () => true,
+      plugins: [
+        {
+          name: 'bad-fileurl-plugin',
+          filter: 'dangerously-open',
+          hooks: {
+            ui: {
+              // This returns invalid data - fileUrl must be string or omitted, not undefined
+              renderField: () => ({
+                valueSummary: 'Test file',
+                fileUrl: undefined,
+              }),
+            },
+          },
+        },
+      ],
+    });
+
+    // Request the edit page - this triggers renderField for columns with plugins config
+    const request = new Request('http://localhost/admin/content/1/edit');
+    await handler(request);
+
+    // console.error should have been called with plugin error message
+    assertEquals(
+      consoleErrors.length >= 1,
+      true,
+      'console.error should be called',
+    );
+    const errorCall = consoleErrors.find((e) =>
+      typeof e.args[0] === 'string' &&
+      e.args[0].includes('[CMS Plugin Error]') &&
+      e.args[0].includes('bad-fileurl-plugin')
+    );
+    assertEquals(
+      errorCall !== undefined,
+      true,
+      'console.error should include [CMS Plugin Error] prefix and plugin name',
+    );
+  } finally {
+    // Restore console.error
+    // deno-lint-ignore no-console
+    console.error = originalError;
+  }
+});

@@ -60,19 +60,23 @@ Deno.test('formField: valueSummary-only override hides raw JSON input', () => {
   }
 });
 
-Deno.test('formField: valueSummary-only override ignored for writable fields', () => {
+Deno.test('formField: valueSummary-only override replaces input for writable fields', () => {
+  // This pattern is used by S3 storage plugin on create view:
+  // "Save record first to upload files via S3"
   const field = createMockField({ readOnly: false });
   const result = formField(field, {
     value: 'test value',
-    override: { valueSummary: '3 blocks' },
+    override: { valueSummary: 'Save record first to upload' },
   });
 
-  // Should render normal input, not the summary
-  assertStringIncludes(result, 'type="text"');
-  assertStringIncludes(result, 'name="testField"');
-  // valueSummary class should not be present
-  if (result.includes('cms-value-summary')) {
-    throw new Error('valueSummary should not render for writable fields');
+  // Should render the summary instead of input
+  assertStringIncludes(result, 'cms-value-summary');
+  assertStringIncludes(result, 'Save record first to upload');
+  // Input should not be present
+  if (result.includes('type="text"')) {
+    throw new Error(
+      'Text input should not render when valueSummary override is provided',
+    );
   }
 });
 

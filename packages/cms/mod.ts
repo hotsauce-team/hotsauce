@@ -790,7 +790,21 @@ export function createCmsHandler(options: CmsOptions): Handler {
     : undefined;
 
   // Create plugin service (lazy initialization - Workers start on first use)
-  const pluginService = createPluginService(pluginRegistry);
+  // TODO: Unify ErrorContext and PluginErrorContext into a discriminated union
+  // so plugin errors can be forwarded to options.onError instead of console.error.
+  // Currently PluginErrorContext has { plugin, operation } while ErrorContext has
+  // { request, url, route } - they need a shared base type.
+  const pluginOnError = (
+    error: Error,
+    ctx: { plugin: string; operation: string },
+  ) => {
+    // deno-lint-ignore no-console
+    console.error(
+      `[CMS Plugin Error] ${ctx.plugin}/${ctx.operation}:`,
+      error.message,
+    );
+  };
+  const pluginService = createPluginService(pluginRegistry, pluginOnError);
 
   // Build storage registry from plugins and options
   const storageRegistry = buildStorageRegistry(

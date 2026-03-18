@@ -517,6 +517,50 @@ Deno.test('FieldUIOverride validation: accepts valueSummary only (no link)', asy
   assertEquals(errors.length, 0);
 });
 
+Deno.test('FieldUIOverride validation: accepts valueSummary with valid fileUrl (no link)', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  // Detail view pattern: valueSummary + fileUrl, no upload link
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 'image.jpg (50KB)',
+    fileUrl: '/files/media/file/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, {
+    valueSummary: 'image.jpg (50KB)',
+    fileUrl: '/files/media/file/123',
+  });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: valueSummary with fileUrl: undefined calls onError', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  // Bug pattern: fileUrl property exists but is undefined (detail view case)
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 'No file',
+    fileUrl: undefined,
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  // CRITICAL: onError must be called
+  assertEquals(errors.length, 1);
+  assertEquals(
+    errors[0]!.message.includes("'fileUrl' to be a string"),
+    true,
+  );
+});
+
 Deno.test('FieldUIOverride validation: accepts link with valueSummary', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));
@@ -553,6 +597,101 @@ Deno.test('FieldUIOverride validation: rejects valueSummary wrong type', async (
   assertEquals(errors.length, 1);
   assertEquals(
     errors[0]!.message.includes("'valueSummary' to be a string"),
+    true,
+  );
+});
+
+Deno.test('FieldUIOverride validation: fileUrl: undefined calls onError and returns null', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  // This was the actual bug - plugin returned { link: ..., valueSummary: ..., fileUrl: undefined }
+  // which fails validation because 'fileUrl' property exists but is not a string
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'No file',
+    fileUrl: undefined,
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  // Should return null (graceful degradation)
+  assertEquals(result, null);
+  // CRITICAL: onError must be called so admins can see the problem in logs
+  assertEquals(errors.length, 1);
+  assertEquals(
+    errors[0]!.message.includes("'fileUrl' to be a string"),
+    true,
+  );
+  assertEquals(
+    errors[0]!.message.includes("Plugin 'test'"),
+    true,
+  );
+});
+
+Deno.test('FieldUIOverride validation: accepts link with valueSummary and fileUrl omitted', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  // Correct pattern: omit fileUrl entirely when undefined
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'No file',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, {
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'No file',
+  });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: accepts link with valueSummary and valid fileUrl', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'image.jpg (50KB)',
+    fileUrl: '/files/media/file/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, {
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'image.jpg (50KB)',
+    fileUrl: '/files/media/file/123',
+  });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: rejects fileUrl wrong type', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'file.txt',
+    fileUrl: 123, // wrong type
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(
+    errors[0]!.message.includes("'fileUrl' to be a string"),
     true,
   );
 });
