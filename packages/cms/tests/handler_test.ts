@@ -593,6 +593,207 @@ Deno.test('createCmsHandler: plugin routes allow access when canAccess returns t
   assertEquals(capturedParams?.section, 'general');
 });
 
+Deno.test('createCmsHandler: plugin table route GET passes read action to canAccess', async () => {
+  let capturedAction: string | undefined;
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, _table, action) => {
+      capturedAction = action;
+      return true;
+    },
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'browse/:table',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/editor/browse/users');
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(handlerCalled, true);
+  assertEquals(capturedAction, 'read');
+});
+
+Deno.test('createCmsHandler: plugin table route POST passes update action to canAccess', async () => {
+  let capturedAction: string | undefined;
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, _table, action) => {
+      capturedAction = action;
+      return true;
+    },
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'browse/:table',
+            methods: ['POST'],
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const { generateCsrfToken } = await import('../csrf.ts');
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+  const formData = new FormData();
+  formData.append('_csrf', csrfToken);
+
+  const request = new Request('http://localhost/admin/editor/browse/users', {
+    method: 'POST',
+    body: formData,
+  });
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(handlerCalled, true);
+  assertEquals(capturedAction, 'update');
+});
+
+Deno.test('createCmsHandler: plugin table route POST denied when canAccess blocks update', async () => {
+  let capturedAction: string | undefined;
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, _table, action) => {
+      capturedAction = action;
+      return action !== 'update';
+    },
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'browse/:table',
+            methods: ['POST'],
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const { generateCsrfToken } = await import('../csrf.ts');
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+  const formData = new FormData();
+  formData.append('_csrf', csrfToken);
+
+  const request = new Request('http://localhost/admin/editor/browse/users', {
+    method: 'POST',
+    body: formData,
+  });
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(handlerCalled, false);
+  assertEquals(capturedAction, 'update');
+});
+
+Deno.test('createCmsHandler: presign-style plugin POST route requires update access', async () => {
+  let capturedAction: string | undefined;
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, _table, action) => {
+      capturedAction = action;
+      return action !== 'update';
+    },
+    plugins: [
+      {
+        name: 'storage',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: ':table/:id/:column',
+            methods: ['POST'],
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const { generateCsrfToken } = await import('../csrf.ts');
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+  const formData = new FormData();
+  formData.append('_csrf', csrfToken);
+
+  const request = new Request(
+    'http://localhost/admin/storage/users/123/email',
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(handlerCalled, false);
+  assertEquals(capturedAction, 'update');
+});
+
 Deno.test('createCmsHandler: plugin POST routes work with valid CSRF', async () => {
   let handlerCalled = false;
 

@@ -413,6 +413,9 @@ async function handlePluginRoute(
 ): Promise<Response> {
   const { plugin, route, params } = match;
 
+  // Infer route action from method for policy and filter checks.
+  const routeAction = inferPluginRouteAction(request.method);
+
   // Extract table and recordId from params (common pattern)
   const table = params.table;
   const recordId = params.id;
@@ -424,9 +427,6 @@ async function handlePluginRoute(
   // integrator has filtered out certain tables/actions.
   // ─────────────────────────────────────────────────────────────
   const pluginFilter = plugin.filter;
-
-  // Derive action from HTTP method: GET = read, POST = update (mutation)
-  const routeAction: CrudAction = request.method === 'POST' ? 'update' : 'read';
 
   const filterCtx: FilterContext = {
     hookType: 'route',
@@ -515,8 +515,9 @@ async function handlePluginRoute(
     const tablePolicy = options.policies?.[table];
 
     // Apply ROW policy - determines if user can access this specific record
+    // Action derived from HTTP method: GET=read, POST=update
     const rowPolicy = extractRowPolicy(tablePolicy);
-    const policyResult = await applyPolicy(rowPolicy, policyCtx, 'read');
+    const policyResult = await applyPolicy(rowPolicy, policyCtx, routeAction);
 
     if (!policyResult.allowed) {
       return new Response('Access denied', { status: 403 });
@@ -621,7 +622,7 @@ async function handlePluginRoute(
         request,
         url: new URL(request.url),
         route: null, // Plugin routes don't use ParsedRoute
-        action: 'read',
+        action: routeAction,
         requestId,
       });
       return new Response(`Plugin error (request: ${requestId})`, {
@@ -648,7 +649,7 @@ async function handlePluginRoute(
         request,
         url: new URL(request.url),
         route: null, // Plugin routes don't use ParsedRoute
-        action: 'read',
+        action: routeAction,
         requestId,
       });
       return new Response(`Plugin error (request: ${requestId})`, {
@@ -659,6 +660,26 @@ async function handlePluginRoute(
 
   // No handler or render configured (should be caught by validation)
   return new Response('Route not configured', { status: 500 });
+}
+
+/**
+ * Infer the required authorization action for plugin routes from HTTP method.
+ * Mutating methods require write-level access by default.
+ */
+function inferPluginRouteAction(method: string): CrudAction {
+  switch (method.toUpperCase()) {
+    case 'POST':
+    case 'PUT':
+    case 'PATCH':
+      return 'update';
+    case 'DELETE':
+      return 'delete';
+    case 'GET':
+    case 'HEAD':
+      return 'read';
+    default:
+      return 'read';
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -1305,8 +1326,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
             (t) => t.name === pluginTable,
           );
           if (tableInfo) {
-            // Plugin routes that reference tables default to 'read' access check
-            const authorized = await opts.canAccess(request, tableInfo, 'read');
+            const pluginRouteAction = inferPluginRouteAction(request.method);
+            const authorized = await opts.canAccess(
+              request,
+              tableInfo,
+              pluginRouteAction,
+            );
             if (!authorized) {
               return forbidden('Access denied');
             }

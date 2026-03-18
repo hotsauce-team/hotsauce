@@ -909,6 +909,179 @@ Deno.test({
       },
     );
 
+    await t.step(
+      'POST plugin route uses update action, not read (action-specific policy)',
+      async () => {
+        // This test verifies that POST requests to plugin routes check the 'update'
+        // action against row policies, not 'read'. This is security-critical:
+        // without this, someone with read-only access could upload/modify via plugins.
+        await resetDb();
+
+        await db.insert(users).values([
+          { email: 'alice@example.com', name: 'Alice' },
+          { email: 'bob@example.com', name: 'Bob' },
+        ]);
+
+        // Post owned by Bob (user 2)
+        await db.insert(posts).values({
+          title: 'Bob Post',
+          body: 'Content',
+          authorId: 2,
+        });
+
+        const passwordHash = await getHash('password');
+        await db.insert(adminUsers).values({
+          email: 'admin@example.com',
+          passwordHash,
+        });
+
+        let handlerCalled = false;
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithAuth,
+          basePath: '/admin',
+          auth: {
+            secret: AUTH_SECRET,
+            provider: new PasswordProvider({ db, usersTable: adminUsers }),
+          },
+          policies: {
+            // Action-specific policy: everyone can read, only owner can update
+            posts: {
+              read: () => undefined, // Anyone can read (undefined = allowed)
+              update: ownedBy(posts, 'authorId'), // Only owner can update
+            },
+          },
+          plugins: [
+            {
+              name: 'storage',
+              hooks: {},
+              filter: 'dangerously-open',
+              routes: [
+                {
+                  pattern: ':table/:id/:column',
+                  methods: ['POST'],
+                  handler: () => {
+                    handlerCalled = true;
+                    return new Response('OK');
+                  },
+                },
+              ],
+            },
+          ],
+        });
+
+        // Alice (user 1) trying to POST to Bob's post (authorId=2)
+        // With the old code (always using 'read'), this would pass
+        // With the fix (POST uses 'update'), this should be blocked
+        const alicePayload = createJwtPayload('1');
+        const aliceToken = await signJwt(alicePayload, AUTH_SECRET);
+        const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+        const request = new Request(
+          'http://localhost/admin/storage/posts/1/body',
+          {
+            method: 'POST',
+            headers: {
+              Cookie: `cms_token=${aliceToken}`,
+              'Content-Type': 'application/json',
+              'X-CSRF-Token': csrfToken,
+            },
+            body: JSON.stringify({ filename: 'test.png', size: 1024 }),
+          },
+        );
+        const response = await handler(request);
+
+        // POST must check 'update' action, which is denied for non-owner
+        assertEquals(response.status, 403);
+        assertEquals(handlerCalled, false);
+      },
+    );
+
+    await t.step(
+      'GET plugin route uses read action (action-specific policy)',
+      async () => {
+        // Complementary test: GET requests should check 'read', not 'update'
+        await resetDb();
+
+        await db.insert(users).values([
+          { email: 'alice@example.com', name: 'Alice' },
+          { email: 'bob@example.com', name: 'Bob' },
+        ]);
+
+        // Post owned by Bob (user 2)
+        await db.insert(posts).values({
+          title: 'Bob Post',
+          body: 'Content',
+          authorId: 2,
+        });
+
+        const passwordHash = await getHash('password');
+        await db.insert(adminUsers).values({
+          email: 'admin@example.com',
+          passwordHash,
+        });
+
+        let handlerCalled = false;
+
+        const handler = createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          db,
+          schema: schemaWithAuth,
+          basePath: '/admin',
+          auth: {
+            secret: AUTH_SECRET,
+            provider: new PasswordProvider({ db, usersTable: adminUsers }),
+          },
+          policies: {
+            // Action-specific policy: everyone can read, only owner can update
+            posts: {
+              read: () => undefined, // Anyone can read (undefined = allowed)
+              update: ownedBy(posts, 'authorId'), // Only owner can update
+            },
+          },
+          plugins: [
+            {
+              name: 'storage',
+              hooks: {},
+              filter: 'dangerously-open',
+              routes: [
+                {
+                  pattern: ':table/:id/:column',
+                  methods: ['GET'],
+                  handler: () => {
+                    handlerCalled = true;
+                    return new Response('OK');
+                  },
+                },
+              ],
+            },
+          ],
+        });
+
+        // Alice (user 1) trying to GET Bob's post (authorId=2)
+        // GET should check 'read' action, which allows everyone
+        const alicePayload = createJwtPayload('1');
+        const aliceToken = await signJwt(alicePayload, AUTH_SECRET);
+
+        const request = new Request(
+          'http://localhost/admin/storage/posts/1/body',
+          {
+            method: 'GET',
+            headers: {
+              Cookie: `cms_token=${aliceToken}`,
+            },
+          },
+        );
+        const response = await handler(request);
+
+        // GET uses 'read' action, which is allowed for everyone
+        assertEquals(response.status, 200);
+        assertEquals(handlerCalled, true);
+      },
+    );
+
     client.close();
   },
 });
