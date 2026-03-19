@@ -877,9 +877,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
           },
         },
       ],
-      storage: {
-        defaultObjectStorageId: 's3',
-      },
+      storage: 's3',
     });
   }
 
@@ -1171,11 +1169,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
             },
           },
         ],
-        storage: {
-          defaultObjectStorageId: 's3',
-          // Route avatar column to 'archive', everything else to default
-          resolveStorage: (ctx) => ctx.column === 'avatar' ? 'archive' : 's3',
-        },
+        // Route avatar column to 'archive', everything else to s3
+        storage: (ctx) => ctx.column === 'avatar' ? 'archive' : 's3',
       });
 
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
@@ -1257,10 +1252,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
             },
           },
         ],
-        storage: {
-          defaultObjectStorageId: 's3',
-          resolveStorage: (ctx) => ctx.column === 'avatar' ? 'archive' : 's3',
-        },
+        storage: (ctx) => ctx.column === 'avatar' ? 'archive' : 's3',
       });
 
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);

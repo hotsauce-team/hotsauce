@@ -729,11 +729,23 @@ function buildStorageRegistry(
     return undefined;
   }
 
-  // Build registry with options
+  // Normalize storage options into registry format
+  // - string: all files go to that provider
+  // - function: dynamic routing
+  let defaultObjectStorageId: StorageId | undefined;
+  let resolveStorage: import('./types.ts').ResolveStorageFn | undefined;
+
+  if (typeof storageOptions === 'string') {
+    defaultObjectStorageId = storageOptions;
+  } else if (typeof storageOptions === 'function') {
+    resolveStorage = storageOptions;
+  }
+
+  // Build registry with normalized options
   const registry: StorageRegistry = {
     instances,
-    defaultObjectStorageId: storageOptions?.defaultObjectStorageId,
-    resolveStorage: storageOptions?.resolveStorage,
+    defaultObjectStorageId,
+    resolveStorage,
   };
 
   // If defaultObjectStorageId is set, validate it exists

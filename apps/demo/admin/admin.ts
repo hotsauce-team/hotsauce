@@ -84,14 +84,7 @@ export function createAdminHandler(db: Database) {
     // Avatar files always stay in the database (small, 20KB limit)
     // Other file columns go to S3
     storage: s3Endpoint
-      ? {
-        defaultObjectStorageId: 's3',
-        resolveStorage: (ctx) => {
-          // Keep avatars in database (return undefined = inline storage)
-          if (ctx.column === 'avatar') return undefined;
-          return 's3';
-        },
-      }
+      ? (ctx) => ctx.column === 'avatar' ? undefined : 's3'
       : undefined,
     onError: (error, context) =>
       // deno-lint-ignore no-console

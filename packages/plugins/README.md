@@ -183,9 +183,10 @@ const handler = createCmsHandler({
       secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
     }),
   ],
-  storage: {
-    defaultObjectStorageId: 's3', // Route file fields to S3
-  },
+  // Route all file fields to S3 (simple string)
+  storage: 's3',
+  // Or use a function for per-column routing:
+  // storage: (ctx) => ctx.column === 'avatar' ? undefined : 's3',
 });
 ```
 

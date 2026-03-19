@@ -190,23 +190,26 @@ export interface StorageProvider {
 
 /**
  * Storage configuration for CMS.
+ *
+ * Can be:
+ * - `StorageId` (string): All files go to that storage provider
+ * - `ResolveStorageFn`: Dynamic routing based on context
+ *
+ * Return `undefined` from the function to use inline database storage.
+ *
+ * @example
+ * ```ts
+ * // Simple: all files go to S3
+ * storage: 's3'
+ *
+ * // Dynamic: avatars stay in DB, everything else to S3
+ * storage: (ctx) => ctx.column === 'avatar' ? undefined : 's3'
+ *
+ * // Route by table
+ * storage: (ctx) => ctx.table === 'backups' ? 'archive' : 's3'
+ * ```
  */
-export interface StorageOptions {
-  /**
-   * Default storage provider ID for new uploads.
-   * Used when no `resolveStorage` callback is provided,
-   * or for legacy FileReferences with `key` but no `storage`.
-   */
-  defaultObjectStorageId?: StorageId;
-
-  /**
-   * Callback to determine storage provider for new uploads.
-   * Receives request context including user, table, column.
-   *
-   * If not provided, uses `defaultObjectStorageId`.
-   */
-  resolveStorage?: ResolveStorageFn;
-}
+export type StorageOptions = StorageId | ResolveStorageFn;
 
 /**
  * Internal storage registry built from plugin providers.
@@ -383,16 +386,11 @@ export interface CmsOptionsBase {
    *
    * @example
    * ```ts
-   * storage: {
-   *   // Use 's3' as the default for new uploads
-   *   defaultObjectStorageId: 's3',
+   * // All files go to S3
+   * storage: 's3'
    *
-   *   // Or dynamically route based on context
-   *   resolveStorage: (ctx) => {
-   *     if (ctx.table === 'backups') return 'archive';
-   *     return 's3';
-   *   },
-   * }
+   * // Dynamic routing: avatars in DB, rest to S3
+   * storage: (ctx) => ctx.column === 'avatar' ? undefined : 's3'
    * ```
    */
   storage?: StorageOptions;
