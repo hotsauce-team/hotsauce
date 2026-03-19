@@ -1290,5 +1290,223 @@ Deno.test('integration: file key tampering prevention', async (t) => {
     },
   );
 
+  // ─────────────────────────────────────────────────────────────
+  // Storage cleanup on record delete tests
+  // ─────────────────────────────────────────────────────────────
+
+  await t.step(
+    'delete cleans up storage objects for file columns',
+    async () => {
+      await resetDb();
+
+      // Track deleteObject calls
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      // Insert record with storage-backed file reference
+      await db.insert(profiles).values({
+        name: 'Profile with S3 file',
+        avatar: {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/uuid-avatar.png',
+          storage: 's3',
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+      assertStringIncludes(
+        response.headers.get('Location') ?? '',
+        '_flash=delete_success',
+      );
+
+      // Verify storage object was deleted
+      assertEquals(deletedKeys.length, 1);
+      assertEquals(deletedKeys[0], 'profiles/avatar/1/uuid-avatar.png');
+
+      // Verify DB record is gone
+      const remaining = await db.select().from(profiles);
+      assertEquals(remaining.length, 0);
+    },
+  );
+
+  await t.step(
+    'delete cleanup is fail-soft (storage error does not fail delete)',
+    async () => {
+      await resetDb();
+
+      let errorLogged = false;
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: () => {
+                throw new Error('S3 delete failed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+        onError: () => {
+          errorLogged = true;
+        },
+      });
+
+      // Insert record with storage-backed file
+      await db.insert(profiles).values({
+        name: 'Profile with failing cleanup',
+        avatar: {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/uuid-avatar.png',
+          storage: 's3',
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Delete should succeed even though storage cleanup failed
+      assertEquals(response.status, 303);
+      assertStringIncludes(
+        response.headers.get('Location') ?? '',
+        '_flash=delete_success',
+      );
+
+      // Error should have been logged
+      assertEquals(errorLogged, true);
+
+      // DB record should be gone
+      const remaining = await db.select().from(profiles);
+      assertEquals(remaining.length, 0);
+    },
+  );
+
+  await t.step(
+    'delete does not cleanup storage for DB-inline files (no key)',
+    async () => {
+      await resetDb();
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      // Insert record with DB-inline file (has data, no key)
+      await db.insert(profiles).values({
+        name: 'Profile with inline file',
+        avatar: {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+          size: 100,
+          data: 'base64encodeddata',
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+      assertStringIncludes(
+        response.headers.get('Location') ?? '',
+        '_flash=delete_success',
+      );
+
+      // No storage cleanup for inline files
+      assertEquals(deletedKeys.length, 0);
+    },
+  );
+
   await client.close();
 });

@@ -1535,8 +1535,15 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   }
 
   try {
-    // Fetch record before deletion for audit purposes
-    const recordToDelete = ctx.pluginService
+    // Check if we need to fetch record before delete
+    // - For plugin hooks (audit log, etc.)
+    // - For storage cleanup (delete S3 objects)
+    const fileColumns = table.columns.filter((col) => col.cmsOptions?.file);
+    const needsStorageCleanup = options.storage && fileColumns.length > 0;
+    const needsRecordSnapshot = ctx.pluginService || needsStorageCleanup;
+
+    // Fetch record before deletion if needed
+    const recordToDelete = needsRecordSnapshot
       ? await findRecordWithPolicy(
         options.db,
         drizzleTable as Table,
@@ -1583,6 +1590,31 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       return redirectWithFlash(
         cmsUrl(basePath, table.name),
         'delete_not_found',
+      );
+    }
+
+    // Clean up storage objects for deleted record (fail-soft)
+    if (needsStorageCleanup && recordToDelete) {
+      await deleteOldFileObjects(
+        options.storage,
+        recordToDelete,
+        {}, // Empty newValues = delete all files
+        fileColumns.map((col) => ({
+          propertyName: col.propertyName,
+          name: col.name,
+        })),
+        request,
+        authUser ? { id: authUser.id, role: authUser.role } : undefined,
+        options.onError
+          ? (err) =>
+            options.onError!(err, {
+              request,
+              url: new URL(request.url),
+              route,
+              table,
+              action: 'delete',
+            })
+          : undefined,
       );
     }
 
