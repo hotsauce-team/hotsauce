@@ -1,11 +1,11 @@
 // CMS admin configuration
 // Sets up hotsauce-cms handler for /admin routes
-import { createCmsHandler, readOnly } from '@hotsauce/cms';
+import { createCmsHandler, PasswordProvider, readOnly } from '@hotsauce/cms';
 import { createPuckPlugin } from '@hotsauce/plugins/puck';
 import { createS3StoragePlugin } from '@hotsauce/plugins/s3-storage';
 
 import type { Database } from '../db.ts';
-import { parsers, schema } from '../schema.ts';
+import { adminUsers, parsers, schema } from '../schema.ts';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
 import { createMarkdownPlugin } from '../lib/markdown-plugin.ts';
