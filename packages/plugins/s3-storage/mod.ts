@@ -41,6 +41,7 @@ import type {
   SignDownloadContext,
   StorageProvider,
 } from '../../cms/types.ts';
+import { getFileKeyPrefix } from '@hotsauce/core';
 import { buildObjectUrl, presignUrl, signHeaders } from './sigv4.ts';
 
 // Re-export types for convenience
@@ -71,7 +72,8 @@ function generateObjectKey(
   const uuid = crypto.randomUUID();
   // Sanitize filename to be URL-safe
   const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
-  return `${table}/${column}/${recordId}/${uuid}-${safeFilename}`;
+  // Use shared prefix from core to ensure consistency with key validation
+  return `${getFileKeyPrefix(table, column, recordId)}${uuid}-${safeFilename}`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -322,14 +324,16 @@ export function createS3StoragePlugin(
               storage?: string;
               contentType?: string;
               key?: string;
+              data?: string;
             };
             if (file.filename) {
               const sizeKb = file.size ? Math.round(file.size / 1024) : 0;
-              const storage = file.storage ?? 'db';
+              const storage = file.storage ?? (file.data ? 'db' : 's3');
               valueSummary = `${file.filename} (${sizeKb}KB, ${storage})`;
 
-              // For files stored in S3, provide URL via CMS file serving endpoint
-              if (file.key) {
+              // Generate URL for file preview/download
+              // The /files/ endpoint handles both DB-stored (data) and S3 (key) files
+              if (file.key || file.data) {
                 fileUrl =
                   `${options.basePath}/files/${ctx.table}/${ctx.field.name}/${ctx.recordId}`;
               }

@@ -80,5 +80,9 @@ export {
   CMS_TABLE_OPTIONS,
   FILE_DEFAULT_ACCEPT,
   FILE_DEFAULT_MAX_SIZE,
-  isValidFileReference,
 } from './extend/types.ts';
+export {
+  getFileKeyPrefix,
+  isValidFileKey,
+  isValidFileReference,
+} from './extend/file.ts';

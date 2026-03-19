@@ -829,3 +829,474 @@ Deno.test('integration: policy-gated file serving', async (t) => {
 
   await client.close();
 });
+
+// ============================================================================
+// File key tampering prevention tests (Finding 2)
+// ============================================================================
+
+Deno.test('integration: file key tampering prevention', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithFiles });
+
+  await createProfilesTable(db);
+
+  async function resetDb() {
+    await db.execute(sql`TRUNCATE TABLE profiles RESTART IDENTITY CASCADE`);
+  }
+
+  function createHandler() {
+    return createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+    });
+  }
+
+  function createHandlerWithStorage() {
+    return createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+      plugins: [
+        {
+          name: 'mock-s3',
+          storageProvider: {
+            id: 's3',
+            kind: 's3' as const,
+            presignUpload: () =>
+              Promise.resolve({
+                key: '',
+                upload: { method: 'PUT' as const, url: '' },
+              }),
+          },
+        },
+      ],
+      storage: {
+        defaultObjectStorageId: 's3',
+      },
+    });
+  }
+
+  await t.step('create rejects file ref with storage key', async () => {
+    await resetDb();
+
+    const handler = createHandler();
+    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
+
+    // Attempt to submit a file reference with a storage key during CREATE
+    // This should be rejected - presign requires existing record ID
+    const formData = new FormData();
+    formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
+    formData.append('name', 'Tampered Create');
+    formData.append(
+      'avatar',
+      JSON.stringify({
+        filename: 'tampered.png',
+        contentType: 'image/png',
+        size: 1234,
+        key: 'profiles/avatar/999/fake-key.png',
+        storage: 's3',
+      }),
+    );
+
+    const request = new Request('http://localhost/admin/profiles/new', {
+      method: 'POST',
+      body: formData,
+    });
+    const response = await handler(request);
+
+    // Should render form with error, not redirect
+    assertEquals(response.status, 200);
+    const html = await response.text();
+    assertStringIncludes(
+      html,
+      'Storage-backed files cannot be attached during create',
+    );
+  });
+
+  await t.step(
+    'create rejects file ref with storage key (JSON API)',
+    async () => {
+      await resetDb();
+
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Tampered Create JSON');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'tampered.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/999/fake-key.png',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/new', {
+        method: 'POST',
+        body: formData,
+        headers: { Accept: 'application/json' },
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 400);
+      const json = await response.json();
+      assertEquals(json.success, false);
+      assertEquals(json.action, 'create');
+      assertStringIncludes(
+        json.errors.avatar[0],
+        'Storage-backed files cannot be attached',
+      );
+    },
+  );
+
+  await t.step(
+    'update rejects file ref with wrong record ID in key',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Original Profile' });
+
+      const handler = createHandlerWithStorage();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Attempt to submit a key that belongs to record ID 999 when editing record ID 1
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Tampered Update');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'stolen.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/999/stolen-file.png', // Wrong record ID!
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'Invalid file reference');
+    },
+  );
+
+  await t.step('update rejects file ref with wrong table in key', async () => {
+    await resetDb();
+    await db.insert(profiles).values({ name: 'Target Profile' });
+
+    const handler = createHandlerWithStorage();
+    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
+
+    // Key from a different table
+    const formData = new FormData();
+    formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
+    formData.append('name', 'Cross-Table Attack');
+    formData.append(
+      'avatar',
+      JSON.stringify({
+        filename: 'cross-table.png',
+        contentType: 'image/png',
+        size: 1234,
+        key: 'other_table/avatar/1/cross-table.png', // Wrong table!
+        storage: 's3',
+      }),
+    );
+
+    const request = new Request('http://localhost/admin/profiles/1', {
+      method: 'POST',
+      body: formData,
+    });
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const html = await response.text();
+    assertStringIncludes(html, 'Invalid file reference');
+  });
+
+  await t.step(
+    'update rejects file ref with wrong storage provider',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Storage Mismatch' });
+
+      const handler = createHandlerWithStorage();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Valid key prefix but wrong storage provider
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Storage Tampering');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'valid-key.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/valid-uuid-prefix.png', // Valid key for record 1
+          storage: 'malicious-provider', // Non-existent provider
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'Invalid storage provider');
+    },
+  );
+
+  await t.step(
+    'update accepts valid file ref with correct key prefix',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Valid Update' });
+
+      const handler = createHandlerWithStorage();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Valid key with correct prefix for record 1
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Valid Update');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'legitimate.png',
+          contentType: 'image/png',
+          size: 5678,
+          key: 'profiles/avatar/1/abc123-legitimate.png', // Correct prefix!
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Should succeed with redirect
+      assertEquals(response.status, 303);
+
+      // Verify the file reference was saved
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as
+        | { key?: string; storage?: string }
+        | null;
+      assertEquals(avatar?.key, 'profiles/avatar/1/abc123-legitimate.png');
+      assertEquals(avatar?.storage, 's3');
+    },
+  );
+
+  await t.step(
+    'update accepts valid storage when resolveStorage routes to non-default',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Resolver Test' });
+
+      // Create handler with resolveStorage that routes avatar column to 'archive'
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+          {
+            name: 'mock-archive',
+            storageProvider: {
+              id: 'archive',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+        ],
+        storage: {
+          defaultObjectStorageId: 's3',
+          // Route avatar column to 'archive', everything else to default
+          resolveStorage: (ctx) => ctx.column === 'avatar' ? 'archive' : 's3',
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Submit with 'archive' storage (matches resolver for avatar column)
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Resolver Test');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'resolved.png',
+          contentType: 'image/png',
+          size: 9999,
+          key: 'profiles/avatar/1/resolved-key.png',
+          storage: 'archive', // Matches resolveStorage result, not default!
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Should succeed - 'archive' matches resolver output for this column
+      assertEquals(response.status, 303);
+
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as
+        | { key?: string; storage?: string }
+        | null;
+      assertEquals(avatar?.storage, 'archive');
+    },
+  );
+
+  await t.step(
+    'update rejects storage mismatch when resolveStorage routes elsewhere',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Resolver Mismatch' });
+
+      // Same resolver: avatar -> 'archive'
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+          {
+            name: 'mock-archive',
+            storageProvider: {
+              id: 'archive',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+        ],
+        storage: {
+          defaultObjectStorageId: 's3',
+          resolveStorage: (ctx) => ctx.column === 'avatar' ? 'archive' : 's3',
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Try to submit with 's3' but resolver routes avatar to 'archive'
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Resolver Mismatch');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'wrong-storage.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/wrong-storage.png',
+          storage: 's3', // Doesn't match resolver (should be 'archive')
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Should fail - 's3' doesn't match resolver's 'archive' for avatar
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'Invalid storage provider');
+    },
+  );
+
+  await client.close();
+});

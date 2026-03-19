@@ -40,6 +40,8 @@ export interface ResolveStorageContext {
  * Function to determine which storage provider to use for a new upload.
  * Called during presign operations.
  *
+ * Return `undefined` to use inline database storage for this column.
+ *
  * @example
  * ```ts
  * // Route by table
@@ -47,9 +49,14 @@ export interface ResolveStorageContext {
  *
  * // Route by tenant (from JWT claims)
  * resolveStorage: (ctx) => `tenant-${ctx.user?.tenantId}`
+ *
+ * // Keep avatars in database, everything else to S3
+ * resolveStorage: (ctx) => ctx.column === 'avatar' ? undefined : 's3'
  * ```
  */
-export type ResolveStorageFn = (ctx: ResolveStorageContext) => StorageId;
+export type ResolveStorageFn = (
+  ctx: ResolveStorageContext,
+) => StorageId | undefined;
 
 /**
  * Context for presigning an upload URL.

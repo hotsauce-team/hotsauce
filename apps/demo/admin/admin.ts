@@ -81,7 +81,18 @@ export function createAdminHandler(db: Database) {
     parsers,
     plugins,
     // Configure storage if S3 plugin is enabled
-    storage: s3Endpoint ? { defaultObjectStorageId: 's3' } : undefined,
+    // Avatar files always stay in the database (small, 20KB limit)
+    // Other file columns go to S3
+    storage: s3Endpoint
+      ? {
+        defaultObjectStorageId: 's3',
+        resolveStorage: (ctx) => {
+          // Keep avatars in database (return undefined = inline storage)
+          if (ctx.column === 'avatar') return undefined;
+          return 's3';
+        },
+      }
+      : undefined,
     onError: (error, context) =>
       // deno-lint-ignore no-console
       console.error('CMS Error:', { error, context }),

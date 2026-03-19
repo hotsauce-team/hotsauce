@@ -135,6 +135,10 @@ export const adminUsers = pgTable('admin_users', {
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   name: varchar('name', { length: 100 }).notNull(),
   role: varchar('role', { length: 50 }).default('editor').notNull(),
+  avatar: jsonb('avatar').$type<FileReference>().$cms({
+    file: true,
+    maxSize: 20 * 1024, // 20KB - always stored in database
+  }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 

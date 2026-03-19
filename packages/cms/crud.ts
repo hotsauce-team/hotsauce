@@ -81,7 +81,7 @@ import {
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
 import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
 import type { CMSField } from '@hotsauce/core';
-import { isValidFileReference } from '@hotsauce/core';
+import { isValidFileKey, isValidFileReference } from '@hotsauce/core';
 
 // ─────────────────────────────────────────────────────────────
 // Storage deletion helpers
@@ -903,6 +903,36 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       }
     }
 
+    // Reject file references with storage keys during create
+    // The presign flow requires an existing record ID, so any key submission
+    // during create is either tampered or from an unsupported client workflow
+    if (fileColumns.length > 0) {
+      const fileKeyErrors: Record<string, string> = {};
+      for (const col of fileColumns) {
+        const value = values[col.propertyName];
+        if (!value || typeof value !== 'object') continue;
+
+        const fileRef = value as { key?: string };
+        if (fileRef.key) {
+          fileKeyErrors[col.propertyName] =
+            'Storage-backed files cannot be attached during create. Save the record first, then upload.';
+        }
+      }
+
+      if (Object.keys(fileKeyErrors).length > 0) {
+        if (isJsonRequest) {
+          return jsonValidationError('create', table.name, fileKeyErrors);
+        }
+        return await renderCreateForm(
+          ctx,
+          columnResult,
+          values,
+          undefined,
+          fileKeyErrors,
+        );
+      }
+    }
+
     // Inject default values for non-writable columns (source-aware)
     values = injectColumnDefaults(values, columnResultWithSource.defaults);
 
@@ -979,6 +1009,20 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       }
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
+      // Log unexpected errors
+      if (options.onError) {
+        options.onError(
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            request,
+            url: new URL(request.url),
+            route: route,
+            table,
+            action: 'create',
+          },
+        );
+      }
+
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'create');
       if (isJsonRequest) {
@@ -1191,6 +1235,68 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       }
     }
 
+    // Validate file reference keys match this record (prevents key tampering)
+    // This ensures clients can only submit keys that were presigned for this specific record
+    if (fileColumns.length > 0) {
+      const fileKeyErrors: Record<string, string> = {};
+
+      for (const col of fileColumns) {
+        const value = values[col.propertyName];
+        if (!value || typeof value !== 'object') continue;
+
+        const fileRef = value as { key?: string; storage?: string };
+        if (!fileRef.key) continue; // No key = inline data or URL-based, skip
+
+        // Validate key prefix: {table}/{column}/{recordId}/
+        if (!isValidFileKey(fileRef.key, table.name, col.name, recordId)) {
+          fileKeyErrors[col.propertyName] =
+            'Invalid file reference. Please re-upload the file.';
+          continue;
+        }
+
+        // Compute expected storage ID using same logic as presign:
+        // 1. Use resolveStorage callback if configured (same context as presign)
+        // 2. Fall back to defaultObjectStorageId
+        let expectedStorageId: string | undefined;
+        if (options.storage?.resolveStorage) {
+          expectedStorageId = options.storage.resolveStorage({
+            request,
+            user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+            table: table.name,
+            column: col.name,
+            action: 'update',
+            recordId: String(recordId),
+          });
+        } else {
+          expectedStorageId = options.storage?.defaultObjectStorageId;
+        }
+
+        // Validate storage provider ID matches expected
+        if (fileRef.storage && fileRef.storage !== expectedStorageId) {
+          fileKeyErrors[col.propertyName] =
+            'Invalid storage provider. Please re-upload the file.';
+        }
+      }
+
+      if (Object.keys(fileKeyErrors).length > 0) {
+        if (isJsonRequest) {
+          return jsonValidationError(
+            'update',
+            table.name,
+            fileKeyErrors,
+            recordId,
+          );
+        }
+        return await renderEditForm(
+          ctx,
+          columnResult,
+          values,
+          undefined,
+          fileKeyErrors,
+        );
+      }
+    }
+
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(
       options,
@@ -1317,6 +1423,20 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       }
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
+      // Log unexpected errors
+      if (options.onError) {
+        options.onError(
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            request,
+            url: new URL(request.url),
+            route: route,
+            table,
+            action: 'update',
+          },
+        );
+      }
+
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'update');
       if (isJsonRequest) {

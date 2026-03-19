@@ -103,20 +103,6 @@ export type FileReference = {
   storage?: string;
 };
 
-/**
- * Runtime check for valid FileReference shape.
- * Defensive check for data that may have been inserted outside CMS.
- */
-export function isValidFileReference(value: unknown): value is FileReference {
-  if (!value || typeof value !== 'object') return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.filename === 'string' &&
-    typeof obj.contentType === 'string' &&
-    typeof obj.size === 'number'
-  );
-}
-
 // ─────────────────────────────────────────────────────────────
 // Table-level CMS options
 // ─────────────────────────────────────────────────────────────
