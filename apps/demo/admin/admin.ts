@@ -9,6 +9,7 @@ import { adminUsers, parsers, schema } from '../schema.ts';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
 import { createMarkdownPlugin } from '../lib/markdown-plugin.ts';
+import { getDemoS3Config } from '../lib/s3-config.ts';
 
 /**
  * Create the CMS handler for admin routes
@@ -21,51 +22,7 @@ import { createMarkdownPlugin } from '../lib/markdown-plugin.ts';
  * This conditional pattern is only for demo convenience.
  */
 export function createAdminHandler(db: Database) {
-  // Build plugins array
-  const plugins = [
-    createMarkdownPlugin({
-      parse: parseMarkdown,
-      sanitize: sanitizeHtml,
-    }),
-    createPuckPlugin({
-      basePath: '/admin',
-      componentsJs: '/admin/components.js',
-      componentsCss: '/static/components.css',
-    }),
-  ];
-
-  // S3 storage plugin (optional)
-  // Without these env vars, files are stored as base64 in the database.
-  // With these env vars, files are uploaded directly to S3 via presigned URLs.
-  //
-  // To enable S3 locally with MinIO:
-  //   docker compose -f docker-compose.yml -f docker-compose.s3.yml up
-  //
-  // WARNING: This env-var-based conditional is for DEMO ONLY.
-  // In production, explicitly configure your storage strategy.
-  const s3Endpoint = Deno.env.get('S3_ENDPOINT');
-  const s3Bucket = Deno.env.get('S3_BUCKET');
-  const s3AccessKey = Deno.env.get('S3_ACCESS_KEY');
-  const s3SecretKey = Deno.env.get('S3_SECRET_KEY');
-
-  if (s3Endpoint && s3Bucket && s3AccessKey && s3SecretKey) {
-    plugins.push(
-      createS3StoragePlugin({
-        basePath: '/admin',
-        endpoint: s3Endpoint,
-        // Public endpoint for browser-facing URLs (Docker: internal vs external)
-        publicEndpoint: Deno.env.get('S3_PUBLIC_ENDPOINT') ?? s3Endpoint,
-        region: Deno.env.get('S3_REGION') ?? 'us-east-1',
-        bucket: s3Bucket,
-        accessKeyId: s3AccessKey,
-        secretAccessKey: s3SecretKey,
-        urlStyle: 'path', // Works with MinIO and most S3-compatible providers
-        expirySeconds: 900, // 15 minutes
-      }),
-    );
-    // deno-lint-ignore no-console
-    console.log('S3 storage plugin enabled:', s3Endpoint);
-  }
+  const s3 = getDemoS3Config();
 
   return createCmsHandler({
     db,
@@ -79,11 +36,22 @@ export function createAdminHandler(db: Database) {
       settings: readOnly(),
     },
     parsers,
-    plugins,
+    plugins: [
+      createMarkdownPlugin({
+        parse: parseMarkdown,
+        sanitize: sanitizeHtml,
+      }),
+      createPuckPlugin({
+        basePath: '/admin',
+        componentsJs: '/admin/components.js',
+        componentsCss: '/static/components.css',
+      }),
+      ...(s3 ? [createS3StoragePlugin({ ...s3, basePath: '/admin' })] : []),
+    ],
     // Configure storage if S3 plugin is enabled
     // Avatar files always stay in the database (small, 20KB limit)
     // Other file columns go to S3
-    storage: s3Endpoint
+    storage: s3
       ? (ctx) => ctx.column === 'avatar' ? undefined : 's3'
       : undefined,
     onError: (error, context) =>
