@@ -1272,7 +1272,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
         }
 
         // Validate storage provider ID matches expected
-        if (fileRef.storage && fileRef.storage !== expectedStorageId) {
+        // Must check expectedStorageId first — if client omits storage field,
+        // the mismatch should still be caught when storage is configured
+        if (expectedStorageId && fileRef.storage !== expectedStorageId) {
           fileKeyErrors[col.propertyName] =
             'Invalid storage provider. Please re-upload the file.';
         }

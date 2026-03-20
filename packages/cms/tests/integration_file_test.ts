@@ -1082,6 +1082,47 @@ Deno.test('integration: file key tampering prevention', async (t) => {
   );
 
   await t.step(
+    'update rejects file ref with missing storage field when storage is configured',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Missing Storage' });
+
+      const handler = createHandlerWithStorage();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Valid key prefix but storage field omitted entirely
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Storage Field Missing');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'sneaky.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/valid-uuid-prefix.png', // Valid key for record 1
+          // storage field intentionally omitted to bypass validation
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'Invalid storage provider');
+    },
+  );
+
+  await t.step(
     'update accepts valid file ref with correct key prefix',
     async () => {
       await resetDb();
