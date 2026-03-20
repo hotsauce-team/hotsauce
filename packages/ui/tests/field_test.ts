@@ -135,3 +135,45 @@ Deno.test('formField: link-only override renders link without summary', () => {
   // Should render disabled input since no valueSummary
   assertStringIncludes(result, 'disabled');
 });
+
+Deno.test('formField: fileUrl shows image preview for image contentType', () => {
+  const field = createMockField({ readOnly: false });
+  const result = formField(field, {
+    value: {
+      filename: 'photo.jpg',
+      contentType: 'image/jpeg',
+      size: 1024,
+    },
+    override: {
+      link: { href: '/upload', label: 'Upload' },
+      fileUrl: '/files/media/image/1',
+    },
+  });
+
+  // Should show image preview
+  assertStringIncludes(result, '<img');
+  assertStringIncludes(result, 'cms-file-preview');
+  assertStringIncludes(result, '/files/media/image/1');
+});
+
+Deno.test('formField: fileUrl does NOT show image preview for non-image contentType', () => {
+  const field = createMockField({ readOnly: false });
+  const result = formField(field, {
+    value: {
+      filename: 'doc.pdf',
+      contentType: 'application/pdf',
+      size: 2048,
+    },
+    override: {
+      link: { href: '/upload', label: 'Upload' },
+      fileUrl: '/files/media/document/1',
+    },
+  });
+
+  // Should NOT show image preview for PDFs
+  if (result.includes('<img')) {
+    throw new Error('Image preview should not render for non-image files');
+  }
+  // But link should still be there
+  assertStringIncludes(result, 'href="/upload"');
+});

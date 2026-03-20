@@ -46,8 +46,10 @@ export function formField(
   if (options.override?.link) {
     const { label, href, target } = options.override.link;
 
-    // For file fields, show image preview if available
-    const imagePreview = options.override.fileUrl
+    // For file fields, show image preview only if it's actually an image
+    const fileValue = options.value as { contentType?: string } | undefined;
+    const isImage = fileValue?.contentType?.startsWith('image/') ?? false;
+    const imagePreview = options.override.fileUrl && isImage
       ? html`
         <img src="${options.override
           .fileUrl}" alt="" class="cms-file-preview" />

@@ -1322,6 +1322,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
                 }),
               deleteObject: (ctx) => {
                 deletedKeys.push(ctx.key);
+                return Promise.resolve();
               },
             },
           },
@@ -1469,6 +1470,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
                 }),
               deleteObject: (ctx) => {
                 deletedKeys.push(ctx.key);
+                return Promise.resolve();
               },
             },
           },
