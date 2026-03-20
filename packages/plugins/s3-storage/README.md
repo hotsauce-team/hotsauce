@@ -53,7 +53,7 @@ const handler = createCmsHandler({
 | `secretAccessKey` | `string`             | Yes      | AWS secret key                                         |
 | `storageId`       | `string`             | No       | Storage ID (default: `'s3'`)                           |
 | `publicEndpoint`  | `string`             | No       | Browser-facing endpoint (if different from `endpoint`) |
-| `urlExpiry`       | `number`             | No       | Presigned URL expiry in seconds (default: `3600`)      |
+| `expirySeconds`   | `number`             | No       | Presigned URL expiry in seconds (default: `900`)       |
 
 ## Local Development with MinIO
 
@@ -145,10 +145,12 @@ This ensures:
 
 ### Presigned URLs
 
-- Time-limited (default: 1 hour)
+- Time-limited (default: 15 minutes)
 - Scoped to specific object key
-- Include content-type restriction
 - Use AWS Signature V4 (HMAC-SHA256)
+
+> **Note:** Content-Type is intentionally NOT included in the signature. This avoids
+> MinIO/CORS issues with unsigned headers. The browser sets Content-Type from the file.
 
 ### Policy Integration
 

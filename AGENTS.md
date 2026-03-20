@@ -653,3 +653,19 @@ slug: text().$cms({ plugins: { slugify: { role: 'output' } } });
 - Optional direct-to-bucket / presigned URL flow (S3/R2-style)
 - Virus scanning / transformations (if ever)
 - Cleanup policies (orphan GC, retention)
+
+## GitHub CLI Notes
+
+When replying to PR review comments (not just commenting on the PR):
+
+```bash
+# Reply to a specific review comment (use in_reply_to)
+gh api repos/OWNER/REPO/pulls/PR_NUMBER/comments -X POST \
+  -f body="Your reply" \
+  -F in_reply_to=COMMENT_ID
+
+# NOT this (creates new top-level PR comment):
+gh pr comment PR_NUMBER --body "..."
+```
+
+The `in_reply_to` field links the reply to the specific review comment thread.

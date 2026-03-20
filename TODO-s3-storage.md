@@ -3,11 +3,11 @@
 ## Must Fix (from PR review)
 
 - [x] **Image preview for non-image files** — `fileUrl` renders `<img>` for PDFs; check `contentType` starts with `image/` ✅ bfaf705
-- [ ] **fileUrl XSS validation** — Plugin-provided URLs should block dangerous schemes like `javascript:`
-- [ ] **Storage key validation gap** — Missing `storage` field bypasses mismatch check; normalize or require when `key` present
-- [ ] **Presign `size: 0` bug** — Falsy check treats 0 as missing; add proper type validation
-- [ ] **README docs mismatch** — Says `urlExpiry` but code uses `expirySeconds` (default 900, not 3600)
-- [ ] **Content-type docs incorrect** — Says "content-type restriction" but presign doesn't sign it
+- [x] **fileUrl XSS validation** — Plugin-provided URLs should block dangerous schemes like `javascript:` ✅ 80319a2
+- [x] **Storage key validation gap** — Missing `storage` field bypasses mismatch check; normalize or require when `key` present ✅ 998fdb7
+- [x] **Presign `size: 0` bug** — Falsy check treats 0 as missing; add proper type validation ✅ 9b1e5c1
+- [x] **README docs mismatch** — Says `urlExpiry` but code uses `expirySeconds` (default 900, not 3600)
+- [x] **Content-type docs incorrect** — Says "content-type restriction" but presign doesn't sign it
 
 ## Must Fix
 

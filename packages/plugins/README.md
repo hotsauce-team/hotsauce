@@ -210,7 +210,7 @@ file: jsonb('file').$cms({ file: true }),
 | `secretAccessKey` | `string`             | AWS secret key                                    |
 | `storageId`       | `string`             | Storage ID (default: `'s3'`)                      |
 | `publicEndpoint`  | `string`             | Browser-facing endpoint (for Docker/proxy setups) |
-| `urlExpiry`       | `number`             | Presigned URL expiry in seconds (default: 3600)   |
+| `expirySeconds`   | `number`             | Presigned URL expiry in seconds (default: 900)    |
 
 Works with AWS S3, MinIO, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, and any S3-compatible service.
 
