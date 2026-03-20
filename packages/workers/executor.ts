@@ -23,6 +23,27 @@ import { validateSerializable } from './validate.ts';
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Check if a URL is safe for use in href/src attributes.
+ * Blocks dangerous schemes like javascript:, vbscript:, data: (for href).
+ * Allows: relative URLs, http:, https:
+ */
+function isSafeUrl(url: string): boolean {
+  // Relative URLs are safe
+  if (url.startsWith('/') || url.startsWith('?') || url.startsWith('#')) {
+    return true;
+  }
+  // Check scheme - must be http or https
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    // If URL parsing fails but doesn't look like a scheme, treat as relative
+    // e.g. "foo/bar" is a relative path
+    return !url.includes(':') || url.indexOf(':') > url.indexOf('/');
+  }
+}
+
+/**
  * Validate that a value is a valid FieldUIOverride.
  * Returns a descriptive error message if invalid, null if valid.
  */
@@ -52,10 +73,14 @@ function validateFieldUIOverride(value: unknown): string | null {
       return `Expected 'valueSummary' to be a string, got ${typeof obj
         .valueSummary}`;
     }
-    // Optional: fileUrl (must be string if present)
-    if ('fileUrl' in obj && typeof obj.fileUrl !== 'string') {
-      return `Expected 'fileUrl' to be a string, got ${typeof obj
-        .fileUrl}`;
+    // Optional: fileUrl (must be safe URL string if present)
+    if ('fileUrl' in obj) {
+      if (typeof obj.fileUrl !== 'string') {
+        return `Expected 'fileUrl' to be a string, got ${typeof obj.fileUrl}`;
+      }
+      if (!isSafeUrl(obj.fileUrl)) {
+        return `Unsafe URL scheme in 'fileUrl'. Only http:, https:, and relative URLs are allowed.`;
+      }
     }
     // Check for unexpected properties
     const allowedRootProps = ['valueSummary', 'fileUrl'];
@@ -84,9 +109,12 @@ function validateFieldUIOverride(value: unknown): string | null {
     return `Expected 'link.label' to be a string, got ${typeof linkObj.label}`;
   }
 
-  // Required: href (string)
+  // Required: href (string with safe URL scheme)
   if (typeof linkObj.href !== 'string') {
     return `Expected 'link.href' to be a string, got ${typeof linkObj.href}`;
+  }
+  if (!isSafeUrl(linkObj.href)) {
+    return `Unsafe URL scheme in 'link.href'. Only http:, https:, and relative URLs are allowed.`;
   }
 
   // Optional: target (must be '_blank' if present)
@@ -113,10 +141,14 @@ function validateFieldUIOverride(value: unknown): string | null {
       .valueSummary}`;
   }
 
-  // Optional: fileUrl (must be string if present)
-  if ('fileUrl' in obj && typeof obj.fileUrl !== 'string') {
-    return `Expected 'fileUrl' to be a string, got ${typeof obj
-      .fileUrl}`;
+  // Optional: fileUrl (must be safe URL string if present)
+  if ('fileUrl' in obj) {
+    if (typeof obj.fileUrl !== 'string') {
+      return `Expected 'fileUrl' to be a string, got ${typeof obj.fileUrl}`;
+    }
+    if (!isSafeUrl(obj.fileUrl)) {
+      return `Unsafe URL scheme in 'fileUrl'. Only http:, https:, and relative URLs are allowed.`;
+    }
   }
 
   // Check for unexpected properties on root object

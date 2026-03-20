@@ -2,7 +2,7 @@
 
 ## Must Fix (from PR review)
 
-- [ ] **Image preview for non-image files** — `fileUrl` renders `<img>` for PDFs; check `contentType` starts with `image/`
+- [x] **Image preview for non-image files** — `fileUrl` renders `<img>` for PDFs; check `contentType` starts with `image/` ✅ bfaf705
 - [ ] **fileUrl XSS validation** — Plugin-provided URLs should block dangerous schemes like `javascript:`
 - [ ] **Storage key validation gap** — Missing `storage` field bypasses mismatch check; normalize or require when `key` present
 - [ ] **Presign `size: 0` bug** — Falsy check treats 0 as missing; add proper type validation

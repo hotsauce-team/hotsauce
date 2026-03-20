@@ -696,6 +696,79 @@ Deno.test('FieldUIOverride validation: rejects fileUrl wrong type', async () => 
   );
 });
 
+Deno.test('FieldUIOverride validation: rejects javascript: in fileUrl', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 'file.txt',
+    fileUrl: 'javascript:alert(1)',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects javascript: in link.href', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'XSS', href: 'javascript:alert(1)' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: accepts relative URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/admin/upload' },
+    fileUrl: '/files/media/file/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(errors.length, 0);
+  assertEquals(result?.fileUrl, '/files/media/file/123');
+});
+
+Deno.test('FieldUIOverride validation: accepts https URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: {
+      label: 'External',
+      href: 'https://example.com/upload',
+      target: '_blank',
+    },
+    fileUrl: 'https://cdn.example.com/files/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(errors.length, 0);
+  assertEquals(result?.fileUrl, 'https://cdn.example.com/files/123');
+});
+
 Deno.test('FieldUIOverride validation: continues to next plugin on invalid return', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));
