@@ -644,8 +644,12 @@ export function createS3StoragePlugin(
             );
           }
 
-          // Validate required fields
-          if (!body.filename || !body.contentType || !body.size) {
+          // Validate required fields (use explicit checks for size since 0 is valid)
+          if (
+            !body.filename ||
+            !body.contentType ||
+            typeof body.size !== 'number'
+          ) {
             return new Response(
               JSON.stringify({ error: 'Missing required fields' }),
               {

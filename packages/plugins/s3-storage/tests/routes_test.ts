@@ -126,30 +126,50 @@ Deno.test('presign handler: validates JSON body structure', () => {
   // Simulate the validation logic in the presign route handler
   // Note: table/id/column come from URL params (handled by CMS policy checks)
   // Body only contains file info
+
+  // Helper that mirrors the actual validation in mod.ts
+  const isValid = (
+    body: { filename?: string; contentType?: string; size?: number },
+  ) => {
+    return !!(body.filename && body.contentType &&
+      typeof body.size === 'number');
+  };
+
+  // All required fields present
   const validBody = {
     filename: 'test.png',
     contentType: 'image/png',
     size: 1024,
   };
+  assertEquals(isValid(validBody), true);
 
-  // All required fields present
-  const hasRequired = validBody.filename &&
-    validBody.contentType &&
-    validBody.size;
-
-  assertEquals(hasRequired !== undefined, true);
-
-  // Missing field should fail validation
-  const invalidBody = {
-    filename: 'test.png',
-    // missing contentType, size
+  // Size 0 is valid (empty files should be uploadable)
+  const zeroSizeBody = {
+    filename: 'empty.txt',
+    contentType: 'text/plain',
+    size: 0,
   };
+  assertEquals(isValid(zeroSizeBody), true);
 
-  const missingRequired = !invalidBody.filename ||
-    !('contentType' in invalidBody) ||
-    !('size' in invalidBody);
+  // Missing size field
+  const missingSize = { filename: 'test.png', contentType: 'image/png' };
+  assertEquals(isValid(missingSize), false);
 
-  assertEquals(missingRequired, true);
+  // Size is wrong type (string instead of number)
+  const stringSize = {
+    filename: 'test.png',
+    contentType: 'image/png',
+    size: '1024' as unknown as number,
+  };
+  assertEquals(isValid(stringSize), false);
+
+  // Size is undefined
+  const undefinedSize = {
+    filename: 'test.png',
+    contentType: 'image/png',
+    size: undefined as unknown as number,
+  };
+  assertEquals(isValid(undefinedSize), false);
 });
 
 // ─────────────────────────────────────────────────────────────
