@@ -484,6 +484,11 @@ export function createS3StoragePlugin(
         methods: ['GET'],
         handler: (ctx) => {
           const { table, id, column } = ctx.params;
+
+          if (!table || !id || !column) {
+            return new Response('Not found', { status: 404 });
+          }
+
           // Use publicEndpoint for CSP if available (browser-facing URL)
           const uploadEndpoint = options.publicEndpoint || options.endpoint;
           const s3Url = new URL(uploadEndpoint);
@@ -775,6 +780,11 @@ export function createS3StoragePlugin(
         methods: ['POST'],
         handler: async (ctx) => {
           const { table, id, column } = ctx.params;
+
+          // These are guaranteed by the route pattern :table/:id/:column
+          if (!table || !id || !column) {
+            return new Response('Not found', { status: 404 });
+          }
 
           // Request body should be JSON with file info only
           // (table/id/column come from URL params, which CMS has policy-checked)
