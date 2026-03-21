@@ -7,6 +7,7 @@ import {
   type FileReference,
 } from '@hotsauce/core';
 import { escapeHtml } from '@hotsauce/ui';
+import type { CspOptions } from './types.ts';
 
 /**
  * Security headers for HTML responses
@@ -22,23 +23,56 @@ import { escapeHtml } from '@hotsauce/ui';
 const CONFIRM_DELETE_HASH =
   'sha256-DMyhM/CqLLlclBYIzGjtyty6mh3xlFohbXui0n6IhdY=';
 
-export const SECURITY_HEADERS: Record<string, string> = {
-  'Content-Security-Policy':
-    `default-src 'self'; style-src 'self'; script-src 'self' 'unsafe-hashes' '${CONFIRM_DELETE_HASH}'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'`,
-  'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-};
+/**
+ * Build security headers with optional CSP extensions.
+ * Called once at startup; the result is reused for every response.
+ */
+export function buildSecurityHeaders(
+  csp?: CspOptions,
+): Record<string, string> {
+  const imgSrc = `img-src 'self' data:${joinOrigins(csp?.imgSrc)}`;
+  const connectSrc = csp?.connectSrc?.length
+    ? `connect-src 'self'${joinOrigins(csp.connectSrc)}; `
+    : '';
+  const frameSrc = csp?.frameSrc?.length
+    ? `frame-src 'self'${joinOrigins(csp.frameSrc)}; `
+    : '';
+
+  return {
+    'Content-Security-Policy':
+      `default-src 'self'; style-src 'self'; script-src 'self' 'unsafe-hashes' '${CONFIRM_DELETE_HASH}'; ${connectSrc}${frameSrc}${imgSrc}; form-action 'self'; frame-ancestors 'none'`,
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  };
+}
+
+function joinOrigins(origins?: string[]): string {
+  if (!origins?.length) return '';
+  return ' ' + origins.join(' ');
+}
+
+/** Default security headers (no CSP extensions) */
+export const SECURITY_HEADERS: Record<string, string> = buildSecurityHeaders();
 
 /**
- * Create an HTML response with security headers
+ * Create an HTML response with security headers.
+ *
+ * CRUD pages pass the resolved `securityHeaders` (which include user-configured
+ * CSP origins like S3 endpoints). Error helpers (notFound, forbidden) omit it
+ * and get the strict default — intentionally, since error pages render no
+ * external resources and a tighter CSP is preferable.
  */
-export function htmlResponse(html: string, status = 200): Response {
+export function htmlResponse(
+  html: string,
+  status = 200,
+  securityHeaders?: Record<string, string>,
+): Response {
   return new Response(html, {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      ...SECURITY_HEADERS,
+      ...(securityHeaders ?? SECURITY_HEADERS),
     },
   });
 }

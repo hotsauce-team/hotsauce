@@ -14,6 +14,7 @@ import {
   parseFormData,
   redirect,
 } from '../http.ts';
+import { buildSecurityHeaders } from '../http.ts';
 import type { IntrospectedColumn } from '@hotsauce/core';
 
 // =============================================================================
@@ -446,4 +447,96 @@ Deno.test('parseFormData: handles multiple values with same name', async () => {
   const result = await parseFormData(request);
 
   assertEquals(result.tag, ['one', 'two']);
+});
+
+// =============================================================================
+// buildSecurityHeaders tests
+// =============================================================================
+
+Deno.test('buildSecurityHeaders: default CSP includes self and data for img-src', () => {
+  const headers = buildSecurityHeaders();
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(csp.includes("img-src 'self' data:"), true);
+  assertEquals(csp.includes("default-src 'self'"), true);
+  assertEquals(csp.includes("frame-ancestors 'none'"), true);
+});
+
+Deno.test('buildSecurityHeaders: appends imgSrc origins', () => {
+  const headers = buildSecurityHeaders({
+    imgSrc: ['https://s3.example.com'],
+  });
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(
+    csp.includes("img-src 'self' data: https://s3.example.com"),
+    true,
+  );
+});
+
+Deno.test('buildSecurityHeaders: appends multiple imgSrc origins', () => {
+  const headers = buildSecurityHeaders({
+    imgSrc: ['https://s3.example.com', 'https://cdn.example.com'],
+  });
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(
+    csp.includes(
+      "img-src 'self' data: https://s3.example.com https://cdn.example.com",
+    ),
+    true,
+  );
+});
+
+Deno.test('buildSecurityHeaders: adds connect-src when connectSrc given', () => {
+  const headers = buildSecurityHeaders({
+    connectSrc: ['https://api.example.com'],
+  });
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(
+    csp.includes("connect-src 'self' https://api.example.com"),
+    true,
+  );
+});
+
+Deno.test('buildSecurityHeaders: adds frame-src when frameSrc given', () => {
+  const headers = buildSecurityHeaders({
+    frameSrc: ['https://embed.example.com'],
+  });
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(
+    csp.includes("frame-src 'self' https://embed.example.com"),
+    true,
+  );
+});
+
+Deno.test('buildSecurityHeaders: no connect-src/frame-src when not given', () => {
+  const headers = buildSecurityHeaders();
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(csp.includes('connect-src'), false);
+  assertEquals(csp.includes('frame-src'), false);
+});
+
+Deno.test('buildSecurityHeaders: preserves non-CSP headers', () => {
+  const headers = buildSecurityHeaders({ imgSrc: ['https://s3.example.com'] });
+
+  assertEquals(headers['X-Content-Type-Options'], 'nosniff');
+  assertEquals(headers['X-Frame-Options'], 'DENY');
+  assertEquals(
+    headers['Referrer-Policy'],
+    'strict-origin-when-cross-origin',
+  );
+});
+
+Deno.test('htmlResponse: uses custom security headers when provided', () => {
+  const custom = buildSecurityHeaders({
+    imgSrc: ['https://s3.example.com'],
+  });
+  const response = htmlResponse('<p>Hi</p>', 200, custom);
+
+  const csp = response.headers.get('Content-Security-Policy')!;
+  assertEquals(csp.includes('https://s3.example.com'), true);
 });

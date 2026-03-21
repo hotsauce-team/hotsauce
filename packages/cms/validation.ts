@@ -268,3 +268,56 @@ export function validateFileColumns(
     );
   }
 }
+
+/**
+ * Validate CSP origin strings.
+ * Each origin must be a valid http: or https: URL origin (scheme + host + optional port).
+ *
+ * @throws {CmsConfigError} When any origin is invalid
+ */
+export function validateCspOptions(
+  csp: { imgSrc?: string[]; connectSrc?: string[]; frameSrc?: string[] },
+): void {
+  const errors: string[] = [];
+
+  const directives: [string, string[] | undefined][] = [
+    ['imgSrc', csp.imgSrc],
+    ['connectSrc', csp.connectSrc],
+    ['frameSrc', csp.frameSrc],
+  ];
+
+  for (const [name, origins] of directives) {
+    if (!origins) continue;
+    for (const origin of origins) {
+      const err = validateOrigin(origin);
+      if (err) {
+        errors.push(`  - csp.${name}: ${err}`);
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new CmsConfigError(
+      `Invalid CSP configuration:\n${errors.join('\n')}`,
+    );
+  }
+}
+
+/**
+ * Validate a single CSP origin string.
+ * Must be scheme + host (+ optional port), no path/query/fragment.
+ */
+function validateOrigin(origin: string): string | null {
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return `'${origin}' must use http: or https: scheme`;
+    }
+    if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      return `'${origin}' must be an origin (scheme + host), not a full URL with path/query`;
+    }
+    return null;
+  } catch {
+    return `'${origin}' is not a valid URL origin`;
+  }
+}

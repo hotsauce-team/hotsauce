@@ -346,7 +346,7 @@ export function handleDashboard(ctx: RouteContext): Response {
 
   const page = layout(content, buildLayoutOptions(ctx, 'Dashboard', navItems));
 
-  return htmlResponse(page);
+  return htmlResponse(page, 200, ctx.options.securityHeaders);
 }
 
 /**
@@ -520,7 +520,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     buildLayoutOptions(ctx, formatTableName(table.name), navItems),
   );
 
-  return htmlResponse(pageHtml);
+  return htmlResponse(pageHtml, 200, ctx.options.securityHeaders);
 }
 
 /**
@@ -721,7 +721,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     buildLayoutOptions(ctx, `View ${formatTableName(table.name)}`, navItems),
   );
 
-  return htmlResponse(page);
+  return htmlResponse(page, 200, ctx.options.securityHeaders);
 }
 
 /**
@@ -1813,7 +1813,7 @@ async function renderCreateForm(
     buildLayoutOptions(ctx, `Create ${formatTableName(table.name)}`, navItems),
   );
 
-  return htmlResponse(page);
+  return htmlResponse(page, 200, ctx.options.securityHeaders);
 }
 
 async function renderEditForm(
@@ -1955,5 +1955,5 @@ async function renderEditForm(
     buildLayoutOptions(ctx, `Edit ${formatTableName(table.name)}`, navItems),
   );
 
-  return htmlResponse(page);
+  return htmlResponse(page, 200, ctx.options.securityHeaders);
 }

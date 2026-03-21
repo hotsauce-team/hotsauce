@@ -277,6 +277,24 @@ export interface ErrorContext {
 }
 
 /**
+ * Custom Content Security Policy directives.
+ * Origins are appended to the CMS defaults (e.g. 'self' is always included).
+ *
+ * @example
+ * ```ts
+ * csp: { imgSrc: ['https://my-bucket.s3.amazonaws.com'] }
+ * ```
+ */
+export interface CspOptions {
+  /** Additional origins for img-src (images, favicons) */
+  imgSrc?: string[];
+  /** Additional origins for connect-src (fetch, XHR, WebSocket) */
+  connectSrc?: string[];
+  /** Additional origins for frame-src (iframes) */
+  frameSrc?: string[];
+}
+
+/**
  * Base options shared by all CMS configurations
  */
 export interface CmsOptionsBase {
@@ -394,6 +412,18 @@ export interface CmsOptionsBase {
    * ```
    */
   storage?: StorageOptions;
+
+  /**
+   * Custom Content Security Policy directives.
+   * Extends the strict defaults — origins are appended, not replaced.
+   *
+   * @example
+   * ```ts
+   * // Allow S3 image previews on admin screens
+   * csp: { imgSrc: ['https://my-bucket.s3.amazonaws.com'] }
+   * ```
+   */
+  csp?: CspOptions;
 }
 
 /**
@@ -562,6 +592,8 @@ export interface ResolvedCmsOptions {
   plugins?: PluginRegistry;
   /** Storage registry (built from plugins) - undefined if no storage providers */
   storage?: StorageRegistry;
+  /** Computed security headers (CSP + other headers), built once at startup */
+  securityHeaders: Record<string, string>;
 }
 
 /**

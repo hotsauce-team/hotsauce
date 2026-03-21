@@ -31,10 +31,10 @@ import type {
 } from './plugins/types.ts';
 import {
   base64ToUint8Array,
+  buildSecurityHeaders,
   forbidden,
   methodNotAllowed,
   notFound,
-  SECURITY_HEADERS,
 } from './http.ts';
 import {
   generateCsrfToken,
@@ -43,6 +43,7 @@ import {
 } from './csrf.ts';
 import {
   validateCmsOptions,
+  validateCspOptions,
   validateFileColumns,
   validateResolvedSecrets,
 } from './validation.ts';
@@ -101,6 +102,7 @@ export type {
   CmsOptionsWithAuth,
   CmsOptionsWithoutAuth,
   CrudAction,
+  CspOptions,
   ErrorContext,
   FlashMessage,
   Handler,
@@ -797,6 +799,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
   // Validate file column configurations (file: true must be on JSON columns)
   validateFileColumns(introspected);
 
+  // Validate and build CSP security headers (computed once at startup)
+  if (options.csp) {
+    validateCspOptions(options.csp);
+  }
+  const securityHeaders = buildSecurityHeaders(options.csp);
+
   // Resolve policies:
   // - 'dangerously-open' → {} (full access)
   // - object → use as-is
@@ -860,6 +868,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     auth: resolvedAuth,
     plugins: pluginRegistry,
     storage: storageRegistry,
+    securityHeaders,
   };
 
   // Helper to check if request accepts JSON
@@ -900,7 +909,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               opts.basePath,
               isSecureRequest(request),
             ),
-            ...SECURITY_HEADERS,
+            ...opts.securityHeaders,
           },
         });
       }
@@ -927,7 +936,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 302,
               headers: {
                 'Location': opts.basePath,
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -944,7 +953,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           status: 200,
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            ...SECURITY_HEADERS,
+            ...opts.securityHeaders,
           },
         });
       }
@@ -971,7 +980,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 403,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -1005,7 +1014,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
                 status: 401,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',
-                  ...SECURITY_HEADERS,
+                  ...opts.securityHeaders,
                 },
               });
             }
@@ -1031,7 +1040,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               headers: {
                 'Location': opts.basePath,
                 'Set-Cookie': cookie,
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -1054,7 +1063,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 400,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -1079,7 +1088,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 401,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -1108,7 +1117,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
                 status: 200,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',
-                  ...SECURITY_HEADERS,
+                  ...opts.securityHeaders,
                 },
               });
             }
@@ -1126,7 +1135,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 500,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -1153,7 +1162,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             headers: {
               'Location': opts.basePath,
               'Set-Cookie': cookie,
-              ...SECURITY_HEADERS,
+              ...opts.securityHeaders,
             },
           });
         } catch (err) {
@@ -1180,7 +1189,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             status: 500,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
-              ...SECURITY_HEADERS,
+              ...opts.securityHeaders,
             },
           });
         }
@@ -1210,7 +1219,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             status: 401,
             headers: {
               'Content-Type': 'application/json',
-              ...SECURITY_HEADERS,
+              ...opts.securityHeaders,
             },
           });
         }
@@ -1218,7 +1227,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           status: 302,
           headers: {
             'Location': loginPath,
-            ...SECURITY_HEADERS,
+            ...opts.securityHeaders,
           },
         });
       }
@@ -1464,7 +1473,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
       }
       return new Response('Internal Server Error', {
         status: 500,
-        headers: SECURITY_HEADERS,
+        headers: opts.securityHeaders,
       });
     }
   };
@@ -1585,7 +1594,7 @@ async function handleFileServing(
       status: 302,
       headers: {
         'Location': fileData.url,
-        ...SECURITY_HEADERS,
+        ...options.securityHeaders,
         'Cache-Control': 'private, max-age=3600',
       },
     });
@@ -1642,7 +1651,7 @@ async function handleFileServing(
         status: 302,
         headers: {
           'Location': signedUrl,
-          ...SECURITY_HEADERS,
+          ...options.securityHeaders,
           'Cache-Control': 'private, no-store', // Signed URLs are short-lived
         },
       });

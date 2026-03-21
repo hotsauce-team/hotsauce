@@ -5,6 +5,7 @@ import {
   CmsConfigError,
   CmsOptionsSchema,
   validateCmsOptions,
+  validateCspOptions,
 } from '../validation.ts';
 
 // Mock minimal valid options
@@ -310,5 +311,90 @@ Deno.test('validateFileColumns: reports multiple errors', () => {
     const message = (error as CmsConfigError).message;
     assertEquals(message.includes('users.avatar'), true);
     assertEquals(message.includes('posts.image'), true);
+  }
+});
+
+// =============================================================================
+// CSP validation tests
+// =============================================================================
+
+Deno.test('validateCspOptions: accepts valid https origins', () => {
+  validateCspOptions({
+    imgSrc: ['https://s3.amazonaws.com', 'https://cdn.example.com:8443'],
+  });
+});
+
+Deno.test('validateCspOptions: accepts valid http origins', () => {
+  validateCspOptions({
+    imgSrc: ['http://localhost:9000'],
+  });
+});
+
+Deno.test('validateCspOptions: accepts empty arrays', () => {
+  validateCspOptions({ imgSrc: [], connectSrc: [], frameSrc: [] });
+});
+
+Deno.test('validateCspOptions: accepts undefined directives', () => {
+  validateCspOptions({});
+});
+
+Deno.test('validateCspOptions: rejects non-URL strings', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['not-a-url'] }),
+    CmsConfigError,
+    'not a valid URL origin',
+  );
+});
+
+Deno.test('validateCspOptions: rejects javascript: scheme', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['javascript:alert(1)'] }),
+    CmsConfigError,
+    'http: or https:',
+  );
+});
+
+Deno.test('validateCspOptions: rejects data: scheme', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['data:text/html,<h1>hi</h1>'] }),
+    CmsConfigError,
+    'http: or https:',
+  );
+});
+
+Deno.test('validateCspOptions: rejects ftp: scheme', () => {
+  assertThrows(
+    () => validateCspOptions({ connectSrc: ['ftp://files.example.com'] }),
+    CmsConfigError,
+    'http: or https:',
+  );
+});
+
+Deno.test('validateCspOptions: rejects URLs with paths', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['https://s3.example.com/bucket'] }),
+    CmsConfigError,
+    'not a full URL with path',
+  );
+});
+
+Deno.test('validateCspOptions: rejects URLs with query strings', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['https://s3.example.com?key=val'] }),
+    CmsConfigError,
+    'not a full URL with path',
+  );
+});
+
+Deno.test('validateCspOptions: reports errors for multiple directives', () => {
+  try {
+    validateCspOptions({
+      imgSrc: ['not-valid'],
+      frameSrc: ['also-not-valid'],
+    });
+  } catch (error) {
+    const message = (error as CmsConfigError).message;
+    assertEquals(message.includes('csp.imgSrc'), true);
+    assertEquals(message.includes('csp.frameSrc'), true);
   }
 });

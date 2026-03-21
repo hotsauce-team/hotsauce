@@ -11,7 +11,7 @@
 
 ## Must Fix
 
-- [ ] **CSP blocking S3 images on admin screens** — Allow S3/MinIO endpoint in `img-src` directive for detail/list views
+- [x] **CSP blocking S3 images on admin screens** — Allow S3/MinIO endpoint in `img-src` directive for detail/list views
 - [ ] **Orphan GC** — Documented but not implemented; uploaded files that never get attached to a record accumulate
 - [ ] **Frontend URL signing** — Expose S3 plugin's `signDownloadUrl` for use on public site (currently only works in CMS handler context)
 
