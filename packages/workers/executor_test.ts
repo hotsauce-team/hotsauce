@@ -769,6 +769,62 @@ Deno.test('FieldUIOverride validation: accepts https URLs', async () => {
   assertEquals(result?.fileUrl, 'https://cdn.example.com/files/123');
 });
 
+Deno.test('FieldUIOverride validation: accepts http URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: {
+      label: 'External',
+      href: 'http://example.com/upload',
+      target: '_blank',
+    },
+    fileUrl: 'http://cdn.example.com/files/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(errors.length, 0);
+  assertEquals(result?.fileUrl, 'http://cdn.example.com/files/123');
+});
+
+Deno.test('FieldUIOverride validation: rejects scheme-relative URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'External', href: '//evil.com/payload' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects backslash-prefixed URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    fileUrl: '\\\\evil.com\\payload',
+    valueSummary: 'test',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
 Deno.test('FieldUIOverride validation: continues to next plugin on invalid return', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));

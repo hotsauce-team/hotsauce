@@ -23,24 +23,63 @@ import { validateSerializable } from './validate.ts';
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Check if a URL is safe for use in href/src attributes.
- * Blocks dangerous schemes like javascript:, vbscript:, data: (for href).
- * Allows: relative URLs, http:, https:
+ * Validate and normalize a URL for use in href/src attributes.
+ * Returns the normalized URL if safe, null if unsafe.
+ *
+ * Blocks: javascript:, vbscript:, data:, and scheme-relative URLs (//...)
+ * Allows: relative URLs (/path, ?query, #hash), http:, https:
  */
-function isSafeUrl(url: string): boolean {
-  // Relative URLs are safe
-  if (url.startsWith('/') || url.startsWith('?') || url.startsWith('#')) {
-    return true;
+function getSafeUrl(url: string): string | null {
+  const normalized = url.trim();
+
+  if (!normalized) {
+    return null;
   }
-  // Check scheme - must be http or https
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    // If URL parsing fails but doesn't look like a scheme, treat as relative
-    // e.g. "foo/bar" is a relative path
-    return !url.includes(':') || url.indexOf(':') > url.indexOf('/');
+
+  // If an explicit scheme exists, only allow http/https.
+  const schemeMatch = normalized.match(/^([a-zA-Z][a-zA-Z\d+.-]*):/);
+  if (schemeMatch) {
+    const scheme = schemeMatch[1]?.toLowerCase();
+    if (scheme !== 'http' && scheme !== 'https') {
+      return null;
+    }
+
+    // For absolute URLs with an allowed scheme, require valid URL parsing.
+    try {
+      const parsed = new URL(normalized);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.href; // Return canonical form
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
+
+  // Block scheme-relative and backslash-prefixed URLs, which can resolve
+  // to external origins (e.g., //evil.com or \\evil.com)
+  if (normalized.startsWith('//') || normalized.startsWith('\\')) {
+    return null;
+  }
+
+  // Relative URLs are safe.
+  if (
+    normalized.startsWith('/') ||
+    normalized.startsWith('?') ||
+    normalized.startsWith('#')
+  ) {
+    return normalized;
+  }
+
+  // If it doesn't declare a scheme, treat as relative path-ish input.
+  if (
+    !normalized.includes(':') ||
+    normalized.indexOf(':') > normalized.indexOf('/')
+  ) {
+    return normalized;
+  }
+
+  return null;
 }
 
 /**
@@ -78,7 +117,7 @@ function validateFieldUIOverride(value: unknown): string | null {
       if (typeof obj.fileUrl !== 'string') {
         return `Expected 'fileUrl' to be a string, got ${typeof obj.fileUrl}`;
       }
-      if (!isSafeUrl(obj.fileUrl)) {
+      if (getSafeUrl(obj.fileUrl) === null) {
         return `Unsafe URL scheme in 'fileUrl'. Only http:, https:, and relative URLs are allowed.`;
       }
     }
@@ -113,7 +152,7 @@ function validateFieldUIOverride(value: unknown): string | null {
   if (typeof linkObj.href !== 'string') {
     return `Expected 'link.href' to be a string, got ${typeof linkObj.href}`;
   }
-  if (!isSafeUrl(linkObj.href)) {
+  if (getSafeUrl(linkObj.href) === null) {
     return `Unsafe URL scheme in 'link.href'. Only http:, https:, and relative URLs are allowed.`;
   }
 
@@ -146,7 +185,7 @@ function validateFieldUIOverride(value: unknown): string | null {
     if (typeof obj.fileUrl !== 'string') {
       return `Expected 'fileUrl' to be a string, got ${typeof obj.fileUrl}`;
     }
-    if (!isSafeUrl(obj.fileUrl)) {
+    if (getSafeUrl(obj.fileUrl) === null) {
       return `Unsafe URL scheme in 'fileUrl'. Only http:, https:, and relative URLs are allowed.`;
     }
   }
