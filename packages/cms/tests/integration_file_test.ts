@@ -1551,5 +1551,587 @@ Deno.test('integration: file key tampering prevention', async (t) => {
     },
   );
 
+  await t.step(
+    'update without file in form data does not delete S3 object',
+    async () => {
+      await resetDb();
+
+      // Record has an existing S3 file
+      await db.insert(profiles).values({
+        name: 'Keep my file',
+        avatar: {
+          filename: 'photo.png',
+          contentType: 'image/png',
+          size: 5000,
+          key: 'profiles/avatar/1/keep-uuid-photo.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Submit form with only name changed — no file field at all
+      // This simulates the S3 edit form where file input is replaced by plugin UI
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Updated name only');
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // File should NOT be deleted — it wasn't in the form submission
+      assertEquals(deletedKeys.length, 0);
+
+      // DB record should still have the file
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as { key?: string } | null;
+      assertEquals(avatar?.key, 'profiles/avatar/1/keep-uuid-photo.png');
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // Orphan cleanup on save tests
+  // ─────────────────────────────────────────────────────────────
+
+  await t.step(
+    'update cleans up orphan files under same prefix',
+    async () => {
+      await resetDb();
+
+      // Simulate a record with an existing S3 file
+      await db.insert(profiles).values({
+        name: 'Profile with orphans',
+        avatar: {
+          filename: 'current.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'profiles/avatar/1/current-uuid-current.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+      const listedPrefixes: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+              listObjects: (prefix) => {
+                listedPrefixes.push(prefix);
+                return Promise.resolve([
+                  // The old key (already known — deleteOldFileObjects handles this)
+                  {
+                    key: 'profiles/avatar/1/current-uuid-current.png',
+                    lastModified: new Date('2025-01-01'),
+                    size: 1000,
+                  },
+                  // An orphan from an abandoned upload
+                  {
+                    key: 'profiles/avatar/1/orphan-uuid-abandoned.png',
+                    lastModified: new Date('2025-01-01'),
+                    size: 2000,
+                  },
+                  // The new file being saved
+                  {
+                    key: 'profiles/avatar/1/new-uuid-photo.png',
+                    lastModified: new Date(),
+                    size: 3000,
+                  },
+                ]);
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Update the file field with a new S3 key
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Profile with orphans');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'photo.png',
+          contentType: 'image/png',
+          size: 3000,
+          key: 'profiles/avatar/1/new-uuid-photo.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // Should have listed the prefix for orphan detection
+      assertEquals(listedPrefixes.length, 1);
+      assertEquals(listedPrefixes[0], 'profiles/avatar/1/');
+
+      // Should have deleted the old key AND the orphan, but NOT the new key
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/current-uuid-current.png'),
+        true,
+      );
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/orphan-uuid-abandoned.png'),
+        true,
+      );
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/new-uuid-photo.png'),
+        false,
+      );
+    },
+  );
+
+  await t.step(
+    'update with same file does not trigger orphan cleanup',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'No change',
+        avatar: {
+          filename: 'same.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/same-uuid-same.png',
+          storage: 's3',
+        },
+      });
+
+      const listedPrefixes: string[] = [];
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+              listObjects: (prefix) => {
+                listedPrefixes.push(prefix);
+                return Promise.resolve([]);
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Submit with the same file reference (no change)
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'No change');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'same.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/same-uuid-same.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // No listing or deletions when file hasn't changed
+      assertEquals(listedPrefixes.length, 0);
+      assertEquals(deletedKeys.length, 0);
+    },
+  );
+
+  await t.step(
+    'orphan cleanup is fail-soft (listObjects error does not fail update)',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'Error test',
+        avatar: {
+          filename: 'old.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/old-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      let errorLogged = false;
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: () => Promise.resolve(),
+              listObjects: () => {
+                throw new Error('S3 ListObjects exploded');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+        onError: () => {
+          errorLogged = true;
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Error test');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 600,
+          key: 'profiles/avatar/1/new-uuid.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Update should still succeed despite listObjects failure
+      assertEquals(response.status, 303);
+
+      // Error should have been logged
+      assertEquals(errorLogged, true);
+
+      // DB should have the new file
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as { key?: string } | null;
+      assertEquals(avatar?.key, 'profiles/avatar/1/new-uuid.png');
+    },
+  );
+
+  await t.step(
+    'orphan cleanup skips providers without listObjects',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'No listObjects',
+        avatar: {
+          filename: 'old.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/old-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+              // No listObjects — orphan cleanup should be skipped
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'No listObjects');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 600,
+          key: 'profiles/avatar/1/new-uuid.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // Only the old key should be deleted (eager delete), no orphan scan
+      assertEquals(deletedKeys.length, 1);
+      assertEquals(deletedKeys[0], 'profiles/avatar/1/old-uuid.png');
+    },
+  );
+
+  await t.step(
+    'orphan cleanup skips recently uploaded files (grace period)',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'Grace period test',
+        avatar: {
+          filename: 'old.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/old-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+              listObjects: () => {
+                return Promise.resolve([
+                  // Old orphan — should be deleted
+                  {
+                    key: 'profiles/avatar/1/old-orphan.png',
+                    lastModified: new Date('2025-01-01'),
+                    size: 1000,
+                  },
+                  // Recent upload — should be kept (within grace period)
+                  {
+                    key: 'profiles/avatar/1/recent-concurrent.png',
+                    lastModified: new Date(), // just now
+                    size: 2000,
+                  },
+                  // The new key being saved
+                  {
+                    key: 'profiles/avatar/1/new-uuid.png',
+                    lastModified: new Date(),
+                    size: 3000,
+                  },
+                ]);
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Grace period test');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 3000,
+          key: 'profiles/avatar/1/new-uuid.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // Old key (from deleteOldFileObjects) and old orphan should be deleted
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/old-uuid.png'),
+        true,
+      );
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/old-orphan.png'),
+        true,
+      );
+
+      // Recent concurrent upload should NOT be deleted (grace period)
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/recent-concurrent.png'),
+        false,
+      );
+
+      // New key should NOT be deleted
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/new-uuid.png'),
+        false,
+      );
+    },
+  );
+
   await client.close();
 });

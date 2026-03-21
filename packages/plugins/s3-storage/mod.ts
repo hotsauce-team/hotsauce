@@ -228,6 +228,71 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
         );
       }
     },
+
+    /**
+     * List objects under a prefix (for orphan cleanup).
+     * Uses the S3 ListObjectsV2 API.
+     */
+    async listObjects(
+      prefix: string,
+    ): Promise<Array<{ key: string; lastModified: Date; size: number }>> {
+      const bucket = typeof options.bucket === 'function'
+        ? options.bucket({
+          request: new Request('https://internal'),
+          user: null,
+          table: '',
+          column: '',
+          action: 'read',
+          recordId: undefined,
+        })
+        : options.bucket;
+
+      // Build the ListObjectsV2 URL: GET /{bucket}?list-type=2&prefix=...
+      const baseUrl = new URL(options.endpoint);
+      if (options.urlStyle === 'virtual-hosted') {
+        baseUrl.hostname = `${bucket}.${baseUrl.hostname}`;
+      } else {
+        baseUrl.pathname = `/${bucket}`;
+      }
+      baseUrl.searchParams.set('list-type', '2');
+      baseUrl.searchParams.set('prefix', prefix);
+
+      const url = baseUrl.toString();
+
+      const headers = await signHeaders({
+        method: 'GET',
+        url,
+        region: options.region,
+        accessKeyId: options.accessKeyId,
+        secretAccessKey: options.secretAccessKey,
+      });
+
+      const response = await fetch(url, { method: 'GET', headers });
+
+      if (!response.ok) {
+        throw new Error(
+          `ListObjectsV2 failed: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const xml = await response.text();
+
+      // Parse the XML response for <Contents> entries
+      const results: Array<{ key: string; lastModified: Date; size: number }> =
+        [];
+      const contentsRegex =
+        /<Contents>[\s\S]*?<Key>(.*?)<\/Key>[\s\S]*?<LastModified>(.*?)<\/LastModified>[\s\S]*?<Size>(.*?)<\/Size>[\s\S]*?<\/Contents>/g;
+      let match;
+      while ((match = contentsRegex.exec(xml)) !== null) {
+        results.push({
+          key: match[1]!,
+          lastModified: new Date(match[2]!),
+          size: parseInt(match[3]!, 10),
+        });
+      }
+
+      return results;
+    },
   };
 }
 

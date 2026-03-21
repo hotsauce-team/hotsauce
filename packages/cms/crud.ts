@@ -81,7 +81,11 @@ import {
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
 import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
 import type { CMSField } from '@hotsauce/core';
-import { isValidFileKey, isValidFileReference } from '@hotsauce/core';
+import {
+  getFileKeyPrefix,
+  isValidFileKey,
+  isValidFileReference,
+} from '@hotsauce/core';
 
 // ─────────────────────────────────────────────────────────────
 // Storage deletion helpers
@@ -120,6 +124,10 @@ async function deleteOldFileObjects(
     // Skip if old value wasn't a valid file reference
     if (!isValidFileReference(oldValue)) continue;
 
+    // Skip if column was not in the form submission (no change).
+    // Explicit null (via _clear_ button) still falls through to delete.
+    if (newValue === undefined) continue;
+
     // Skip if new value is the same (no change)
     if (newValue && typeof newValue === 'object') {
       const newRef = newValue as { key?: string; storage?: string };
@@ -147,6 +155,83 @@ async function deleteOldFileObjects(
         // Log error but don't fail the request
         onError?.(error as Error);
       }
+    }
+  }
+}
+
+/** Grace period (ms) — skip objects uploaded within the last 5 minutes to avoid deleting concurrent uploads. */
+const ORPHAN_GRACE_MS = 5 * 60 * 1000;
+
+/**
+ * After an update, list all objects under each file column's prefix and delete
+ * any that are neither the current key nor too recently uploaded.
+ *
+ * This catches "orphan" files left behind by abandoned uploads that were never
+ * saved to the record.  It is fail-soft: errors are logged but don't fail the
+ * request.  If the provider doesn't implement `listObjects`, this is a no-op.
+ */
+async function cleanupOrphanFileObjects(
+  storage: StorageRegistry | undefined,
+  tableName: string,
+  recordId: string | number,
+  oldRecord: Record<string, unknown>,
+  currentValues: Record<string, unknown>,
+  fileColumns: Array<{ propertyName: string; name: string }>,
+  request: Request,
+  authUser: { id: string; role?: string } | undefined,
+  onError?: (error: Error) => void,
+): Promise<void> {
+  if (!storage) return;
+
+  const now = Date.now();
+
+  for (const col of fileColumns) {
+    const curValue = currentValues[col.propertyName];
+    if (!isValidFileReference(curValue)) continue;
+
+    // Skip columns where the file didn't change
+    const oldValue = oldRecord[col.propertyName];
+    if (
+      isValidFileReference(oldValue) && oldValue.key === curValue.key &&
+      oldValue.storage === curValue.storage
+    ) {
+      continue;
+    }
+
+    const storageId = curValue.storage ?? storage.defaultObjectStorageId;
+    if (!storageId) continue;
+
+    const provider = storage.instances.get(storageId);
+    if (!provider?.listObjects) continue;
+
+    const prefix = getFileKeyPrefix(tableName, col.name, recordId);
+    const currentKey = curValue.key;
+
+    try {
+      const objects = await provider.listObjects(prefix);
+
+      for (const obj of objects) {
+        // Keep the current key
+        if (obj.key === currentKey) continue;
+
+        // Keep recently-uploaded objects (grace period)
+        if (
+          obj.lastModified && now - obj.lastModified.getTime() < ORPHAN_GRACE_MS
+        ) continue;
+
+        try {
+          await provider.deleteObject!({
+            storage: storageId,
+            key: obj.key,
+            request,
+            user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+          });
+        } catch (err) {
+          onError?.(err as Error);
+        }
+      }
+    } catch (error) {
+      onError?.(error as Error);
     }
   }
 }
@@ -1399,6 +1484,28 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
               })
             : undefined,
         );
+
+        // Orphan cleanup: list all objects under the prefix and delete stale ones
+        await cleanupOrphanFileObjects(
+          options.storage,
+          table.name,
+          recordId,
+          record,
+          dataToUpdate,
+          fileColumns,
+          request,
+          authUser,
+          options.onError
+            ? (err) =>
+              options.onError!(err, {
+                request,
+                url: new URL(request.url),
+                route,
+                table,
+                action: 'update',
+              })
+            : undefined,
+        );
       }
 
       // Fire update action hook (may be fire-and-forget)
@@ -1597,10 +1704,15 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
 
     // Clean up storage objects for deleted record (fail-soft)
     if (needsStorageCleanup && recordToDelete) {
+      // Build explicit null values so deleteOldFileObjects sees "cleared" (not "absent")
+      const clearedFileValues: Record<string, null> = {};
+      for (const col of fileColumns) {
+        clearedFileValues[col.propertyName] = null;
+      }
       await deleteOldFileObjects(
         options.storage,
         recordToDelete,
-        {}, // Empty newValues = delete all files
+        clearedFileValues,
         fileColumns.map((col) => ({
           propertyName: col.propertyName,
           name: col.name,

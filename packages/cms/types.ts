@@ -181,6 +181,15 @@ export interface StorageProvider {
   deleteObject?: (ctx: DeleteContext) => Promise<void>;
 
   /**
+   * List objects under a key prefix.
+   * Called after update/delete to clean up orphaned files in the same prefix.
+   * Optional - if not implemented, only the specific old key is deleted.
+   */
+  listObjects?: (
+    prefix: string,
+  ) => Promise<Array<{ key: string; lastModified: Date; size: number }>>;
+
+  /**
    * Invalidate CDN cache for an object.
    * Called after deletion/replacement if the provider supports it.
    * Optional - most providers don't need this with unique keys.
