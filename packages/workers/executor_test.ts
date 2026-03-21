@@ -825,6 +825,74 @@ Deno.test('FieldUIOverride validation: rejects backslash-prefixed URLs', async (
   assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
 });
 
+Deno.test('FieldUIOverride validation: rejects percent-encoded control chars in scheme obfuscation', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'XSS', href: 'java%0ascript:alert(1)' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects embedded control characters in URL', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 'file.txt',
+    fileUrl: `ja\u0000vascript:alert(1)`,
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects backslashes anywhere in relative URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Weird', href: '.\\\\evil.com\\\\payload' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: accepts relative URLs with colon in query', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Search', href: '/search?q=a:b' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(errors.length, 0);
+  assertEquals(result, { link: { label: 'Search', href: '/search?q=a:b' } });
+});
+
 Deno.test('FieldUIOverride validation: continues to next plugin on invalid return', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));

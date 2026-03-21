@@ -23,63 +23,30 @@ import { validateSerializable } from './validate.ts';
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Validate and normalize a URL for use in href/src attributes.
- * Returns the normalized URL if safe, null if unsafe.
+ * Check whether a URL is safe for use in href/src attributes.
+ * Returns the URL if safe, null if unsafe.
  *
- * Blocks: javascript:, vbscript:, data:, and scheme-relative URLs (//...)
  * Allows: relative URLs (/path, ?query, #hash), http:, https:
+ * Blocks: everything else (javascript:, data:, vbscript:, //..., etc.)
  */
 function getSafeUrl(url: string): string | null {
-  const normalized = url.trim();
+  const input = url.trim();
+  if (!input) return null;
 
-  if (!normalized) {
-    return null;
+  // Block control characters and backslashes (scheme obfuscation vectors)
+  // deno-lint-ignore no-control-regex
+  if (/[\x00-\x1f\x7f-\x9f\\]/.test(input)) return null;
+  if (/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(input)) return null;
+
+  // Block scheme-relative URLs (//evil.com)
+  if (input.startsWith('//')) return null;
+
+  // If it has a scheme (RFC 3986: ALPHA *(ALPHA/DIGIT/"+"/"-"/".")), only allow http(s)
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(input)) {
+    if (!/^https?:\/\//i.test(input)) return null;
   }
 
-  // If an explicit scheme exists, only allow http/https.
-  const schemeMatch = normalized.match(/^([a-zA-Z][a-zA-Z\d+.-]*):/);
-  if (schemeMatch) {
-    const scheme = schemeMatch[1]?.toLowerCase();
-    if (scheme !== 'http' && scheme !== 'https') {
-      return null;
-    }
-
-    // For absolute URLs with an allowed scheme, require valid URL parsing.
-    try {
-      const parsed = new URL(normalized);
-      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-        return parsed.href; // Return canonical form
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }
-
-  // Block scheme-relative and backslash-prefixed URLs, which can resolve
-  // to external origins (e.g., //evil.com or \\evil.com)
-  if (normalized.startsWith('//') || normalized.startsWith('\\')) {
-    return null;
-  }
-
-  // Relative URLs are safe.
-  if (
-    normalized.startsWith('/') ||
-    normalized.startsWith('?') ||
-    normalized.startsWith('#')
-  ) {
-    return normalized;
-  }
-
-  // If it doesn't declare a scheme, treat as relative path-ish input.
-  if (
-    !normalized.includes(':') ||
-    normalized.indexOf(':') > normalized.indexOf('/')
-  ) {
-    return normalized;
-  }
-
-  return null;
+  return input;
 }
 
 /**
