@@ -213,6 +213,9 @@ The default constraints are:
 - `accept`: `image/*`
 - `maxSize`: `200_000` (200KB)
 
+> **Note:** The S3 storage plugin uses its own default of 10MB. See the
+> [S3 plugin docs](../plugins/s3-storage/README.md#file-validation) for details.
+
 #### UI Visibility
 
 Control how fields appear in the CMS UI:

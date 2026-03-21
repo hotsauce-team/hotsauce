@@ -8,6 +8,7 @@
 
 import { assertEquals, assertStringIncludes } from '@std/assert';
 import { buildObjectUrl, presignUrl } from '../sigv4.ts';
+import { validatePresignRequest } from '../mod.ts';
 
 // ─────────────────────────────────────────────────────────────
 // PublicEndpoint Tests
@@ -215,4 +216,192 @@ Deno.test('publicEndpoint: presigned upload URL differs from internal delete URL
   // Both should have the same path
   assertStringIncludes(presignedUpload, '/uploads/media/file/1/doc.pdf');
   assertStringIncludes(deleteUrl, '/uploads/media/file/1/doc.pdf');
+});
+
+// ─────────────────────────────────────────────────────────────
+// Presign validation: maxSize and accept from $cms() options
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('presign validation: rejects file exceeding maxSize', () => {
+  const body = {
+    filename: 'big.png',
+    contentType: 'image/png',
+    size: 5_000_000,
+  };
+  const config = { file: true, maxSize: 200_000 };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, 'File too large');
+  assertStringIncludes(result!.error, '195KB');
+});
+
+Deno.test('presign validation: default 10MB limit applies when no maxSize set', () => {
+  const body = {
+    filename: 'huge.bin',
+    contentType: 'application/octet-stream',
+    size: 11 * 1024 * 1024,
+  };
+  const config = { file: true };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, 'File too large');
+  assertStringIncludes(result!.error, '10MB');
+});
+
+Deno.test('presign validation: file within default 10MB limit passes', () => {
+  const body = {
+    filename: 'ok.bin',
+    contentType: 'application/octet-stream',
+    size: 9 * 1024 * 1024,
+  };
+  const config = { file: true };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: maxSize 0 disables size limit', () => {
+  const body = {
+    filename: 'huge.bin',
+    contentType: 'application/octet-stream',
+    size: 500 * 1024 * 1024,
+  };
+  const config = { file: true, maxSize: 0 };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: accepts file within maxSize', () => {
+  const body = {
+    filename: 'small.png',
+    contentType: 'image/png',
+    size: 100_000,
+  };
+  const config = { file: true, maxSize: 200_000 };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: accepts file at exactly maxSize', () => {
+  const body = {
+    filename: 'exact.png',
+    contentType: 'image/png',
+    size: 200_000,
+  };
+  const config = { file: true, maxSize: 200_000 };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: rejects wrong content type', () => {
+  const body = {
+    filename: 'doc.pdf',
+    contentType: 'application/pdf',
+    size: 1000,
+  };
+  const config = { file: true, accept: 'image/*' };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, 'Invalid file type');
+  assertStringIncludes(result!.error, 'image/*');
+});
+
+Deno.test('presign validation: accepts matching content type', () => {
+  const body = { filename: 'photo.jpg', contentType: 'image/jpeg', size: 1000 };
+  const config = { file: true, accept: 'image/*' };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: accepts exact content type match', () => {
+  const body = { filename: 'photo.png', contentType: 'image/png', size: 1000 };
+  const config = { file: true, accept: 'image/png,image/jpeg' };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: rejects content type not in comma list', () => {
+  const body = { filename: 'photo.gif', contentType: 'image/gif', size: 1000 };
+  const config = { file: true, accept: 'image/png,image/jpeg' };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, 'Invalid file type');
+});
+
+Deno.test('presign validation: wildcard */* accepts anything', () => {
+  const body = {
+    filename: 'anything.zip',
+    contentType: 'application/zip',
+    size: 1000,
+  };
+  const config = { file: true, accept: '*/*' };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: no config means no restrictions', () => {
+  const body = {
+    filename: 'huge.bin',
+    contentType: 'application/octet-stream',
+    size: 999_999_999,
+  };
+
+  const result = validatePresignRequest(body, undefined);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: error shows MB for large limits', () => {
+  const body = {
+    filename: 'big.bin',
+    contentType: 'application/octet-stream',
+    size: 60_000_000,
+  };
+  const config = { file: true, maxSize: 50 * 1024 * 1024 };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, '50MB');
+});
+
+Deno.test('presign validation: both maxSize and accept checked together', () => {
+  // Valid type but too big
+  const bigImage = {
+    filename: 'big.png',
+    contentType: 'image/png',
+    size: 5_000_000,
+  };
+  const config = { file: true, maxSize: 200_000, accept: 'image/*' };
+
+  const result1 = validatePresignRequest(bigImage, config);
+  assertEquals(result1 !== null, true);
+  assertStringIncludes(result1!.error, 'File too large');
+
+  // Valid size but wrong type
+  const smallPdf = {
+    filename: 'doc.pdf',
+    contentType: 'application/pdf',
+    size: 1000,
+  };
+  const result2 = validatePresignRequest(smallPdf, config);
+  assertEquals(result2 !== null, true);
+  assertStringIncludes(result2!.error, 'Invalid file type');
+
+  // Both valid
+  const goodFile = {
+    filename: 'ok.png',
+    contentType: 'image/png',
+    size: 100_000,
+  };
+  const result3 = validatePresignRequest(goodFile, config);
+  assertEquals(result3, null);
 });

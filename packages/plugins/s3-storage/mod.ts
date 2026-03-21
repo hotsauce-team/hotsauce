@@ -48,6 +48,55 @@ import { buildObjectUrl, presignUrl, signHeaders } from './sigv4.ts';
 export type { S3StoragePluginOptions } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
+// File Validation
+// ─────────────────────────────────────────────────────────────
+
+/** Default max file size for S3 uploads: 10MB. Set maxSize: 0 in $cms() to disable. */
+export const S3_DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
+
+/**
+ * Validate a presign request against column $cms() options.
+ * Returns `{ error: string }` if invalid, `null` if valid.
+ *
+ * Applies S3_DEFAULT_MAX_SIZE (10MB) when no explicit maxSize is set.
+ * Set `$cms({ file: true, maxSize: 0 })` to disable the size limit.
+ */
+export function validatePresignRequest(
+  body: { filename: string; contentType: string; size: number },
+  fieldConfig: Record<string, unknown> | undefined,
+): { error: string } | null {
+  if (!fieldConfig) return null;
+
+  const maxSize = fieldConfig.maxSize !== undefined
+    ? fieldConfig.maxSize as number
+    : S3_DEFAULT_MAX_SIZE;
+  if (maxSize > 0 && body.size > maxSize) {
+    const label = maxSize >= 1_048_576
+      ? `${Math.round(maxSize / 1_048_576)}MB`
+      : `${Math.round(maxSize / 1024)}KB`;
+    return { error: `File too large. Maximum size is ${label}.` };
+  }
+
+  const accept = fieldConfig.accept as string | undefined;
+  if (accept && accept !== '*/*') {
+    const patterns = accept.split(',').map((p) => p.trim().toLowerCase());
+    const type = body.contentType.toLowerCase();
+    const matched = patterns.some((pattern) => {
+      if (pattern === type) return true;
+      if (pattern.endsWith('/*')) {
+        return type.startsWith(pattern.slice(0, -1));
+      }
+      return false;
+    });
+    if (!matched) {
+      return { error: `Invalid file type. Accepted: ${accept}` };
+    }
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Unique Key Generation
 // ─────────────────────────────────────────────────────────────
 
@@ -501,9 +550,15 @@ export function createS3StoragePlugin(
     <p>Table: <strong>${table}</strong> | Record: <strong>${id}</strong> | Column: <strong>${column}</strong></p>
 
     <div class="upload-area" id="uploadArea">
-      <input type="file" id="fileInput">
+      <input type="file" id="fileInput"${
+            ctx.field?.config?.accept
+              ? ` accept="${ctx.field.config.accept}"`
+              : ''
+          }>
       <p>Click or drag a file here to upload</p>
     </div>
+
+    <p id="uploadHints" class="upload-hints" style="display: none; color: #666; font-size: 0.9em; margin-top: 0.5rem;"></p>
 
     <div class="progress-bar" id="progressBar">
       <div class="progress" id="progress"></div>
@@ -530,6 +585,14 @@ export function createS3StoragePlugin(
       column: ${JSON.stringify(column)},
       csrfToken: ${JSON.stringify(ctx.csrfToken)},
       sourceToken: ${JSON.stringify(ctx.sourceToken)},
+      maxSize: ${
+            JSON.stringify(
+              ctx.field?.config?.maxSize !== undefined
+                ? ctx.field.config.maxSize
+                : S3_DEFAULT_MAX_SIZE,
+            )
+          },
+      accept: ${JSON.stringify(ctx.field?.config?.accept ?? null)},
     };
 
     const uploadArea = document.getElementById('uploadArea');
@@ -554,6 +617,24 @@ export function createS3StoragePlugin(
         handleFile(e.dataTransfer.files[0]);
       }
     });
+    function formatSize(bytes) {
+      return bytes >= 1048576
+        ? Math.round(bytes / 1048576) + 'MB'
+        : Math.round(bytes / 1024) + 'KB';
+    }
+
+    // Show upload hints (max size, accepted types)
+    {
+      const hints = [];
+      if (config.maxSize) hints.push('Max size: ' + formatSize(config.maxSize));
+      if (config.accept) hints.push('Accepted: ' + config.accept);
+      if (hints.length) {
+        const el = document.getElementById('uploadHints');
+        el.textContent = hints.join(' · ');
+        el.style.display = 'block';
+      }
+    }
+
     fileInput.addEventListener('change', () => {
       if (fileInput.files.length) {
         handleFile(fileInput.files[0]);
@@ -566,6 +647,13 @@ export function createS3StoragePlugin(
       document.getElementById('fileSize').textContent = Math.round(file.size / 1024) + ' KB';
       document.getElementById('fileType').textContent = file.type || 'application/octet-stream';
       fileInfo.style.display = 'block';
+
+      // Client-side validation
+      if (config.maxSize && file.size > config.maxSize) {
+        status.textContent = 'File too large. Maximum size is ' + formatSize(config.maxSize) + '.';
+        status.className = 'status error';
+        return;
+      }
 
       status.textContent = 'Getting presigned URL...';
       status.className = 'status';
@@ -717,6 +805,21 @@ export function createS3StoragePlugin(
           ) {
             return new Response(
               JSON.stringify({ error: 'Missing required fields' }),
+              {
+                status: 400,
+                headers: { 'Content-Type': 'application/json' },
+              },
+            );
+          }
+
+          // Validate file size and content type against $cms() field config
+          const fieldConfig = ctx.field?.config as
+            | Record<string, unknown>
+            | undefined;
+          const validationError = validatePresignRequest(body, fieldConfig);
+          if (validationError) {
+            return new Response(
+              JSON.stringify(validationError),
               {
                 status: 400,
                 headers: { 'Content-Type': 'application/json' },

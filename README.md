@@ -277,11 +277,16 @@ interface TableParsers {
 - [ ] Security disclosure policy
 - [ ] Add tests for NodeJS runtime
 - [ ] File uploads (S3/R2 cloud storage adapter)
+- [ ] S3 orphan garbage collection (cleanup objects not referenced by any record)
+- [ ] Expose plugin utilities for frontend use (e.g., S3 signed download URLs)
+- [ ] Media library UI (browse, search, reuse previously uploaded files)
+- [ ] Native CDN support (public + private files, cache invalidation)
 - [ ] Plugin config - timeout, worker response validation, load testing
 - [ ] Plugin data obfuscation (PII/credential redaction)
 - [ ] Audit logging
 - [ ] 2FA backup codes (recovery codes for lost authenticator)
 - [ ] Customizable UI components
+- [ ] Seamless plugin UI (in-page S3 uploads and block editing without navigation)
 
 Schema hints example:
 

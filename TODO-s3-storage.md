@@ -12,13 +12,13 @@
 ## Must Fix
 
 - [x] **CSP blocking S3 images on admin screens** — Allow S3/MinIO endpoint in `img-src` directive for detail/list views
-- [ ] **Orphan GC** — Documented but not implemented; uploaded files that never get attached to a record accumulate
-- [ ] **Frontend URL signing** — Expose S3 plugin's `signDownloadUrl` for use on public site (currently only works in CMS handler context)
+- [-] **Orphan GC** — Documented but not implemented; uploaded files that never get attached to a record accumulate
+- [-] **Frontend URL signing** — Expose S3 plugin's `signDownloadUrl` for use on public site (currently only works in CMS handler context)
 
 ## Should Add
 
-- [ ] **Upload progress indicator** — Currently no feedback during large file uploads to S3
-- [ ] **Max file size validation** — Validate before presign, not just after upload fails
+- [x] **Upload progress indicator** — XHR progress bar on S3 upload page
+- [x] **Max file size validation** — Validate before presign, not just after upload fails
 - [ ] **Real AWS S3 testing** — Demo only tested with MinIO; need to verify SigV4 with actual AWS
 - [ ] **IAM role credential support** — Use EC2/ECS instance profiles instead of long-lived access keys in env vars (IMDS v2)
 - [ ] **Unify ErrorContext and PluginErrorContext** — Common base type so plugin errors can forward to `options.onError`
@@ -31,9 +31,9 @@
 
 ## Nice to Have
 
-- [ ] **In-form upload JS** — Upload without leaving the edit page (currently redirects to standalone upload page)
-- [ ] **Media library UI** — Browse/select from previously uploaded files (separate milestone per spec)
-- [ ] **CDN integration docs** — Example CloudFront/R2 CDN configuration
+- [-] **In-form upload JS** — Upload without leaving the edit page (currently redirects to standalone upload page)
+- [-] **Media library UI** — Browse/select from previously uploaded files (separate milestone per spec)
+- [-] **CDN integration docs** — Example CloudFront/R2 CDN configuration
 - [ ] **Expose policy API** — Let devs reuse CMS policies in their app routes (noted in README as future consideration)
 - [ ] **Create-time S3 uploads** — Currently record must exist before S3 upload; presign requires record ID
 

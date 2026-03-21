@@ -54,7 +54,10 @@ export const authors = pgTable('authors', {
  */
 export const media = pgTable('media', {
   id: serial('id').primaryKey(),
-  file: jsonb('file').$type<FileReference>().$cms({ file: true }),
+  file: jsonb('file').$type<FileReference>().$cms({
+    file: true,
+    accept: 'image/*',
+  }), // 5MB limit
   alt: text('alt'),
   caption: text('caption'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
