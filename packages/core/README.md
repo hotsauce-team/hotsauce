@@ -182,6 +182,7 @@ const posts = pgTable('posts', {
 
 | Option        | Type                                                | Description                                         |
 | ------------- | --------------------------------------------------- | --------------------------------------------------- |
+| `autoDraft`   | `boolean`                                           | Auto-create a draft row on "Create New" (see below) |
 | `frontendUrl` | `(record: Record<string, unknown>) => string\|null` | Generate a "View on site" link on detail/edit views |
 | `label`       | `string`                                            | Singular label for the table (e.g., "Blog Post")    |
 | `labelPlural` | `string`                                            | Plural label for lists (e.g., "Blog Posts")         |
@@ -197,6 +198,23 @@ For security, prefer returning either:
 
 - A relative URL (e.g. `/blog/my-post`)
 - An absolute `https://...` (or `http://...`) URL
+
+#### Auto-draft creation
+
+When `autoDraft: true` is set, clicking "Create New" inserts a row with all defaults and redirects to the edit page. This enables features that need a record ID before saving (S3 uploads, Puck editor).
+
+```ts
+const media = pgTable('media', {
+  id: serial('id').primaryKey(),
+  file: jsonb('file'), // nullable — OK
+  published: boolean('published').default(false), // has default — OK
+}).$cms({ autoDraft: true });
+```
+
+Requirements:
+
+- Every non-PK column must have a database default or be nullable
+- The CMS validates this at startup and throws `CmsConfigError` if the schema doesn't support it
 
 #### File fields
 

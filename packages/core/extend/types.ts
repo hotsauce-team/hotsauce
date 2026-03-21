@@ -158,6 +158,27 @@ export type CmsTableOptions = {
   icon?: string;
 
   /**
+   * Auto-create a draft row when visiting the create page.
+   *
+   * When true, "Create New" inserts a row with all defaults and redirects to
+   * the edit page. This enables features that need a record ID before saving
+   * (e.g. S3 uploads, Puck editor).
+   *
+   * Requires every non-PK column to have a default or be nullable.
+   * The CMS validates this at startup and throws if the schema doesn't support it.
+   *
+   * @example
+   * ```ts
+   * pgTable('media', {
+   *   id: uuid('id').primaryKey().defaultRandom(),
+   *   file: jsonb('file'),
+   *   published: boolean('published').notNull().default(false),
+   * }).$cms({ autoDraft: true });
+   * ```
+   */
+  autoDraft?: boolean;
+
+  /**
    * Table-level plugin configuration, keyed by plugin name.
    * Plugins declared here receive the full record for transform/action hooks.
    *

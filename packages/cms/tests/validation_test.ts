@@ -4,6 +4,7 @@ import { assertEquals, assertThrows } from '@std/assert';
 import {
   CmsConfigError,
   CmsOptionsSchema,
+  validateAutoDraft,
   validateCmsOptions,
   validateCspOptions,
 } from '../validation.ts';
@@ -397,4 +398,233 @@ Deno.test('validateCspOptions: reports errors for multiple directives', () => {
     assertEquals(message.includes('csp.imgSrc'), true);
     assertEquals(message.includes('csp.frameSrc'), true);
   }
+});
+
+// =============================================================================
+// validateAutoDraft tests
+// =============================================================================
+
+Deno.test('validateAutoDraft: accepts table with all nullable columns', () => {
+  const introspected = {
+    tables: [{
+      name: 'media',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'file',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: false,
+        },
+        { name: 'alt', isPrimaryKey: false, hasDefault: false, notNull: false },
+      ],
+    }],
+  };
+  // Should not throw
+  validateAutoDraft(introspected);
+});
+
+Deno.test('validateAutoDraft: accepts table with all columns having defaults', () => {
+  const introspected = {
+    tables: [{
+      name: 'uploads',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'status',
+          isPrimaryKey: false,
+          hasDefault: true,
+          notNull: true,
+        },
+        {
+          name: 'created_at',
+          isPrimaryKey: false,
+          hasDefault: true,
+          notNull: true,
+        },
+      ],
+    }],
+  };
+  validateAutoDraft(introspected);
+});
+
+Deno.test('validateAutoDraft: accepts table with mix of nullable and defaulted', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'title',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: false,
+        },
+        {
+          name: 'published',
+          isPrimaryKey: false,
+          hasDefault: true,
+          notNull: true,
+        },
+      ],
+    }],
+  };
+  validateAutoDraft(introspected);
+});
+
+Deno.test('validateAutoDraft: rejects table with NOT NULL column without default', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'title',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: true,
+        },
+      ],
+    }],
+  };
+  assertThrows(
+    () => validateAutoDraft(introspected),
+    CmsConfigError,
+    'title',
+  );
+});
+
+Deno.test('validateAutoDraft: reports multiple blocking columns', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'title',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: true,
+        },
+        { name: 'slug', isPrimaryKey: false, hasDefault: false, notNull: true },
+      ],
+    }],
+  };
+  try {
+    validateAutoDraft(introspected);
+  } catch (error) {
+    const message = (error as CmsConfigError).message;
+    assertEquals(message.includes('title'), true);
+    assertEquals(message.includes('slug'), true);
+  }
+});
+
+Deno.test('validateAutoDraft: skips tables without autoDraft', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'title',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: true,
+        },
+      ],
+    }],
+  };
+  // Should not throw — autoDraft is not set
+  validateAutoDraft(introspected);
+});
+
+Deno.test('validateAutoDraft: rejects PK without default', () => {
+  const introspected = {
+    tables: [{
+      name: 'media',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: false, notNull: true },
+        {
+          name: 'file',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: false,
+        },
+      ],
+    }],
+  };
+  assertThrows(
+    () => validateAutoDraft(introspected),
+    CmsConfigError,
+    'id',
+  );
+});
+
+// =============================================================================
+// canAutoCreateDraft tests
+// =============================================================================
+
+import { canAutoCreateDraft } from '../crud-helpers.ts';
+import type { IntrospectedTable } from '@hotsauce/core';
+
+function makeTable(
+  columns: Array<
+    {
+      name: string;
+      isPrimaryKey: boolean;
+      hasDefault: boolean;
+      notNull: boolean;
+    }
+  >,
+): IntrospectedTable {
+  return {
+    name: 'test',
+    primaryKey: columns.filter((c) => c.isPrimaryKey).map((c) => c.name),
+    columns: columns.map((c) => ({
+      ...c,
+      propertyName: c.name,
+      columnType: 'string',
+      dataType: 'string',
+      isUnique: false,
+    })),
+    table: {},
+  };
+}
+
+Deno.test('canAutoCreateDraft: true when all columns nullable', () => {
+  const table = makeTable([
+    { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+    { name: 'file', isPrimaryKey: false, hasDefault: false, notNull: false },
+  ]);
+  assertEquals(canAutoCreateDraft(table), true);
+});
+
+Deno.test('canAutoCreateDraft: true when all columns have defaults', () => {
+  const table = makeTable([
+    { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+    { name: 'status', isPrimaryKey: false, hasDefault: true, notNull: true },
+  ]);
+  assertEquals(canAutoCreateDraft(table), true);
+});
+
+Deno.test('canAutoCreateDraft: false when NOT NULL column has no default', () => {
+  const table = makeTable([
+    { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+    { name: 'title', isPrimaryKey: false, hasDefault: false, notNull: true },
+  ]);
+  assertEquals(canAutoCreateDraft(table), false);
+});
+
+Deno.test('canAutoCreateDraft: false when PK has no default', () => {
+  const table = makeTable([
+    { name: 'id', isPrimaryKey: true, hasDefault: false, notNull: true },
+    { name: 'file', isPrimaryKey: false, hasDefault: false, notNull: false },
+  ]);
+  assertEquals(canAutoCreateDraft(table), false);
 });

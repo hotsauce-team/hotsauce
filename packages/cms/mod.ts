@@ -42,6 +42,7 @@ import {
   validateCsrfToken,
 } from './csrf.ts';
 import {
+  validateAutoDraft,
   validateCmsOptions,
   validateCspOptions,
   validateFileColumns,
@@ -120,6 +121,7 @@ export {
   CmsConfigError,
   CmsOptionsSchema,
   ResolvedSecretsSchema,
+  validateAutoDraft,
   validateCmsOptions,
   validateFileColumns,
   validateResolvedSecrets,
@@ -798,6 +800,9 @@ export function createCmsHandler(options: CmsOptions): Handler {
 
   // Validate file column configurations (file: true must be on JSON columns)
   validateFileColumns(introspected);
+
+  // Validate autoDraft tables (all non-PK columns must have defaults or be nullable)
+  validateAutoDraft(introspected);
 
   // Validate and build CSP security headers (computed once at startup)
   if (options.csp) {

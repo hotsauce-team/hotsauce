@@ -11,6 +11,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 import { createInsertSchema, createUpdateSchema } from 'drizzle-zod';
+import { z } from 'zod';
 
 import '@hotsauce/core/extend';
 import type {
@@ -57,11 +58,12 @@ export const media = pgTable('media', {
   file: jsonb('file').$type<FileReference>().$cms({
     file: true,
     accept: 'image/*',
-  }), // 5MB limit
+  }),
   alt: text('alt'),
   caption: text('caption'),
+  published: boolean('published').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-});
+}).$cms({ autoDraft: true });
 
 /**
  * Categories table - post organization
@@ -107,8 +109,9 @@ export const posts = pgTable('posts', {
  */
 export const pages = pgTable('pages', {
   id: serial('id').primaryKey(),
-  title: varchar('title', { length: 255 }).notNull(),
-  slug: varchar('slug', { length: 255 }).notNull().unique(),
+  title: varchar('title', { length: 255 }),
+  slug: varchar('slug', { length: 255 }).unique()
+    .$defaultFn(() => `draft-${crypto.randomUUID().slice(0, 8)}`),
   // JSON content edited with Puck visual editor
   content: jsonb('content').$cms({ plugins: { puck: true } }),
   published: boolean('published').default(false).notNull(),
@@ -116,6 +119,7 @@ export const pages = pgTable('pages', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }).$cms({
+  autoDraft: true,
   frontendUrl: (page) => page.published ? `/${page.slug}` : null,
 });
 
@@ -194,7 +198,6 @@ const authorsInsertSchema = createInsertSchema(authors);
 const mediaInsertSchema = createInsertSchema(media);
 const categoriesInsertSchema = createInsertSchema(categories);
 const postsInsertSchema = createInsertSchema(posts);
-const pagesInsertSchema = createInsertSchema(pages);
 const settingsInsertSchema = createInsertSchema(settings);
 const adminUsersInsertSchema = createInsertSchema(adminUsers);
 
@@ -202,9 +205,37 @@ const authorsUpdateSchema = createUpdateSchema(authors);
 const mediaUpdateSchema = createUpdateSchema(media);
 const categoriesUpdateSchema = createUpdateSchema(categories);
 const postsUpdateSchema = createUpdateSchema(posts);
-const pagesUpdateSchema = createUpdateSchema(pages);
 const settingsUpdateSchema = createUpdateSchema(settings);
 const adminUsersUpdateSchema = createUpdateSchema(adminUsers);
+
+// Pages: require title and slug when publishing
+function requireTitleSlugWhenPublished(
+  data: Record<string, unknown>,
+  ctx: z.RefinementCtx,
+) {
+  if (data.published) {
+    if (!data.title || (typeof data.title === 'string' && !data.title.trim())) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Title is required when publishing',
+        path: ['title'],
+      });
+    }
+    if (!data.slug || (typeof data.slug === 'string' && !data.slug.trim())) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Slug is required when publishing',
+        path: ['slug'],
+      });
+    }
+  }
+}
+const pagesInsertSchema = createInsertSchema(pages).superRefine(
+  requireTitleSlugWhenPublished,
+);
+const pagesUpdateSchema = createUpdateSchema(pages).superRefine(
+  requireTitleSlugWhenPublished,
+);
 
 /**
  * Parsers for CMS form validation

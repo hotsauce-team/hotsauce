@@ -270,6 +270,62 @@ export function validateFileColumns(
 }
 
 /**
+ * Validate autoDraft table option.
+ *
+ * Tables with `$cms({ autoDraft: true })` must have every non-PK column
+ * either nullable or with a database default. Otherwise the CMS can't
+ * `INSERT … DEFAULT VALUES` to create a draft row.
+ *
+ * @throws {CmsConfigError} When autoDraft is set on incompatible tables
+ */
+export function validateAutoDraft(
+  introspected: {
+    tables: Array<
+      {
+        name: string;
+        cmsOptions?: { autoDraft?: boolean };
+        columns: Array<
+          {
+            name: string;
+            isPrimaryKey: boolean;
+            hasDefault: boolean;
+            notNull: boolean;
+          }
+        >;
+      }
+    >;
+  },
+): void {
+  const errors: string[] = [];
+
+  for (const table of introspected.tables) {
+    if (!table.cmsOptions?.autoDraft) continue;
+
+    const blocking = table.columns.filter((col) => {
+      if (col.isPrimaryKey && col.hasDefault) return false;
+      if (col.hasDefault) return false;
+      if (!col.notNull) return false;
+      return true;
+    });
+
+    if (blocking.length > 0) {
+      const cols = blocking.map((c) => c.name).join(', ');
+      errors.push(
+        `  - ${table.name}: autoDraft requires all non-PK columns to have defaults or be nullable. ` +
+          `Blocking column(s): ${cols}. ` +
+          `Add .default(...) or remove .notNull() from these columns.`,
+      );
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new CmsConfigError(
+      `Invalid autoDraft configuration:\n${errors.join('\n')}`,
+    );
+  }
+}
+
+/**
  * Validate CSP origin strings.
  * Each origin must be a valid http: or https: URL origin (scheme + host + optional port).
  *

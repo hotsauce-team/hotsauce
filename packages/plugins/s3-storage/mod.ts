@@ -415,11 +415,13 @@ export function createS3StoragePlugin(
             return null;
           }
 
-          // Create view: no recordId yet, can't generate S3 upload path
-          // Show message instead of file input for consistency with edit view
+          // Create view: no recordId yet, can't generate S3 upload path.
+          // Tables with $cms({ autoDraft: true }) skip this — they redirect
+          // to the edit view automatically. This message only appears on
+          // tables without autoDraft.
           if (ctx.view === 'create' || !ctx.recordId) {
             return {
-              valueSummary: 'Save record first to upload files via S3',
+              valueSummary: 'Save this record first to enable S3 uploads',
             };
           }
 

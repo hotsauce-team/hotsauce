@@ -34,8 +34,8 @@
 - [-] **In-form upload JS** — Upload without leaving the edit page (currently redirects to standalone upload page)
 - [-] **Media library UI** — Browse/select from previously uploaded files (separate milestone per spec)
 - [-] **CDN integration docs** — Example CloudFront/R2 CDN configuration
-- [ ] **Expose policy API** — Let devs reuse CMS policies in their app routes (noted in README as future consideration)
-- [ ] **Create-time S3 uploads** — Currently record must exist before S3 upload; presign requires record ID
+- [-] **Expose policy API** — Let devs reuse CMS policies in their app routes (noted in README as future consideration)
+- [x] **Create-time S3 uploads** — `$cms({ autoDraft: true })` inserts draft row on "Create New", redirects to edit (#38)
 
 ## Done
 

@@ -49,6 +49,7 @@ import {
 } from './tokens/mod.ts';
 import {
   buildNavItems,
+  canAutoCreateDraft,
   fetchAllRelationOptions,
   fetchManyToManyData,
   fetchManyToManyDisplayData,
@@ -1119,7 +1120,38 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     }
   }
 
-  // Handle GET - show form
+  // Handle GET - show form (or auto-create draft if configured)
+  if (table.cmsOptions?.autoDraft && canAutoCreateDraft(table)) {
+    try {
+      // Insert a row with all defaults and redirect to edit
+      const result = await options.db
+        .insert(drizzleTable)
+        .values({} as Record<string, never>)
+        .returning();
+
+      const newRecord = result[0] as Record<string, unknown>;
+      const newId = getPrimaryKeyValue(table, newRecord);
+
+      return redirect(cmsUrl(basePath, table.name, newId, 'edit'));
+    } catch (error) {
+      // Log and fall through to normal create form
+      if (options.onError) {
+        options.onError(
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            request,
+            url: new URL(request.url),
+            route: route,
+            table,
+            action: 'create',
+          },
+        );
+      }
+      const safeMessage = getSafeErrorMessage(error, 'create');
+      return await renderCreateForm(ctx, columnResult, {}, safeMessage);
+    }
+  }
+
   return await renderCreateForm(ctx, columnResult);
 }
 

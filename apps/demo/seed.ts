@@ -68,6 +68,7 @@ await db.execute(sql`
     file JSONB,
     alt TEXT,
     caption TEXT,
+    published BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP DEFAULT NOW() NOT NULL
   )
 `);
@@ -101,8 +102,8 @@ await db.execute(sql`
 await db.execute(sql`
   CREATE TABLE IF NOT EXISTS pages (
     id SERIAL PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    slug VARCHAR(255) NOT NULL UNIQUE,
+    title VARCHAR(255),
+    slug VARCHAR(255) UNIQUE,
     content JSONB,
     published BOOLEAN DEFAULT FALSE NOT NULL,
     sort_order INTEGER DEFAULT 0 NOT NULL,
@@ -200,6 +201,7 @@ const [media1] = await db.insert(media).values({
   },
   alt: 'Hono framework logo',
   caption: 'The lightweight web framework that works everywhere',
+  published: true,
 }).onConflictDoNothing().returning();
 
 const [media2] = await db.insert(media).values({
@@ -213,6 +215,7 @@ const [media2] = await db.insert(media).values({
   },
   alt: 'Drizzle ORM logo',
   caption: 'TypeScript ORM that feels like magic',
+  published: true,
 }).onConflictDoNothing().returning();
 
 const [media3] = await db.insert(media).values({

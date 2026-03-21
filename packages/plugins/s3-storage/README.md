@@ -119,10 +119,18 @@ CMS → DB: Update record with file info
 
 ### Create vs Edit
 
-- **Create view**: Shows "Save record first to upload files via S3" (no file input)
-- **Edit view**: Shows "Upload via S3" link
+S3 uploads need a record ID to build the object key (`{table}/{column}/{recordId}/...`). On the **edit** page the ID already exists, so uploads work immediately.
 
-This is because S3 upload paths include the record ID, which doesn't exist until after creation.
+On the **create** page there's no ID yet. The CMS handles this with the `autoDraft` table option:
+
+- **`$cms({ autoDraft: true })`** — When visiting "Create New", the CMS inserts a row with all defaults and redirects to the edit page, where uploads work immediately.
+- **Without `autoDraft`** — The standard create form appears. File upload fields show "Save this record first to enable S3 uploads."
+
+`autoDraft` requires every non-PK column to have a default or be nullable — the CMS validates this at startup and throws a clear error if the schema doesn't support it.
+
+> **Recommendation:** Add `$cms({ autoDraft: true })` to tables with file uploads, and
+> design those tables so all required columns have sensible defaults.
+> See [Schema Design for Create-Time Uploads](#schema-design-for-create-time-uploads) below.
 
 ## Object Key Format
 
@@ -250,6 +258,107 @@ file: jsonb('file').$cms({ file: true }),
 // SQLite
 file: text('file', { mode: 'json' }).$cms({ file: true }),
 ```
+
+## Schema Design for Create-Time Uploads
+
+Tables with `$cms({ autoDraft: true })` get automatic draft row creation. Every non-PK column must either have a **database default** or be **nullable** — the CMS validates this at startup.
+
+### Good: Draft-capable schemas
+
+```ts
+import {
+  boolean,
+  jsonb,
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
+
+// ✅ All columns have defaults or are nullable
+export const media = pgTable('media', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  file: jsonb('file'), // nullable — OK
+  alt: text('alt'), // nullable — OK
+  published: boolean('published').default(false),
+  createdAt: timestamp('created_at').defaultNow(),
+}).$cms({ autoDraft: true });
+
+// ✅ Works with serial PKs too — PK type doesn't matter
+export const uploads = pgTable('uploads', {
+  id: serial('id').primaryKey(),
+  file: jsonb('file'), // nullable — OK
+  description: text('description'), // nullable — OK
+  status: text('status').default('draft'), // has default — OK
+}).$cms({ autoDraft: true });
+```
+
+### Bad: Blocks auto-draft
+
+```ts
+// ❌ title is NOT NULL with no default — CMS can't insert an empty row
+export const posts = pgTable('posts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  title: text('title').notNull(), // ← blocks auto-draft
+  body: text('body'),
+  cover: jsonb('cover').$cms({ file: true }),
+});
+```
+
+Fix: add a default, or make the column nullable:
+
+```ts
+// Option A: default value
+title: text('title').notNull().default('Untitled'),
+
+// Option B: nullable (let users fill it in after creating)
+title: text('title'),
+```
+
+### Common patterns
+
+```ts
+// Published flag — use default(false) so drafts start unpublished
+published: boolean('published').notNull().default(false),
+
+// Status enum — default to 'draft'
+status: text('status', { enum: ['draft', 'published', 'archived'] }).notNull().default('draft'),
+
+// Timestamps — use defaultNow()
+createdAt: timestamp('created_at').notNull().defaultNow(),
+
+// Author — nullable if set later, or use a policy default
+authorId: uuid('author_id'),
+
+// Slug — $defaultFn generates a unique value for each draft
+slug: varchar('slug', { length: 255 }).unique()
+  .$defaultFn(() => `draft-${crypto.randomUUID().slice(0, 8)}`),
+```
+
+**Tip:** If you make columns nullable for `autoDraft` but want to enforce them on publish, use a [custom parser](../../cms/README.md) with Zod `superRefine`:
+
+```ts
+const pagesSchema = createInsertSchema(pages).superRefine((data, ctx) => {
+  if (data.published && !data.title) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'Title is required when publishing',
+      path: ['title'],
+    });
+  }
+});
+```
+
+### How it works
+
+When a user clicks "Create New" on a table with `$cms({ autoDraft: true })`:
+
+1. CMS inserts a row with all defaults (`INSERT … DEFAULT VALUES RETURNING *`)
+2. Redirects to the edit page for that new row
+3. User can upload files and fill in fields, then save
+
+For tables without `autoDraft`, the standard create form appears. File upload fields show "Save this record first to enable S3 uploads."
 
 ## Troubleshooting
 
