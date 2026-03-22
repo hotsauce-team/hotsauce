@@ -387,3 +387,21 @@ EOF
 ### Presigned URL expired
 
 Default expiry is 15 minutes. Increase with `expirySeconds` option.
+
+## Future / Not Yet Implemented
+
+- **Orphan GC** — Uploaded files that never get attached to a record (e.g., user
+  starts upload then abandons the form) accumulate in storage. A cleanup mechanism
+  is needed.
+- **Frontend URL signing** — Expose `signDownloadUrl` for use outside the CMS
+  handler context (e.g., public site templates, API routes).
+- **In-form upload** — Upload files without leaving the edit page. Currently
+  redirects to a standalone upload page; inline upload would improve UX.
+- **Media library UI** — Browse/select from previously uploaded files instead of
+  uploading new ones each time. Separate milestone.
+- **CDN integration docs** — Example CloudFront / Cloudflare R2 CDN configuration
+  with cache invalidation.
+- **IAM role credentials** — Support EC2/ECS instance profiles (IMDS v2) instead
+  of long-lived access keys in environment variables.
+- **Additional S3 providers** — Tested with MinIO. AWS S3, Backblaze B2, and
+  Hetzner Object Storage to be verified.
