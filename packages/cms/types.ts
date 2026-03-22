@@ -283,6 +283,8 @@ export interface ErrorContext {
   action?: CrudAction | 'dashboard';
   /** Request ID for correlating logs with user-facing error messages */
   requestId?: string;
+  /** Plugin name (when the error originated from a plugin) */
+  plugin?: string;
 }
 
 /**

@@ -281,6 +281,8 @@ export interface PluginErrorContext {
     | 'route:render';
   /** CRUD action (for action hooks) */
   action?: CrudAction;
+  /** The hook context that was active when the error occurred (varies by operation) */
+  hookContext?: Serializable;
 }
 
 /**
@@ -392,7 +394,19 @@ export class WorkerExecutor {
         // Execute in-process hook (function form)
         const hook = this.getInProcessTransformHook(plugin.hooks, 'beforeSave');
         if (hook) {
-          result = await hook(ctx, result);
+          try {
+            result = await hook(ctx, result);
+          } catch (error) {
+            const err = error instanceof Error
+              ? error
+              : new Error(String(error));
+            this.onError?.(err, {
+              plugin: plugin.name,
+              operation: 'transform:beforeSave',
+              hookContext: ctx as unknown as Serializable,
+            });
+            throw err;
+          }
         }
       }
     }
@@ -433,7 +447,19 @@ export class WorkerExecutor {
         // Execute in-process hook (function form)
         const hook = this.getInProcessTransformHook(plugin.hooks, 'afterRead');
         if (hook) {
-          result = await hook(ctx, result);
+          try {
+            result = await hook(ctx, result);
+          } catch (error) {
+            const err = error instanceof Error
+              ? error
+              : new Error(String(error));
+            this.onError?.(err, {
+              plugin: plugin.name,
+              operation: 'transform:afterRead',
+              hookContext: ctx as unknown as Serializable,
+            });
+            throw err;
+          }
         }
       }
     }
@@ -589,7 +615,14 @@ export class WorkerExecutor {
           const blocking = this.isBlocking(hook);
           const handler = typeof hook === 'function' ? hook : hook.handler;
 
-          const promise = Promise.resolve(handler(ctx)).then(() => {});
+          const promise = new Promise<void>((resolve, reject) => {
+            try {
+              const result = handler(ctx);
+              Promise.resolve(result).then(() => resolve(), reject);
+            } catch (err) {
+              reject(err);
+            }
+          });
 
           if (!blocking) {
             fireAndForgetPromises.push(
@@ -602,11 +635,25 @@ export class WorkerExecutor {
                   plugin: plugin.name,
                   operation: 'action',
                   action,
+                  hookContext: ctx as unknown as Serializable,
                 });
               }),
             );
           } else {
-            blockingPromises.push(promise);
+            blockingPromises.push(
+              promise.catch((error) => {
+                const err = error instanceof Error
+                  ? error
+                  : new Error(String(error));
+                this.onError?.(err, {
+                  plugin: plugin.name,
+                  operation: 'action',
+                  action,
+                  hookContext: ctx as unknown as Serializable,
+                });
+                throw err; // Re-throw so caller can handle
+              }),
+            );
           }
         }
       }
@@ -656,6 +703,7 @@ export class WorkerExecutor {
       'action',
       { action, ctx } as unknown as Serializable,
       action,
+      ctx as unknown as Serializable,
     );
   }
 
@@ -734,6 +782,7 @@ export class WorkerExecutor {
     type: WorkerMessageType,
     payload: Serializable,
     action?: CrudAction,
+    hookContext?: Serializable,
   ): Promise<Serializable> {
     const worker = this.workers.get(pluginName);
     if (!worker) {
@@ -762,6 +811,7 @@ export class WorkerExecutor {
         ? 'init'
         : type as PluginErrorContext['operation'],
       action,
+      hookContext,
     };
 
     return new Promise((resolve, reject) => {

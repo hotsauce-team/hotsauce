@@ -3,7 +3,8 @@
 
 import { assert, assertEquals, assertRejects } from '@std/assert';
 import { WorkerExecutor } from './executor.ts';
-import type { RegisteredPlugin } from './executor.ts';
+import type { PluginErrorContext, RegisteredPlugin } from './executor.ts';
+import type { ActionContext } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Test helpers
@@ -1140,4 +1141,226 @@ Deno.test('WorkerExecutor: executeRouteRender with minimal context', async () =>
   } finally {
     executor.terminate();
   }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PluginErrorContext: hookContext on fire-and-forget errors
+// ─────────────────────────────────────────────────────────────
+
+Deno.test({
+  name:
+    'PluginErrorContext: in-process blocking:false includes full hookContext',
+  sanitizeOps: false,
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const executor = new WorkerExecutor((_error, ctx) => contexts.push(ctx));
+
+    const actionCtx: ActionContext = {
+      table: 'posts',
+      action: 'create',
+      recordId: '42',
+      user: { sub: 'user-1', role: 'editor' },
+      timestamp: new Date().toISOString(),
+      newData: { title: 'Hello' },
+    };
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'failing-inprocess',
+        hooks: {
+          on: {
+            create: {
+              handler: () => {
+                throw new Error('boom');
+              },
+              blocking: false,
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    await executor.executeAction([plugin], 'create', actionCtx);
+    // Fire-and-forget — give it a tick to settle
+    await new Promise((r) => setTimeout(r, 50));
+
+    assertEquals(contexts.length, 1);
+    assertEquals(contexts[0]?.plugin, 'failing-inprocess');
+    assertEquals(contexts[0]?.operation, 'action');
+    assertEquals(contexts[0]?.action, 'create');
+
+    // hookContext should be the full ActionContext
+    const hook = contexts[0]?.hookContext as unknown as ActionContext;
+    assertEquals(hook.table, 'posts');
+    assertEquals(hook.recordId, '42');
+    assertEquals(hook.user?.sub, 'user-1');
+    assertEquals(hook.newData, { title: 'Hello' });
+  },
+});
+
+Deno.test({
+  name: 'PluginErrorContext: in-process blocking:false with no recordId',
+  sanitizeOps: false,
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const executor = new WorkerExecutor((_error, ctx) => contexts.push(ctx));
+
+    const actionCtx: ActionContext = {
+      table: 'products',
+      action: 'list',
+      timestamp: new Date().toISOString(),
+    };
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'list-fail',
+        hooks: {
+          on: {
+            list: {
+              handler: () => {
+                throw new Error('list error');
+              },
+              blocking: false,
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    await executor.executeAction([plugin], 'list', actionCtx);
+    await new Promise((r) => setTimeout(r, 50));
+
+    assertEquals(contexts.length, 1);
+    const hook = contexts[0]?.hookContext as unknown as ActionContext;
+    assertEquals(hook.table, 'products');
+    assertEquals(hook.recordId, undefined);
+  },
+});
+
+Deno.test({
+  name:
+    'PluginErrorContext: blocking:true action calls onError with hookContext',
+  sanitizeOps: false,
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const executor = new WorkerExecutor((_error, ctx) => contexts.push(ctx));
+
+    const actionCtx: ActionContext = {
+      table: 'orders',
+      action: 'update',
+      recordId: 7,
+      timestamp: new Date().toISOString(),
+    };
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'blocking-plugin',
+        hooks: {
+          on: {
+            update: () => {
+              throw new Error('blocking failure');
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    // blocking hooks call onError then re-throw via allSettled
+    await executor.executeAction([plugin], 'update', actionCtx);
+
+    assertEquals(contexts.length, 1);
+    assertEquals(contexts[0]?.plugin, 'blocking-plugin');
+    assertEquals(contexts[0]?.operation, 'action');
+    assertEquals(contexts[0]?.action, 'update');
+    const hook = contexts[0]?.hookContext as unknown as ActionContext;
+    assertEquals(hook.table, 'orders');
+    assertEquals(hook.recordId, 7);
+  },
+});
+
+Deno.test({
+  name:
+    'PluginErrorContext: in-process beforeSave calls onError with hookContext and re-throws',
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const errors: Error[] = [];
+    const executor = new WorkerExecutor((error, ctx) => {
+      errors.push(error);
+      contexts.push(ctx);
+    });
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'bad-transform',
+        hooks: {
+          transform: {
+            beforeSave: () => {
+              throw new Error('transform broke');
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    const ctx = { table: 'articles', action: 'create' as const };
+
+    await assertRejects(
+      () => executor.executeBeforeSave([plugin], ctx, { title: 'test' }),
+      Error,
+      'transform broke',
+    );
+
+    assertEquals(contexts.length, 1);
+    assertEquals(contexts[0]?.plugin, 'bad-transform');
+    assertEquals(contexts[0]?.operation, 'transform:beforeSave');
+    assertEquals(errors[0]?.message, 'transform broke');
+    const hook = contexts[0]?.hookContext as unknown as typeof ctx;
+    assertEquals(hook.table, 'articles');
+  },
+});
+
+Deno.test({
+  name:
+    'PluginErrorContext: in-process afterRead calls onError with hookContext and re-throws',
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const executor = new WorkerExecutor((_error, ctx) => contexts.push(ctx));
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'bad-read-transform',
+        hooks: {
+          transform: {
+            afterRead: () => {
+              throw new Error('afterRead broke');
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    const ctx = { table: 'comments', action: 'read' as const };
+
+    await assertRejects(
+      () => executor.executeAfterRead([plugin], ctx, { body: 'hello' }),
+      Error,
+      'afterRead broke',
+    );
+
+    assertEquals(contexts.length, 1);
+    assertEquals(contexts[0]?.plugin, 'bad-read-transform');
+    assertEquals(contexts[0]?.operation, 'transform:afterRead');
+    const hook = contexts[0]?.hookContext as unknown as typeof ctx;
+    assertEquals(hook.table, 'comments');
+  },
 });

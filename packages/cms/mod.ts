@@ -51,6 +51,7 @@ import {
 import { getEnv } from './runtime-compat.ts';
 import { createPluginRegistry } from './plugins/registry.ts';
 import { createPluginService } from './plugins/service.ts';
+import type { PluginErrorHandler } from './plugins/service.ts';
 import {
   handleCreate,
   handleDashboard,
@@ -836,14 +837,11 @@ export function createCmsHandler(options: CmsOptions): Handler {
     : undefined;
 
   // Create plugin service (lazy initialization - Workers start on first use)
-  // TODO: Unify ErrorContext and PluginErrorContext into a discriminated union
-  // so plugin errors can be forwarded to options.onError instead of console.error.
-  // Currently PluginErrorContext has { plugin, operation } while ErrorContext has
-  // { request, url, route } - they need a shared base type.
-  const pluginOnError = (
-    error: Error,
-    ctx: { plugin: string; operation: string },
-  ) => {
+  // Plugin errors flow through two paths:
+  // 1. Blocking/in-process: error propagates to CRUD handler's catch → options.onError with full HTTP context
+  // 2. Fire-and-forget: error caught by WorkerExecutor → this bridge logs with plugin context
+  // Both paths call onError with hookContext (the full context the plugin had when it failed).
+  const pluginOnError: PluginErrorHandler = (error, ctx) => {
     // deno-lint-ignore no-console
     console.error(
       `[CMS Plugin Error] ${ctx.plugin}/${ctx.operation}:`,

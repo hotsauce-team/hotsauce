@@ -636,6 +636,7 @@ interface ErrorContext {
   table?: IntrospectedTable; // Table being accessed
   action?: CrudAction | 'dashboard'; // Action attempted
   requestId?: string; // Correlates error response with logs
+  plugin?: string; // Plugin name (when error originated from a plugin)
 }
 ```
 
