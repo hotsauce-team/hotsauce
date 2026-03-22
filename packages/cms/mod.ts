@@ -615,11 +615,23 @@ async function handlePluginRoute(
     try {
       const result = await route.handler(ctx);
       if (result instanceof Response) {
+        // Merge security headers for HTML responses (plugin headers win)
+        const ct = result.headers.get('content-type') ?? '';
+        if (ct.startsWith('text/html')) {
+          for (const [k, v] of Object.entries(options.securityHeaders)) {
+            if (!result.headers.has(k)) {
+              result.headers.set(k, v);
+            }
+          }
+        }
         return result;
       }
-      // String result - wrap in HTML response
+      // String result - wrap in HTML response with security headers
       return new Response(result, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          ...options.securityHeaders,
+        },
       });
     } catch (error) {
       // Generate request ID to correlate error logs with user-facing response
@@ -648,7 +660,10 @@ async function handlePluginRoute(
         ctx,
       );
       return new Response(html, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          ...options.securityHeaders,
+        },
       });
     } catch (error) {
       // Generate request ID to correlate error logs with user-facing response
