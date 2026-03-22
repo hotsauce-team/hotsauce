@@ -139,7 +139,9 @@ export const settings = pgTable('settings', {
 export const adminUsers = pgTable('admin_users', {
   id: serial('id').primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
-  passwordHash: varchar('password_hash', { length: 255 }).notNull(),
+  passwordHash: varchar('password_hash', { length: 255 }).notNull().$cms({
+    hidden: true,
+  }),
   name: varchar('name', { length: 100 }).notNull(),
   role: varchar('role', { length: 50 }).default('editor').notNull(),
   avatar: jsonb('avatar').$type<FileReference>().$cms({
