@@ -1393,10 +1393,27 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           expectedStorageId = options.storage?.defaultObjectStorageId;
         }
 
+        // No storage provider expected — reject key (inline DB storage only)
+        if (expectedStorageId === undefined) {
+          fileKeyErrors[col.propertyName] =
+            'This field does not use external storage. Please re-upload the file.';
+          continue;
+        }
+
+        // Validate expectedStorageId is actually registered
+        if (!options.storage?.instances.has(expectedStorageId)) {
+          fileKeyErrors[col.propertyName] =
+            `Storage provider '${expectedStorageId}' is not registered. Check your CMS storage configuration.`;
+          continue;
+        }
+
+        // Normalize: if client omitted storage but sent a key, fill from config
+        if (fileRef.key && !fileRef.storage) {
+          fileRef.storage = expectedStorageId;
+        }
+
         // Validate storage provider ID matches expected
-        // Must check expectedStorageId first — if client omits storage field,
-        // the mismatch should still be caught when storage is configured
-        if (expectedStorageId && fileRef.storage !== expectedStorageId) {
+        if (fileRef.storage !== expectedStorageId) {
           fileKeyErrors[col.propertyName] =
             'Invalid storage provider. Please re-upload the file.';
         }

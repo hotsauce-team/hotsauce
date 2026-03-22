@@ -40,9 +40,9 @@
 
 ### Storage Validation — Should Fix
 
-- [ ] **`expectedStorageId` not validated against registered providers** — `resolveStorage` can return an ID not in `options.storage.instances`; save succeeds but file serving/deletion fails later [#discussion_r2969771385](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2969771385)
-- [ ] **DB-routed column accepts `key`** — When `resolveStorage` returns `undefined` (inline DB storage), client can still submit a `key` field and pass validation. Reject `key` when no storage provider expected [#discussion_r2970063187](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063187)
-- [ ] **Normalize missing `storage` field instead of rejecting** — When `expectedStorageId` is set and `fileRef.key` exists but `storage` is missing, set `storage = expectedStorageId` rather than rejecting (matches `FileReference` documented fallback behavior) [#discussion_r2970347412](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347412)
+- [x] **`expectedStorageId` not validated against registered providers** — `resolveStorage` can return an ID not in `options.storage.instances`; save succeeds but file serving/deletion fails later [#discussion_r2969771385](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2969771385)
+- [x] **DB-routed column accepts `key`** — When `resolveStorage` returns `undefined` (inline DB storage), client can still submit a `key` field and pass validation. Reject `key` when no storage provider expected [#discussion_r2970063187](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063187)
+- [x] **Normalize missing `storage` field instead of rejecting** — When `expectedStorageId` is set and `fileRef.key` exists but `storage` is missing, set `storage = expectedStorageId` rather than rejecting (matches `FileReference` documented fallback behavior) [#discussion_r2970347412](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347412)
 
 ### Minor
 

@@ -1082,7 +1082,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
   );
 
   await t.step(
-    'update rejects file ref with missing storage field when storage is configured',
+    'update normalizes missing storage field when storage is configured',
     async () => {
       await resetDb();
       await db.insert(profiles).values({ name: 'Missing Storage' });
@@ -1094,7 +1094,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
         TEST_CSRF_SECRET,
       );
 
-      // Valid key prefix but storage field omitted entirely
+      // Valid key prefix but storage field omitted — should be normalized
       const formData = new FormData();
       formData.append('_csrf', csrfToken);
       formData.append('_source', sourceToken);
@@ -1106,7 +1106,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
           contentType: 'image/png',
           size: 1234,
           key: 'profiles/avatar/1/valid-uuid-prefix.png', // Valid key for record 1
-          // storage field intentionally omitted to bypass validation
+          // storage field intentionally omitted — should be filled from config
         }),
       );
 
@@ -1116,9 +1116,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       });
       const response = await handler(request);
 
-      assertEquals(response.status, 200);
-      const html = await response.text();
-      assertStringIncludes(html, 'Invalid storage provider');
+      // Should succeed (303 redirect) — storage normalized to 'test-s3'
+      assertEquals(response.status, 303);
     },
   );
 
@@ -1328,6 +1327,112 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       assertEquals(response.status, 200);
       const html = await response.text();
       assertStringIncludes(html, 'Invalid storage provider');
+    },
+  );
+
+  await t.step(
+    'update rejects key when no storage provider expected (DB-routed column)',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'DB Only' });
+
+      // Handler without storage — all file columns use inline DB storage
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'DB Only');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'sneaky.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/injected-key.png', // Key should not exist without storage
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'does not use external storage');
+    },
+  );
+
+  await t.step(
+    'update rejects when resolveStorage returns unregistered provider',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Bad Config' });
+
+      // resolver returns 'nonexistent' which is not in instances
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+        ],
+        // Resolver returns an ID that no plugin registered
+        storage: () => 'nonexistent',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Bad Config');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'test.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/test-key.png',
+          storage: 'nonexistent',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'is not registered');
     },
   );
 
