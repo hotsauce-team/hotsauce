@@ -117,14 +117,17 @@ Deno.test('plugin route: security headers', async (t) => {
     },
   );
 
-  await t.step('JSON Response gets no security headers', async () => {
-    const res = await handler(
-      new Request('http://localhost/admin/header-test/response-json'),
-    );
-    assertEquals(res.status, 200);
-    assertEquals(res.headers.get('X-Frame-Options'), null);
-    assertEquals(res.headers.get('X-Content-Type-Options'), null);
-    assertEquals(res.headers.get('Referrer-Policy'), null);
-    assertEquals(res.headers.get('Content-Security-Policy'), null);
-  });
+  await t.step(
+    'non-HTML Response gets only nosniff header',
+    async () => {
+      const res = await handler(
+        new Request('http://localhost/admin/header-test/response-json'),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(res.headers.get('X-Content-Type-Options'), 'nosniff');
+      assertEquals(res.headers.get('X-Frame-Options'), null);
+      assertEquals(res.headers.get('Referrer-Policy'), null);
+      assertEquals(res.headers.get('Content-Security-Policy'), null);
+    },
+  );
 });
