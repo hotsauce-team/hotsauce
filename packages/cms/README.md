@@ -121,9 +121,9 @@ const handler = createCmsHandler({
   title: 'Blog Admin',
   auth: {
     provider: new PasswordProvider({ db, usersTable: schema.users }),
-    policies: {
-      posts: ownedBy(schema.posts, 'authorId'),
-    },
+  },
+  policies: {
+    posts: ownedBy(schema.posts, 'authorId'),
   },
 });
 ```
