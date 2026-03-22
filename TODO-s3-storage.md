@@ -34,7 +34,7 @@
 ### Security — Must Fix
 
 - [ ] **Column auth uses `request.method` not `routeAction`** — Plugin route column policy checks use `request.method === 'POST'` to decide read vs write; PUT/PATCH/DELETE treated as read-only. Use `routeAction`/`inferPluginRouteAction()` instead (`mod.ts` L573-574) [#discussion_r2970347390](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347390)
-- [ ] **Upload page XSS** — S3 upload page interpolates `table`, `id`, `column` directly into HTML without escaping. Use `html` tagged template or escape helper (`s3-storage/mod.ts` L507-550) [#discussion_r2970063213](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063213)
+- [x] **Upload page XSS** — Escape `table`, `id`, `column` with `escapeHtml()` from `@hotsauce/ui` [#discussion_r2970063213](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063213)
 - [ ] **Plugin route responses missing security headers** — Both in-process and Worker plugin routes return HTML without X-Frame-Options, X-Content-Type-Options, Referrer-Policy. Apply non-CSP security headers (`mod.ts` L616-619, L644-646) [#discussion_r2970063199](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063199) [#discussion_r2970063204](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063204)
 - [ ] **POST body unbounded read** — Every POST to plugin route reads full body with no size limit; large bodies could cause OOM. Add Content-Length check + cap, return 413 (`mod.ts` L596-599) [#discussion_r2970347434](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347434)
 
@@ -46,9 +46,9 @@
 
 ### Minor
 
-- [ ] **`fileUrl`-only FieldUIOverride fails validation** — `{ fileUrl: '...' }` without `link`/`valueSummary` fails "must have at least link or valueSummary" check [#discussion_r2969771415](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2969771415)
-- [ ] **Docker healthcheck uses `mc`** — `minio/minio` image doesn't include `mc` CLI; use `curl -f http://localhost:9000/minio/health/ready` [#discussion_r2970347424](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347424)
-- [ ] **Demo schema `maxSize` missing** — Comment says "5MB limit" but `$cms()` config doesn't set `maxSize` [#discussion_r2970063232](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063232)
+- [x] **`fileUrl`-only FieldUIOverride fails validation** — Added `fileUrl` to minimum-shape check [#discussion_r2969771415](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2969771415)
+- [x] **Docker healthcheck uses `mc`** — Works fine; `minio/minio:latest` includes `mc`. Won't fix. [#discussion_r2970347424](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347424)
+- [x] **Demo schema `maxSize` missing** — Stale review comment; no misleading comment in current code. Won't fix. [#discussion_r2970063232](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063232)
 
 ## Nice to Have
 

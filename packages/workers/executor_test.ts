@@ -396,7 +396,7 @@ Deno.test('FieldUIOverride validation: rejects missing link property', async () 
   assertEquals(errors.length, 1);
   assertEquals(
     errors[0]!.message.includes(
-      "Expected object with 'link' and/or 'valueSummary'",
+      "Expected object with 'link', 'valueSummary', and/or 'fileUrl'",
     ),
     true,
   );

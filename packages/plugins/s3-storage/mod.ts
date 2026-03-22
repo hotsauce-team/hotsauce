@@ -42,6 +42,7 @@ import type {
   StorageProvider,
 } from '../../cms/types.ts';
 import { getFileKeyPrefix } from '@hotsauce/core';
+import { html, raw } from '@hotsauce/ui';
 import { buildObjectUrl, presignUrl, signHeaders } from './sigv4.ts';
 
 // Re-export types for convenience
@@ -505,15 +506,22 @@ export function createS3StoragePlugin(
             "frame-ancestors 'none'",
           ].join('; ');
 
-          const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="${csp}">
-  <title>Upload File - ${table}/${id}/${column}</title>
-  <link rel="stylesheet" href="${options.basePath}/styles.css">
-  <style>
+          const acceptAttr = ctx.field?.config?.accept
+            ? ` accept="${ctx.field.config.accept}"`
+            : '';
+
+          const page = html`
+            <!DOCTYPE html>
+            <html lang="en">
+              <head>
+                <meta charset="UTF-8">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                <meta http-equiv="Content-Security-Policy" content="${raw(
+                  csp,
+                )}">
+                <title>Upload File - ${table}/${id}/${column}</title>
+                <link rel="stylesheet" href="${options.basePath}/styles.css">
+                ${raw(`<style>
     .upload-container { max-width: 600px; margin: 2rem auto; padding: 1rem; }
     .upload-area {
       border: 2px dashed #ccc;
@@ -549,42 +557,49 @@ export function createS3StoragePlugin(
     .btn { padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; }
     .btn-primary { background: #4a90d9; color: white; }
     .btn-secondary { background: #ccc; color: #333; }
-  </style>
-</head>
-<body>
-  <div class="upload-container">
-    <h1>Upload File</h1>
-    <p>Table: <strong>${table}</strong> | Record: <strong>${id}</strong> | Column: <strong>${column}</strong></p>
+  </style>`)}
+              </head>
+              <body>
+                <div class="upload-container">
+                  <h1>Upload File</h1>
+                  <p>
+                    Table: <strong>${table}</strong> | Record: <strong
+                    >${id}</strong> | Column: <strong>${column}</strong>
+                  </p>
 
-    <div class="upload-area" id="uploadArea">
-      <input type="file" id="fileInput"${
-            ctx.field?.config?.accept
-              ? ` accept="${ctx.field.config.accept}"`
-              : ''
-          }>
-      <p>Click or drag a file here to upload</p>
-    </div>
+                  <div class="upload-area" id="uploadArea">
+                    <input type="file" id="fileInput" ${raw(acceptAttr)}>
+                    <p>Click or drag a file here to upload</p>
+                  </div>
 
-    <p id="uploadHints" class="upload-hints" style="display: none; color: #666; font-size: 0.9em; margin-top: 0.5rem;"></p>
+                  <p
+                    id="uploadHints"
+                    class="upload-hints"
+                    style="display: none; color: #666; font-size: 0.9em; margin-top: 0.5rem;"
+                  >
+                  </p>
 
-    <div class="progress-bar" id="progressBar">
-      <div class="progress" id="progress"></div>
-    </div>
+                  <div class="progress-bar" id="progressBar">
+                    <div class="progress" id="progress"></div>
+                  </div>
 
-    <div class="status" id="status"></div>
+                  <div class="status" id="status"></div>
 
-    <div class="file-info" id="fileInfo" style="display: none;">
-      <p><strong>File:</strong> <span id="fileName"></span></p>
-      <p><strong>Size:</strong> <span id="fileSize"></span></p>
-      <p><strong>Type:</strong> <span id="fileType"></span></p>
-    </div>
+                  <div class="file-info" id="fileInfo" style="display: none;">
+                    <p><strong>File:</strong> <span id="fileName"></span></p>
+                    <p><strong>Size:</strong> <span id="fileSize"></span></p>
+                    <p><strong>Type:</strong> <span id="fileType"></span></p>
+                  </div>
 
-    <p style="margin-top: 2rem;">
-      <a href="${options.basePath}/${table}/${id}/edit" class="btn btn-secondary">← Back to record</a>
-    </p>
-  </div>
+                  <p style="margin-top: 2rem;">
+                    <a
+                      href="${options.basePath}/${table}/${id}/edit"
+                      class="btn btn-secondary"
+                    >← Back to record</a>
+                  </p>
+                </div>
 
-  <script>
+                ${raw(`<script>
     const config = {
       basePath: ${JSON.stringify(options.basePath)},
       table: ${JSON.stringify(table)},
@@ -593,12 +608,12 @@ export function createS3StoragePlugin(
       csrfToken: ${JSON.stringify(ctx.csrfToken)},
       sourceToken: ${JSON.stringify(ctx.sourceToken)},
       maxSize: ${
-            JSON.stringify(
-              ctx.field?.config?.maxSize !== undefined
-                ? ctx.field.config.maxSize
-                : S3_DEFAULT_MAX_SIZE,
-            )
-          },
+                  JSON.stringify(
+                    ctx.field?.config?.maxSize !== undefined
+                      ? ctx.field.config.maxSize
+                      : S3_DEFAULT_MAX_SIZE,
+                  )
+                },
       accept: ${JSON.stringify(ctx.field?.config?.accept ?? null)},
     };
 
@@ -761,11 +776,12 @@ export function createS3StoragePlugin(
         progressBar.style.display = 'none';
       }
     }
-  </script>
-</body>
-</html>`;
+  </script>`)}
+              </body>
+            </html>
+          `;
 
-          return new Response(html, {
+          return new Response(page, {
             status: 200,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',

@@ -64,10 +64,10 @@ function validateFieldUIOverride(value: unknown): string | null {
     return `Expected null or an object with 'link' and/or 'valueSummary', got ${typeof value}`;
   }
 
-  // Must have at least link or valueSummary
+  // Must have at least link, valueSummary, or fileUrl
   const obj = value as Record<string, unknown>;
-  if (!('link' in obj) && !('valueSummary' in obj)) {
-    return `Expected object with 'link' and/or 'valueSummary' property, got: ${
+  if (!('link' in obj) && !('valueSummary' in obj) && !('fileUrl' in obj)) {
+    return `Expected object with 'link', 'valueSummary', and/or 'fileUrl' property, got: ${
       JSON.stringify(Object.keys(obj))
     }`;
   }
