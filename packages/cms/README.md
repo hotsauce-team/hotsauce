@@ -644,7 +644,7 @@ interface HandlerErrorContext {
 }
 
 // Error from a plugin (fire-and-forget or async)
-interface PluginAsyncErrorContext {
+interface PluginErrorContext {
   source: 'plugin';
   plugin: string;
   operation:
@@ -658,7 +658,7 @@ interface PluginAsyncErrorContext {
   hookContext?: Serializable; // Full hook context at time of error
 }
 
-type ErrorContext = HandlerErrorContext | PluginAsyncErrorContext;
+type ErrorContext = HandlerErrorContext | PluginErrorContext;
 ```
 
 **Breaking change:** `ErrorContext` was previously a flat interface with `request`, `url`, etc. It is now a discriminated union. Update your `onError` handler to check `context.source` before accessing fields.

@@ -269,6 +269,8 @@ export interface RegisteredPlugin {
  * Context for plugin error reporting
  */
 export interface PluginErrorContext {
+  /** Discriminator for ErrorContext union (always 'plugin') */
+  source: 'plugin';
   /** Plugin name that failed */
   plugin: string;
   /** Type of operation that failed */
@@ -403,6 +405,7 @@ export class WorkerExecutor {
               ? error
               : new Error(String(error));
             this.onError?.(err, {
+              source: 'plugin',
               plugin: plugin.name,
               operation: 'transform:beforeSave',
               hookContext: ctx as unknown as Serializable,
@@ -458,6 +461,7 @@ export class WorkerExecutor {
               ? error
               : new Error(String(error));
             this.onError?.(err, {
+              source: 'plugin',
               plugin: plugin.name,
               operation: 'transform:afterRead',
               hookContext: ctx as unknown as Serializable,
@@ -537,6 +541,7 @@ export class WorkerExecutor {
               `Plugin '${plugin.name}' returned invalid FieldUIOverride: ${validationError}`,
             ),
             {
+              source: 'plugin',
               plugin: plugin.name,
               operation: 'ui:renderField',
               hookContext: pluginCtx as unknown as Serializable,
@@ -564,6 +569,7 @@ export class WorkerExecutor {
                 `Plugin '${plugin.name}' returned invalid FieldUIOverride: ${validationError}`,
               ),
               {
+                source: 'plugin',
                 plugin: plugin.name,
                 operation: 'ui:renderField',
                 hookContext: pluginCtx as unknown as Serializable,
@@ -646,6 +652,7 @@ export class WorkerExecutor {
                   ? error
                   : new Error(String(error));
                 this.onError?.(err, {
+                  source: 'plugin',
                   plugin: plugin.name,
                   operation: 'action',
                   action,
@@ -660,6 +667,7 @@ export class WorkerExecutor {
                   ? error
                   : new Error(String(error));
                 this.onError?.(err, {
+                  source: 'plugin',
                   plugin: plugin.name,
                   operation: 'action',
                   action,
@@ -763,6 +771,7 @@ export class WorkerExecutor {
         `Expected { html: string }, got: ${JSON.stringify(response)}`,
     );
     this.onError?.(err, {
+      source: 'plugin',
       plugin: pluginName,
       operation: 'route:render',
       hookContext: routePayload,
@@ -827,6 +836,7 @@ export class WorkerExecutor {
 
     // Build error context for this request
     const context: PluginErrorContext = {
+      source: 'plugin',
       plugin: pluginName,
       operation: type === 'init'
         ? 'init'

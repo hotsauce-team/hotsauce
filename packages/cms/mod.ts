@@ -846,7 +846,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
   // 2. Fire-and-forget: error caught by WorkerExecutor → this bridge forwards to options.onError with source: 'plugin'
   const pluginOnError: PluginErrorHandler = (error, ctx) => {
     if (options.onError) {
-      options.onError(error, { source: 'plugin', ...ctx });
+      options.onError(error, ctx);
     } else {
       // deno-lint-ignore no-console
       console.error(
