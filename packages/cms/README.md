@@ -392,18 +392,28 @@ export const users = pgTable('users', {
 **With S3 storage:**
 
 ```ts
-import { s3Storage } from '@hotsauce/plugins/s3-storage';
+import { createS3StoragePlugin } from '@hotsauce/plugins/s3-storage';
 
 const handler = createCmsHandler({
   db,
   schema,
   basePath: '/admin',
-  storage: s3Storage({
-    bucket: 'my-bucket',
-    region: 'us-east-1',
-    accessKeyId: '...',
-    secretAccessKey: '...',
-  }),
+  // Use the S3 storage provider by id
+  storage: 's3',
+  // Register the S3 storage plugin
+  plugins: [
+    createS3StoragePlugin({
+      id: 's3',
+      bucket: 'my-bucket',
+      region: 'us-east-1',
+      accessKeyId: '...',
+      secretAccessKey: '...',
+    }),
+  ],
+  // Optionally configure CSP for images served from S3
+  csp: {
+    imgSrc: ["'self'", 'https://my-bucket.s3.us-east-1.amazonaws.com'],
+  },
 });
 ```
 
