@@ -25,9 +25,30 @@
 
 ## Before Merge
 
-- [ ] **Documentation review** — Ensure README, SPEC, and inline docs are accurate and complete
+- [x] **Documentation review** — Ensure README, SPEC, and inline docs are accurate and complete ✅ c9b3d0b
 - [ ] **Security peer review** — External review of key tampering prevention, presign flow, and policy enforcement
 - [x] **S3 README uses old storage API syntax** — Shows `{ defaultObjectStorageId: 's3' }` instead of simplified `storage: 's3'`
+
+## Copilot PR Review (PR #36)
+
+### Security — Must Fix
+
+- [ ] **Column auth uses `request.method` not `routeAction`** — Plugin route column policy checks use `request.method === 'POST'` to decide read vs write; PUT/PATCH/DELETE treated as read-only. Use `routeAction`/`inferPluginRouteAction()` instead (`mod.ts` L573-574) [#discussion_r2970347390](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347390)
+- [ ] **Upload page XSS** — S3 upload page interpolates `table`, `id`, `column` directly into HTML without escaping. Use `html` tagged template or escape helper (`s3-storage/mod.ts` L507-550) [#discussion_r2970063213](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063213)
+- [ ] **Plugin route responses missing security headers** — Both in-process and Worker plugin routes return HTML without X-Frame-Options, X-Content-Type-Options, Referrer-Policy. Apply non-CSP security headers (`mod.ts` L616-619, L644-646) [#discussion_r2970063199](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063199) [#discussion_r2970063204](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063204)
+- [ ] **POST body unbounded read** — Every POST to plugin route reads full body with no size limit; large bodies could cause OOM. Add Content-Length check + cap, return 413 (`mod.ts` L596-599) [#discussion_r2970347434](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347434)
+
+### Storage Validation — Should Fix
+
+- [ ] **`expectedStorageId` not validated against registered providers** — `resolveStorage` can return an ID not in `options.storage.instances`; save succeeds but file serving/deletion fails later [#discussion_r2969771385](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2969771385)
+- [ ] **DB-routed column accepts `key`** — When `resolveStorage` returns `undefined` (inline DB storage), client can still submit a `key` field and pass validation. Reject `key` when no storage provider expected [#discussion_r2970063187](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063187)
+- [ ] **Normalize missing `storage` field instead of rejecting** — When `expectedStorageId` is set and `fileRef.key` exists but `storage` is missing, set `storage = expectedStorageId` rather than rejecting (matches `FileReference` documented fallback behavior) [#discussion_r2970347412](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347412)
+
+### Minor
+
+- [ ] **`fileUrl`-only FieldUIOverride fails validation** — `{ fileUrl: '...' }` without `link`/`valueSummary` fails "must have at least link or valueSummary" check [#discussion_r2969771415](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2969771415)
+- [ ] **Docker healthcheck uses `mc`** — `minio/minio` image doesn't include `mc` CLI; use `curl -f http://localhost:9000/minio/health/ready` [#discussion_r2970347424](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347424)
+- [ ] **Demo schema `maxSize` missing** — Comment says "5MB limit" but `$cms()` config doesn't set `maxSize` [#discussion_r2970063232](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063232)
 
 ## Nice to Have
 
