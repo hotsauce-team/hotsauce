@@ -383,6 +383,8 @@ export class WorkerExecutor {
             ctx,
             data: result,
           } as unknown as Serializable,
+          undefined,
+          ctx as unknown as Serializable,
         );
 
         if (
@@ -436,6 +438,8 @@ export class WorkerExecutor {
             ctx,
             data: result,
           } as unknown as Serializable,
+          undefined,
+          ctx as unknown as Serializable,
         );
 
         if (
@@ -521,6 +525,8 @@ export class WorkerExecutor {
           plugin.name,
           'ui:renderField',
           pluginCtx as unknown as Serializable,
+          undefined,
+          pluginCtx as unknown as Serializable,
         );
 
         // Validate response
@@ -530,7 +536,11 @@ export class WorkerExecutor {
             new Error(
               `Plugin '${plugin.name}' returned invalid FieldUIOverride: ${validationError}`,
             ),
-            { plugin: plugin.name, operation: 'ui:renderField' },
+            {
+              plugin: plugin.name,
+              operation: 'ui:renderField',
+              hookContext: pluginCtx as unknown as Serializable,
+            },
           );
           // Skip this plugin, continue to next
           continue;
@@ -553,7 +563,11 @@ export class WorkerExecutor {
               new Error(
                 `Plugin '${plugin.name}' returned invalid FieldUIOverride: ${validationError}`,
               ),
-              { plugin: plugin.name, operation: 'ui:renderField' },
+              {
+                plugin: plugin.name,
+                operation: 'ui:renderField',
+                hookContext: pluginCtx as unknown as Serializable,
+              },
             );
             // Skip this plugin, continue to next
             continue;
@@ -659,8 +673,8 @@ export class WorkerExecutor {
       }
     }
 
-    // Wait for blocking hooks
-    await Promise.allSettled(blockingPromises);
+    // Wait for blocking hooks (re-thrown errors propagate to caller)
+    await Promise.all(blockingPromises);
 
     // Fire-and-forget hooks run in background (not awaited)
   }
@@ -721,13 +735,16 @@ export class WorkerExecutor {
     renderType: string,
     context: PluginRouteContext,
   ): Promise<string> {
+    const routePayload = {
+      renderType,
+      context,
+    } as unknown as Serializable;
     const response = await this.sendToWorker(
       pluginName,
       'route:render',
-      {
-        renderType,
-        context,
-      } as unknown as Serializable,
+      routePayload,
+      undefined,
+      routePayload,
     );
 
     // Worker should return { html: string }
@@ -745,7 +762,11 @@ export class WorkerExecutor {
       `Plugin '${pluginName}' route render '${renderType}' returned invalid response. ` +
         `Expected { html: string }, got: ${JSON.stringify(response)}`,
     );
-    this.onError?.(err, { plugin: pluginName, operation: 'route:render' });
+    this.onError?.(err, {
+      plugin: pluginName,
+      operation: 'route:render',
+      hookContext: routePayload,
+    });
     throw err;
   }
 

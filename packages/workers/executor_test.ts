@@ -1271,8 +1271,12 @@ Deno.test({
       isWorker: false,
     };
 
-    // blocking hooks call onError then re-throw via allSettled
-    await executor.executeAction([plugin], 'update', actionCtx);
+    // blocking hooks call onError then re-throw — Promise.all propagates to caller
+    await assertRejects(
+      () => executor.executeAction([plugin], 'update', actionCtx),
+      Error,
+      'blocking failure',
+    );
 
     assertEquals(contexts.length, 1);
     assertEquals(contexts[0]?.plugin, 'blocking-plugin');

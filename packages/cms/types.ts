@@ -4,6 +4,7 @@ import type { IntrospectedSchema, IntrospectedTable } from '@hotsauce/core';
 import type { AuthProvider, JwtPayload } from '@hotsauce/auth';
 import type { Policies } from './policies/types.ts';
 import type { PluginConfig } from './plugins/types.ts';
+import type { PluginErrorContext } from './plugins/types.ts';
 import type { PluginRegistry } from './plugins/registry.ts';
 import type { PluginService } from './plugins/service.ts';
 
@@ -268,9 +269,20 @@ export type Parsers = Record<string, TableParsers>;
 export type CrudAction = 'list' | 'read' | 'create' | 'update' | 'delete';
 
 /**
- * Context passed to error handler
+ * Context passed to error handler.
+ *
+ * Discriminated union: narrow on `source` to determine what context is available.
+ * - `'handler'`: Error in an HTTP request handler (has request, url, route)
+ * - `'plugin'`: Error in a plugin (fire-and-forget or async; has plugin name, operation, hookContext)
  */
-export interface ErrorContext {
+export type ErrorContext = HandlerErrorContext | PluginAsyncErrorContext;
+
+/**
+ * Error context from an HTTP request handler.
+ * Always has the Request and URL that was being processed.
+ */
+export interface HandlerErrorContext {
+  source: 'handler';
   /** The original request */
   request: Request;
   /** Parsed URL */
@@ -283,8 +295,16 @@ export interface ErrorContext {
   action?: CrudAction | 'dashboard';
   /** Request ID for correlating logs with user-facing error messages */
   requestId?: string;
-  /** Plugin name (when the error originated from a plugin) */
+  /** Plugin name (when the error originated from a plugin within a handler) */
   plugin?: string;
+}
+
+/**
+ * Error context from a plugin that failed outside an HTTP request lifecycle.
+ * Typically fire-and-forget hooks where the request has already completed.
+ */
+export interface PluginAsyncErrorContext extends PluginErrorContext {
+  source: 'plugin';
 }
 
 /**

@@ -606,39 +606,62 @@ const handler = createCmsHandler({
   schema,
 
   onError: (error: Error, context: ErrorContext) => {
-    // Log to your monitoring service
-    logger.error('CMS error', {
-      message: error.message,
-      stack: error.stack,
-      path: context.url.pathname,
-      table: context.table?.name,
-      action: context.action,
-    });
-
-    // Or send to Sentry, Datadog, etc.
-    Sentry.captureException(error, {
-      extra: {
+    if (context.source === 'handler') {
+      // HTTP request handler error — has request, url, route
+      logger.error('CMS handler error', {
+        message: error.message,
+        stack: error.stack,
+        path: context.url.pathname,
         table: context.table?.name,
         action: context.action,
-      },
-    });
+      });
+    } else {
+      // Plugin error (fire-and-forget or async) — has plugin name, operation
+      logger.error('CMS plugin error', {
+        message: error.message,
+        plugin: context.plugin,
+        operation: context.operation,
+        action: context.action,
+      });
+    }
   },
 });
 ```
 
-The `ErrorContext` includes:
+`ErrorContext` is a discriminated union — narrow on `source` to access context-specific fields:
 
 ```ts
-interface ErrorContext {
-  request: Request; // Original request
-  url: URL; // Parsed URL
-  route: ParsedRoute | null; // Route info (if parsed)
-  table?: IntrospectedTable; // Table being accessed
-  action?: CrudAction | 'dashboard'; // Action attempted
-  requestId?: string; // Correlates error response with logs
-  plugin?: string; // Plugin name (when error originated from a plugin)
+// Error from an HTTP request handler
+interface HandlerErrorContext {
+  source: 'handler';
+  request: Request;
+  url: URL;
+  route: ParsedRoute | null;
+  table?: IntrospectedTable;
+  action?: CrudAction | 'dashboard';
+  requestId?: string;
+  plugin?: string; // When error originated from a plugin within a handler
 }
+
+// Error from a plugin (fire-and-forget or async)
+interface PluginAsyncErrorContext {
+  source: 'plugin';
+  plugin: string;
+  operation:
+    | 'init'
+    | 'transform:beforeSave'
+    | 'transform:afterRead'
+    | 'ui:renderField'
+    | 'action'
+    | 'route:render';
+  action?: CrudAction;
+  hookContext?: Serializable; // Full hook context at time of error
+}
+
+type ErrorContext = HandlerErrorContext | PluginAsyncErrorContext;
 ```
+
+**Breaking change:** `ErrorContext` was previously a flat interface with `request`, `url`, etc. It is now a discriminated union. Update your `onError` handler to check `context.source` before accessing fields.
 
 ### Validation Schema
 

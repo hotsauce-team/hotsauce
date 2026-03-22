@@ -341,6 +341,7 @@ function getFrontendUrl(
             `frontendUrl for table '${table.name}' returned a non-string (${typeof url})`,
           ),
           {
+            source: 'handler',
             request: ctx.request,
             url: ctx.url,
             route: ctx.route ?? null,
@@ -360,6 +361,7 @@ function getFrontendUrl(
             `frontendUrl for table '${table.name}' returned a disallowed URL`,
           ),
           {
+            source: 'handler',
             request: ctx.request,
             url: ctx.url,
             route: ctx.route ?? null,
@@ -378,6 +380,7 @@ function getFrontendUrl(
       ctx.options.onError(
         error instanceof Error ? error : new Error(String(error)),
         {
+          source: 'handler',
           request: ctx.request,
           url: ctx.url,
           route: ctx.route ?? null,
@@ -1100,6 +1103,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
         options.onError(
           error instanceof Error ? error : new Error(String(error)),
           {
+            source: 'handler',
             request,
             url: new URL(request.url),
             route: route,
@@ -1139,6 +1143,7 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
         options.onError(
           error instanceof Error ? error : new Error(String(error)),
           {
+            source: 'handler',
             request,
             url: new URL(request.url),
             route: route,
@@ -1508,6 +1513,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           options.onError
             ? (err) =>
               options.onError!(err, {
+                source: 'handler',
                 request,
                 url: new URL(request.url),
                 route,
@@ -1530,6 +1536,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           options.onError
             ? (err) =>
               options.onError!(err, {
+                source: 'handler',
                 request,
                 url: new URL(request.url),
                 route,
@@ -1569,6 +1576,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
         options.onError(
           error instanceof Error ? error : new Error(String(error)),
           {
+            source: 'handler',
             request,
             url: new URL(request.url),
             route: route,
@@ -1754,6 +1762,7 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
         options.onError
           ? (err) =>
             options.onError!(err, {
+              source: 'handler',
               request,
               url: new URL(request.url),
               route,
@@ -1804,6 +1813,7 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       options.onError(
         error instanceof Error ? error : new Error(String(error)),
         {
+          source: 'handler',
           request,
           url: new URL(request.url),
           route: route,

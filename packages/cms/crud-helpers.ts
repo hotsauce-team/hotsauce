@@ -787,6 +787,7 @@ export function validateWithParsers(
       options.onError(
         error instanceof Error ? error : new Error(String(error)),
         {
+          source: 'handler',
           request: new Request('http://localhost/validation'),
           url: new URL('http://localhost/validation'),
           route: null,

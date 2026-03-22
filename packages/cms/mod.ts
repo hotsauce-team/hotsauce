@@ -624,11 +624,13 @@ async function handlePluginRoute(
       // Generate request ID to correlate error logs with user-facing response
       const requestId = crypto.randomUUID();
       options.onError?.(error as Error, {
+        source: 'handler',
         request,
         url: new URL(request.url),
         route: null, // Plugin routes don't use ParsedRoute
         action: routeAction,
         requestId,
+        plugin: plugin.name,
       });
       return new Response(`Plugin error (request: ${requestId})`, {
         status: 500,
@@ -651,11 +653,13 @@ async function handlePluginRoute(
       // Generate request ID to correlate error logs with user-facing response
       const requestId = crypto.randomUUID();
       options.onError?.(error as Error, {
+        source: 'handler',
         request,
         url: new URL(request.url),
         route: null, // Plugin routes don't use ParsedRoute
         action: routeAction,
         requestId,
+        plugin: plugin.name,
       });
       return new Response(`Plugin error (request: ${requestId})`, {
         status: 500,
@@ -838,15 +842,18 @@ export function createCmsHandler(options: CmsOptions): Handler {
 
   // Create plugin service (lazy initialization - Workers start on first use)
   // Plugin errors flow through two paths:
-  // 1. Blocking/in-process: error propagates to CRUD handler's catch → options.onError with full HTTP context
-  // 2. Fire-and-forget: error caught by WorkerExecutor → this bridge logs with plugin context
-  // Both paths call onError with hookContext (the full context the plugin had when it failed).
+  // 1. Blocking/in-process: error propagates to CRUD handler's catch → options.onError with source: 'handler'
+  // 2. Fire-and-forget: error caught by WorkerExecutor → this bridge forwards to options.onError with source: 'plugin'
   const pluginOnError: PluginErrorHandler = (error, ctx) => {
-    // deno-lint-ignore no-console
-    console.error(
-      `[CMS Plugin Error] ${ctx.plugin}/${ctx.operation}:`,
-      error.message,
-    );
+    if (options.onError) {
+      options.onError(error, { source: 'plugin', ...ctx });
+    } else {
+      // deno-lint-ignore no-console
+      console.error(
+        `[CMS Plugin Error] ${ctx.plugin}/${ctx.operation}:`,
+        error.message,
+      );
+    }
   };
   const pluginService = createPluginService(pluginRegistry, pluginOnError);
 
@@ -1173,6 +1180,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           if (opts.onError) {
             const error = err instanceof Error ? err : new Error(String(err));
             opts.onError(error, {
+              source: 'handler',
               request,
               url,
               route: null,
@@ -1467,6 +1475,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
       // Call user's error handler if provided
       if (opts.onError) {
         opts.onError(error, {
+          source: 'handler',
           request,
           url,
           route,
@@ -1661,6 +1670,7 @@ async function handleFileServing(
     } catch (error) {
       // Log error and return generic failure
       options.onError?.(error as Error, {
+        source: 'handler',
         request,
         url: new URL(request.url),
         route: null,
