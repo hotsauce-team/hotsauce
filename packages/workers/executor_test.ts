@@ -808,6 +808,22 @@ Deno.test('FieldUIOverride validation: rejects scheme-relative URLs', async () =
   assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
 });
 
+Deno.test('FieldUIOverride validation: accepts fileUrl only (no link, no valueSummary)', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    fileUrl: '/files/media/file/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, { fileUrl: '/files/media/file/123' });
+  assertEquals(errors.length, 0);
+});
+
 Deno.test('FieldUIOverride validation: rejects backslash-prefixed URLs', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));

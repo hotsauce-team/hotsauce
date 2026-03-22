@@ -72,10 +72,10 @@ function validateFieldUIOverride(value: unknown): string | null {
     }`;
   }
 
-  // valueSummary-only is valid (no link required)
+  // valueSummary-only or fileUrl-only is valid (no link required)
   if (!('link' in obj)) {
-    // Only valueSummary provided - validate it's a string
-    if (typeof obj.valueSummary !== 'string') {
+    // Validate valueSummary is a string if present
+    if ('valueSummary' in obj && typeof obj.valueSummary !== 'string') {
       return `Expected 'valueSummary' to be a string, got ${typeof obj
         .valueSummary}`;
     }
