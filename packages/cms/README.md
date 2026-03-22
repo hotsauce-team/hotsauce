@@ -681,34 +681,64 @@ if (!result.success) {
 
 ### `CmsOptions`
 
+`CmsOptions` is a discriminated union — both `auth` and `policies` are required:
+
 ```ts
-interface CmsOptions {
-  /** Drizzle database instance */
-  db: any;
-  /** Drizzle schema object (e.g., { users, posts }) */
-  schema: Record<string, any>;
-  /** Base path for CMS routes (default: '/admin') */
-  basePath?: string;
-  /** Site title for the admin UI */
-  title?: string;
-  /**
-   * Secret for CSRF token signing (HMAC-SHA256).
-   * Must be at least 32 characters. Generate with: openssl rand -base64 32
-   * If not provided, a random secret is generated (tokens won't survive restarts).
-   */
-  csrfSecret?: string;
-  /** Custom authentication check */
-  isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
-  /** Custom authorization check per table/action */
-  canAccess?: (
-    request: Request,
-    table: IntrospectedTable,
-    action: CrudAction,
-  ) => Promise<boolean> | boolean;
-  /** Custom parsers for form validation (optional) */
-  parsers?: Parsers;
-}
+// With authentication
+createCmsHandler({
+  db,
+  schema,
+  auth: {
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+  },
+  policies: { posts: ownedBy(schema.posts, 'authorId') },
+});
+
+// Without authentication (internal tool)
+createCmsHandler({
+  db,
+  schema,
+  auth: 'dangerously-open',
+  policies: 'dangerously-open',
+});
 ```
+
+**Base options** (shared by both variants):
+
+| Option            | Type                                                      | Default      | Description                                                                            |
+| ----------------- | --------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------- |
+| `db`              | `any`                                                     | _(required)_ | Drizzle database instance                                                              |
+| `schema`          | `Record<string, any>`                                     | _(required)_ | Drizzle schema object (e.g., `{ users, posts }`)                                       |
+| `basePath`        | `string`                                                  | `'/admin'`   | Base path for CMS routes                                                               |
+| `title`           | `string`                                                  | `'Admin'`    | Site title for the admin UI                                                            |
+| `csrfSecret`      | `string`                                                  | env var      | CSRF token signing secret (32+ chars). Falls back to `CMS_CSRF_SECRET` env var         |
+| `onError`         | `(error: Error, ctx: ErrorContext) => void`               | —            | Error handler for unexpected errors (see [Error Logging](#error-logging-with-onerror)) |
+| `parsers`         | `Parsers`                                                 | auto-gen     | Custom Zod parsers per table (overrides drizzle-zod)                                   |
+| `plugins`         | `PluginConfig[]`                                          | —            | Plugins (UI overrides, transforms, action hooks)                                       |
+| `storage`         | `string \| (ctx) => string \| undefined`                  | —            | Storage routing: provider ID or resolver function                                      |
+| `csp`             | `CspOptions`                                              | —            | Additional CSP origins (`imgSrc`, `connectSrc`, `frameSrc`)                            |
+| `isAuthenticated` | `(request: Request) => boolean \| Promise<boolean>`       | —            | Legacy: custom auth check (prefer `auth` option)                                       |
+| `canAccess`       | `(request, table, action) => boolean \| Promise<boolean>` | —            | Legacy: custom per-table authorization                                                 |
+
+**Auth options** (when `auth` is an object):
+
+| Option               | Type                   | Default         | Description                                                    |
+| -------------------- | ---------------------- | --------------- | -------------------------------------------------------------- |
+| `auth.provider`      | `AuthProvider`         | _(required)_    | Login provider (e.g., `PasswordProvider`)                      |
+| `auth.secret`        | `string`               | env var         | JWT signing secret (32+ chars). Falls back to `CMS_JWT_SECRET` |
+| `auth.maxAge`        | `number`               | `28800` (8hr)   | Token lifetime in seconds                                      |
+| `auth.cookieName`    | `string`               | `'cms_token'`   | Cookie name for JWT                                            |
+| `auth.loginTitle`    | `string`               | `'Admin Login'` | Title shown on login page                                      |
+| `auth.identityLabel` | `string`               | `'Email'`       | Label for identity field on login page                         |
+| `auth.isRevoked`     | `(payload) => boolean` | —               | Check if a token has been revoked                              |
+
+**Policies** (required when `auth` is configured):
+
+| Value                    | Behavior                                |
+| ------------------------ | --------------------------------------- |
+| `{ table: policy, ... }` | Apply row/column policies per table     |
+| `{}`                     | Full access for all authenticated users |
+| `'dangerously-open'`     | Bypass all policy checks                |
 
 ### `Handler`
 

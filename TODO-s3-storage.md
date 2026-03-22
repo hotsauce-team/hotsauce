@@ -19,8 +19,8 @@
 
 - [x] **Upload progress indicator** — XHR progress bar on S3 upload page
 - [x] **Max file size validation** — Validate before presign, not just after upload fails
-- [ ] **Real AWS S3 testing** — Demo only tested with MinIO; need to verify SigV4 with actual AWS
-- [ ] **IAM role credential support** — Use EC2/ECS instance profiles instead of long-lived access keys in env vars (IMDS v2)
+- [-] **Real AWS S3 testing** — Tested with MinIO; AWS/B2/Hetzner Object Storage to be verified later
+- [-] **IAM role credential support** — Use EC2/ECS instance profiles instead of long-lived access keys in env vars (IMDS v2)
 - [x] **Unify ErrorContext and PluginErrorContext** — `hookContext` on `PluginErrorContext`, `plugin` on `ErrorContext` ✅ 0499fe6, 25b6a6a
 
 ## Before Merge
