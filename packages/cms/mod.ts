@@ -571,8 +571,9 @@ async function handlePluginRoute(
     if (column) {
       const columnInfo = tableInfo.columns.find((c) => c.name === column);
       if (columnInfo) {
-        // For POST (mutations), check write permission; for GET, check read permission
-        const allowedColumns = request.method === 'POST'
+        // For mutating actions, check write permission; for reads, check read permission
+        const isWrite = routeAction === 'update' || routeAction === 'delete';
+        const allowedColumns = isWrite
           ? columnResult.writableColumns
           : columnResult.readableColumns;
 
@@ -594,8 +595,8 @@ async function handlePluginRoute(
     }
   }
 
-  // Read request body for POST requests (deferred until after validation)
-  if (request.method === 'POST') {
+  // Read request body for mutating requests (deferred until after validation)
+  if (routeAction === 'update' || routeAction === 'delete') {
     body = await request.text();
   }
 
