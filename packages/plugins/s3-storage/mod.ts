@@ -44,6 +44,8 @@ import type {
 import { getFileKeyPrefix } from '@hotsauce/core';
 import { html, raw } from '@hotsauce/ui';
 import { buildObjectUrl, presignUrl, signHeaders } from './sigv4.ts';
+import { UPLOAD_CSS } from './upload-styles.ts';
+import { UPLOAD_JS } from './upload-script.ts';
 
 // Re-export types for convenience
 export type { S3StoragePluginOptions } from './types.ts';
@@ -51,6 +53,14 @@ export type { S3StoragePluginOptions } from './types.ts';
 // ─────────────────────────────────────────────────────────────
 // File Validation
 // ─────────────────────────────────────────────────────────────
+
+/** Safely serialize a value for embedding in <script type="application/json">. */
+function safeJsonForHtml(value: unknown): string {
+  return JSON.stringify(value)
+    .replaceAll('&', '\\u0026')
+    .replaceAll('<', '\\u003c')
+    .replaceAll('>', '\\u003e');
+}
 
 /** Default max file size for S3 uploads: 10MB. Set maxSize: 0 in $cms() to disable. */
 export const S3_DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
@@ -479,6 +489,26 @@ export function createS3StoragePlugin(
     },
 
     routes: [
+      // Serve embedded upload page CSS
+      {
+        pattern: '_assets/upload.css',
+        methods: ['GET'],
+        handler: () =>
+          new Response(UPLOAD_CSS, {
+            headers: { 'Content-Type': 'text/css; charset=utf-8' },
+          }),
+      },
+      // Serve embedded upload page JS
+      {
+        pattern: '_assets/upload.js',
+        methods: ['GET'],
+        handler: () =>
+          new Response(UPLOAD_JS, {
+            headers: {
+              'Content-Type': 'application/javascript; charset=utf-8',
+            },
+          }),
+      },
       // Upload page (GET /admin/s3-storage/:table/:id/:column)
       {
         pattern: ':table/:id/:column',
@@ -495,11 +525,12 @@ export function createS3StoragePlugin(
           const s3Url = new URL(uploadEndpoint);
           const s3Origin = s3Url.origin; // e.g., http://localhost:9000
 
-          // Build CSP for upload page (allows PUT to S3)
+          // Build CSP for upload page — no unsafe-inline needed
+          // CSS and JS are served as external assets via plugin routes
           const csp = [
             "default-src 'self'",
-            "script-src 'self' 'unsafe-inline'", // Allow inline script for init
-            "style-src 'self' 'unsafe-inline'", // Allow inline styles
+            "style-src 'self'",
+            "script-src 'self'",
             `connect-src 'self' ${s3Origin}`, // S3 for upload
             "img-src 'self' data:", // Preview
             "form-action 'self'",
@@ -510,54 +541,33 @@ export function createS3StoragePlugin(
             ? ` accept="${ctx.field.config.accept}"`
             : '';
 
+          const uploadCssUrl =
+            `${options.basePath}/s3-storage/_assets/upload.css`;
+          const uploadJsUrl =
+            `${options.basePath}/s3-storage/_assets/upload.js`;
+
+          const configJson = safeJsonForHtml({
+            basePath: options.basePath,
+            table,
+            recordId: id,
+            column,
+            csrfToken: ctx.csrfToken,
+            sourceToken: ctx.sourceToken,
+            maxSize: ctx.field?.config?.maxSize !== undefined
+              ? ctx.field.config.maxSize
+              : S3_DEFAULT_MAX_SIZE,
+            accept: ctx.field?.config?.accept ?? null,
+          });
+
           const page = html`
             <!DOCTYPE html>
             <html lang="en">
               <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <meta http-equiv="Content-Security-Policy" content="${raw(
-                  csp,
-                )}">
                 <title>Upload File - ${table}/${id}/${column}</title>
                 <link rel="stylesheet" href="${options.basePath}/styles.css">
-                ${raw(`<style>
-    .upload-container { max-width: 600px; margin: 2rem auto; padding: 1rem; }
-    .upload-area {
-      border: 2px dashed #ccc;
-      border-radius: 8px;
-      padding: 2rem;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.2s;
-    }
-    .upload-area:hover, .upload-area.dragover {
-      border-color: #4a90d9;
-      background: #f0f7ff;
-    }
-    .upload-area input[type="file"] { display: none; }
-    .progress-bar {
-      height: 20px;
-      background: #e0e0e0;
-      border-radius: 10px;
-      overflow: hidden;
-      margin: 1rem 0;
-      display: none;
-    }
-    .progress-bar .progress {
-      height: 100%;
-      background: #4a90d9;
-      width: 0%;
-      transition: width 0.2s;
-    }
-    .status { margin: 1rem 0; }
-    .status.error { color: #d32f2f; }
-    .status.success { color: #388e3c; }
-    .file-info { margin: 1rem 0; padding: 1rem; background: #f5f5f5; border-radius: 4px; }
-    .btn { padding: 0.5rem 1rem; border: none; border-radius: 4px; cursor: pointer; }
-    .btn-primary { background: #4a90d9; color: white; }
-    .btn-secondary { background: #ccc; color: #333; }
-  </style>`)}
+                <link rel="stylesheet" href="${uploadCssUrl}">
               </head>
               <body>
                 <div class="upload-container">
@@ -572,12 +582,7 @@ export function createS3StoragePlugin(
                     <p>Click or drag a file here to upload</p>
                   </div>
 
-                  <p
-                    id="uploadHints"
-                    class="upload-hints"
-                    style="display: none; color: #666; font-size: 0.9em; margin-top: 0.5rem;"
-                  >
-                  </p>
+                  <p id="uploadHints" class="upload-hints"></p>
 
                   <div class="progress-bar" id="progressBar">
                     <div class="progress" id="progress"></div>
@@ -585,13 +590,13 @@ export function createS3StoragePlugin(
 
                   <div class="status" id="status"></div>
 
-                  <div class="file-info" id="fileInfo" style="display: none;">
+                  <div class="file-info" id="fileInfo">
                     <p><strong>File:</strong> <span id="fileName"></span></p>
                     <p><strong>Size:</strong> <span id="fileSize"></span></p>
                     <p><strong>Type:</strong> <span id="fileType"></span></p>
                   </div>
 
-                  <p style="margin-top: 2rem;">
+                  <p class="back-link">
                     <a
                       href="${options.basePath}/${table}/${id}/edit"
                       class="btn btn-secondary"
@@ -599,184 +604,10 @@ export function createS3StoragePlugin(
                   </p>
                 </div>
 
-                ${raw(`<script>
-    const config = {
-      basePath: ${JSON.stringify(options.basePath)},
-      table: ${JSON.stringify(table)},
-      recordId: ${JSON.stringify(id)},
-      column: ${JSON.stringify(column)},
-      csrfToken: ${JSON.stringify(ctx.csrfToken)},
-      sourceToken: ${JSON.stringify(ctx.sourceToken)},
-      maxSize: ${
-                  JSON.stringify(
-                    ctx.field?.config?.maxSize !== undefined
-                      ? ctx.field.config.maxSize
-                      : S3_DEFAULT_MAX_SIZE,
-                  )
-                },
-      accept: ${JSON.stringify(ctx.field?.config?.accept ?? null)},
-    };
-
-    const uploadArea = document.getElementById('uploadArea');
-    const fileInput = document.getElementById('fileInput');
-    const progressBar = document.getElementById('progressBar');
-    const progress = document.getElementById('progress');
-    const status = document.getElementById('status');
-    const fileInfo = document.getElementById('fileInfo');
-
-    uploadArea.addEventListener('click', () => fileInput.click());
-    uploadArea.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      uploadArea.classList.add('dragover');
-    });
-    uploadArea.addEventListener('dragleave', () => {
-      uploadArea.classList.remove('dragover');
-    });
-    uploadArea.addEventListener('drop', (e) => {
-      e.preventDefault();
-      uploadArea.classList.remove('dragover');
-      if (e.dataTransfer.files.length) {
-        handleFile(e.dataTransfer.files[0]);
-      }
-    });
-    function formatSize(bytes) {
-      return bytes >= 1048576
-        ? Math.round(bytes / 1048576) + 'MB'
-        : Math.round(bytes / 1024) + 'KB';
-    }
-
-    // Show upload hints (max size, accepted types)
-    {
-      const hints = [];
-      if (config.maxSize) hints.push('Max size: ' + formatSize(config.maxSize));
-      if (config.accept) hints.push('Accepted: ' + config.accept);
-      if (hints.length) {
-        const el = document.getElementById('uploadHints');
-        el.textContent = hints.join(' · ');
-        el.style.display = 'block';
-      }
-    }
-
-    fileInput.addEventListener('change', () => {
-      if (fileInput.files.length) {
-        handleFile(fileInput.files[0]);
-      }
-    });
-
-    async function handleFile(file) {
-      // Show file info
-      document.getElementById('fileName').textContent = file.name;
-      document.getElementById('fileSize').textContent = Math.round(file.size / 1024) + ' KB';
-      document.getElementById('fileType').textContent = file.type || 'application/octet-stream';
-      fileInfo.style.display = 'block';
-
-      // Client-side validation
-      if (config.maxSize && file.size > config.maxSize) {
-        status.textContent = 'File too large. Maximum size is ' + formatSize(config.maxSize) + '.';
-        status.className = 'status error';
-        return;
-      }
-
-      status.textContent = 'Getting presigned URL...';
-      status.className = 'status';
-      progressBar.style.display = 'none';
-
-      try {
-        // Step 1: Get presigned URL (POST to same URL)
-        const presignRes = await fetch(window.location.href, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-Token': config.csrfToken,
-          },
-          body: JSON.stringify({
-            filename: file.name,
-            contentType: file.type || 'application/octet-stream',
-            size: file.size,
-          }),
-        });
-
-        if (!presignRes.ok) {
-          let errMsg = 'Failed to get presigned URL';
-          try {
-            const err = await presignRes.json();
-            errMsg = err.error || errMsg;
-          } catch { errMsg = 'Server error (' + presignRes.status + ')'; }
-          throw new Error(errMsg);
-        }
-
-        const presignData = await presignRes.json();
-        status.textContent = 'Uploading to storage...';
-        progressBar.style.display = 'block';
-
-        // Step 2: Upload to S3
-        await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.upload.addEventListener('progress', (e) => {
-            if (e.lengthComputable) {
-              const pct = Math.round((e.loaded / e.total) * 100);
-              progress.style.width = pct + '%';
-            }
-          });
-          xhr.addEventListener('load', () => {
-            if (xhr.status >= 200 && xhr.status < 300) {
-              resolve();
-            } else {
-              // Extract error message from S3/MinIO XML response
-              let detail = xhr.responseText || '';
-              const match = detail.match(/<Message>([^<]+)<\\/Message>/);
-              if (match) detail = match[1];
-              reject(new Error('Upload failed (' + xhr.status + '): ' + (detail || 'Unknown error')));
-            }
-          });
-          xhr.addEventListener('error', () => reject(new Error('Upload failed: Network error (check browser console)')));
-          xhr.open(presignData.upload.method, presignData.upload.url);
-          for (const [k, v] of Object.entries(presignData.upload.headers || {})) {
-            xhr.setRequestHeader(k, v);
-          }
-          xhr.send(file);
-        });
-
-        status.textContent = 'Saving to record...';
-
-        // Step 3: Save FileReference to record (POST to CMS edit endpoint like Puck)
-        const fileReference = {
-          filename: file.name,
-          contentType: file.type || 'application/octet-stream',
-          size: file.size,
-          storage: presignData.storage,
-          key: presignData.key,
-        };
-        const formData = new FormData();
-        formData.append(config.column, JSON.stringify(fileReference));
-        formData.append('_csrf', config.csrfToken);
-        formData.append('_source', config.sourceToken);
-
-        const saveRes = await fetch(config.basePath + '/' + config.table + '/' + config.recordId, {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!saveRes.ok) {
-          const errText = await saveRes.text();
-          throw new Error('Failed to save: ' + saveRes.status + ' ' + errText.slice(0, 100));
-        }
-
-        status.textContent = 'Upload complete! Redirecting...';
-        status.className = 'status success';
-
-        // Redirect back to the edit page
-        setTimeout(() => {
-          window.location.href = config.basePath + '/' + config.table + '/' + config.recordId + '/edit';
-        }, 1000);
-
-      } catch (err) {
-        status.textContent = 'Error: ' + err.message;
-        status.className = 'status error';
-        progressBar.style.display = 'none';
-      }
-    }
-  </script>`)}
+                ${raw(
+                  `<script type="application/json" id="upload-config">${configJson}</script>`,
+                )}
+                <script src="${uploadJsUrl}"></script>
               </body>
             </html>
           `;
@@ -785,6 +616,7 @@ export function createS3StoragePlugin(
             status: 200,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
+              'Content-Security-Policy': csp,
             },
           });
         },
