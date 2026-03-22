@@ -111,17 +111,19 @@ openssl rand -base64 32
 **Example:**
 
 ```ts
-import { createCmsHandler } from '@hotsauce/cms';
+import { createCmsHandler, PasswordProvider } from '@hotsauce/cms';
+import { ownedBy } from '@hotsauce/cms/policies';
 
 const handler = createCmsHandler({
   db,
   schema,
   basePath: '/admin',
   title: 'Blog Admin',
-  isAuthenticated: (req) => req.headers.get('X-User') !== null,
-  canAccess: (req, table, action) => {
-    // Custom authorization logic
-    return table.name !== 'settings' || action === 'read';
+  auth: {
+    provider: new PasswordProvider({ db, usersTable: schema.users }),
+    policies: {
+      posts: ownedBy(schema.posts, 'authorId'),
+    },
   },
 });
 ```
@@ -370,6 +372,8 @@ File uploads are supported by storing a JSON `FileReference` object in a column 
 - Forms: the admin automatically switches to `multipart/form-data` when a table has file columns.
 - Clearing: file inputs can be cleared on update via a `_clear_<propertyName>` field.
 
+For external storage (S3, R2, MinIO), see the [S3 storage plugin](../plugins/s3-storage/README.md). When configured, uploads go to object storage instead of the database:
+
 **Schema example (Postgres):**
 
 ```ts
@@ -382,6 +386,24 @@ export const users = pgTable('users', {
   avatar: jsonb('avatar')
     .$type<FileReference>()
     .$cms({ file: true, accept: 'image/*', maxSize: 200_000 }),
+});
+```
+
+**With S3 storage:**
+
+```ts
+import { s3Storage } from '@hotsauce/plugins/s3-storage';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  storage: s3Storage({
+    bucket: 'my-bucket',
+    region: 'us-east-1',
+    accessKeyId: '...',
+    secretAccessKey: '...',
+  }),
 });
 ```
 

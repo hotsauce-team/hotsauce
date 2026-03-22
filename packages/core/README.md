@@ -275,7 +275,7 @@ const pages = pgTable('pages', {
 
 | Value             | Meaning                                      |
 | ----------------- | -------------------------------------------- |
-| `true`            | Shorthand for `{ write: true }`              |
+| `true`            | Shorthand for `{ write: true, read: true }`  |
 | `{ write: true }` | Plugin can write to this column              |
 | `{ read: true }`  | Plugin can read this column (for future use) |
 
@@ -300,8 +300,10 @@ export type FileReference = {
   filename: string;
   contentType: string;
   size: number;
-  data?: string; // base64
-  url?: string; // external URL
+  data?: string; // base64 (MVP db storage)
+  key?: string; // storage key (S3/R2 plugin)
+  url?: string; // public URL (CDN/direct access)
+  storage?: string; // storage provider ID (e.g., 's3', 'r2')
 };
 ```
 
