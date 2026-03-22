@@ -35,9 +35,7 @@ const handler = createCmsHandler({
   db,
   schema,
   plugins: [s3Plugin],
-  storage: {
-    defaultObjectStorageId: 's3', // Route file fields to this plugin
-  },
+  storage: 's3', // Route file fields to this plugin
 });
 ```
 
@@ -98,7 +96,7 @@ mc mb local/uploads
 ### Upload Flow
 
 1. User clicks "Upload via S3" on edit page
-2. CMS generates presigned PUT URL (valid for 1 hour)
+2. CMS generates presigned PUT URL (valid for 15 minutes by default)
 3. Browser uploads directly to S3
 4. On success, CMS updates record with file metadata
 
@@ -222,16 +220,18 @@ Configure your S3 bucket to allow browser uploads:
 Route different tables/columns to different storage backends:
 
 ```ts
-storage: {
-  defaultObjectStorageId: 's3',
-  resolveStorage: ({ table, column, user }) => {
+const handler = createCmsHandler({
+  db,
+  schema,
+  plugins: [s3Plugin, glacierPlugin],
+  storage: ({ table, column, user }) => {
     // Large files to cheap storage
     if (table === 'videos') return 'glacier';
     // Tenant isolation
     if (user?.tenantId) return `tenant-${user.tenantId}`;
     return 's3';
   },
-}
+});
 ```
 
 ## File Metadata Schema
@@ -364,7 +364,7 @@ For tables without `autoDraft`, the standard create form appears. File upload fi
 
 ### "Upload via S3" link doesn't appear
 
-1. Ensure `storage.defaultObjectStorageId` matches the plugin's `storageId`
+1. Ensure `storage` is set to the plugin's `storageId` (default: `'s3'`)
 2. Check the column has `$cms({ file: true })` marker
 3. Verify the plugin is in the `plugins` array
 
@@ -386,4 +386,4 @@ EOF
 
 ### Presigned URL expired
 
-Default expiry is 1 hour. Increase with `urlExpiry` option (in seconds).
+Default expiry is 15 minutes. Increase with `expirySeconds` option.

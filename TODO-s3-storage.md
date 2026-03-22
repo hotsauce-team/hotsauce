@@ -21,13 +21,13 @@
 - [x] **Max file size validation** — Validate before presign, not just after upload fails
 - [ ] **Real AWS S3 testing** — Demo only tested with MinIO; need to verify SigV4 with actual AWS
 - [ ] **IAM role credential support** — Use EC2/ECS instance profiles instead of long-lived access keys in env vars (IMDS v2)
-- [x] **Unify ErrorContext and PluginErrorContext** — `hookContext` on `PluginErrorContext`, `plugin` on `ErrorContext`
+- [x] **Unify ErrorContext and PluginErrorContext** — `hookContext` on `PluginErrorContext`, `plugin` on `ErrorContext` ✅ 0499fe6, 25b6a6a
 
 ## Before Merge
 
 - [ ] **Documentation review** — Ensure README, SPEC, and inline docs are accurate and complete
 - [ ] **Security peer review** — External review of key tampering prevention, presign flow, and policy enforcement
-- [ ] **S3 README uses old storage API syntax** — Shows `{ defaultObjectStorageId: 's3' }` instead of simplified `storage: 's3'`
+- [x] **S3 README uses old storage API syntax** — Shows `{ defaultObjectStorageId: 's3' }` instead of simplified `storage: 's3'`
 
 ## Nice to Have
 
