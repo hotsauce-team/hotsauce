@@ -180,6 +180,13 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
         options.urlStyle,
       );
 
+      // Sign Content-Length and Content-Type so S3 enforces exact file
+      // size and MIME type. The client must send these headers verbatim.
+      const uploadHeaders: Record<string, string> = {
+        'Content-Length': String(ctx.size),
+        'Content-Type': ctx.contentType,
+      };
+
       // Generate presigned PUT URL
       const presignedUrl = await presignUrl({
         method: 'PUT',
@@ -188,8 +195,7 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
         accessKeyId: options.accessKeyId,
         secretAccessKey: options.secretAccessKey,
         expirySeconds: options.expirySeconds,
-        // Note: contentType is NOT passed to presignUrl - MinIO rejects unsigned headers
-        // The browser will naturally send Content-Type from the file
+        headers: uploadHeaders,
       });
 
       return {
@@ -197,8 +203,7 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
         upload: {
           method: 'PUT',
           url: presignedUrl,
-          // No headers - browser sets Content-Type from file automatically
-          // Adding headers here causes MinIO to reject with "unsigned headers" error
+          headers: uploadHeaders,
         },
       };
     },

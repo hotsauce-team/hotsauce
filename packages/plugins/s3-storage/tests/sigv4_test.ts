@@ -7,7 +7,7 @@
  * https://docs.aws.amazon.com/general/latest/gr/signature-v4-test-suite.html
  */
 
-import { assertEquals, assertExists } from '@std/assert';
+import { assertEquals, assertExists, assertNotEquals } from '@std/assert';
 import {
   buildObjectUrl,
   formatAmzDate,
@@ -209,19 +209,97 @@ Deno.test('presignUrl: generates valid presigned PUT URL', async () => {
     accessKeyId: 'AKIATEST',
     secretAccessKey: 'testSecret123',
     expirySeconds: 900,
-    // Note: contentType is intentionally NOT included in presigned URLs
-    // to avoid MinIO rejecting requests with "unsigned headers" error
     date: new Date('2023-11-15T10:00:00.000Z'),
   });
 
   const parsed = new URL(url);
   assertEquals(parsed.pathname, '/uploads/file.pdf');
 
-  // Presigned PUT URLs only sign 'host' header (not content-type)
-  // This avoids MinIO rejecting browser uploads with unsigned headers
+  // Without extra headers, only 'host' is signed
   const signedHeaders = parsed.searchParams.get('X-Amz-SignedHeaders');
   assertExists(signedHeaders);
   assertEquals(signedHeaders, 'host');
+});
+
+Deno.test('presignUrl: signs Content-Length when provided in headers', async () => {
+  const url = await presignUrl({
+    method: 'PUT',
+    url: 'https://mybucket.s3.us-east-1.amazonaws.com/uploads/file.pdf',
+    region: 'us-east-1',
+    accessKeyId: 'AKIATEST',
+    secretAccessKey: 'testSecret123',
+    expirySeconds: 900,
+    headers: { 'Content-Length': '12345' },
+    date: new Date('2023-11-15T10:00:00.000Z'),
+  });
+
+  const parsed = new URL(url);
+
+  // Content-Length must appear in SignedHeaders (sorted: content-length;host)
+  const signedHeaders = parsed.searchParams.get('X-Amz-SignedHeaders');
+  assertExists(signedHeaders);
+  assertEquals(signedHeaders, 'content-length;host');
+
+  // Signature must differ from a URL without Content-Length
+  const urlNoHeaders = await presignUrl({
+    method: 'PUT',
+    url: 'https://mybucket.s3.us-east-1.amazonaws.com/uploads/file.pdf',
+    region: 'us-east-1',
+    accessKeyId: 'AKIATEST',
+    secretAccessKey: 'testSecret123',
+    expirySeconds: 900,
+    date: new Date('2023-11-15T10:00:00.000Z'),
+  });
+  const sig1 = parsed.searchParams.get('X-Amz-Signature');
+  const sig2 = new URL(urlNoHeaders).searchParams.get('X-Amz-Signature');
+  assertNotEquals(sig1, sig2);
+
+  // Signature must differ when Content-Length value changes
+  const urlDiffSize = await presignUrl({
+    method: 'PUT',
+    url: 'https://mybucket.s3.us-east-1.amazonaws.com/uploads/file.pdf',
+    region: 'us-east-1',
+    accessKeyId: 'AKIATEST',
+    secretAccessKey: 'testSecret123',
+    expirySeconds: 900,
+    headers: { 'Content-Length': '99999' },
+    date: new Date('2023-11-15T10:00:00.000Z'),
+  });
+  const sig3 = new URL(urlDiffSize).searchParams.get('X-Amz-Signature');
+  assertNotEquals(sig1, sig3);
+});
+
+Deno.test('presignUrl: signs Content-Type and Content-Length together', async () => {
+  const url = await presignUrl({
+    method: 'PUT',
+    url: 'https://mybucket.s3.us-east-1.amazonaws.com/uploads/file.pdf',
+    region: 'us-east-1',
+    accessKeyId: 'AKIATEST',
+    secretAccessKey: 'testSecret123',
+    expirySeconds: 900,
+    headers: { 'Content-Length': '12345', 'Content-Type': 'image/png' },
+    date: new Date('2023-11-15T10:00:00.000Z'),
+  });
+
+  const parsed = new URL(url);
+  const signedHeaders = parsed.searchParams.get('X-Amz-SignedHeaders');
+  assertEquals(signedHeaders, 'content-length;content-type;host');
+
+  // Changing Content-Type changes the signature
+  const urlDiffType = await presignUrl({
+    method: 'PUT',
+    url: 'https://mybucket.s3.us-east-1.amazonaws.com/uploads/file.pdf',
+    region: 'us-east-1',
+    accessKeyId: 'AKIATEST',
+    secretAccessKey: 'testSecret123',
+    expirySeconds: 900,
+    headers: { 'Content-Length': '12345', 'Content-Type': 'application/pdf' },
+    date: new Date('2023-11-15T10:00:00.000Z'),
+  });
+  assertNotEquals(
+    parsed.searchParams.get('X-Amz-Signature'),
+    new URL(urlDiffType).searchParams.get('X-Amz-Signature'),
+  );
 });
 
 Deno.test('presignUrl: signature changes with different dates', async () => {

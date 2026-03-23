@@ -351,8 +351,6 @@ export async function presignUrl(options: PresignOptions): Promise<string> {
     secretAccessKey,
     expirySeconds = 900,
     headers = {},
-    // contentType is intentionally not used in presigned URL signature
-    // to avoid CORS issues - the client sends it as a regular header
     date = new Date(),
   } = options;
 
@@ -362,18 +360,15 @@ export async function presignUrl(options: PresignOptions): Promise<string> {
   const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
   const credential = `${accessKeyId}/${credentialScope}`;
 
-  // Build signed headers (only host for presigned URLs)
-  // Note: For presigned URLs, we DON'T sign Content-Type because:
-  // 1. The browser may send additional unsigned headers (Origin, etc.)
-  // 2. Some S3 implementations reject requests with any unsigned headers
-  // The client should still send Content-Type, but it won't be verified
+  // Build signed headers — start with host, add any extras from `headers`.
+  // Additional signed headers (e.g. Content-Length) are enforced by S3:
+  // the client must send the exact same value or the request is rejected.
   const signedHeadersObj: SignedHeaders = {
     names: ['host'],
     values: { host: url.host },
   };
 
   // Add any additional headers that were explicitly requested to be signed
-  // (but NOT content-type for presigned URLs - that causes CORS issues)
   for (const [name, value] of Object.entries(headers)) {
     const lowerName = name.toLowerCase();
     if (!signedHeadersObj.values[lowerName]) {
