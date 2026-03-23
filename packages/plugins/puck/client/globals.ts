@@ -11,7 +11,7 @@
  * These are only available at runtime after puck-editor.js has loaded.
  */
 
-import type { default as ReactType } from 'npm:react@18.2.0';
+import type { default as ReactType } from 'npm:react@19.2.4';
 
 /** React instance from the CMS bundle (available after puck-editor.js loads) */
 export const React = (globalThis as any).React as typeof ReactType;

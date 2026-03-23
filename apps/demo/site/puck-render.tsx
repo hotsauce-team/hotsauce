@@ -10,8 +10,8 @@
  * browser-only dependencies like happy-dom/ws.
  */
 
-import React from 'npm:react@18.2.0';
-import { renderToStaticMarkup } from 'npm:react-dom@18.2.0/server';
+import React from 'npm:react@19.2.4';
+import { renderToStaticMarkup } from 'npm:react-dom@19.2.4/server';
 import { type Config, type Data } from 'npm:@puckeditor/core@0.21.1';
 import { Render } from 'npm:@puckeditor/core@0.21.1/rsc';
 
