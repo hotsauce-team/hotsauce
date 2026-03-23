@@ -22,8 +22,8 @@
  * @module
  */
 
-import type ReactNamespace from 'npm:react@18.2.0';
-import type { ComponentProps } from 'npm:react@18.2.0';
+import type ReactNamespace from 'npm:react@19.2.4';
+import type { ComponentProps } from 'npm:react@19.2.4';
 
 /**
  * Re-export React types so users stay in sync with CMS version.

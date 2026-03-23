@@ -9,9 +9,9 @@
  * Build with: deno task build:puck (from workspace root)
  */
 
-import React from 'npm:react@18.2.0';
-import type { ComponentProps } from 'npm:react@18.2.0';
-import { createRoot } from 'npm:react-dom@18.2.0/client';
+import React from 'npm:react@19.2.4';
+import type { ComponentProps } from 'npm:react@19.2.4';
+import { createRoot } from 'npm:react-dom@19.2.4/client';
 import { type Data, DropZone, Puck } from 'npm:@puckeditor/core@0.21.1';
 
 type _PuckProps = ComponentProps<typeof Puck>;
