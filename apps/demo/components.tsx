@@ -318,9 +318,9 @@ export const puckProps: PuckProps = {
         description: '',
       },
       render: (
-        { children, title }: { children: React.ReactNode; title: string },
+        { children, title }: { children?: React.ReactNode; title?: string },
       ) => (
-        <main data-page-title={title}>
+        <main data-page-title={title ?? ''}>
           {children}
         </main>
       ),
