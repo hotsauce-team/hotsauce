@@ -7,6 +7,7 @@ import {
   type FileReference,
 } from '@hotsauce/core';
 import { escapeHtml } from '@hotsauce/ui';
+import { typeByExtension } from '@std/media-types';
 import type { CspOptions } from './types.ts';
 
 /**
@@ -478,6 +479,23 @@ export async function parseMultipartFormData(
         const maxSizeKb = Math.round(maxSize / 1000);
         errors[key] = `File too large. Maximum size is ${maxSizeKb}KB.`;
         continue;
+      }
+
+      // Cross-validate claimed content type against file extension.
+      // Blocks unrecognised extensions and extension↔type mismatches.
+      // Duplicated in packages/plugins/s3-storage/mod.ts — keep in sync.
+      const extMatch = value.name.match(/\.[^.]+$/);
+      if (extMatch) {
+        const expectedType = typeByExtension(extMatch[0]!.toLowerCase());
+        if (!expectedType) {
+          errors[key] = `Unrecognised file extension: ${extMatch[0]}`;
+          continue;
+        }
+        if (value.type && value.type.toLowerCase() !== expectedType) {
+          errors[key] =
+            `Content type mismatch: file extension suggests ${expectedType}, but got ${value.type}`;
+          continue;
+        }
       }
 
       // Validate content type against accept pattern

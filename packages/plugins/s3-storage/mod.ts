@@ -42,6 +42,7 @@ import type {
   StorageProvider,
 } from '../../cms/types.ts';
 import { getFileKeyPrefix } from '@hotsauce/core';
+import { typeByExtension } from '@std/media-types';
 import { html, raw } from '@hotsauce/ui';
 import { buildObjectUrl, presignUrl, signHeaders } from './sigv4.ts';
 import { UPLOAD_CSS } from './upload-styles.ts';
@@ -86,6 +87,23 @@ export function validatePresignRequest(
       ? `${Math.round(maxSize / 1_048_576)}MB`
       : `${Math.round(maxSize / 1024)}KB`;
     return { error: `File too large. Maximum size is ${label}.` };
+  }
+
+  // Cross-validate claimed content type against file extension.
+  // Blocks unrecognised extensions and extension↔type mismatches.
+  // Duplicated in packages/cms/http.ts — keep in sync.
+  const extMatch = body.filename.match(/\.[^.]+$/);
+  if (extMatch) {
+    const expectedType = typeByExtension(extMatch[0]!.toLowerCase());
+    if (!expectedType) {
+      return { error: `Unrecognised file extension: ${extMatch[0]}` };
+    }
+    if (body.contentType && body.contentType.toLowerCase() !== expectedType) {
+      return {
+        error:
+          `Content type mismatch: file extension suggests ${expectedType}, but got ${body.contentType}`,
+      };
+    }
   }
 
   const accept = fieldConfig.accept as string | undefined;

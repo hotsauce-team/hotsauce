@@ -405,3 +405,62 @@ Deno.test('presign validation: both maxSize and accept checked together', () => 
   const result3 = validatePresignRequest(goodFile, config);
   assertEquals(result3, null);
 });
+
+// ─────────────────────────────────────────────────────────────
+// Presign validation: content-type cross-validation (extension ↔ claimed MIME)
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('presign validation: rejects unrecognised file extension', () => {
+  const body = {
+    filename: 'data.xyz999',
+    contentType: 'application/octet-stream',
+    size: 1000,
+  };
+  const config = { file: true };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, 'Unrecognised file extension');
+});
+
+Deno.test('presign validation: rejects content-type mismatch', () => {
+  const body = {
+    filename: 'malware.exe',
+    contentType: 'image/png',
+    size: 1000,
+  };
+  const config = { file: true };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, 'Content type mismatch');
+  assertStringIncludes(result!.error, 'application/x-msdos-program');
+});
+
+Deno.test('presign validation: .jpg with image/jpeg passes', () => {
+  const body = { filename: 'photo.jpg', contentType: 'image/jpeg', size: 1000 };
+  const config = { file: true };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: .jpeg with image/jpeg passes', () => {
+  const body = {
+    filename: 'photo.jpeg',
+    contentType: 'image/jpeg',
+    size: 1000,
+  };
+  const config = { file: true };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
+
+Deno.test('presign validation: uppercase extension is validated', () => {
+  const body = { filename: 'photo.PNG', contentType: 'image/png', size: 1000 };
+  const config = { file: true };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result, null);
+});
