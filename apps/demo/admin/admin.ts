@@ -1,3 +1,5 @@
+import process from 'node:process';
+
 // CMS admin configuration
 // Sets up hotsauce-cms handler for /admin routes
 import { createCmsHandler, PasswordProvider, readOnly } from '@hotsauce/cms';
@@ -28,7 +30,9 @@ export function createAdminHandler(db: Database) {
     db,
     schema,
     basePath: '/admin',
-    auth: {
+    // In local development, use open auth for convenience (no login required).
+    // In production, use password auth with credentials from the database.
+    auth: process.env.NODE_ENV === 'local' ? 'dangerously-open' : {
       provider: new PasswordProvider({ db, usersTable: adminUsers }),
     },
     policies: {
