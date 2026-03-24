@@ -5,6 +5,7 @@ import {
   attrs,
   escapeHtml,
   escapeUrlPath,
+  getSafeUrl,
   html,
   join,
   raw,
@@ -154,4 +155,60 @@ Deno.test('join: works without separator', () => {
 Deno.test('SafeHtml: toString returns value', () => {
   const safe = new SafeHtml('<p>test</p>');
   assertEquals(safe.toString(), '<p>test</p>');
+});
+
+// =============================================================================
+// getSafeUrl tests
+// =============================================================================
+
+Deno.test('getSafeUrl: allows relative paths', () => {
+  assertEquals(getSafeUrl('/files/posts/avatar/1/photo.png') !== null, true);
+  assertEquals(getSafeUrl('photo.png') !== null, true);
+  assertEquals(getSafeUrl('./photo.png') !== null, true);
+});
+
+Deno.test('getSafeUrl: returns trimmed URL', () => {
+  assertEquals(getSafeUrl('  /path  '), '/path');
+});
+
+Deno.test('getSafeUrl: allows http and https', () => {
+  assertEquals(getSafeUrl('https://cdn.example.com/photo.png') !== null, true);
+  assertEquals(getSafeUrl('http://cdn.example.com/photo.png') !== null, true);
+  assertEquals(getSafeUrl('HTTPS://CDN.EXAMPLE.COM/PHOTO.PNG') !== null, true);
+});
+
+Deno.test('getSafeUrl: blocks javascript: scheme', () => {
+  assertEquals(getSafeUrl('javascript:alert(1)'), null);
+  assertEquals(getSafeUrl('JAVASCRIPT:alert(1)'), null);
+  assertEquals(getSafeUrl('JavaScript:alert(document.cookie)'), null);
+});
+
+Deno.test('getSafeUrl: blocks data: scheme', () => {
+  assertEquals(getSafeUrl('data:text/html,<script>alert(1)</script>'), null);
+});
+
+Deno.test('getSafeUrl: blocks scheme-relative URLs', () => {
+  assertEquals(getSafeUrl('//evil.com/tracker.png'), null);
+});
+
+Deno.test('getSafeUrl: blocks control characters', () => {
+  assertEquals(getSafeUrl('\x00javascript:alert(1)'), null);
+  assertEquals(getSafeUrl('java\x00script:alert(1)'), null);
+  assertEquals(getSafeUrl('http://evil\x00.com'), null);
+});
+
+Deno.test('getSafeUrl: blocks percent-encoded control characters', () => {
+  assertEquals(getSafeUrl('%0dhttp://evil.com'), null);
+  assertEquals(getSafeUrl('%0ahttp://evil.com'), null);
+});
+
+Deno.test('getSafeUrl: blocks other schemes', () => {
+  assertEquals(getSafeUrl('vbscript:msgbox'), null);
+  assertEquals(getSafeUrl('file:///etc/passwd'), null);
+  assertEquals(getSafeUrl('ftp://evil.com/file'), null);
+});
+
+Deno.test('getSafeUrl: rejects empty and whitespace-only', () => {
+  assertEquals(getSafeUrl(''), null);
+  assertEquals(getSafeUrl('   '), null);
 });

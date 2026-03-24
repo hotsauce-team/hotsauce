@@ -9,6 +9,7 @@ export {
   attrs,
   escapeHtml,
   escapeUrlPath,
+  getSafeUrl,
   html,
   join,
   raw,

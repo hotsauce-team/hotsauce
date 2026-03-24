@@ -28,6 +28,8 @@ import { validateSerializable } from './validate.ts';
  *
  * Allows: relative URLs (/path, ?query, #hash), http:, https:
  * Blocks: everything else (javascript:, data:, vbscript:, //..., etc.)
+ *
+ * NOTE: Duplicated in packages/ui/html.ts — keep in sync.
  */
 function getSafeUrl(url: string): string | null {
   const input = url.trim();

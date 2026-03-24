@@ -135,3 +135,33 @@ export function join(items: (string | SafeHtml)[], separator = ''): SafeHtml {
     ),
   );
 }
+
+/**
+ * Check whether a URL is safe for use in href/src attributes.
+ * Returns the URL (trimmed) if safe, null if unsafe.
+ *
+ * Allows: relative URLs (/path, ?query, #hash), http:, https:
+ * Blocks: javascript:, data:, vbscript:, scheme-relative (//),
+ *         control characters, and percent-encoded control characters.
+ *
+ * NOTE: Duplicated in packages/workers/executor.ts — keep in sync.
+ */
+export function getSafeUrl(url: string): string | null {
+  const input = url.trim();
+  if (!input) return null;
+
+  // Block control characters and backslashes (scheme obfuscation vectors)
+  // deno-lint-ignore no-control-regex
+  if (/[\x00-\x1f\x7f-\x9f\\]/.test(input)) return null;
+  if (/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(input)) return null;
+
+  // Block scheme-relative URLs (//evil.com)
+  if (input.startsWith('//')) return null;
+
+  // If it has a scheme (RFC 3986: ALPHA *(ALPHA/DIGIT/"+"/"-"/".")), only allow http(s)
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(input)) {
+    if (!/^https?:\/\//i.test(input)) return null;
+  }
+
+  return input;
+}

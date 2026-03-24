@@ -1,6 +1,6 @@
 // Form field input renderers by field type
 
-import { attrs, html, raw } from '../html.ts';
+import { attrs, getSafeUrl, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import {
   FILE_DEFAULT_ACCEPT,
@@ -443,8 +443,8 @@ export function fileInput(
     // 1. Direct URL (e.g., from external storage with public URLs)
     // 2. Base64 data (inline storage)
     let previewUrl: string | null = null;
-    if (existingFile.url) {
-      previewUrl = existingFile.url;
+    if (existingFile.url && getSafeUrl(existingFile.url)) {
+      previewUrl = getSafeUrl(existingFile.url);
     } else if (existingFile.data) {
       previewUrl =
         `data:${existingFile.contentType};base64,${existingFile.data}`;

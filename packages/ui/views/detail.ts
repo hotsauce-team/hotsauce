@@ -1,6 +1,6 @@
 // Detail view - single record display
 
-import { attrs, escapeHtml, html, raw } from '../html.ts';
+import { attrs, escapeHtml, getSafeUrl, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import type { RelationOption } from '../forms/inputs.ts';
@@ -59,10 +59,11 @@ function formatValue(
   if (field.fieldType === 'file' && isValidFileReference(value)) {
     const sizeStr = formatFileSize(value.size);
     const isImage = value.contentType.startsWith('image/');
+    const safeValueUrl = value.url ? getSafeUrl(value.url) : null;
     // Determine image source: fileUrl (served endpoint), url (external), or data (base64)
-    const imgSrc = fileUrl ?? value.url ??
+    const imgSrc = fileUrl ?? safeValueUrl ??
       (value.data ? `data:${value.contentType};base64,${value.data}` : null);
-    const downloadUrl = fileUrl ?? value.url;
+    const downloadUrl = fileUrl ?? safeValueUrl;
     const link = downloadUrl
       ? `<a href="${
         escapeHtml(downloadUrl)
