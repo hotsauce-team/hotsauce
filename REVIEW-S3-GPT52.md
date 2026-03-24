@@ -97,19 +97,24 @@ Suggested mitigation:
 
 - Treat SVG as non-previewable (show metadata + download only).
 
-### 5) Presigned PUT does not bind content-type/size (Design tradeoff; document clearly)
+### 5) Presigned PUT binds request `Content-Length`/`Content-Type` (but not bytes) (Updated)
 
-The presign flow intentionally does **not** sign `Content-Type` to avoid CORS/MinIO “unsigned headers” issues. Validation is performed in the app layer (`validatePresignRequest`) using client-reported `contentType` and `size`.
+The presign flow signs **additional request headers** for uploads (`Content-Length` and `Content-Type`) and returns those headers to the browser to send verbatim.
 
 Security implication:
 
-- A malicious client can presign an allowed type/size then upload a different type or larger payload.
+- **Good:** S3/MinIO will reject uploads where the request’s `Content-Length` or `Content-Type` differs from what was signed (typically as `SignatureDoesNotMatch`). This closes the “presign small, upload big” gap for clients that send these headers.
+- **Remaining:** This still does **not** prove the uploaded bytes match the MIME type. A client can upload arbitrary bytes while presenting a signed `Content-Type` header value.
 
-Mitigation options (pick based on desired strictness):
+Operational/compatibility note:
 
-- Enforce limits at the bucket/policy layer (preferred when possible).
-- Consider presigned POST with a policy that includes size/type conditions.
-- If staying with PUT, document that `accept`/`maxSize` are advisory unless enforced by the storage backend.
+- Signing more headers increases coupling to client/server behavior. Some upload paths (streaming/chunked transfer, intermediaries that omit/normalize headers, or certain S3-compatible vendors) may fail if they can’t reproduce the signed header set exactly.
+
+Mitigation options (depending on strictness):
+
+- Keep PUT+signed headers (current approach) and document the constraints (client must send exact `Content-Length`/`Content-Type`).
+- If you need storage-enforced _ranges_ (not exact lengths), consider presigned POST policies (`content-length-range`).
+- If you need byte-level type validation, you need a separate content sniffing/processing step (not provided by SigV4 signing).
 
 ### 6) Orphan cleanup can be used as a performance lever (Low → Medium DoS)
 
@@ -205,7 +210,7 @@ This section explores additional security avenues beyond the immediate S3/file U
 - Notable limitations / considerations:
   - **No support for session tokens** (`X-Amz-Security-Token`) used with STS/temp creds; without it, many AWS setups can’t use this plugin safely.
   - Signing-key cache key does not include `secretAccessKey`; secret rotation for the same access key ID during the day can cause temporary signature failures (availability).
-  - Presigned PUT uses `UNSIGNED-PAYLOAD` and doesn’t sign Content-Type (intentional). Treat `accept/maxSize` as UX guardrails unless the backend enforces constraints.
+  - Presigned PUT uses `UNSIGNED-PAYLOAD`. Upload requests are additionally bound by signing `Content-Length` and `Content-Type`, but this is still header-level (not byte sniffing) and can be brittle across clients/vendors.
 
 #### DoS / performance / operational security
 
