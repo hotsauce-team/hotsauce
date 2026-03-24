@@ -67,7 +67,7 @@ function formatValue(
     const link = downloadUrl
       ? `<a href="${
         escapeHtml(downloadUrl)
-      }" target="_blank" class="cms-file-link">Download</a>`
+      }" target="_blank" rel="noopener" class="cms-file-link">Download</a>`
       : '';
     // Show image preview for image files
     const imagePreview = isImage && imgSrc

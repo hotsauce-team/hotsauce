@@ -64,30 +64,15 @@ Suggested mitigation (low-cost, defense-in-depth):
 - Before signing or deleting, validate keys with `isValidFileKey(key, tableName, columnName, recordId)`.
 - If invalid: return `404` for serving and skip deletion.
 
-### 2) `FileReference.url` rendered without safe-scheme checks (Medium)
+### 2) `FileReference.url` safe-scheme checks in UI (Medium) (Addressed)
 
-In UI rendering, `FileReference.url` is treated as a trusted URL:
+UI rendering now treats `FileReference.url` as untrusted input and gates it through `getSafeUrl()` before using it in `href`/`src` contexts.
 
-- `packages/ui/forms/inputs.ts` uses `existingFile.url` as an `<img src>` for image previews.
-- `packages/ui/views/detail.ts` uses `value.url` as a download link and also as a possible image source.
+Residual risk (still relevant): even “safe” `http(s)` URLs can be used for tracking/exfiltration if you loosen CSP; prefer policy-aware `/files/...` links when possible.
 
-Risks:
+### 3) Reverse tabnabbing in file download link (Low → Medium) (Addressed)
 
-- If an attacker can write arbitrary JSON to a file column (e.g. via API usage or misconfigured parsers), they can set `url: "javascript:..."` and produce a clickable XSS vector.
-- Even without `javascript:`, allowing arbitrary remote `http(s)` URLs enables tracking / unexpected external requests from admin pages if CSP is loosened.
-
-Suggested mitigation:
-
-- Apply the same safe-URL policy used for plugin overrides (relative + `http(s)` only) before rendering any `FileReference.url` into `href`/`src`.
-- Consider preferring `/files/...` (policy-aware) links over raw URLs.
-
-### 3) Reverse tabnabbing in file download link (Low → Medium)
-
-`packages/ui/views/detail.ts` renders `target="_blank"` links without `rel="noopener"`.
-
-Suggested mitigation:
-
-- Add `rel="noopener"` (or `noopener noreferrer`) anywhere `target="_blank"` is used.
+The file “Download” link now includes `rel="noopener"` alongside `target="_blank"`, preventing reverse-tabnabbing.
 
 ### 4) SVG preview via `<img>` (Low, but worth hardening)
 
@@ -148,11 +133,9 @@ This is probably acceptable (plugins are integrator-controlled), but it’s wort
 ## Suggested follow-ups (ordered)
 
 1. Add key-prefix validation in file serving + deletion paths (defense-in-depth).
-2. Apply safe-scheme URL validation when rendering `FileReference.url` in UI.
-3. Add `rel="noopener"` to `target="_blank"` file links.
-4. Disable SVG previews.
-5. Document the “PUT presign doesn’t bind type/size” tradeoff; optionally add backend enforcement guidance.
-6. Put guardrails around orphan cleanup cost (paging/limits or async).
+2. Disable SVG previews.
+3. Document the “PUT presign doesn’t bind type/size” tradeoff; optionally add backend enforcement guidance.
+4. Put guardrails around orphan cleanup cost (paging/limits or async).
 
 ### Deeper review
 

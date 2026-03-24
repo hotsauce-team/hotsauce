@@ -397,6 +397,7 @@ Deno.test('detailView: shows frontend URL link when provided', () => {
 
   assertStringIncludes(result, 'View on site');
   assertStringIncludes(result, 'href="/users/john"');
+  assertStringIncludes(result, 'rel="noopener"');
   assertStringIncludes(result, 'target="_blank"');
 });
 
@@ -441,6 +442,7 @@ Deno.test('editView: shows frontend URL link when provided', () => {
 
   assertStringIncludes(result, 'View on site');
   assertStringIncludes(result, 'href="/users/john"');
+  assertStringIncludes(result, 'rel="noopener"');
   assertStringIncludes(result, 'target="_blank"');
 });
 
