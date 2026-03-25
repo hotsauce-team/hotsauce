@@ -228,7 +228,7 @@ Deno.test('presign validation: rejects file exceeding maxSize', () => {
     contentType: 'image/png',
     size: 5_000_000,
   };
-  const config = { file: true, maxSize: 200_000 };
+  const config = { file: { maxSize: 200_000 } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result !== null, true);
@@ -268,7 +268,7 @@ Deno.test('presign validation: maxSize 0 disables size limit', () => {
     contentType: 'application/octet-stream',
     size: 500 * 1024 * 1024,
   };
-  const config = { file: true, maxSize: 0 };
+  const config = { file: { maxSize: 0 } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result, null);
@@ -280,7 +280,7 @@ Deno.test('presign validation: accepts file within maxSize', () => {
     contentType: 'image/png',
     size: 100_000,
   };
-  const config = { file: true, maxSize: 200_000 };
+  const config = { file: { maxSize: 200_000 } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result, null);
@@ -292,7 +292,7 @@ Deno.test('presign validation: accepts file at exactly maxSize', () => {
     contentType: 'image/png',
     size: 200_000,
   };
-  const config = { file: true, maxSize: 200_000 };
+  const config = { file: { maxSize: 200_000 } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result, null);
@@ -304,7 +304,7 @@ Deno.test('presign validation: rejects wrong content type', () => {
     contentType: 'application/pdf',
     size: 1000,
   };
-  const config = { file: true, accept: 'image/*' };
+  const config = { file: { accept: 'image/*' } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result !== null, true);
@@ -314,15 +314,41 @@ Deno.test('presign validation: rejects wrong content type', () => {
 
 Deno.test('presign validation: accepts matching content type', () => {
   const body = { filename: 'photo.jpg', contentType: 'image/jpeg', size: 1000 };
-  const config = { file: true, accept: 'image/*' };
+  const config = { file: { accept: 'image/*' } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result, null);
 });
 
+Deno.test('presign validation: nested file config enforces maxSize', () => {
+  const body = {
+    filename: 'big.png',
+    contentType: 'image/png',
+    size: 5_000_000,
+  };
+  const config = { file: { maxSize: 200_000 } };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, 'File too large');
+});
+
+Deno.test('presign validation: nested file config enforces accept', () => {
+  const body = {
+    filename: 'doc.pdf',
+    contentType: 'application/pdf',
+    size: 1000,
+  };
+  const config = { file: { accept: 'image/*' } };
+
+  const result = validatePresignRequest(body, config);
+  assertEquals(result !== null, true);
+  assertStringIncludes(result!.error, 'Invalid file type');
+});
+
 Deno.test('presign validation: accepts exact content type match', () => {
   const body = { filename: 'photo.png', contentType: 'image/png', size: 1000 };
-  const config = { file: true, accept: 'image/png,image/jpeg' };
+  const config = { file: { accept: 'image/png,image/jpeg' } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result, null);
@@ -330,7 +356,7 @@ Deno.test('presign validation: accepts exact content type match', () => {
 
 Deno.test('presign validation: rejects content type not in comma list', () => {
   const body = { filename: 'photo.gif', contentType: 'image/gif', size: 1000 };
-  const config = { file: true, accept: 'image/png,image/jpeg' };
+  const config = { file: { accept: 'image/png,image/jpeg' } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result !== null, true);
@@ -343,7 +369,7 @@ Deno.test('presign validation: wildcard */* accepts anything', () => {
     contentType: 'application/zip',
     size: 1000,
   };
-  const config = { file: true, accept: '*/*' };
+  const config = { file: { accept: '*/*' } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result, null);
@@ -366,7 +392,7 @@ Deno.test('presign validation: error shows MB for large limits', () => {
     contentType: 'application/octet-stream',
     size: 60_000_000,
   };
-  const config = { file: true, maxSize: 50 * 1024 * 1024 };
+  const config = { file: { maxSize: 50 * 1024 * 1024 } };
 
   const result = validatePresignRequest(body, config);
   assertEquals(result !== null, true);
@@ -380,7 +406,7 @@ Deno.test('presign validation: both maxSize and accept checked together', () => 
     contentType: 'image/png',
     size: 5_000_000,
   };
-  const config = { file: true, maxSize: 200_000, accept: 'image/*' };
+  const config = { file: { maxSize: 200_000, accept: 'image/*' } };
 
   const result1 = validatePresignRequest(bigImage, config);
   assertEquals(result1 !== null, true);

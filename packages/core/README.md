@@ -222,9 +222,9 @@ To model file uploads, mark a JSON/JSONB column with `$cms({ file: true })`.
 
 `CmsColumnOptions` supports:
 
-- `file?: boolean` — marks the column as a file field
-- `accept?: string` — MIME accept pattern(s) (e.g. `image/*`, `image/*,application/pdf`)
-- `maxSize?: number` — maximum size in bytes
+- `file?: true | { accept?: string; maxSize?: number }`
+  - `true` — shorthand: marks as file field with defaults
+  - object — explicit MIME/type limits
 
 The default constraints are:
 

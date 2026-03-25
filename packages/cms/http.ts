@@ -439,7 +439,7 @@ export interface ParsedMultipartData {
  * Converts uploaded files to FileReference objects with base64 data.
  *
  * @param request The incoming request
- * @param fileColumns Columns that are file fields (have cmsOptions.file: true)
+ * @param fileColumns Columns that are file fields (have cmsOptions.file: true|{...})
  */
 export async function parseMultipartFormData(
   request: Request,
@@ -469,10 +469,20 @@ export async function parseMultipartFormData(
         continue;
       }
 
-      // Get column options
+      // Get column file options (supports `file: true` shorthand)
       const cmsOptions = column.cmsOptions ?? {};
-      const maxSize = cmsOptions.maxSize ?? FILE_DEFAULT_MAX_SIZE;
-      const accept = cmsOptions.accept ?? FILE_DEFAULT_ACCEPT;
+      const fileOptions = cmsOptions.file;
+      const fileConfig: Record<string, unknown> = fileOptions === true
+        ? {}
+        : fileOptions && typeof fileOptions === 'object'
+        ? fileOptions as Record<string, unknown>
+        : {};
+      const maxSize = typeof fileConfig.maxSize === 'number'
+        ? fileConfig.maxSize
+        : FILE_DEFAULT_MAX_SIZE;
+      const accept = typeof fileConfig.accept === 'string'
+        ? fileConfig.accept
+        : FILE_DEFAULT_ACCEPT;
 
       // Validate file size
       if (value.size > maxSize) {

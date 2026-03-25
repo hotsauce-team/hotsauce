@@ -154,7 +154,7 @@ const mockFileColumn: IntrospectedColumn = {
 
 const mockFileColumnWithLimits: IntrospectedColumn = {
   ...mockFileColumn,
-  cmsOptions: { file: true, maxSize: 100, accept: 'image/png' },
+  cmsOptions: { file: { maxSize: 100, accept: 'image/png' } },
 };
 
 Deno.test('parseMultipartFormData: parses file upload', async () => {

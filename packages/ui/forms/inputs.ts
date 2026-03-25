@@ -426,8 +426,18 @@ export function fileInput(
   options: FieldInputOptions = {},
 ): string {
   const cmsOptions = field.column.cmsOptions ?? {};
-  const accept = cmsOptions.accept ?? FILE_DEFAULT_ACCEPT;
-  const maxSize = cmsOptions.maxSize ?? FILE_DEFAULT_MAX_SIZE;
+  const fileOptions = cmsOptions.file;
+  const fileConfig: Record<string, unknown> = fileOptions === true
+    ? {}
+    : fileOptions && typeof fileOptions === 'object'
+    ? fileOptions as Record<string, unknown>
+    : {};
+  const accept = typeof fileConfig.accept === 'string'
+    ? fileConfig.accept
+    : FILE_DEFAULT_ACCEPT;
+  const maxSize = typeof fileConfig.maxSize === 'number'
+    ? fileConfig.maxSize
+    : FILE_DEFAULT_MAX_SIZE;
   const maxSizeKb = Math.round(maxSize / 1000);
   const propertyName = field.column.propertyName;
 
@@ -439,6 +449,9 @@ export function fileInput(
   let currentFileDisplay = '';
   if (hasExistingFile) {
     const isImage = existingFile.contentType.startsWith('image/');
+    const isSvg = existingFile.contentType === 'image/svg+xml';
+    const previewSvg = fileConfig.previewSvg === true;
+    const shouldRenderImagePreview = isImage && (!isSvg || previewSvg);
     // For images, determine preview URL:
     // 1. Direct URL (e.g., from external storage with public URLs)
     // 2. Base64 data (inline storage)
@@ -449,7 +462,7 @@ export function fileInput(
       previewUrl =
         `data:${existingFile.contentType};base64,${existingFile.data}`;
     }
-    const imagePreview = isImage && previewUrl
+    const imagePreview = shouldRenderImagePreview && previewUrl
       ? html`
         <img src="${previewUrl}" alt="${existingFile
           .filename}" class="cms-file-preview" />

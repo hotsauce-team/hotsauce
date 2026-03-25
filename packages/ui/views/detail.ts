@@ -59,6 +59,11 @@ function formatValue(
   if (field.fieldType === 'file' && isValidFileReference(value)) {
     const sizeStr = formatFileSize(value.size);
     const isImage = value.contentType.startsWith('image/');
+    const isSvg = value.contentType === 'image/svg+xml';
+    const fileConfig = field.column.cmsOptions?.file;
+    const previewSvg = fileConfig && typeof fileConfig === 'object' &&
+      fileConfig.previewSvg === true;
+    const shouldRenderImagePreview = isImage && (!isSvg || previewSvg);
     const safeValueUrl = value.url ? getSafeUrl(value.url) : null;
     // Determine image source: fileUrl (served endpoint), url (external), or data (base64)
     const imgSrc = fileUrl ?? safeValueUrl ??
@@ -70,7 +75,7 @@ function formatValue(
       }" target="_blank" rel="noopener" class="cms-file-link">Download</a>`
       : '';
     // Show image preview for image files
-    const imagePreview = isImage && imgSrc
+    const imagePreview = shouldRenderImagePreview && imgSrc
       ? `<img src="${escapeHtml(imgSrc)}" alt="${
         escapeHtml(value.filename)
       }" class="cms-file-preview" />`

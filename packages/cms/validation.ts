@@ -231,18 +231,29 @@ export function validateResolvedSecrets(secrets: {
 }
 
 /**
- * Validate that file columns are on JSON-compatible column types.
- * File columns (marked with `$cms({ file: true })`) must be on jsonb/json columns.
+ * Validate file columns: JSON-compatible types and config shape.
+ * File columns (marked with `$cms({ file: true })` or `$cms({ file: { ... } })`)
+ * must be on jsonb/json columns. Also validates file config options.
  *
- * @throws {CmsConfigError} When file: true is used on a non-JSON column
+ * @throws {CmsConfigError} When file config is invalid
  */
-export function validateFileColumns(
+export function validateFileColumnsAndConfigs(
   introspected: {
     tables: Array<
       {
         name: string;
         columns: Array<
-          { name: string; dataType: string; cmsOptions?: { file?: boolean } }
+          {
+            name: string;
+            dataType: string;
+            cmsOptions?: {
+              file?: boolean | {
+                accept?: string;
+                maxSize?: number;
+                previewSvg?: boolean;
+              };
+            };
+          }
         >;
       }
     >;
@@ -252,12 +263,36 @@ export function validateFileColumns(
 
   for (const table of introspected.tables) {
     for (const column of table.columns) {
-      if (column.cmsOptions?.file && column.dataType !== 'json') {
+      const fileConfig = column.cmsOptions?.file;
+      if (!fileConfig) continue;
+
+      if (column.dataType !== 'json') {
         errors.push(
-          `  - ${table.name}.${column.name}: { file: true } requires a JSON column (jsonb/json), ` +
+          `  - ${table.name}.${column.name}: { file: ... } requires a JSON column (jsonb/json), ` +
             `but column has dataType '${column.dataType}'. ` +
             `Use jsonb() (Postgres), json() (MySQL), or text({ mode: 'json' }) (SQLite).`,
         );
+      }
+
+      if (typeof fileConfig === 'object') {
+        const { accept, maxSize, previewSvg } = fileConfig;
+        if (accept !== undefined && typeof accept !== 'string') {
+          errors.push(
+            `  - ${table.name}.${column.name}: file.accept must be a string when provided.`,
+          );
+        }
+        if (maxSize !== undefined) {
+          if (typeof maxSize !== 'number' || maxSize < 0) {
+            errors.push(
+              `  - ${table.name}.${column.name}: file.maxSize must be a non-negative number when provided.`,
+            );
+          }
+        }
+        if (previewSvg !== undefined && typeof previewSvg !== 'boolean') {
+          errors.push(
+            `  - ${table.name}.${column.name}: file.previewSvg must be a boolean when provided.`,
+          );
+        }
       }
     }
   }

@@ -217,12 +217,12 @@ Deno.test('CmsConfigError: includes ZodError details', () => {
 });
 
 // =============================================================================
-// validateFileColumns tests
+// validateFileColumnsAndConfigs tests
 // =============================================================================
 
-import { validateFileColumns } from '../validation.ts';
+import { validateFileColumnsAndConfigs } from '../validation.ts';
 
-Deno.test('validateFileColumns: accepts file columns with json dataType', () => {
+Deno.test('validateFileColumnsAndConfigs: accepts file columns with json dataType', () => {
   const introspected = {
     tables: [
       {
@@ -234,10 +234,184 @@ Deno.test('validateFileColumns: accepts file columns with json dataType', () => 
     ],
   };
   // Should not throw
-  validateFileColumns(introspected);
+  validateFileColumnsAndConfigs(introspected);
 });
 
-Deno.test('validateFileColumns: accepts tables without file columns', () => {
+Deno.test('validateFileColumnsAndConfigs: accepts file.previewSvg boolean on json columns', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'assets',
+        columns: [
+          {
+            name: 'icon',
+            dataType: 'json',
+            cmsOptions: { file: { previewSvg: true } },
+          },
+        ],
+      },
+    ],
+  };
+
+  validateFileColumnsAndConfigs(introspected);
+});
+
+Deno.test('validateFileColumnsAndConfigs: rejects non-boolean file.previewSvg', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'assets',
+        columns: [
+          {
+            name: 'icon',
+            dataType: 'json',
+            cmsOptions: {
+              file: { previewSvg: 'yes' as unknown as boolean },
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  assertThrows(
+    () => validateFileColumnsAndConfigs(introspected),
+    CmsConfigError,
+    'file.previewSvg must be a boolean',
+  );
+});
+
+Deno.test('validateFileColumnsAndConfigs: accepts valid file.accept string', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'document',
+            dataType: 'json',
+            cmsOptions: { file: { accept: 'application/pdf,.doc,.docx' } },
+          },
+        ],
+      },
+    ],
+  };
+
+  validateFileColumnsAndConfigs(introspected);
+});
+
+Deno.test('validateFileColumnsAndConfigs: rejects non-string file.accept', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'document',
+            dataType: 'json',
+            cmsOptions: {
+              file: { accept: ['image/*'] as unknown as string },
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  assertThrows(
+    () => validateFileColumnsAndConfigs(introspected),
+    CmsConfigError,
+    'file.accept must be a string',
+  );
+});
+
+Deno.test('validateFileColumnsAndConfigs: accepts valid file.maxSize number', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'photo',
+            dataType: 'json',
+            cmsOptions: { file: { maxSize: 5_000_000 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  validateFileColumnsAndConfigs(introspected);
+});
+
+Deno.test('validateFileColumnsAndConfigs: accepts file.maxSize of 0', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'photo',
+            dataType: 'json',
+            cmsOptions: { file: { maxSize: 0 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  validateFileColumnsAndConfigs(introspected);
+});
+
+Deno.test('validateFileColumnsAndConfigs: rejects non-number file.maxSize', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'document',
+            dataType: 'json',
+            cmsOptions: {
+              file: { maxSize: '5MB' as unknown as number },
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  assertThrows(
+    () => validateFileColumnsAndConfigs(introspected),
+    CmsConfigError,
+    'file.maxSize must be a non-negative number',
+  );
+});
+
+Deno.test('validateFileColumnsAndConfigs: rejects negative file.maxSize', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'document',
+            dataType: 'json',
+            cmsOptions: { file: { maxSize: -100 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  assertThrows(
+    () => validateFileColumnsAndConfigs(introspected),
+    CmsConfigError,
+    'file.maxSize must be a non-negative number',
+  );
+});
+
+Deno.test('validateFileColumnsAndConfigs: accepts tables without file columns', () => {
   const introspected = {
     tables: [
       {
@@ -250,10 +424,10 @@ Deno.test('validateFileColumns: accepts tables without file columns', () => {
     ],
   };
   // Should not throw
-  validateFileColumns(introspected);
+  validateFileColumnsAndConfigs(introspected);
 });
 
-Deno.test('validateFileColumns: rejects file column with string dataType', () => {
+Deno.test('validateFileColumnsAndConfigs: rejects file column with string dataType', () => {
   const introspected = {
     tables: [
       {
@@ -265,13 +439,13 @@ Deno.test('validateFileColumns: rejects file column with string dataType', () =>
     ],
   };
   assertThrows(
-    () => validateFileColumns(introspected),
+    () => validateFileColumnsAndConfigs(introspected),
     CmsConfigError,
     'users.avatar',
   );
 });
 
-Deno.test('validateFileColumns: rejects file column with number dataType', () => {
+Deno.test('validateFileColumnsAndConfigs: rejects file column with number dataType', () => {
   const introspected = {
     tables: [
       {
@@ -283,13 +457,13 @@ Deno.test('validateFileColumns: rejects file column with number dataType', () =>
     ],
   };
   assertThrows(
-    () => validateFileColumns(introspected),
+    () => validateFileColumnsAndConfigs(introspected),
     CmsConfigError,
     'posts.image',
   );
 });
 
-Deno.test('validateFileColumns: reports multiple errors', () => {
+Deno.test('validateFileColumnsAndConfigs: reports multiple errors', () => {
   const introspected = {
     tables: [
       {
@@ -307,7 +481,7 @@ Deno.test('validateFileColumns: reports multiple errors', () => {
     ],
   };
   try {
-    validateFileColumns(introspected);
+    validateFileColumnsAndConfigs(introspected);
   } catch (error) {
     const message = (error as CmsConfigError).message;
     assertEquals(message.includes('users.avatar'), true);

@@ -6,6 +6,7 @@ import {
   checkboxListInput,
   dateInput,
   datetimeInput,
+  fileInput,
   hiddenInput,
   jsonInput,
   numberInput,
@@ -219,6 +220,90 @@ Deno.test('hiddenInput: renders hidden input', () => {
 
   assertStringIncludes(result, 'type="hidden"');
   assertStringIncludes(result, 'value="secret"');
+});
+
+Deno.test('fileInput: uses nested file config options', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: {
+      name: 'avatar',
+      propertyName: 'avatar',
+      dataType: 'json',
+      columnType: 'PgJsonb',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      cmsOptions: {
+        file: {
+          accept: 'application/pdf',
+          maxSize: 1_024,
+        },
+      },
+    } as IntrospectedColumn,
+  });
+
+  const result = fileInput(field);
+  assertStringIncludes(result, 'accept="application/pdf"');
+  assertStringIncludes(result, 'Max size: 1KB. Accepted: application/pdf');
+});
+
+Deno.test('fileInput: does not preview SVG by default', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: {
+      name: 'icon',
+      propertyName: 'icon',
+      dataType: 'json',
+      columnType: 'PgJsonb',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      cmsOptions: { file: true },
+    } as IntrospectedColumn,
+  });
+
+  const result = fileInput(field, {
+    value: {
+      filename: 'icon.svg',
+      contentType: 'image/svg+xml',
+      size: 123,
+      url: 'https://cdn.example.com/icon.svg',
+    },
+  });
+
+  assertEquals(result.includes('cms-file-preview'), false);
+  assertEquals(result.includes('<img'), false);
+});
+
+Deno.test('fileInput: previews SVG when file.previewSvg is true', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: {
+      name: 'icon',
+      propertyName: 'icon',
+      dataType: 'json',
+      columnType: 'PgJsonb',
+      notNull: false,
+      hasDefault: false,
+      isPrimaryKey: false,
+      isUnique: false,
+      cmsOptions: { file: { previewSvg: true } },
+    } as IntrospectedColumn,
+  });
+
+  const result = fileInput(field, {
+    value: {
+      filename: 'icon.svg',
+      contentType: 'image/svg+xml',
+      size: 123,
+      url: 'https://cdn.example.com/icon.svg',
+    },
+  });
+
+  assertStringIncludes(result, 'cms-file-preview');
+  assertStringIncludes(result, '<img');
 });
 
 // renderFieldInput tests

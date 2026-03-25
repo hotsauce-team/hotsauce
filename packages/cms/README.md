@@ -368,7 +368,7 @@ const handlePublish = async (data) => {
 File uploads are supported by storing a JSON `FileReference` object in a column that is marked as a file field via `$cms({ file: true })`.
 
 - Storage: uploaded bytes are converted to base64 and stored in the JSON field (as `data`).
-- Validation: controlled per-column via `$cms({ accept, maxSize })` (with sensible defaults).
+- Validation: controlled per-column via `$cms({ file: { accept, maxSize } })` (with sensible defaults).
 - Forms: the admin automatically switches to `multipart/form-data` when a table has file columns.
 - Clearing: file inputs can be cleared on update via a `_clear_<propertyName>` field.
 
@@ -385,7 +385,7 @@ export const users = pgTable('users', {
   id: text('id').primaryKey(),
   avatar: jsonb('avatar')
     .$type<FileReference>()
-    .$cms({ file: true, accept: 'image/*', maxSize: 200_000 }),
+    .$cms({ file: { accept: 'image/*', maxSize: 200_000 } }),
 });
 ```
 

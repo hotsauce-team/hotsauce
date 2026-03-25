@@ -309,6 +309,62 @@ Deno.test('detailField: renders document file with download link but NO image pr
   );
 });
 
+Deno.test('detailField: does not preview SVG by default', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: {
+      propertyName: 'icon',
+      name: 'icon',
+      cmsOptions: { file: true },
+    } as IntrospectedColumn,
+  });
+
+  const fileValue = {
+    filename: 'icon.svg',
+    contentType: 'image/svg+xml',
+    size: 100,
+    url: 'https://cdn.example.com/icon.svg',
+  };
+
+  const result = detailField(
+    field,
+    fileValue,
+    undefined,
+    'https://cdn.example.com/icon.svg?signed=1',
+  );
+
+  assertEquals(result.includes('cms-file-preview'), false);
+  assertEquals(result.includes('<img'), false);
+});
+
+Deno.test('detailField: previews SVG when file.previewSvg is true', () => {
+  const field = createMockField({
+    fieldType: 'file',
+    column: {
+      propertyName: 'icon',
+      name: 'icon',
+      cmsOptions: { file: { previewSvg: true } },
+    } as IntrospectedColumn,
+  });
+
+  const fileValue = {
+    filename: 'icon.svg',
+    contentType: 'image/svg+xml',
+    size: 100,
+    url: 'https://cdn.example.com/icon.svg',
+  };
+
+  const result = detailField(
+    field,
+    fileValue,
+    undefined,
+    'https://cdn.example.com/icon.svg?signed=1',
+  );
+
+  assertStringIncludes(result, 'cms-file-preview');
+  assertStringIncludes(result, '<img');
+});
+
 Deno.test('detailField: renders file without fileUrl using fallback URL', () => {
   const field = createMockField({
     fieldType: 'file',

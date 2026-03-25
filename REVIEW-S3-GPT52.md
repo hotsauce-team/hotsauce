@@ -74,13 +74,14 @@ Residual risk (still relevant): even “safe” `http(s)` URLs can be used for t
 
 The file “Download” link now includes `rel="noopener"` alongside `target="_blank"`, preventing reverse-tabnabbing.
 
-### 4) SVG preview via `<img>` (Low, but worth hardening)
+### 4) SVG preview via `<img>` (Low, but worth hardening) (Addressed)
 
-`handleFileServing` deliberately avoids serving SVG inline, but UI previews currently treat `image/svg+xml` as an image and can render it inline.
+`handleFileServing` deliberately avoids serving SVG inline, and UI previews now gate SVG rendering on an opt-in `file.previewSvg` config option (default: `false`).
 
-Suggested mitigation:
+Resolution:
 
-- Treat SVG as non-previewable (show metadata + download only).
+- SVG is non-previewable by default (shows metadata + download only).
+- Integrators can opt-in per column: `$cms({ file: { previewSvg: true } })`.
 
 ### 5) Presigned PUT binds request `Content-Length`/`Content-Type` (but not bytes) (Updated)
 

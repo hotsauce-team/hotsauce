@@ -66,21 +66,37 @@ function safeJsonForHtml(value: unknown): string {
 /** Default max file size for S3 uploads: 10MB. Set maxSize: 0 in $cms() to disable. */
 export const S3_DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
 
+function resolveFileConfig(
+  fieldConfig: Record<string, unknown> | undefined,
+): Record<string, unknown> | null {
+  if (!fieldConfig) return null;
+  const fileConfig = fieldConfig.file;
+
+  if (fileConfig === true) {
+    return {};
+  }
+  if (fileConfig && typeof fileConfig === 'object') {
+    return fileConfig as Record<string, unknown>;
+  }
+  return null;
+}
+
 /**
  * Validate a presign request against column $cms() options.
  * Returns `{ error: string }` if invalid, `null` if valid.
  *
  * Applies S3_DEFAULT_MAX_SIZE (10MB) when no explicit maxSize is set.
- * Set `$cms({ file: true, maxSize: 0 })` to disable the size limit.
+ * Set `$cms({ file: { maxSize: 0 } })` to disable the size limit.
  */
 export function validatePresignRequest(
   body: { filename: string; contentType: string; size: number },
   fieldConfig: Record<string, unknown> | undefined,
 ): { error: string } | null {
-  if (!fieldConfig) return null;
+  const normalizedConfig = resolveFileConfig(fieldConfig);
+  if (!normalizedConfig) return null;
 
-  const maxSize = fieldConfig.maxSize !== undefined
-    ? fieldConfig.maxSize as number
+  const maxSize = typeof normalizedConfig.maxSize === 'number'
+    ? normalizedConfig.maxSize
     : S3_DEFAULT_MAX_SIZE;
   if (maxSize > 0 && body.size > maxSize) {
     const label = maxSize >= 1_048_576
@@ -106,7 +122,9 @@ export function validatePresignRequest(
     }
   }
 
-  const accept = fieldConfig.accept as string | undefined;
+  const accept = typeof normalizedConfig.accept === 'string'
+    ? normalizedConfig.accept
+    : undefined;
   if (accept && accept !== '*/*') {
     const patterns = accept.split(',').map((p) => p.trim().toLowerCase());
     const type = body.contentType.toLowerCase();
@@ -560,8 +578,14 @@ export function createS3StoragePlugin(
             "frame-ancestors 'none'",
           ].join('; ');
 
-          const acceptAttr = ctx.field?.config?.accept
-            ? ` accept="${ctx.field.config.accept}"`
+          const resolvedFieldConfig = resolveFileConfig(
+            ctx.field?.config as Record<string, unknown> | undefined,
+          );
+          const acceptValue = resolvedFieldConfig?.accept;
+          const maxSizeValue = resolvedFieldConfig?.maxSize;
+
+          const acceptAttr = typeof acceptValue === 'string'
+            ? ` accept="${acceptValue}"`
             : '';
 
           const uploadCssUrl =
@@ -576,10 +600,10 @@ export function createS3StoragePlugin(
             column,
             csrfToken: ctx.csrfToken,
             sourceToken: ctx.sourceToken,
-            maxSize: ctx.field?.config?.maxSize !== undefined
-              ? ctx.field.config.maxSize
+            maxSize: typeof maxSizeValue === 'number'
+              ? maxSizeValue
               : S3_DEFAULT_MAX_SIZE,
-            accept: ctx.field?.config?.accept ?? null,
+            accept: typeof acceptValue === 'string' ? acceptValue : null,
           });
 
           const page = html`

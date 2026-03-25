@@ -30,6 +30,23 @@ export type PluginColumnConfig =
     [key: string]: unknown;
   };
 
+/**
+ * Configuration for file fields.
+ *
+ * - `true`: Shorthand for using default file validation options
+ * - Object: Explicit file validation options
+ */
+export type FileColumnConfig =
+  | true
+  | {
+    /** MIME type filter for file input (default: 'image/*') */
+    accept?: string;
+    /** Maximum file size in bytes (default: 200000 = 200KB) */
+    maxSize?: number;
+    /** Allow SVG previews in UI (default: false) */
+    previewSvg?: boolean;
+  };
+
 // ─────────────────────────────────────────────────────────────
 // Column-level CMS options
 // ─────────────────────────────────────────────────────────────
@@ -40,11 +57,7 @@ export type PluginColumnConfig =
  */
 export type CmsColumnOptions = {
   /** Treat this column as a file reference (UI: file input). */
-  file?: boolean;
-  /** MIME type filter for file input (default: 'image/*'). Only used when file: true. */
-  accept?: string;
-  /** Maximum file size in bytes (default: 200000 = 200KB). Only used when file: true. */
-  maxSize?: number;
+  file?: FileColumnConfig;
   /** Hide this field from all CMS views (forms, lists, detail). Still saved to DB. */
   hidden?: boolean;
   /** Show this field but prevent editing. */

@@ -160,19 +160,19 @@ The plugin validates file size and content type **before** generating a presigne
 file: jsonb('file').$cms({ file: true }),
 
 // Custom: 50MB limit, images only
-photo: jsonb('photo').$cms({ file: true, maxSize: 50 * 1024 * 1024, accept: 'image/*' }),
+photo: jsonb('photo').$cms({ file: { maxSize: 50 * 1024 * 1024, accept: 'image/*' } }),
 
 // Unlimited size (opt out of default)
-video: jsonb('video').$cms({ file: true, maxSize: 0 }),
+video: jsonb('video').$cms({ file: { maxSize: 0 } }),
 
 // Multiple accepted types
-document: jsonb('document').$cms({ file: true, accept: 'image/*,application/pdf' }),
+document: jsonb('document').$cms({ file: { accept: 'image/*,application/pdf' } }),
 ```
 
-| `$cms()` option | Type     | Default  | Description                                        |
-| --------------- | -------- | -------- | -------------------------------------------------- |
-| `maxSize`       | `number` | 10MB     | Max file size in bytes. `0` = unlimited.           |
-| `accept`        | `string` | _(none)_ | MIME pattern(s): `image/*`, `image/png,image/jpeg` |
+| `$cms().file` option | Type     | Default  | Description                                        |
+| -------------------- | -------- | -------- | -------------------------------------------------- |
+| `maxSize`            | `number` | 10MB     | Max file size in bytes. `0` = unlimited.           |
+| `accept`             | `string` | _(none)_ | MIME pattern(s): `image/*`, `image/png,image/jpeg` |
 
 The upload page shows hints ("Max size: 10MB") and sets the `accept` attribute on the file input for OS-level filtering.
 

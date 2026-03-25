@@ -56,8 +56,7 @@ export const authors = pgTable('authors', {
 export const media = pgTable('media', {
   id: serial('id').primaryKey(),
   file: jsonb('file').$type<FileReference>().$cms({
-    file: true,
-    accept: 'image/*',
+    file: { accept: 'image/*' },
   }),
   alt: text('alt'),
   caption: text('caption'),
@@ -145,8 +144,8 @@ export const adminUsers = pgTable('admin_users', {
   name: varchar('name', { length: 100 }).notNull(),
   role: varchar('role', { length: 50 }).default('editor').notNull(),
   avatar: jsonb('avatar').$type<FileReference>().$cms({
-    file: true,
-    maxSize: 20 * 1024, // 20KB - always stored in database
+    // 20KB - always stored in database
+    file: { maxSize: 20 * 1024 },
   }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

@@ -45,7 +45,7 @@ import {
   validateAutoDraft,
   validateCmsOptions,
   validateCspOptions,
-  validateFileColumns,
+  validateFileColumnsAndConfigs,
   validateResolvedSecrets,
 } from './validation.ts';
 import { getEnv } from './runtime-compat.ts';
@@ -124,7 +124,7 @@ export {
   ResolvedSecretsSchema,
   validateAutoDraft,
   validateCmsOptions,
-  validateFileColumns,
+  validateFileColumnsAndConfigs,
   validateResolvedSecrets,
 } from './validation.ts';
 
@@ -825,7 +825,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     : introspectFullSchema(options.schema);
 
   // Validate file column configurations (file: true must be on JSON columns)
-  validateFileColumns(introspected);
+  validateFileColumnsAndConfigs(introspected);
 
   // Validate autoDraft tables (all non-PK columns must have defaults or be nullable)
   validateAutoDraft(introspected);
