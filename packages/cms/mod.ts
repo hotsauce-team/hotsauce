@@ -19,6 +19,7 @@ import type {
 import type { Policies } from './policies/types.ts';
 import {
   introspectFullSchema,
+  isValidFileKey,
   isValidFileReference,
   mapColumnToFieldType,
 } from '@hotsauce/core';
@@ -1635,6 +1636,12 @@ async function handleFileServing(
 
   // If file has storage + key, get signed URL from provider
   if (fileData.key) {
+    // Defense-in-depth: validate key belongs to this table/column/record
+    // Prevents signing arbitrary keys if DB is tampered with
+    if (!isValidFileKey(fileData.key, tableName, columnName, recordId)) {
+      return notFound('Invalid file key');
+    }
+
     // Determine storage provider ID using fallback rules:
     // 1. Use explicit storage field if present
     // 2. Fall back to defaultObjectStorageId from config

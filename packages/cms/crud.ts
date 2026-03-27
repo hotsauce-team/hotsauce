@@ -100,6 +100,8 @@ import {
  * data integrity issue.
  *
  * @param storage - Storage registry
+ * @param tableName - Table name (for key validation)
+ * @param recordId - Record ID (for key validation)
  * @param oldRecord - Record before update
  * @param newValues - Values being written
  * @param fileColumns - File column metadata
@@ -109,6 +111,8 @@ import {
  */
 async function deleteOldFileObjects(
   storage: StorageRegistry | undefined,
+  tableName: string,
+  recordId: string | number,
   oldRecord: Record<string, unknown>,
   newValues: Record<string, unknown>,
   fileColumns: Array<{ propertyName: string; name: string }>,
@@ -139,6 +143,18 @@ async function deleteOldFileObjects(
 
     // Old file is being cleared or replaced - delete it
     if (oldValue.key) {
+      // Defense-in-depth: validate key belongs to this table/column/record
+      // Skip deletion if key is invalid (prevents deleting arbitrary keys if DB tampered)
+      if (!isValidFileKey(oldValue.key, tableName, col.name, recordId)) {
+        const expectedPrefix = getFileKeyPrefix(tableName, col.name, recordId);
+        onError?.(
+          new Error(
+            `Skipping deletion of invalid key: ${oldValue.key} (expected prefix: ${expectedPrefix})`,
+          ),
+        );
+        continue;
+      }
+
       const storageId = oldValue.storage ?? storage.defaultObjectStorageId;
       if (!storageId) continue;
 
@@ -1522,6 +1538,8 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       if (fileColumns.length > 0) {
         await deleteOldFileObjects(
           options.storage,
+          table.name,
+          recordId,
           record,
           dataToUpdate,
           fileColumns,
@@ -1768,6 +1786,8 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       }
       await deleteOldFileObjects(
         options.storage,
+        table.name,
+        recordId,
         recordToDelete,
         clearedFileValues,
         fileColumns.map((col) => ({

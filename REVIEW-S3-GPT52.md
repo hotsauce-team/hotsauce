@@ -47,7 +47,7 @@ Strong security posture improvements overall (CSRF enforcement, source tokens, p
 
 ## Issues / risks (security-focused)
 
-### 1) Arbitrary object-key signing/deletion if DB is tampered (Medium)
+### 1) Arbitrary object-key signing/deletion if DB is tampered (Medium) (Addressed)
 
 There are a couple places that assume the DB only contains keys minted by the CMS:
 
@@ -63,6 +63,12 @@ Suggested mitigation (low-cost, defense-in-depth):
 
 - Before signing or deleting, validate keys with `isValidFileKey(key, tableName, columnName, recordId)`.
 - If invalid: return `404` for serving and skip deletion.
+
+Resolution:
+
+- `handleFileServing`: validates key prefix before signing, returns 404 if invalid
+- `deleteOldFileObjects`: validates key prefix before deletion, skips and logs via `onError` if invalid
+- Tests added for both positive and negative cases
 
 ### 2) `FileReference.url` safe-scheme checks in UI (Medium) (Addressed)
 
@@ -129,12 +135,12 @@ This is probably acceptable (plugins are integrator-controlled), but it’s wort
 
 ## Test status
 
-- `deno task test` passed: `1108 passed | 0 failed`.
+- `deno task test` passed: `1145 passed | 0 failed`.
 
 ## Suggested follow-ups (ordered)
 
-1. Add key-prefix validation in file serving + deletion paths (defense-in-depth).
-2. Disable SVG previews.
+1. ~~Add key-prefix validation in file serving + deletion paths (defense-in-depth).~~ ✅ Done
+2. ~~Disable SVG previews.~~ ✅ Done (opt-in via `previewSvg`)
 3. Document the “PUT presign doesn’t bind type/size” tradeoff; optionally add backend enforcement guidance.
 4. Put guardrails around orphan cleanup cost (paging/limits or async).
 

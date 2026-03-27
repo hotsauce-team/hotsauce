@@ -2238,5 +2238,263 @@ Deno.test('integration: file key tampering prevention', async (t) => {
     },
   );
 
+  // ──────────────────────────────────────────────────────────
+  // Defense-in-depth: key validation in file serving and deletion
+  // ──────────────────────────────────────────────────────────
+
+  await t.step(
+    'file serving returns 404 for tampered key (wrong prefix)',
+    async () => {
+      await resetDb();
+
+      // Simulate DB tampering: insert a record with a key that
+      // doesn't match the expected {table}/{column}/{recordId}/ prefix
+      await db.insert(profiles).values({
+        name: 'Tampered Record',
+        avatar: {
+          filename: 'tampered.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'other-table/other-column/999/secret-file.png', // Wrong prefix
+          storage: 's3',
+        },
+      });
+
+      let signCalled = false;
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              signDownloadUrl: () => {
+                signCalled = true;
+                return Promise.resolve('https://s3.example.com/signed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+      );
+      const response = await handler(request);
+
+      // Should return 404, not sign the tampered key
+      assertEquals(response.status, 404);
+      assertEquals(signCalled, false);
+    },
+  );
+
+  await t.step(
+    'file serving accepts valid key (correct prefix)',
+    async () => {
+      await resetDb();
+
+      // Valid key with correct prefix
+      await db.insert(profiles).values({
+        name: 'Valid Record',
+        avatar: {
+          filename: 'valid.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'profiles/avatar/1/valid-uuid.png', // Correct prefix
+          storage: 's3',
+        },
+      });
+
+      let signedKey: string | null = null;
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              signDownloadUrl: (ctx) => {
+                signedKey = ctx.key;
+                return Promise.resolve('https://s3.example.com/signed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+      );
+      const response = await handler(request);
+
+      // Should redirect to signed URL
+      assertEquals(response.status, 302);
+      assertEquals(signedKey, 'profiles/avatar/1/valid-uuid.png');
+    },
+  );
+
+  await t.step(
+    'delete skips invalid key and calls onError (defense-in-depth)',
+    async () => {
+      await resetDb();
+
+      // Simulate DB tampering: record has a key with wrong prefix
+      await db.insert(profiles).values({
+        name: 'Tampered for Delete',
+        avatar: {
+          filename: 'tampered.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'other-table/other-column/999/should-not-delete.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+      const errors: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+            },
+          },
+        ],
+        storage: 's3',
+        onError: (err) => {
+          errors.push(err.message);
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Delete should succeed (DB record removed)
+      assertEquals(response.status, 303);
+
+      // But the tampered key should NOT be deleted from storage
+      assertEquals(deletedKeys.length, 0);
+
+      // onError should be called with the validation failure
+      assertEquals(errors.length > 0, true);
+      assertStringIncludes(errors[0] ?? '', 'Skipping deletion of invalid key');
+    },
+  );
+
+  await t.step(
+    'delete removes valid key (correct prefix)',
+    async () => {
+      await resetDb();
+
+      // Valid key with correct prefix
+      await db.insert(profiles).values({
+        name: 'Valid for Delete',
+        avatar: {
+          filename: 'valid.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'profiles/avatar/1/valid-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Delete should succeed
+      assertEquals(response.status, 303);
+
+      // Valid key should be deleted
+      assertEquals(deletedKeys.length, 1);
+      assertEquals(deletedKeys[0], 'profiles/avatar/1/valid-uuid.png');
+    },
+  );
+
   await client.close();
 });
