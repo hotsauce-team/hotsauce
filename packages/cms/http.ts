@@ -48,9 +48,23 @@ export function buildSecurityHeaders(
   };
 }
 
+/**
+ * Normalize a CSP source to an origin.
+ * URLs with paths are stripped to just the origin (CSP ignores paths for most directives).
+ * Non-URL values (like 'self' or blob:) are returned as-is.
+ */
+function normalizeOrigin(source: string): string {
+  try {
+    const url = new URL(source);
+    return url.origin;
+  } catch {
+    return source;
+  }
+}
+
 function joinOrigins(origins?: string[]): string {
   if (!origins?.length) return '';
-  return ' ' + origins.join(' ');
+  return ' ' + origins.map(normalizeOrigin).join(' ');
 }
 
 /** Default security headers (no CSP extensions) */

@@ -31,13 +31,19 @@ const s3Plugin = createS3StoragePlugin({
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
 });
 
+const s3Endpoint = 'https://s3.us-east-1.amazonaws.com';
+
 const handler = createCmsHandler({
   db,
   schema,
   plugins: [s3Plugin],
   storage: 's3', // Route file fields to this plugin
+  // Required: allow browser to upload directly to S3
+  csp: { connectSrc: [s3Endpoint] },
 });
 ```
+
+> **Important:** You must configure `csp.connectSrc` with your S3 endpoint for uploads to work. The CMS enforces security headers — plugins cannot override them.
 
 ## Configuration Options
 
@@ -184,9 +190,38 @@ The upload page shows hints ("Max size: 10MB") and sets the `accept` attribute o
 - Time-limited (default: 15 minutes)
 - Scoped to specific object key
 - Use AWS Signature V4 (HMAC-SHA256)
+- Sign `Content-Length` and `Content-Type` headers
 
-> **Note:** Content-Type is intentionally NOT included in the signature. This avoids
-> MinIO/CORS issues with unsigned headers. The browser sets Content-Type from the file.
+#### What's Enforced
+
+The presigned URL binds the exact `Content-Length` and `Content-Type` that the client must send. S3/MinIO will reject uploads where these headers don't match exactly (typically `SignatureDoesNotMatch`).
+
+**This prevents:**
+
+- "Presign small, upload big" attacks — client can't claim a small file then upload a large one
+- Content-Type spoofing at the header level — the declared type must match what was signed
+
+#### What's NOT Enforced
+
+The signature does **not** validate that the uploaded bytes actually match the declared MIME type. A client can upload arbitrary bytes while sending the signed Content-Type header.
+
+**Example:** A presigned URL for `image/png` will accept any bytes as long as the client sends `Content-Type: image/png` in the request headers.
+
+**If you need byte-level validation:**
+
+- Implement a post-upload content sniffing step (Lambda/edge function)
+- Use S3 Object Lambda to validate on read
+- Run antivirus scanning on uploaded objects
+
+#### Compatibility Note
+
+Signing `Content-Length` and `Content-Type` increases coupling to client/browser behavior. Some scenarios may cause signature mismatches:
+
+- Streaming/chunked uploads (no Content-Length)
+- Intermediaries that normalize headers
+- Certain S3-compatible vendors with different header handling
+
+If you encounter issues, check that the client sends these headers exactly as returned from the presign endpoint.
 
 ### Policy Integration
 

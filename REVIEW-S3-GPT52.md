@@ -108,7 +108,7 @@ Mitigation options (depending on strictness):
 - If you need storage-enforced _ranges_ (not exact lengths), consider presigned POST policies (`content-length-range`).
 - If you need byte-level type validation, you need a separate content sniffing/processing step (not provided by SigV4 signing).
 
-### 6) Orphan cleanup can be used as a performance lever (Low → Medium DoS)
+### 6) Orphan cleanup can be used as a performance lever (Low → Medium DoS) (Addressed)
 
 `cleanupOrphanFileObjects()` can call `provider.listObjects(prefix)` during an update. The S3 plugin implementation:
 
@@ -119,19 +119,22 @@ Risk:
 
 - A prefix with many objects can slow down updates (and could be weaponized if an attacker can cause many uploads under one prefix).
 
-Suggested mitigation:
+Resolution:
 
-- Add paging/limits (`max-keys`) and continuation handling, or cap deletions per request.
-- Consider making orphan cleanup asynchronous/out-of-band.
+- Parallelized orphan deletion with max 10 concurrent operations (sliding window pattern)
+- Prevents sequential deletion from blocking updates for extended periods
+- Test verifies concurrency is capped at 10
 
 ### 7) In-process plugin routes can weaken security headers (Footgun)
 
-For in-process plugin route handlers that return `Response` with `text/html`, CMS merges defaults but **plugin headers win** (including CSP).
+**✅ Addressed** — CMS now enforces all security headers on plugin HTML responses. Plugins cannot override CSP, X-Frame-Options, etc.
 
-This is probably acceptable (plugins are integrator-controlled), but it’s worth calling out in docs:
+**Changes made:**
 
-- If a plugin route sets a permissive CSP, it can re-enable XSS primitives for that page.
-- Consider optionally enforcing non-negotiable headers like `frame-ancestors 'none'`.
+- `packages/cms/mod.ts`: Changed header merging to replace, not merge
+- `packages/plugins/s3-storage/mod.ts`: Removed custom CSP — uses CMS CSP via `csp.connectSrc` config
+- Added documentation that users must configure `csp.connectSrc` for S3 uploads
+- Test updated to verify CMS headers are enforced over plugin-set headers
 
 ## Test status
 
@@ -141,8 +144,8 @@ This is probably acceptable (plugins are integrator-controlled), but it’s wort
 
 1. ~~Add key-prefix validation in file serving + deletion paths (defense-in-depth).~~ ✅ Done
 2. ~~Disable SVG previews.~~ ✅ Done (opt-in via `previewSvg`)
-3. Document the “PUT presign doesn’t bind type/size” tradeoff; optionally add backend enforcement guidance.
-4. Put guardrails around orphan cleanup cost (paging/limits or async).
+3. ~~Document the "PUT presign doesn't bind type/size" tradeoff; optionally add backend enforcement guidance.~~ ✅ Done (S3 README updated)
+4. ~~Put guardrails around orphan cleanup cost (paging/limits or async).~~ ✅ Done (parallelized with max 10 concurrent)
 
 ### Deeper review
 
@@ -219,5 +222,44 @@ This section explores additional security avenues beyond the immediate S3/file U
 
 #### Security headers and plugin routes
 
-- Built-in `securityHeaders` are applied broadly.
-- For plugin routes returning HTML `Response`, plugin-set CSP can weaken protections. If you want a “minimum bar”, consider enforcing a non-overridable subset (e.g., `frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`).
+**✅ Resolved** — CMS now enforces all security headers on plugin HTML responses. Plugins set `Content-Type` only; CSP extensions (e.g., `connectSrc` for S3) are configured centrally in `CmsOptions`.
+
+**Additional hardening:**
+
+- CSP origins are normalized (paths stripped) — `https://s3.example.com/bucket/path` becomes `https://s3.example.com`
+- Known limitation: plugins returning HTML without `Content-Type: text/html` only get `nosniff` header (plugin bug, acceptable)
+
+---
+
+## Checklist
+
+### Core Issues (1-7)
+
+- [x] **#1** Key signing/deletion validation (defense-in-depth)
+- [x] **#2** FileReference.url safe-scheme checks
+- [x] **#3** Reverse tabnabbing (`rel="noopener"`)
+- [x] **#4** SVG preview disabled by default (`previewSvg` opt-in)
+- [x] **#5** Presign tradeoffs documented (README updated)
+- [x] **#6** Orphan cleanup DoS mitigation (parallelized, max 10 concurrent)
+- [x] **#7** Plugin security headers enforced (plugins cannot weaken CSP)
+- [x] **#8** CSP origins normalized (paths stripped automatically)
+
+### Suggested Follow-ups
+
+- [x] Key-prefix validation in file serving + deletion
+- [x] SVG preview opt-in
+- [x] Document presign tradeoffs
+- [x] Orphan cleanup guardrails
+
+### Deeper Review (Optional Hardening)
+
+- [ ] S3 upload page: use `attrs({ accept })` instead of `raw(acceptAttr)`
+- [ ] Inline JS confirm(): refactor to remove `'unsafe-hashes'` from CSP
+- [ ] Open redirects: optional host allowlist for file serving redirects
+- [ ] SameSite cookie documentation (outside this diff)
+- [ ] Plugin route authorization docs: clarify routes without `:table` param
+- [ ] STS/session token support (`X-Amz-Security-Token`)
+- [ ] Signing key cache: include `secretAccessKey` in cache key for rotation safety
+- [ ] Orphan cleanup: add `max-keys` pagination to listObjects
+- [ ] Rate limiting guidance for presign endpoints
+- [ ] Docs: warn about logging `onError` contexts with secrets/PII

@@ -35,7 +35,7 @@
 
 - [x] **Column auth uses `request.method` not `routeAction`** — Plugin route column policy checks use `request.method === 'POST'` to decide read vs write; PUT/PATCH/DELETE treated as read-only. Use `routeAction`/`inferPluginRouteAction()` instead (`mod.ts` L573-574) [#discussion_r2970347390](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347390)
 - [x] **Upload page XSS** — Escape `table`, `id`, `column` with `escapeHtml()` from `@hotsauce/ui` [#discussion_r2970063213](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063213)
-- [x] **Plugin route responses missing security headers** — Merge CMS security headers into plugin HTML responses (plugin headers win); skip non-HTML responses [#discussion_r2970063199](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063199) [#discussion_r2970063204](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063204)
+- [x] **Plugin route responses missing security headers** — CMS enforces all security headers on plugin HTML responses; plugins cannot override CSP (strengthened from "plugin headers win" to "CMS headers win") [#discussion_r2970063199](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063199) [#discussion_r2970063204](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970063204)
 - [-] **POST body unbounded read** — Deferred to #39. Auth-gated (low risk); per-route `maxBodySize` design agreed [#discussion_r2970347434](https://github.com/hotsauce-team/hotsauce/pull/36#discussion_r2970347434)
 
 ### Storage Validation — Should Fix

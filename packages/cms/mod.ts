@@ -618,17 +618,14 @@ async function handlePluginRoute(
       if (result instanceof Response) {
         const ct = result.headers.get('content-type') ?? '';
         if (ct.startsWith('text/html')) {
-          // Merge all security headers for HTML responses (plugin headers win)
+          // Enforce all security headers for HTML responses
+          // (plugins cannot override CSP, X-Frame-Options, etc.)
           for (const [k, v] of Object.entries(options.securityHeaders)) {
-            if (!result.headers.has(k)) {
-              result.headers.set(k, v);
-            }
+            result.headers.set(k, v);
           }
         } else {
-          // Non-HTML: only add nosniff (prevents MIME-sniffing of CSS/JS/JSON)
-          if (!result.headers.has('X-Content-Type-Options')) {
-            result.headers.set('X-Content-Type-Options', 'nosniff');
-          }
+          // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
+          result.headers.set('X-Content-Type-Options', 'nosniff');
         }
         return result;
       }

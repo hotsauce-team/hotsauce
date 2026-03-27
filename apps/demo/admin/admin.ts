@@ -58,8 +58,10 @@ export function createAdminHandler(db: Database) {
     storage: s3
       ? (ctx) => ctx.column === 'avatar' ? undefined : 's3'
       : undefined,
-    // Allow image previews from S3/MinIO endpoint on admin screens
-    csp: s3 ? { imgSrc: [s3.publicEndpoint] } : undefined,
+    // Allow S3/MinIO endpoint for uploads (connectSrc) and image previews (imgSrc)
+    csp: s3
+      ? { connectSrc: [s3.publicEndpoint], imgSrc: [s3.publicEndpoint] }
+      : undefined,
     onError: (error, context) =>
       // deno-lint-ignore no-console
       console.error('CMS Error:', { error, context }),

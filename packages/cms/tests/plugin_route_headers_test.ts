@@ -94,7 +94,7 @@ Deno.test('plugin route: security headers', async (t) => {
   );
 
   await t.step(
-    'HTML Response with custom CSP preserves plugin CSP',
+    'HTML Response with custom headers gets CMS CSP enforced',
     async () => {
       const res = await handler(
         new Request(
@@ -102,12 +102,11 @@ Deno.test('plugin route: security headers', async (t) => {
         ),
       );
       assertEquals(res.status, 200);
-      // Plugin's CSP wins
-      assertEquals(
-        res.headers.get('Content-Security-Policy'),
-        "default-src 'self'; connect-src 'self' https://s3.example.com",
-      );
-      // Non-CSP headers still filled in by CMS
+      // CMS CSP enforced — plugins cannot override security headers
+      const csp = res.headers.get('Content-Security-Policy');
+      assertEquals(csp?.includes("frame-ancestors 'none'"), true);
+      assertEquals(csp?.includes('https://s3.example.com'), false);
+      // All security headers enforced by CMS
       assertEquals(res.headers.get('X-Frame-Options'), 'DENY');
       assertEquals(res.headers.get('X-Content-Type-Options'), 'nosniff');
       assertEquals(

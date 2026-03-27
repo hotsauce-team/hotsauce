@@ -561,23 +561,6 @@ export function createS3StoragePlugin(
             return new Response('Not found', { status: 404 });
           }
 
-          // Use publicEndpoint for CSP if available (browser-facing URL)
-          const uploadEndpoint = options.publicEndpoint || options.endpoint;
-          const s3Url = new URL(uploadEndpoint);
-          const s3Origin = s3Url.origin; // e.g., http://localhost:9000
-
-          // Build CSP for upload page — no unsafe-inline needed
-          // CSS and JS are served as external assets via plugin routes
-          const csp = [
-            "default-src 'self'",
-            "style-src 'self'",
-            "script-src 'self'",
-            `connect-src 'self' ${s3Origin}`, // S3 for upload
-            "img-src 'self' data:", // Preview
-            "form-action 'self'",
-            "frame-ancestors 'none'",
-          ].join('; ');
-
           const resolvedFieldConfig = resolveFileConfig(
             ctx.field?.config as Record<string, unknown> | undefined,
           );
@@ -659,13 +642,9 @@ export function createS3StoragePlugin(
             </html>
           `;
 
-          return new Response(page, {
-            status: 200,
-            headers: {
-              'Content-Type': 'text/html; charset=utf-8',
-              'Content-Security-Policy': csp,
-            },
-          });
+          // Return HTML string — CMS applies security headers
+          // (users must configure csp.connectSrc in CmsOptions for S3 uploads)
+          return page;
         },
       },
       // Presign endpoint (POST /admin/s3-storage/:table/:id/:column)

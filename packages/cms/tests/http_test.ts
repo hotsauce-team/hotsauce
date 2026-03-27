@@ -531,6 +531,20 @@ Deno.test('buildSecurityHeaders: preserves non-CSP headers', () => {
   );
 });
 
+Deno.test('buildSecurityHeaders: normalizes URLs to origins (strips paths)', () => {
+  const headers = buildSecurityHeaders({
+    connectSrc: ['https://s3.example.com/bucket/path'],
+    imgSrc: ['http://localhost:9000/uploads/'],
+  });
+  const csp = headers['Content-Security-Policy']!;
+
+  // Paths are stripped - only origins remain
+  assertEquals(csp.includes('https://s3.example.com/bucket'), false);
+  assertEquals(csp.includes("connect-src 'self' https://s3.example.com"), true);
+  assertEquals(csp.includes('http://localhost:9000/uploads'), false);
+  assertEquals(csp.includes('http://localhost:9000'), true);
+});
+
 Deno.test('htmlResponse: uses custom security headers when provided', () => {
   const custom = buildSecurityHeaders({
     imgSrc: ['https://s3.example.com'],
