@@ -2118,6 +2118,103 @@ Deno.test('integration: file key tampering prevention', async (t) => {
   );
 
   await t.step(
+    'orphan cleanup skips providers without deleteObject',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'No deleteObject',
+        avatar: {
+          filename: 'old.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/old-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      let errorLogged = false;
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              listObjects: () => {
+                return Promise.resolve([
+                  {
+                    key: 'profiles/avatar/1/old-orphan.png',
+                    lastModified: new Date('2025-01-01'),
+                    size: 1000,
+                  },
+                  {
+                    key: 'profiles/avatar/1/new-uuid.png',
+                    lastModified: new Date(),
+                    size: 3000,
+                  },
+                ]);
+              },
+              // No deleteObject — orphan cleanup (and eager delete) should be skipped
+            },
+          },
+        ],
+        storage: 's3',
+        onError: () => {
+          errorLogged = true;
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'No deleteObject');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 600,
+          key: 'profiles/avatar/1/new-uuid.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Update should succeed; orphan cleanup should be a no-op without deleteObject
+      assertEquals(response.status, 303);
+      assertEquals(errorLogged, false);
+
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as { key?: string } | null;
+      assertEquals(avatar?.key, 'profiles/avatar/1/new-uuid.png');
+    },
+  );
+
+  await t.step(
     'orphan cleanup skips recently uploaded files (grace period)',
     async () => {
       await resetDb();
@@ -2235,6 +2332,117 @@ Deno.test('integration: file key tampering prevention', async (t) => {
         deletedKeys.includes('profiles/avatar/1/new-uuid.png'),
         false,
       );
+    },
+  );
+
+  await t.step(
+    'orphan cleanup deletes with max 10 concurrent operations',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'Concurrency test',
+        avatar: {
+          filename: 'current.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/current.png',
+          storage: 's3',
+        },
+      });
+
+      let currentConcurrent = 0;
+      let maxConcurrent = 0;
+      const deletedKeys: string[] = [];
+
+      // Generate 25 orphan objects to test concurrency limiting
+      const orphanObjects = Array.from({ length: 25 }, (_, i) => ({
+        key: `profiles/avatar/1/orphan-${i}.png`,
+        lastModified: new Date('2025-01-01'),
+        size: 1000,
+      }));
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: async (ctx) => {
+                currentConcurrent++;
+                maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+
+                // Simulate network delay to allow concurrency to build up
+                await new Promise((r) => setTimeout(r, 10));
+
+                deletedKeys.push(ctx.key);
+                currentConcurrent--;
+              },
+              listObjects: () =>
+                Promise.resolve([
+                  // New file (won't be deleted - it's currentKey)
+                  {
+                    key: 'profiles/avatar/1/new.png',
+                    lastModified: new Date(),
+                    size: 1000,
+                  },
+                  ...orphanObjects,
+                ]),
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Concurrency test');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'profiles/avatar/1/new.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // 25 orphans + 1 old key (from deleteOldFileObjects) = 26
+      assertEquals(deletedKeys.length, 26);
+
+      // Max concurrent should be capped at 10
+      assertEquals(maxConcurrent <= 10, true);
+
+      // Should have had some concurrency (not all sequential)
+      assertEquals(maxConcurrent > 1, true);
     },
   );
 

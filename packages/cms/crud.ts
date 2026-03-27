@@ -220,6 +220,8 @@ async function cleanupOrphanFileObjects(
 
     const provider = storage.instances.get(storageId);
     if (!provider?.listObjects) continue;
+    const deleteObject = provider.deleteObject;
+    if (!deleteObject) continue;
 
     const prefix = getFileKeyPrefix(tableName, col.name, recordId);
     const currentKey = curValue.key;
@@ -227,26 +229,44 @@ async function cleanupOrphanFileObjects(
     try {
       const objects = await provider.listObjects(prefix);
 
-      for (const obj of objects) {
-        // Keep the current key
-        if (obj.key === currentKey) continue;
-
-        // Keep recently-uploaded objects (grace period)
+      // Filter to orphans (not current key, not recently uploaded)
+      const orphans = objects.filter((obj) => {
+        if (obj.key === currentKey) return false;
         if (
           obj.lastModified && now - obj.lastModified.getTime() < ORPHAN_GRACE_MS
-        ) continue;
+        ) return false;
+        return true;
+      });
 
-        try {
-          await provider.deleteObject!({
-            storage: storageId,
-            key: obj.key,
-            request,
-            user: authUser ? { sub: authUser.id, role: authUser.role } : null,
-          });
-        } catch (err) {
-          onError?.(err as Error);
+      // Delete with max 10 concurrent operations (sliding window)
+      const MAX_CONCURRENT = 10;
+      const pending = new Set<Promise<void>>();
+
+      for (const obj of orphans) {
+        const deletePromise = (async () => {
+          try {
+            await deleteObject({
+              storage: storageId,
+              key: obj.key,
+              request,
+              user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+            });
+          } catch (err) {
+            onError?.(err as Error);
+          }
+        })();
+
+        pending.add(deletePromise);
+        deletePromise.finally(() => pending.delete(deletePromise));
+
+        // Wait for one to complete if at max concurrency
+        if (pending.size >= MAX_CONCURRENT) {
+          await Promise.race(pending);
         }
       }
+
+      // Wait for remaining deletions
+      await Promise.all(pending);
     } catch (error) {
       onError?.(error as Error);
     }
