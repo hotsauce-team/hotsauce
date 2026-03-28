@@ -332,7 +332,7 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
 
     /**
      * List objects under a prefix (for orphan cleanup).
-     * Uses the S3 ListObjectsV2 API.
+     * Uses the S3 ListObjectsV2 API with pagination.
      */
     async listObjects(
       prefix: string,
@@ -348,49 +348,66 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
         })
         : options.bucket;
 
-      // Build the ListObjectsV2 URL: GET /{bucket}?list-type=2&prefix=...
-      const baseUrl = new URL(options.endpoint);
-      if (options.urlStyle === 'virtual-hosted') {
-        baseUrl.hostname = `${bucket}.${baseUrl.hostname}`;
-      } else {
-        baseUrl.pathname = `/${bucket}`;
-      }
-      baseUrl.searchParams.set('list-type', '2');
-      baseUrl.searchParams.set('prefix', prefix);
-
-      const url = baseUrl.toString();
-
-      const headers = await signHeaders({
-        method: 'GET',
-        url,
-        region: options.region,
-        accessKeyId: options.accessKeyId,
-        secretAccessKey: options.secretAccessKey,
-      });
-
-      const response = await fetch(url, { method: 'GET', headers });
-
-      if (!response.ok) {
-        throw new Error(
-          `ListObjectsV2 failed: ${response.status} ${response.statusText}`,
-        );
-      }
-
-      const xml = await response.text();
-
-      // Parse the XML response for <Contents> entries
       const results: Array<{ key: string; lastModified: Date; size: number }> =
         [];
-      const contentsRegex =
-        /<Contents>[\s\S]*?<Key>(.*?)<\/Key>[\s\S]*?<LastModified>(.*?)<\/LastModified>[\s\S]*?<Size>(.*?)<\/Size>[\s\S]*?<\/Contents>/g;
-      let match;
-      while ((match = contentsRegex.exec(xml)) !== null) {
-        results.push({
-          key: match[1]!,
-          lastModified: new Date(match[2]!),
-          size: parseInt(match[3]!, 10),
+      let continuationToken: string | undefined;
+
+      do {
+        // Build the ListObjectsV2 URL: GET /{bucket}?list-type=2&prefix=...
+        const baseUrl = new URL(options.endpoint);
+        if (options.urlStyle === 'virtual-hosted') {
+          baseUrl.hostname = `${bucket}.${baseUrl.hostname}`;
+        } else {
+          baseUrl.pathname = `/${bucket}`;
+        }
+        baseUrl.searchParams.set('list-type', '2');
+        baseUrl.searchParams.set('prefix', prefix);
+        baseUrl.searchParams.set('max-keys', '10');
+        if (continuationToken) {
+          baseUrl.searchParams.set('continuation-token', continuationToken);
+        }
+
+        const url = baseUrl.toString();
+
+        const headers = await signHeaders({
+          method: 'GET',
+          url,
+          region: options.region,
+          accessKeyId: options.accessKeyId,
+          secretAccessKey: options.secretAccessKey,
         });
-      }
+
+        const response = await fetch(url, { method: 'GET', headers });
+
+        if (!response.ok) {
+          throw new Error(
+            `ListObjectsV2 failed: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const xml = await response.text();
+
+        // Parse the XML response for <Contents> entries
+        const contentsRegex =
+          /<Contents>[\s\S]*?<Key>(.*?)<\/Key>[\s\S]*?<LastModified>(.*?)<\/LastModified>[\s\S]*?<Size>(.*?)<\/Size>[\s\S]*?<\/Contents>/g;
+        let match;
+        while ((match = contentsRegex.exec(xml)) !== null) {
+          results.push({
+            key: match[1]!,
+            lastModified: new Date(match[2]!),
+            size: parseInt(match[3]!, 10),
+          });
+        }
+
+        // Check for pagination
+        const isTruncated = /<IsTruncated>true<\/IsTruncated>/i.test(xml);
+        const tokenMatch = xml.match(
+          /<NextContinuationToken>(.*?)<\/NextContinuationToken>/,
+        );
+        continuationToken = isTruncated && tokenMatch
+          ? tokenMatch[1]
+          : undefined;
+      } while (continuationToken);
 
       return results;
     },

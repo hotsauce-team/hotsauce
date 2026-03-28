@@ -238,35 +238,19 @@ async function cleanupOrphanFileObjects(
         return true;
       });
 
-      // Delete with max 10 concurrent operations (sliding window)
-      const MAX_CONCURRENT = 10;
-      const pending = new Set<Promise<void>>();
-
-      for (const obj of orphans) {
-        const deletePromise = (async () => {
-          try {
-            await deleteObject({
-              storage: storageId,
-              key: obj.key,
-              request,
-              user: authUser ? { sub: authUser.id, role: authUser.role } : null,
-            });
-          } catch (err) {
-            onError?.(err as Error);
-          }
-        })();
-
-        pending.add(deletePromise);
-        deletePromise.finally(() => pending.delete(deletePromise));
-
-        // Wait for one to complete if at max concurrency
-        if (pending.size >= MAX_CONCURRENT) {
-          await Promise.race(pending);
+      // Delete all orphans concurrently
+      await Promise.all(orphans.map(async (obj) => {
+        try {
+          await deleteObject({
+            storage: storageId,
+            key: obj.key,
+            request,
+            user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+          });
+        } catch (err) {
+          onError?.(err as Error);
         }
-      }
-
-      // Wait for remaining deletions
-      await Promise.all(pending);
+      }));
     } catch (error) {
       onError?.(error as Error);
     }

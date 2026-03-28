@@ -490,3 +490,149 @@ Deno.test('presign validation: uppercase extension is validated', () => {
   const result = validatePresignRequest(body, config);
   assertEquals(result, null);
 });
+
+// ─────────────────────────────────────────────────────────────
+// ListObjectsV2 Pagination Tests
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('listObjects: paginates through multiple pages', async () => {
+  // Track fetch calls
+  const fetchCalls: string[] = [];
+  const originalFetch = globalThis.fetch;
+
+  // Mock fetch to return paginated responses
+  globalThis.fetch = ((input: string | URL | Request) => {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.toString()
+      : input.url;
+    fetchCalls.push(url);
+
+    // First page: truncated with continuation token
+    if (!url.includes('continuation-token')) {
+      return Promise.resolve(
+        new Response(
+          `<?xml version="1.0" encoding="UTF-8"?>
+        <ListBucketResult>
+          <IsTruncated>true</IsTruncated>
+          <NextContinuationToken>token-page-2</NextContinuationToken>
+          <Contents>
+            <Key>prefix/file1.png</Key>
+            <LastModified>2024-01-01T00:00:00.000Z</LastModified>
+            <Size>1000</Size>
+          </Contents>
+          <Contents>
+            <Key>prefix/file2.png</Key>
+            <LastModified>2024-01-02T00:00:00.000Z</LastModified>
+            <Size>2000</Size>
+          </Contents>
+        </ListBucketResult>`,
+          { status: 200 },
+        ),
+      );
+    }
+
+    // Second page: not truncated (final page)
+    return Promise.resolve(
+      new Response(
+        `<?xml version="1.0" encoding="UTF-8"?>
+      <ListBucketResult>
+        <IsTruncated>false</IsTruncated>
+        <Contents>
+          <Key>prefix/file3.png</Key>
+          <LastModified>2024-01-03T00:00:00.000Z</LastModified>
+          <Size>3000</Size>
+        </Contents>
+      </ListBucketResult>`,
+        { status: 200 },
+      ),
+    );
+  }) as typeof fetch;
+
+  try {
+    // Import and create the storage provider
+    const { createS3StoragePlugin } = await import('../mod.ts');
+    const plugin = createS3StoragePlugin({
+      endpoint: 'http://localhost:9000',
+      region: 'us-east-1',
+      bucket: 'test-bucket',
+      accessKeyId: 'test-key',
+      secretAccessKey: 'test-secret',
+      urlStyle: 'path',
+      basePath: '/admin',
+    });
+
+    const provider = plugin.storageProvider!;
+    const results = await provider.listObjects!('prefix/');
+
+    // Should have made 2 fetch calls (2 pages)
+    assertEquals(fetchCalls.length, 2);
+
+    // First call should not have continuation token
+    assertEquals(fetchCalls[0]!.includes('continuation-token'), false);
+
+    // Second call should have continuation token
+    assertStringIncludes(fetchCalls[1]!, 'continuation-token=token-page-2');
+
+    // Should have all 3 objects from both pages
+    assertEquals(results.length, 3);
+    assertEquals(results[0]!.key, 'prefix/file1.png');
+    assertEquals(results[1]!.key, 'prefix/file2.png');
+    assertEquals(results[2]!.key, 'prefix/file3.png');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+Deno.test('listObjects: single page (not truncated) makes one request', async () => {
+  const fetchCalls: string[] = [];
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = ((input: string | URL | Request) => {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.toString()
+      : input.url;
+    fetchCalls.push(url);
+
+    return Promise.resolve(
+      new Response(
+        `<?xml version="1.0" encoding="UTF-8"?>
+      <ListBucketResult>
+        <IsTruncated>false</IsTruncated>
+        <Contents>
+          <Key>prefix/only-file.png</Key>
+          <LastModified>2024-01-01T00:00:00.000Z</LastModified>
+          <Size>500</Size>
+        </Contents>
+      </ListBucketResult>`,
+        { status: 200 },
+      ),
+    );
+  }) as typeof fetch;
+
+  try {
+    const { createS3StoragePlugin } = await import('../mod.ts');
+    const plugin = createS3StoragePlugin({
+      endpoint: 'http://localhost:9000',
+      region: 'us-east-1',
+      bucket: 'test-bucket',
+      accessKeyId: 'test-key',
+      secretAccessKey: 'test-secret',
+      urlStyle: 'path',
+      basePath: '/admin',
+    });
+
+    const provider = plugin.storageProvider!;
+    const results = await provider.listObjects!('prefix/');
+
+    // Only 1 fetch call for non-truncated response
+    assertEquals(fetchCalls.length, 1);
+    assertEquals(results.length, 1);
+    assertEquals(results[0]!.key, 'prefix/only-file.png');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
