@@ -26,16 +26,27 @@ const UNSIGNED_PAYLOAD = 'UNSIGNED-PAYLOAD';
  * Cache for derived signing keys.
  * Keys are expensive to derive (4 HMAC operations), so we cache them.
  *
- * Cache key format: `${accessKeyId}:${date}:${region}:s3`
+ * Cache key format: `${accessKeyId}:${secretFingerprint}:${date}:${region}:s3`
  * This ensures keys are NOT reused across:
  * - Different credentials (accessKeyId)
+ * - Different secret values (rotation safety)
  * - Different dates (SigV4 keys are date-scoped)
  * - Different regions
  *
  * MUST-Address #2: Safe caching under tenant-dynamic credentials
- * The cache key includes accessKeyId, preventing cross-tenant key reuse.
+ * The cache key includes accessKeyId + secret hash, preventing stale cache
+ * reuse when secrets rotate for the same access key ID.
  */
 const signingKeyCache = new Map<string, ArrayBuffer>();
+
+/**
+ * Generate a compact SHA-256 fingerprint for cache partitioning.
+ * Used only to avoid embedding raw secrets in cache keys.
+ */
+async function getSecretFingerprint(secretAccessKey: string): Promise<string> {
+  // 64-bit prefix of SHA-256 is sufficient for cache partitioning.
+  return toHex(await sha256(secretAccessKey)).slice(0, 16);
+}
 
 /**
  * Get cache key for signing key derivation.
@@ -43,10 +54,11 @@ const signingKeyCache = new Map<string, ArrayBuffer>();
  */
 function getSigningKeyCacheKey(
   accessKeyId: string,
+  secretFingerprint: string,
   dateStamp: string,
   region: string,
 ): string {
-  return `${accessKeyId}:${dateStamp}:${region}:s3`;
+  return `${accessKeyId}:${secretFingerprint}:${dateStamp}:${region}:s3`;
 }
 
 /**
@@ -152,8 +164,15 @@ export async function getSigningKey(
   region: string,
   accessKeyId: string,
 ): Promise<ArrayBuffer> {
+  const secretFingerprint = await getSecretFingerprint(secretAccessKey);
+
   // Check cache first
-  const cacheKey = getSigningKeyCacheKey(accessKeyId, dateStamp, region);
+  const cacheKey = getSigningKeyCacheKey(
+    accessKeyId,
+    secretFingerprint,
+    dateStamp,
+    region,
+  );
   const cached = signingKeyCache.get(cacheKey);
   if (cached) {
     return cached;

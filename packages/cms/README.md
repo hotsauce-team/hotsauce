@@ -2186,8 +2186,20 @@ interface PluginRouteContext {
 - Filter receives `hookType: 'route'` so you can handle routes separately from hooks
 - If `:table` param references a known table, `canAccess` is checked
 - POST requests validate CSRF tokens automatically
-- Row policies filter which records are accessible
-- Column policies filter which fields are visible in `ctx.record`
+- Row and column policies are applied only when both `:table` and `:id` are present
+
+**Authorization behavior by route shape:**
+
+- Route includes `:table` and `:id`:
+  - `filter` + `canAccess` + row policy + column policy are applied before populating `ctx.record`/`ctx.field`.
+- Route includes `:table` but no `:id`:
+  - `filter` + `canAccess` are applied.
+  - Row/column policy filtering does not run automatically because no specific record is loaded.
+- Route has no `:table` param:
+  - `filter` is the primary authorization guard (plus authentication + CSRF for POST).
+  - `canAccess` is not invoked because there is no table context.
+
+For routes without `:table`, use a restrictive `filter` and explicit checks inside your handler for any sensitive operation.
 
 **Important:** Plugin routes are subject to the same `filter` function as hooks. If your filter blocks a table, routes to that table will return 403 without fetching any data. This prevents data exfiltration via plugin routes:
 

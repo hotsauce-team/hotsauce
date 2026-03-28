@@ -122,6 +122,42 @@ Deno.test('getSigningKey: different credentials produce different keys', async (
   assertEquals(same, false);
 });
 
+Deno.test(
+  'getSigningKey: secret rotation with same accessKeyId does not reuse cached key',
+  async () => {
+    const key1 = await getSigningKey(
+      'secret-old',
+      '20231115',
+      'us-east-1',
+      'AKIATEST',
+    );
+    const key2 = await getSigningKey(
+      'secret-new',
+      '20231115',
+      'us-east-1',
+      'AKIATEST',
+    );
+
+    // Must not return same cached ArrayBuffer when secret changes
+    assertEquals(key1 === key2, false);
+
+    // And derived key bytes should differ
+    const arr1 = new Uint8Array(key1);
+    const arr2 = new Uint8Array(key2);
+
+    let same = arr1.length === arr2.length;
+    if (same) {
+      for (let i = 0; i < arr1.length; i++) {
+        if (arr1[i] !== arr2[i]) {
+          same = false;
+          break;
+        }
+      }
+    }
+    assertEquals(same, false);
+  },
+);
+
 // ─────────────────────────────────────────────────────────────
 // URL Building Tests
 // ─────────────────────────────────────────────────────────────
