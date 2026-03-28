@@ -43,7 +43,7 @@ import type {
 } from '../../cms/types.ts';
 import { getFileKeyPrefix } from '@hotsauce/core';
 import { typeByExtension } from '@std/media-types';
-import { html, raw } from '@hotsauce/ui';
+import { attrs, html, raw } from '@hotsauce/ui';
 import { buildObjectUrl, presignUrl, signHeaders } from './sigv4.ts';
 import { UPLOAD_CSS } from './upload-styles.ts';
 import { UPLOAD_JS } from './upload-script.ts';
@@ -568,8 +568,8 @@ export function createS3StoragePlugin(
           const maxSizeValue = resolvedFieldConfig?.maxSize;
 
           const acceptAttr = typeof acceptValue === 'string'
-            ? ` accept="${acceptValue}"`
-            : '';
+            ? { accept: acceptValue }
+            : {};
 
           const uploadCssUrl =
             `${options.basePath}/s3-storage/_assets/upload.css`;
@@ -608,7 +608,7 @@ export function createS3StoragePlugin(
                   </p>
 
                   <div class="upload-area" id="uploadArea">
-                    <input type="file" id="fileInput" ${raw(acceptAttr)}>
+                    <input type="file" id="fileInput" ${attrs(acceptAttr)}>
                     <p>Click or drag a file here to upload</p>
                   </div>
 

@@ -253,7 +253,7 @@ This section explores additional security avenues beyond the immediate S3/file U
 
 ### Deeper Review (Optional Hardening)
 
-- [ ] S3 upload page: use `attrs({ accept })` instead of `raw(acceptAttr)`
+- [x] S3 upload page: use `attrs({ accept })` instead of `raw(acceptAttr)`
 - [ ] Inline JS confirm(): refactor to remove `'unsafe-hashes'` from CSP
 - [ ] Open redirects: optional host allowlist for file serving redirects
 - [ ] SameSite cookie documentation (outside this diff)
