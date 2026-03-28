@@ -89,3 +89,8 @@ export { pagination, paginationStyles } from './components/pagination.ts';
 // Styles - CSS stylesheet for the CMS UI
 // ─────────────────────────────────────────────────────────────
 export { cmsStylesheet } from './styles.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Scripts - JavaScript for the CMS UI
+// ─────────────────────────────────────────────────────────────
+export { cmsScript } from './scripts.ts';

@@ -19,10 +19,6 @@ import type { CspOptions } from './types.ts';
  * - X-Frame-Options: Prevents clickjacking
  * - Referrer-Policy: Limits referrer information leakage
  */
-// Hash for: return confirm('Delete this record?')
-// Used in detail.ts and list.ts delete forms
-const CONFIRM_DELETE_HASH =
-  'sha256-DMyhM/CqLLlclBYIzGjtyty6mh3xlFohbXui0n6IhdY=';
 
 /**
  * Build security headers with optional CSP extensions.
@@ -41,7 +37,7 @@ export function buildSecurityHeaders(
 
   return {
     'Content-Security-Policy':
-      `default-src 'self'; style-src 'self'; script-src 'self' 'unsafe-hashes' '${CONFIRM_DELETE_HASH}'; ${connectSrc}${frameSrc}${imgSrc}; form-action 'self'; frame-ancestors 'none'`,
+      `default-src 'self'; style-src 'self'; script-src 'self'; ${connectSrc}${frameSrc}${imgSrc}; form-action 'self'; frame-ancestors 'none'`,
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',

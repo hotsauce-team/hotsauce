@@ -660,6 +660,14 @@ const handler = createCmsHandler({
 });
 ```
 
+> Security note: `onError` context may include request metadata and plugin hook data that can contain secrets or PII. Avoid logging raw `context`, request headers, cookies, form bodies, or `hookContext` without redaction.
+>
+> Recommended practice:
+>
+> - Log an allowlist of fields (`requestId`, `plugin`, `operation`, `action`, `path`) instead of full objects.
+> - Redact sensitive keys before logging (`authorization`, `cookie`, `token`, `secret`, `password`, `apiKey`).
+> - Prefer structured logging with explicit fields over dumping full error/context payloads.
+
 `ErrorContext` is a discriminated union — narrow on `source` to access context-specific fields:
 
 ```ts

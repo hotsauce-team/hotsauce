@@ -62,6 +62,7 @@ import {
   handleUpdate,
 } from './crud.ts';
 import { handleStylesheet } from './styles.ts';
+import { handleScript } from './scripts.ts';
 
 // Auth imports from @hotsauce/auth
 import {
@@ -227,6 +228,11 @@ export { getEnv, requireEnv } from './runtime-compat.ts';
 // Styles - CSS stylesheet served as external file
 // ─────────────────────────────────────────────────────────────
 export { cmsStylesheet, cssResponse, handleStylesheet } from './styles.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Scripts - JavaScript served as external file
+// ─────────────────────────────────────────────────────────────
+export { cmsScript, handleScript, jsResponse } from './scripts.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Policies - Row-level security for fine-grained authorization
@@ -918,6 +924,13 @@ export function createCmsHandler(options: CmsOptions): Handler {
       pathname === `${opts.basePath}/styles.css` && request.method === 'GET'
     ) {
       return handleStylesheet();
+    }
+
+    // Serve script at {basePath}/admin.js
+    if (
+      pathname === `${opts.basePath}/admin.js` && request.method === 'GET'
+    ) {
+      return handleScript();
     }
 
     // ─────────────────────────────────────────────────────────────

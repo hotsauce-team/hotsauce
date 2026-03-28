@@ -228,10 +228,15 @@ export function detailView(
         action="${options.baseUrl}/${options.id}/delete"
         method="POST"
         class="cms-inline-form"
-        onsubmit="return confirm('Delete this record?')"
       >
         ${raw(csrfField)}
-        <button type="submit" class="cms-btn cms-btn-danger">Delete</button>
+        <button
+          type="submit"
+          class="cms-btn cms-btn-danger"
+          data-confirm="Delete this record?"
+        >
+          Delete
+        </button>
       </form>
     `);
   }

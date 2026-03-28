@@ -254,7 +254,7 @@ This section explores additional security avenues beyond the immediate S3/file U
 ### Deeper Review (Optional Hardening)
 
 - [x] S3 upload page: use `attrs({ accept })` instead of `raw(acceptAttr)`
-- [ ] Inline JS confirm(): refactor to remove `'unsafe-hashes'` from CSP
+- [x] Inline JS confirm(): refactor to remove `'unsafe-hashes'` from CSP
 - [ ] Open redirects: optional host allowlist for file serving redirects
 - [ ] SameSite cookie documentation (outside this diff)
 - [ ] Plugin route authorization docs: clarify routes without `:table` param
@@ -262,4 +262,4 @@ This section explores additional security avenues beyond the immediate S3/file U
 - [ ] Signing key cache: include `secretAccessKey` in cache key for rotation safety
 - [ ] Orphan cleanup: add `max-keys` pagination to listObjects
 - [ ] Rate limiting guidance for presign endpoints
-- [ ] Docs: warn about logging `onError` contexts with secrets/PII
+- [x] Docs: warn about logging `onError` contexts with secrets/PII

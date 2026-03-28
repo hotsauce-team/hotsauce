@@ -186,10 +186,15 @@ export function listTable(
           action="${options.baseUrl}/${id}/delete"
           method="POST"
           class="cms-action-form"
-          onsubmit="return confirm('Delete this record?')"
         >
           ${raw(csrfField)}
-          <button type="submit" class="cms-action cms-action-delete">Delete</button>
+          <button
+            type="submit"
+            class="cms-action cms-action-delete"
+            data-confirm="Delete this record?"
+          >
+            Delete
+          </button>
         </form>
       `);
     }

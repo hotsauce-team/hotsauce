@@ -321,6 +321,7 @@ function buildLayoutOptions(
     siteName: options.title,
     nav: navItems,
     stylesheetUrl: `${basePath}/styles.css`,
+    scriptUrl: `${basePath}/admin.js`,
     user: authUser
       ? {
         name: authUser.identity ?? `User ${authUser.id}`,
