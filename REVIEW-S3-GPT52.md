@@ -258,8 +258,8 @@ This section explores additional security avenues beyond the immediate S3/file U
 - [-] Open redirects: optional host allowlist for file serving redirects
 - [-] SameSite cookie documentation (outside this diff)
 - [x] Plugin route authorization docs: clarify routes without `:table` param
-- [ ] STS/session token support (`X-Amz-Security-Token`)
+- [-] STS/session token support (`X-Amz-Security-Token`)
 - [x] Signing key cache: include `secretAccessKey` in cache key for rotation safety
-- [ ] Orphan cleanup: add `max-keys` pagination to listObjects
+- [x] Orphan cleanup: add `max-keys` pagination to listObjects
 - [-] Rate limiting guidance for presign endpoints
 - [x] Docs: warn about logging `onError` contexts with secrets/PII
