@@ -456,8 +456,9 @@ export function fileInput(
     // 1. Direct URL (e.g., from external storage with public URLs)
     // 2. Base64 data (inline storage)
     let previewUrl: string | null = null;
-    if (existingFile.url && getSafeUrl(existingFile.url)) {
-      previewUrl = getSafeUrl(existingFile.url);
+    const safeUrl = existingFile.url ? getSafeUrl(existingFile.url) : null;
+    if (safeUrl) {
+      previewUrl = safeUrl;
     } else if (existingFile.data) {
       previewUrl =
         `data:${existingFile.contentType};base64,${existingFile.data}`;

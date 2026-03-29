@@ -106,8 +106,8 @@ export function validatePresignRequest(
   }
 
   // Cross-validate claimed content type against file extension.
-  // Blocks unrecognised extensions and extension↔type mismatches.
-  // Duplicated in packages/cms/http.ts — keep in sync.
+  // Files without extensions skip this check and rely on content-type +
+  // accept pattern validation alone. Duplicated in packages/cms/http.ts.
   const extMatch = body.filename.match(/\.[^.]+$/);
   if (extMatch) {
     const expectedType = typeByExtension(extMatch[0]!.toLowerCase());

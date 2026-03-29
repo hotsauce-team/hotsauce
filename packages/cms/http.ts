@@ -502,8 +502,9 @@ export async function parseMultipartFormData(
       }
 
       // If a file extension is present, cross-validate the claimed content type
-      // against the extension. For such files, block unrecognised extensions
-      // and extension↔type mismatches. Duplicated in
+      // against the extension. Files without extensions skip this check and
+      // rely on content-type + accept pattern validation alone.
+      // Duplicated in packages/plugins/s3-storage/mod.ts.
       const extMatch = value.name.match(/\.[^.]+$/);
       if (extMatch) {
         const expectedType = typeByExtension(extMatch[0]!.toLowerCase());
