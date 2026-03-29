@@ -273,14 +273,16 @@ The CMS uses a **layered security model** for authorization. Understanding this 
 ### Security Layers (in order)
 
 1. **Type-level enforcement** (`CmsOptions` in `types.ts`)
-   - When `auth` is configured, `policies` is **required** inside `auth` by TypeScript
-   - Forces developers to explicitly choose an authorization strategy
-   - Options: `auth.policies: { ... }`, `auth.policies: {}`, or `auth.policies: 'dangerously-open'`
+
+- When `auth` is configured, `policies` is **required** at the top level by TypeScript
+- Forces developers to explicitly choose an authorization strategy
+- Options: `policies: { ... }`, `policies: {}`, or `policies: 'dangerously-open'`
 
 2. **Zod validation at startup** (`validateCmsOptions` in `validation.ts`)
    - Validates entire config when `createCmsHandler()` is called
    - Throws `CmsConfigError` with detailed messages for invalid config
-   - Enforces: `auth.policies` required when auth is configured
+
+- Enforces: `policies` required when auth is configured
 
 3. **Runtime column policy column policy validation** (`crud.ts` handlers)
    - If auth is enabled but policies somehow undefined, handlers return 403
@@ -303,26 +305,28 @@ The CMS uses a **layered security model** for authorization. Understanding this 
 
 ```typescript
 auth: {
-  policies: {
-    posts: ownedBy(schema.posts, 'authorId'), // Row-only
-  },
-}
+  provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+},
+policies: {
+  posts: ownedBy(schema.posts, 'authorId'), // Row-only
+},
 ```
 
 **Column policies** filter which fields within records are visible/editable:
 
 ```typescript
 auth: {
-  policies: {
-    posts: {
-      row: ownedBy(schema.posts, 'authorId'),   // Row filter
-      columns: {                                  // Column filter
-        salary: { read: adminOnly, write: adminOnly },
-        tenantId: { read: () => false, write: () => false, default: getTenant },
-      },
+  provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+},
+policies: {
+  posts: {
+    row: ownedBy(schema.posts, 'authorId'),   // Row filter
+    columns: {                                  // Column filter
+      salary: { read: adminOnly, write: adminOnly },
+      tenantId: { read: () => false, write: () => false, default: getTenant },
     },
   },
-}
+},
 ```
 
 The `TablePolicy` type enables either pattern:

@@ -1159,7 +1159,7 @@ class MyCustomProvider implements AuthProvider {
 
 ### Authorization (Permissions)
 
-> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use `auth.policies` (recommended) or the `canAccess` callback.
+> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use `policies` (recommended) or the `canAccess` callback.
 
 ## Row-Level Security (Policies)
 

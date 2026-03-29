@@ -255,12 +255,12 @@ interface TableParsers {
 
 ## Extension Points
 
-| Option          | Purpose                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------- |
-| `auth`          | Authentication: `'dangerously-open'`, `{ provider, policies }` (JWT), or `{ external }` (reverse proxy) |
-| `auth.policies` | Row-level security with SQL conditions + column-level read/write control                                |
-| `parsers`       | Custom validation (Zod, Valibot, Arktype, or any library)                                               |
-| `onError`       | Error logging integration (Sentry, Datadog, etc.)                                                       |
+| Option     | Purpose                                                                  |
+| ---------- | ------------------------------------------------------------------------ |
+| `auth`     | Authentication: `'dangerously-open'` or `{ provider, ... }` (JWT)        |
+| `policies` | Row-level security with SQL conditions + column-level read/write control |
+| `parsers`  | Custom validation (Zod, Valibot, Arktype, or any library)                |
+| `onError`  | Error logging integration (Sentry, Datadog, etc.)                        |
 
 ## Features
 
