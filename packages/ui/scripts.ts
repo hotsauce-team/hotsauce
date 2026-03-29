@@ -15,6 +15,7 @@ export const cmsScript: string = `
   // Usage: <button data-confirm="Are you sure?">Delete</button>
   // Works on buttons, links, and form submit buttons
   document.addEventListener('click', function(e) {
+    if (!(e.target instanceof Element)) return;
     var target = e.target.closest('[data-confirm]');
     if (!target) return;
 

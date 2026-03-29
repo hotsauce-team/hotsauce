@@ -403,16 +403,18 @@ const handler = createCmsHandler({
   // Register the S3 storage plugin
   plugins: [
     createS3StoragePlugin({
-      id: 's3',
+      storageId: 's3',
       bucket: 'my-bucket',
       region: 'us-east-1',
+      endpoint: 'https://s3.us-east-1.amazonaws.com',
+      basePath: '/my-bucket',
       accessKeyId: '...',
       secretAccessKey: '...',
     }),
   ],
   // Optionally configure CSP for images served from S3
   csp: {
-    imgSrc: ["'self'", 'https://my-bucket.s3.us-east-1.amazonaws.com'],
+    imgSrc: ['https://my-bucket.s3.us-east-1.amazonaws.com'],
   },
 });
 ```
