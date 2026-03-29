@@ -5,7 +5,12 @@ import { formField } from '../forms/field.ts';
 import type { CMSField, IntrospectedColumn } from '@hotsauce/core';
 
 // Helper to create mock CMSField
-function createMockField(overrides: Partial<CMSField> = {}): CMSField {
+function createMockField(
+  overrides: Omit<Partial<CMSField>, 'column'> & {
+    column?: Partial<IntrospectedColumn>;
+  } = {},
+): CMSField {
+  const { column: columnOverrides, ...rest } = overrides;
   const column: IntrospectedColumn = {
     name: 'test_field',
     propertyName: 'testField',
@@ -15,14 +20,14 @@ function createMockField(overrides: Partial<CMSField> = {}): CMSField {
     hasDefault: false,
     isPrimaryKey: false,
     isUnique: false,
-    ...overrides.column,
+    ...columnOverrides,
   };
 
   return {
     column,
     fieldType: 'text',
     label: 'Test Field',
-    ...overrides,
+    ...rest,
   };
 }
 
@@ -176,4 +181,49 @@ Deno.test('formField: fileUrl does NOT show image preview for non-image contentT
   }
   // But link should still be there
   assertStringIncludes(result, 'href="/upload"');
+});
+
+Deno.test('formField: does not preview SVG by default (XSS protection)', () => {
+  const field = createMockField({ readOnly: false });
+  const result = formField(field, {
+    value: {
+      filename: 'icon.svg',
+      contentType: 'image/svg+xml',
+      size: 512,
+    },
+    override: {
+      link: { href: '/upload', label: 'Upload' },
+      fileUrl: '/files/media/icon/1',
+    },
+  });
+
+  // Should NOT show image preview for SVG by default
+  if (result.includes('<img')) {
+    throw new Error('SVG preview should not render without previewSvg opt-in');
+  }
+  // But link should still be there
+  assertStringIncludes(result, 'href="/upload"');
+});
+
+Deno.test('formField: previews SVG when file.previewSvg is true', () => {
+  const field = createMockField({
+    readOnly: false,
+    column: { cmsOptions: { file: { previewSvg: true } } },
+  });
+  const result = formField(field, {
+    value: {
+      filename: 'icon.svg',
+      contentType: 'image/svg+xml',
+      size: 512,
+    },
+    override: {
+      link: { href: '/upload', label: 'Upload' },
+      fileUrl: '/files/media/icon/1',
+    },
+  });
+
+  // Should show image preview when previewSvg is true
+  assertStringIncludes(result, '<img');
+  assertStringIncludes(result, 'cms-file-preview');
+  assertStringIncludes(result, '/files/media/icon/1');
 });
