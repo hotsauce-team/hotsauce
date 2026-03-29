@@ -27,7 +27,9 @@ import { validateSerializable } from './validate.ts';
  * Returns the URL if safe, null if unsafe.
  *
  * Allows: relative URLs (/path, ?query, #hash), http:, https:
- * Blocks: everything else (javascript:, data:, vbscript:, //..., etc.)
+ * Blocks: javascript:, data:, vbscript:, scheme-relative (//),
+ *         control characters, and percent-encoded ASCII control characters
+ *         (%00–%1F, %7F).
  *
  * NOTE: Duplicated in packages/ui/html.ts — keep in sync.
  */

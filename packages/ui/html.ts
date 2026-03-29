@@ -142,7 +142,8 @@ export function join(items: (string | SafeHtml)[], separator = ''): SafeHtml {
  *
  * Allows: relative URLs (/path, ?query, #hash), http:, https:
  * Blocks: javascript:, data:, vbscript:, scheme-relative (//),
- *         control characters, and percent-encoded control characters.
+ *         control characters, and percent-encoded ASCII control characters
+ *         (%00–%1F, %7F).
  *
  * NOTE: Duplicated in packages/workers/executor.ts — keep in sync.
  */
