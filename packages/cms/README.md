@@ -412,7 +412,7 @@ const handler = createCmsHandler({
   ],
   // Optionally configure CSP for images served from S3
   csp: {
-    imgSrc: ["'self'", 'https://my-bucket.s3.us-east-1.amazonaws.com'],
+    imgSrc: ['https://my-bucket.s3.us-east-1.amazonaws.com'],
   },
 });
 ```
