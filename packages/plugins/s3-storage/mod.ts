@@ -40,7 +40,7 @@ import type {
   PresignResult,
   SignDownloadContext,
   StorageProvider,
-} from '../../cms/types.ts';
+} from '@hotsauce/cms';
 import { getFileKeyPrefix } from '@hotsauce/core';
 import { typeByExtension } from '@std/media-types';
 import { attrs, html, raw } from '@hotsauce/ui';
