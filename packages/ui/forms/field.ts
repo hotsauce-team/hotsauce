@@ -48,17 +48,20 @@ export function formField(
 
     // For file fields, show image preview only if it's actually an image
     // SVG previews require explicit opt-in (previewSvg: true) due to XSS risk
-    const fileValue = options.value as { contentType?: string } | undefined;
+    const fileValue = options.value as
+      | { contentType?: string; filename?: string }
+      | undefined;
     const isImage = fileValue?.contentType?.startsWith('image/') ?? false;
     const isSvg = fileValue?.contentType === 'image/svg+xml';
     const fileConfig = field.column.cmsOptions?.file;
     const previewSvg = fileConfig && typeof fileConfig === 'object' &&
       fileConfig.previewSvg === true;
     const shouldRenderImagePreview = isImage && (!isSvg || previewSvg);
+    const altText = fileValue?.filename ?? `${field.label} preview`;
     const imagePreview = options.override.fileUrl && shouldRenderImagePreview
       ? html`
         <img src="${options.override
-          .fileUrl}" alt="" class="cms-file-preview" />
+          .fileUrl}" alt="${altText}" class="cms-file-preview" />
       `
       : '';
 

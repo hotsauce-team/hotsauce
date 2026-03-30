@@ -155,10 +155,11 @@ Deno.test('formField: fileUrl shows image preview for image contentType', () => 
     },
   });
 
-  // Should show image preview
+  // Should show image preview with filename as alt text
   assertStringIncludes(result, '<img');
   assertStringIncludes(result, 'cms-file-preview');
   assertStringIncludes(result, '/files/media/image/1');
+  assertStringIncludes(result, 'alt="photo.jpg"');
 });
 
 Deno.test('formField: fileUrl does NOT show image preview for non-image contentType', () => {
@@ -226,4 +227,22 @@ Deno.test('formField: previews SVG when file.previewSvg is true', () => {
   assertStringIncludes(result, '<img');
   assertStringIncludes(result, 'cms-file-preview');
   assertStringIncludes(result, '/files/media/icon/1');
+});
+
+Deno.test('formField: uses field label as fallback alt text when filename missing', () => {
+  const field = createMockField({ readOnly: false, label: 'Profile Image' });
+  const result = formField(field, {
+    value: {
+      contentType: 'image/png',
+      size: 2048,
+    },
+    override: {
+      link: { href: '/upload', label: 'Upload' },
+      fileUrl: '/files/media/image/1',
+    },
+  });
+
+  // Should use field label as fallback alt text
+  assertStringIncludes(result, '<img');
+  assertStringIncludes(result, 'alt="Profile Image preview"');
 });
