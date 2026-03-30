@@ -65,7 +65,7 @@ function validateFieldUIOverride(value: unknown): string | null {
 
   // Must be an object
   if (typeof value !== 'object') {
-    return `Expected null or an object with 'link' and/or 'valueSummary', got ${typeof value}`;
+    return `Expected null or an object with 'link', 'valueSummary', and/or 'fileUrl', got ${typeof value}`;
   }
 
   // Must have at least link, valueSummary, or fileUrl
