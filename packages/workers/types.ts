@@ -185,13 +185,19 @@ export interface UIRenderFieldContext {
   value: Serializable;
   /** Record ID (undefined on create) */
   recordId?: string | number;
-  /** View type: 'edit' for edit form, 'create' for create form */
-  view: 'edit' | 'create';
+  /** View type: where the field is being rendered */
+  view: 'edit' | 'create' | 'detail';
   /** Authenticated user info (if available) */
   user?: {
     sub: string;
     role?: string;
   };
+  /**
+   * Resolved storage provider ID for this field (file fields only).
+   * Determined by resolveStorage callback or defaultObjectStorageId.
+   * Undefined for non-file fields or when no storage is configured.
+   */
+  storageId?: string;
 }
 
 /**
@@ -208,6 +214,8 @@ export type FieldUIOverride =
     link?: { label: string; href: string; target?: '_blank' };
     /** Human-readable summary to show instead of raw value (plain text, no HTML) */
     valueSummary?: string;
+    /** URL where the file can be fetched (for download link and image preview) */
+    fileUrl?: string;
   };
 
 /**
@@ -341,6 +349,8 @@ export interface PluginRouteContext {
   requestUrl: string;
   /** HTTP method (GET, POST) */
   method: string;
+  /** Request body (for POST requests, raw text) */
+  body?: string;
   /** Additional route params from pattern matching */
   params: Record<string, string>;
 }

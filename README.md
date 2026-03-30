@@ -5,7 +5,7 @@ A schema-driven CMS derived from your Drizzle ORM definitions. Define your datab
 ## Philosophy
 
 - **Single source of truth**: Your Drizzle schema defines database tables, TypeScript types, validation rules, AND CMS fields
-- **Minimal dependencies**: Core stack is `drizzle-orm` + `zod` + `drizzle-zod` (all zero transitive deps)
+- **Minimal dependencies**: Core stack is `drizzle-orm` + `zod` + `drizzle-zod` + `@std/media-types` (all zero transitive deps)
 - **Secure by default**: CSRF protection, JWT auth, row-level policies, column-level policies, XSS-safe templates
 - **Flexible & extensible**: Pluggable auth, custom validation, row & column policies, plugins with Worker isolation
 - **Cross-runtime**: Works in Deno and Node.js — Web Standard `Request`/`Response` everywhere
@@ -52,8 +52,9 @@ Each package has its own README with detailed API documentation:
 | [`@hotsauce/core`](packages/core/)       | Schema introspection, field mapping, validation | [README](packages/core/README.md)    |
 | [`@hotsauce/ui`](packages/ui/)           | HTML generation, form rendering, views          | [README](packages/ui/README.md)      |
 | [`@hotsauce/cms`](packages/cms/)         | CRUD route handlers (Request → Response)        | [README](packages/cms/README.md)     |
-| [`@hotsauce/workers`](packages/workers/) | Worker sandbox for plugin isolation             | [README](packages/workers/README.md) |
-| [`@hotsauce/plugins`](packages/plugins/) | Official plugins (audit-log, etc.)              | [README](packages/plugins/README.md) |
+| [`@hotsauce/auth`](packages/auth/)       | JWT, password hashing, TOTP, account management | [README](packages/auth/README.md)    |
+| [`@hotsauce/workers`](packages/workers/) | Plugin runtime with Worker isolation            | [README](packages/workers/README.md) |
+| [`@hotsauce/plugins`](packages/plugins/) | Official plugins (audit-log, puck, s3-storage)  | [README](packages/plugins/README.md) |
 
 ```
 packages/
@@ -61,6 +62,7 @@ packages/
 │   │                  # Runtime-agnostic, zero Deno/Node specific code
 │   ├── schema/        # Schema parsing and metadata extraction
 │   ├── fields/        # Column type → CMS field mapping
+│   ├── extend/        # $cms() column/table metadata
 │   └── validation/    # drizzle-zod integration
 │
 ├── ui/                # HTML generation, form rendering
@@ -74,16 +76,27 @@ packages/
 │   │                  # Bring Your Own Server - works with any framework
 │   ├── router.ts      # URL routing and handler dispatch
 │   ├── crud.ts        # List, create, read, update, delete handlers
-│   ├── auth/          # JWT authentication module
-│   └── plugins/       # Plugin registry and service (uses workers)
+│   ├── plugins/       # Plugin registry and service (uses workers)
+│   ├── policies/      # Row and column-level security
+│   └── tokens/        # CSRF, source token utilities
 │
-├── workers/           # Worker sandbox for plugin isolation
+├── auth/              # Authentication and authorization
+│   │                  # JWT, password hashing, TOTP 2FA, account management
+│   ├── jwt.ts         # JWT sign/verify (HMAC-SHA256)
+│   ├── password.ts    # PBKDF2-SHA256 password hashing
+│   ├── totp.ts        # RFC 6238 TOTP utilities
+│   └── account/       # Self-service account management
+│
+├── workers/           # Plugin runtime with Worker isolation
 │   │                  # Compatible with Deno and Node.js 20+
-│   ├── executor.ts    # Manages Worker instances
-│   └── sandbox/       # Worker script that runs plugin code
+│   ├── executor.ts    # Manages Worker instances and in-process plugins
+│   ├── guard.ts       # Worker context detection
+│   └── validate.ts    # Serialization validation
 │
 └── plugins/           # Official plugins
-    └── audit-log/     # Logs all CRUD operations
+    ├── audit-log/     # Logs all CRUD operations
+    ├── puck/          # Puck visual editor integration
+    └── s3-storage/    # S3/R2/MinIO file storage
 ```
 
 ## Bring Your Own Server
@@ -242,12 +255,12 @@ interface TableParsers {
 
 ## Extension Points
 
-| Option          | Purpose                                                                                                 |
-| --------------- | ------------------------------------------------------------------------------------------------------- |
-| `auth`          | Authentication: `'dangerously-open'`, `{ provider, policies }` (JWT), or `{ external }` (reverse proxy) |
-| `auth.policies` | Row-level security with SQL conditions + column-level read/write control                                |
-| `parsers`       | Custom validation (Zod, Valibot, Arktype, or any library)                                               |
-| `onError`       | Error logging integration (Sentry, Datadog, etc.)                                                       |
+| Option     | Purpose                                                                  |
+| ---------- | ------------------------------------------------------------------------ |
+| `auth`     | Authentication: `'dangerously-open'` or `{ provider, ... }` (JWT)        |
+| `policies` | Row-level security with SQL conditions + column-level read/write control |
+| `parsers`  | Custom validation (Zod, Valibot, Arktype, or any library)                |
+| `onError`  | Error logging integration (Sentry, Datadog, etc.)                        |
 
 ## Features
 
@@ -274,14 +287,20 @@ interface TableParsers {
 - [x] Plugin system with Worker isolation (Deno + Node.js 20+)
 - [x] File uploads (base64 in DB, validation, serving route)
 - [x] Publish alpha release to jsr (Deno support)
+- [ ] Shared policy API (reuse CMS row/column policies in your app routes)
 - [ ] Security disclosure policy
 - [ ] Add tests for NodeJS runtime
 - [ ] File uploads (S3/R2 cloud storage adapter)
+- [ ] S3 orphan garbage collection (cleanup objects not referenced by any record)
+- [ ] Expose plugin utilities for frontend use (e.g., S3 signed download URLs)
+- [ ] Media library UI (browse, search, reuse previously uploaded files)
+- [ ] Native CDN support (public + private files, cache invalidation)
 - [ ] Plugin config - timeout, worker response validation, load testing
 - [ ] Plugin data obfuscation (PII/credential redaction)
 - [ ] Audit logging
 - [ ] 2FA backup codes (recovery codes for lost authenticator)
 - [ ] Customizable UI components
+- [ ] Seamless plugin UI (in-page S3 uploads and block editing without navigation)
 
 Schema hints example:
 

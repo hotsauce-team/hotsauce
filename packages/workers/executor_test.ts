@@ -3,7 +3,8 @@
 
 import { assert, assertEquals, assertRejects } from '@std/assert';
 import { WorkerExecutor } from './executor.ts';
-import type { RegisteredPlugin } from './executor.ts';
+import type { PluginErrorContext, RegisteredPlugin } from './executor.ts';
+import type { ActionContext } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Test helpers
@@ -395,7 +396,7 @@ Deno.test('FieldUIOverride validation: rejects missing link property', async () 
   assertEquals(errors.length, 1);
   assertEquals(
     errors[0]!.message.includes(
-      "Expected object with 'link' and/or 'valueSummary'",
+      "Expected object with 'link', 'valueSummary', and/or 'fileUrl'",
     ),
     true,
   );
@@ -517,6 +518,50 @@ Deno.test('FieldUIOverride validation: accepts valueSummary only (no link)', asy
   assertEquals(errors.length, 0);
 });
 
+Deno.test('FieldUIOverride validation: accepts valueSummary with valid fileUrl (no link)', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  // Detail view pattern: valueSummary + fileUrl, no upload link
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 'image.jpg (50KB)',
+    fileUrl: '/files/media/file/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, {
+    valueSummary: 'image.jpg (50KB)',
+    fileUrl: '/files/media/file/123',
+  });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: valueSummary with fileUrl: undefined calls onError', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  // Bug pattern: fileUrl property exists but is undefined (detail view case)
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 'No file',
+    fileUrl: undefined,
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  // CRITICAL: onError must be called
+  assertEquals(errors.length, 1);
+  assertEquals(
+    errors[0]!.message.includes("'fileUrl' to be a string"),
+    true,
+  );
+});
+
 Deno.test('FieldUIOverride validation: accepts link with valueSummary', async () => {
   const errors: Error[] = [];
   const executor = new WorkerExecutor((err) => errors.push(err));
@@ -555,6 +600,314 @@ Deno.test('FieldUIOverride validation: rejects valueSummary wrong type', async (
     errors[0]!.message.includes("'valueSummary' to be a string"),
     true,
   );
+});
+
+Deno.test('FieldUIOverride validation: fileUrl: undefined calls onError and returns null', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  // This was the actual bug - plugin returned { link: ..., valueSummary: ..., fileUrl: undefined }
+  // which fails validation because 'fileUrl' property exists but is not a string
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'No file',
+    fileUrl: undefined,
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  // Should return null (graceful degradation)
+  assertEquals(result, null);
+  // CRITICAL: onError must be called so admins can see the problem in logs
+  assertEquals(errors.length, 1);
+  assertEquals(
+    errors[0]!.message.includes("'fileUrl' to be a string"),
+    true,
+  );
+  assertEquals(
+    errors[0]!.message.includes("Plugin 'test'"),
+    true,
+  );
+});
+
+Deno.test('FieldUIOverride validation: accepts link with valueSummary and fileUrl omitted', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  // Correct pattern: omit fileUrl entirely when undefined
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'No file',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, {
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'No file',
+  });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: accepts link with valueSummary and valid fileUrl', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'image.jpg (50KB)',
+    fileUrl: '/files/media/file/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, {
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'image.jpg (50KB)',
+    fileUrl: '/files/media/file/123',
+  });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: rejects fileUrl wrong type', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/upload' },
+    valueSummary: 'file.txt',
+    fileUrl: 123, // wrong type
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(
+    errors[0]!.message.includes("'fileUrl' to be a string"),
+    true,
+  );
+});
+
+Deno.test('FieldUIOverride validation: rejects javascript: in fileUrl', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 'file.txt',
+    fileUrl: 'javascript:alert(1)',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects javascript: in link.href', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'XSS', href: 'javascript:alert(1)' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: accepts relative URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Upload', href: '/admin/upload' },
+    fileUrl: '/files/media/file/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(errors.length, 0);
+  assertEquals(result?.fileUrl, '/files/media/file/123');
+});
+
+Deno.test('FieldUIOverride validation: accepts https URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: {
+      label: 'External',
+      href: 'https://example.com/upload',
+      target: '_blank',
+    },
+    fileUrl: 'https://cdn.example.com/files/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(errors.length, 0);
+  assertEquals(result?.fileUrl, 'https://cdn.example.com/files/123');
+});
+
+Deno.test('FieldUIOverride validation: accepts http URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: {
+      label: 'External',
+      href: 'http://example.com/upload',
+      target: '_blank',
+    },
+    fileUrl: 'http://cdn.example.com/files/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(errors.length, 0);
+  assertEquals(result?.fileUrl, 'http://cdn.example.com/files/123');
+});
+
+Deno.test('FieldUIOverride validation: rejects scheme-relative URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'External', href: '//evil.com/payload' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: accepts fileUrl only (no link, no valueSummary)', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    fileUrl: '/files/media/file/123',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, { fileUrl: '/files/media/file/123' });
+  assertEquals(errors.length, 0);
+});
+
+Deno.test('FieldUIOverride validation: rejects backslash-prefixed URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    fileUrl: '\\\\evil.com\\payload',
+    valueSummary: 'test',
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects percent-encoded control chars in scheme obfuscation', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'XSS', href: 'java%0ascript:alert(1)' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects embedded control characters in URL', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    valueSummary: 'file.txt',
+    fileUrl: `ja\u0000vascript:alert(1)`,
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: rejects backslashes anywhere in relative URLs', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Weird', href: '.\\\\evil.com\\\\payload' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(result, null);
+  assertEquals(errors.length, 1);
+  assertEquals(errors[0]!.message.includes('Unsafe URL scheme'), true);
+});
+
+Deno.test('FieldUIOverride validation: accepts relative URLs with colon in query', async () => {
+  const errors: Error[] = [];
+  const executor = new WorkerExecutor((err) => errors.push(err));
+  const plugin = createInProcessUIPlugin('test', () => ({
+    link: { label: 'Search', href: '/search?q=a:b' },
+  }));
+
+  const result = await executor.executeRenderField(
+    [plugin],
+    testUIFieldContext,
+  );
+
+  assertEquals(errors.length, 0);
+  assertEquals(result, { link: { label: 'Search', href: '/search?q=a:b' } });
 });
 
 Deno.test('FieldUIOverride validation: continues to next plugin on invalid return', async () => {
@@ -804,4 +1157,230 @@ Deno.test('WorkerExecutor: executeRouteRender with minimal context', async () =>
   } finally {
     executor.terminate();
   }
+});
+
+// ─────────────────────────────────────────────────────────────
+// PluginErrorContext: hookContext on fire-and-forget errors
+// ─────────────────────────────────────────────────────────────
+
+Deno.test({
+  name:
+    'PluginErrorContext: in-process blocking:false includes full hookContext',
+  sanitizeOps: false,
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const executor = new WorkerExecutor((_error, ctx) => contexts.push(ctx));
+
+    const actionCtx: ActionContext = {
+      table: 'posts',
+      action: 'create',
+      recordId: '42',
+      user: { sub: 'user-1', role: 'editor' },
+      timestamp: new Date().toISOString(),
+      newData: { title: 'Hello' },
+    };
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'failing-inprocess',
+        hooks: {
+          on: {
+            create: {
+              handler: () => {
+                throw new Error('boom');
+              },
+              blocking: false,
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    await executor.executeAction([plugin], 'create', actionCtx);
+    // Fire-and-forget — give it a tick to settle
+    await new Promise((r) => setTimeout(r, 50));
+
+    assertEquals(contexts.length, 1);
+    assertEquals(contexts[0]?.plugin, 'failing-inprocess');
+    assertEquals(contexts[0]?.operation, 'action');
+    assertEquals(contexts[0]?.action, 'create');
+
+    // hookContext should be the full ActionContext
+    const hook = contexts[0]?.hookContext as unknown as ActionContext;
+    assertEquals(hook.table, 'posts');
+    assertEquals(hook.recordId, '42');
+    assertEquals(hook.user?.sub, 'user-1');
+    assertEquals(hook.newData, { title: 'Hello' });
+  },
+});
+
+Deno.test({
+  name: 'PluginErrorContext: in-process blocking:false with no recordId',
+  sanitizeOps: false,
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const executor = new WorkerExecutor((_error, ctx) => contexts.push(ctx));
+
+    const actionCtx: ActionContext = {
+      table: 'products',
+      action: 'list',
+      timestamp: new Date().toISOString(),
+    };
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'list-fail',
+        hooks: {
+          on: {
+            list: {
+              handler: () => {
+                throw new Error('list error');
+              },
+              blocking: false,
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    await executor.executeAction([plugin], 'list', actionCtx);
+    await new Promise((r) => setTimeout(r, 50));
+
+    assertEquals(contexts.length, 1);
+    const hook = contexts[0]?.hookContext as unknown as ActionContext;
+    assertEquals(hook.table, 'products');
+    assertEquals(hook.recordId, undefined);
+  },
+});
+
+Deno.test({
+  name:
+    'PluginErrorContext: blocking:true action calls onError with hookContext',
+  sanitizeOps: false,
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const executor = new WorkerExecutor((_error, ctx) => contexts.push(ctx));
+
+    const actionCtx: ActionContext = {
+      table: 'orders',
+      action: 'update',
+      recordId: 7,
+      timestamp: new Date().toISOString(),
+    };
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'blocking-plugin',
+        hooks: {
+          on: {
+            update: () => {
+              throw new Error('blocking failure');
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    // blocking hooks call onError then re-throw — Promise.all propagates to caller
+    await assertRejects(
+      () => executor.executeAction([plugin], 'update', actionCtx),
+      Error,
+      'blocking failure',
+    );
+
+    assertEquals(contexts.length, 1);
+    assertEquals(contexts[0]?.plugin, 'blocking-plugin');
+    assertEquals(contexts[0]?.operation, 'action');
+    assertEquals(contexts[0]?.action, 'update');
+    const hook = contexts[0]?.hookContext as unknown as ActionContext;
+    assertEquals(hook.table, 'orders');
+    assertEquals(hook.recordId, 7);
+  },
+});
+
+Deno.test({
+  name:
+    'PluginErrorContext: in-process beforeSave calls onError with hookContext and re-throws',
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const errors: Error[] = [];
+    const executor = new WorkerExecutor((error, ctx) => {
+      errors.push(error);
+      contexts.push(ctx);
+    });
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'bad-transform',
+        hooks: {
+          transform: {
+            beforeSave: () => {
+              throw new Error('transform broke');
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    const ctx = { table: 'articles', action: 'create' as const };
+
+    await assertRejects(
+      () => executor.executeBeforeSave([plugin], ctx, { title: 'test' }),
+      Error,
+      'transform broke',
+    );
+
+    assertEquals(contexts.length, 1);
+    assertEquals(contexts[0]?.plugin, 'bad-transform');
+    assertEquals(contexts[0]?.operation, 'transform:beforeSave');
+    assertEquals(errors[0]?.message, 'transform broke');
+    const hook = contexts[0]?.hookContext as unknown as typeof ctx;
+    assertEquals(hook.table, 'articles');
+  },
+});
+
+Deno.test({
+  name:
+    'PluginErrorContext: in-process afterRead calls onError with hookContext and re-throws',
+  fn: async () => {
+    const contexts: PluginErrorContext[] = [];
+    const executor = new WorkerExecutor((_error, ctx) => contexts.push(ctx));
+
+    const plugin: RegisteredPlugin = {
+      plugin: {
+        name: 'bad-read-transform',
+        hooks: {
+          transform: {
+            afterRead: () => {
+              throw new Error('afterRead broke');
+            },
+          },
+        },
+      },
+      initialized: true,
+      isWorker: false,
+    };
+
+    const ctx = { table: 'comments', action: 'read' as const };
+
+    await assertRejects(
+      () => executor.executeAfterRead([plugin], ctx, { body: 'hello' }),
+      Error,
+      'afterRead broke',
+    );
+
+    assertEquals(contexts.length, 1);
+    assertEquals(contexts[0]?.plugin, 'bad-read-transform');
+    assertEquals(contexts[0]?.operation, 'transform:afterRead');
+    const hook = contexts[0]?.hookContext as unknown as typeof ctx;
+    assertEquals(hook.table, 'comments');
+  },
 });

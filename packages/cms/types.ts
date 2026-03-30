@@ -3,9 +3,236 @@
 import type { IntrospectedSchema, IntrospectedTable } from '@hotsauce/core';
 import type { AuthProvider, JwtPayload } from '@hotsauce/auth';
 import type { Policies } from './policies/types.ts';
-import type { PluginConfig } from './plugins/types.ts';
+import type { PluginConfig, PluginErrorContext } from './plugins/types.ts';
 import type { PluginRegistry } from './plugins/registry.ts';
 import type { PluginService } from './plugins/service.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Storage types - for file upload/download providers
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Unique identifier for a storage provider instance.
+ * @example 's3', 'r2', 'minio-backup', 'tenant-uploads'
+ */
+export type StorageId = string;
+
+/**
+ * Context for resolving which storage provider to use for uploads.
+ * Passed to the `resolveStorage` callback during presign operations.
+ */
+export interface ResolveStorageContext {
+  /** The original HTTP request */
+  request: Request;
+  /** Authenticated user info (null if no auth) */
+  user: { sub: string; role?: string; [key: string]: unknown } | null;
+  /** Table name being operated on */
+  table: string;
+  /** Column name for the file field */
+  column: string;
+  /** Action being performed */
+  action: 'create' | 'update';
+  /** Record ID (for updates) */
+  recordId?: string;
+}
+
+/**
+ * Function to determine which storage provider to use for a new upload.
+ * Called during presign operations.
+ *
+ * Return `undefined` to use inline database storage for this column.
+ *
+ * @example
+ * ```ts
+ * // Route by table
+ * resolveStorage: (ctx) => ctx.table === 'backups' ? 'archive' : 'primary'
+ *
+ * // Route by tenant (from JWT claims)
+ * resolveStorage: (ctx) => `tenant-${ctx.user?.tenantId}`
+ *
+ * // Keep avatars in database, everything else to S3
+ * resolveStorage: (ctx) => ctx.column === 'avatar' ? undefined : 's3'
+ * ```
+ */
+export type ResolveStorageFn = (
+  ctx: ResolveStorageContext,
+) => StorageId | undefined;
+
+/**
+ * Context for presigning an upload URL.
+ */
+export interface PresignContext extends ResolveStorageContext {
+  /** Original filename from client */
+  filename: string;
+  /** MIME type */
+  contentType: string;
+  /** File size in bytes */
+  size: number;
+}
+
+/**
+ * Result from presigning an upload URL.
+ */
+export interface PresignResult {
+  /** The generated unique object key */
+  key: string;
+  /** Upload instructions for the client */
+  upload: {
+    /** HTTP method (usually PUT) */
+    method: string;
+    /** Presigned upload URL */
+    url: string;
+    /** Headers the client must send */
+    headers?: Record<string, string>;
+  };
+}
+
+/**
+ * Context for signing a download URL.
+ */
+export interface SignDownloadContext {
+  /** Storage provider ID */
+  storage: StorageId;
+  /** Object key */
+  key: string;
+  /** Optional filename for Content-Disposition */
+  filename?: string;
+  /** Original request (for tenant context if needed) */
+  request?: Request;
+  /** User context (for tenant-aware signing) */
+  user?: { sub: string; role?: string; [key: string]: unknown } | null;
+}
+
+/**
+ * Context for deleting an object from storage.
+ */
+export interface DeleteContext {
+  /** Storage provider ID */
+  storage: StorageId;
+  /** Object key to delete */
+  key: string;
+  /** Original request (for tenant context if needed) */
+  request?: Request;
+  /** User context (for tenant-aware operations) */
+  user?: { sub: string; role?: string; [key: string]: unknown } | null;
+}
+
+/**
+ * Context for cache invalidation.
+ */
+export interface InvalidateContext {
+  /** Storage provider ID */
+  storage: StorageId;
+  /** Object key to invalidate */
+  key: string;
+  /** Public URL (if known) */
+  url?: string;
+}
+
+/**
+ * Storage provider interface.
+ *
+ * Providers implement this interface to enable presigned uploads and signed downloads.
+ * The interface is intentionally storage-agnostic - no S3/bucket concepts in the core type.
+ *
+ * Plugins register providers via `storageProvider` field in their config.
+ * The CMS extracts these during init and builds a registry.
+ *
+ * @example
+ * ```ts
+ * const s3Provider: StorageProvider = {
+ *   id: 's3-uploads',
+ *   kind: 's3',
+ *   presignUpload: async (ctx) => ({ key: '...', upload: { method: 'PUT', url: '...' } }),
+ *   signDownloadUrl: async (ctx) => 'https://...',
+ *   deleteObject: async (ctx) => { ... },
+ * };
+ * ```
+ */
+export interface StorageProvider {
+  /** Unique identifier for this provider instance */
+  id: StorageId;
+
+  /**
+   * Provider kind for documentation/debugging.
+   * Does not affect behavior - just metadata.
+   */
+  kind: 'db-inline' | 's3' | 'custom';
+
+  /**
+   * Generate a presigned upload URL.
+   * Called when preparing for a direct-to-storage upload.
+   * Optional - providers without this use server-side upload.
+   */
+  presignUpload?: (ctx: PresignContext) => Promise<PresignResult>;
+
+  /**
+   * Generate a signed download URL.
+   * Called when serving files via /files/{table}/{column}/{id}.
+   * Optional - providers without this cannot serve files via redirect.
+   */
+  signDownloadUrl?: (ctx: SignDownloadContext) => Promise<string>;
+
+  /**
+   * Delete an object from storage.
+   * Called when file fields are cleared or replaced.
+   * Optional - if not implemented, orphaned files accumulate.
+   */
+  deleteObject?: (ctx: DeleteContext) => Promise<void>;
+
+  /**
+   * List objects under a key prefix.
+   * Called after update/delete to clean up orphaned files in the same prefix.
+   * Optional - if not implemented, only the specific old key is deleted.
+   */
+  listObjects?: (
+    prefix: string,
+  ) => Promise<Array<{ key: string; lastModified: Date; size: number }>>;
+
+  /**
+   * Invalidate CDN cache for an object.
+   * Called after deletion/replacement if the provider supports it.
+   * Optional - most providers don't need this with unique keys.
+   */
+  invalidateCache?: (ctx: InvalidateContext) => Promise<void>;
+}
+
+/**
+ * Storage configuration for CMS.
+ *
+ * Can be:
+ * - `StorageId` (string): All files go to that storage provider
+ * - `ResolveStorageFn`: Dynamic routing based on context
+ *
+ * Return `undefined` from the function to use inline database storage.
+ *
+ * @example
+ * ```ts
+ * // Simple: all files go to S3
+ * storage: 's3'
+ *
+ * // Dynamic: avatars stay in DB, everything else to S3
+ * storage: (ctx) => ctx.column === 'avatar' ? undefined : 's3'
+ *
+ * // Route by table
+ * storage: (ctx) => ctx.table === 'backups' ? 'archive' : 's3'
+ * ```
+ */
+export type StorageOptions = StorageId | ResolveStorageFn;
+
+/**
+ * Internal storage registry built from plugin providers.
+ */
+export interface StorageRegistry {
+  /** Provider instances keyed by ID */
+  instances: Map<StorageId, StorageProvider>;
+
+  /** Default provider for new uploads */
+  defaultObjectStorageId?: StorageId;
+
+  /** Resolver function */
+  resolveStorage?: ResolveStorageFn;
+}
 
 /**
  * A Web Standard handler function: Request → Response
@@ -41,9 +268,20 @@ export type Parsers = Record<string, TableParsers>;
 export type CrudAction = 'list' | 'read' | 'create' | 'update' | 'delete';
 
 /**
- * Context passed to error handler
+ * Context passed to error handler.
+ *
+ * Discriminated union: narrow on `source` to determine what context is available.
+ * - `'handler'`: Error in an HTTP request handler (has request, url, route)
+ * - `'plugin'`: Error in a plugin (fire-and-forget or async; has plugin name, operation, hookContext)
  */
-export interface ErrorContext {
+export type ErrorContext = HandlerErrorContext | PluginErrorContext;
+
+/**
+ * Error context from an HTTP request handler.
+ * Always has the Request and URL that was being processed.
+ */
+export interface HandlerErrorContext {
+  source: 'handler';
   /** The original request */
   request: Request;
   /** Parsed URL */
@@ -54,6 +292,31 @@ export interface ErrorContext {
   table?: IntrospectedTable;
   /** The action being performed (if any) */
   action?: CrudAction | 'dashboard';
+  /** Request ID for correlating logs with user-facing error messages */
+  requestId?: string;
+  /** Plugin name (when the error originated from a plugin within a handler) */
+  plugin?: string;
+}
+
+// PluginErrorContext (from @hotsauce/workers) already has source: 'plugin'
+// and is used directly in the ErrorContext union above.
+
+/**
+ * Custom Content Security Policy directives.
+ * Origins are appended to the CMS defaults (e.g. 'self' is always included).
+ *
+ * @example
+ * ```ts
+ * csp: { imgSrc: ['https://my-bucket.s3.amazonaws.com'] }
+ * ```
+ */
+export interface CspOptions {
+  /** Additional origins for img-src (images, favicons) */
+  imgSrc?: string[];
+  /** Additional origins for connect-src (fetch, XHR, WebSocket) */
+  connectSrc?: string[];
+  /** Additional origins for frame-src (iframes) */
+  frameSrc?: string[];
 }
 
 /**
@@ -157,6 +420,35 @@ export interface CmsOptionsBase {
    * ```
    */
   plugins?: PluginConfig[];
+
+  /**
+   * Storage configuration for file uploads.
+   *
+   * Storage providers are registered by plugins (e.g., S3 storage plugin).
+   * This option configures which provider to use and how to route uploads.
+   *
+   * @example
+   * ```ts
+   * // All files go to S3
+   * storage: 's3'
+   *
+   * // Dynamic routing: avatars in DB, rest to S3
+   * storage: (ctx) => ctx.column === 'avatar' ? undefined : 's3'
+   * ```
+   */
+  storage?: StorageOptions;
+
+  /**
+   * Custom Content Security Policy directives.
+   * Extends the strict defaults — origins are appended, not replaced.
+   *
+   * @example
+   * ```ts
+   * // Allow S3 image previews on admin screens
+   * csp: { imgSrc: ['https://my-bucket.s3.amazonaws.com'] }
+   * ```
+   */
+  csp?: CspOptions;
 }
 
 /**
@@ -323,6 +615,10 @@ export interface ResolvedCmsOptions {
   auth?: ResolvedAuthOptions;
   /** Plugin registry (undefined if no plugins configured) */
   plugins?: PluginRegistry;
+  /** Storage registry (built from plugins) - undefined if no storage providers */
+  storage?: StorageRegistry;
+  /** Computed security headers (CSP + other headers), built once at startup */
+  securityHeaders: Record<string, string>;
 }
 
 /**

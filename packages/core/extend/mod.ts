@@ -102,3 +102,8 @@ export type {
   PluginColumnConfig,
 } from './types.ts';
 export { CMS_TABLE_OPTIONS } from './types.ts';
+export {
+  getFileKeyPrefix,
+  isValidFileKey,
+  isValidFileReference,
+} from './file.ts';

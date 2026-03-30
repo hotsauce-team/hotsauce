@@ -4,7 +4,9 @@ import { assertEquals, assertThrows } from '@std/assert';
 import {
   CmsConfigError,
   CmsOptionsSchema,
+  validateAutoDraft,
   validateCmsOptions,
+  validateCspOptions,
 } from '../validation.ts';
 
 // Mock minimal valid options
@@ -215,12 +217,12 @@ Deno.test('CmsConfigError: includes ZodError details', () => {
 });
 
 // =============================================================================
-// validateFileColumns tests
+// validateFileColumnsAndConfigs tests
 // =============================================================================
 
-import { validateFileColumns } from '../validation.ts';
+import { validateFileColumnsAndConfigs } from '../validation.ts';
 
-Deno.test('validateFileColumns: accepts file columns with json dataType', () => {
+Deno.test('validateFileColumnsAndConfigs: accepts file columns with json dataType', () => {
   const introspected = {
     tables: [
       {
@@ -232,10 +234,184 @@ Deno.test('validateFileColumns: accepts file columns with json dataType', () => 
     ],
   };
   // Should not throw
-  validateFileColumns(introspected);
+  validateFileColumnsAndConfigs(introspected);
 });
 
-Deno.test('validateFileColumns: accepts tables without file columns', () => {
+Deno.test('validateFileColumnsAndConfigs: accepts file.previewSvg boolean on json columns', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'assets',
+        columns: [
+          {
+            name: 'icon',
+            dataType: 'json',
+            cmsOptions: { file: { previewSvg: true } },
+          },
+        ],
+      },
+    ],
+  };
+
+  validateFileColumnsAndConfigs(introspected);
+});
+
+Deno.test('validateFileColumnsAndConfigs: rejects non-boolean file.previewSvg', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'assets',
+        columns: [
+          {
+            name: 'icon',
+            dataType: 'json',
+            cmsOptions: {
+              file: { previewSvg: 'yes' as unknown as boolean },
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  assertThrows(
+    () => validateFileColumnsAndConfigs(introspected),
+    CmsConfigError,
+    'file.previewSvg must be a boolean',
+  );
+});
+
+Deno.test('validateFileColumnsAndConfigs: accepts valid file.accept string', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'document',
+            dataType: 'json',
+            cmsOptions: { file: { accept: 'application/pdf,.doc,.docx' } },
+          },
+        ],
+      },
+    ],
+  };
+
+  validateFileColumnsAndConfigs(introspected);
+});
+
+Deno.test('validateFileColumnsAndConfigs: rejects non-string file.accept', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'document',
+            dataType: 'json',
+            cmsOptions: {
+              file: { accept: ['image/*'] as unknown as string },
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  assertThrows(
+    () => validateFileColumnsAndConfigs(introspected),
+    CmsConfigError,
+    'file.accept must be a string',
+  );
+});
+
+Deno.test('validateFileColumnsAndConfigs: accepts valid file.maxSize number', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'photo',
+            dataType: 'json',
+            cmsOptions: { file: { maxSize: 5_000_000 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  validateFileColumnsAndConfigs(introspected);
+});
+
+Deno.test('validateFileColumnsAndConfigs: accepts file.maxSize of 0', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'photo',
+            dataType: 'json',
+            cmsOptions: { file: { maxSize: 0 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  validateFileColumnsAndConfigs(introspected);
+});
+
+Deno.test('validateFileColumnsAndConfigs: rejects non-number file.maxSize', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'document',
+            dataType: 'json',
+            cmsOptions: {
+              file: { maxSize: '5MB' as unknown as number },
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  assertThrows(
+    () => validateFileColumnsAndConfigs(introspected),
+    CmsConfigError,
+    'file.maxSize must be a non-negative number',
+  );
+});
+
+Deno.test('validateFileColumnsAndConfigs: rejects negative file.maxSize', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'uploads',
+        columns: [
+          {
+            name: 'document',
+            dataType: 'json',
+            cmsOptions: { file: { maxSize: -100 } },
+          },
+        ],
+      },
+    ],
+  };
+
+  assertThrows(
+    () => validateFileColumnsAndConfigs(introspected),
+    CmsConfigError,
+    'file.maxSize must be a non-negative number',
+  );
+});
+
+Deno.test('validateFileColumnsAndConfigs: accepts tables without file columns', () => {
   const introspected = {
     tables: [
       {
@@ -248,10 +424,10 @@ Deno.test('validateFileColumns: accepts tables without file columns', () => {
     ],
   };
   // Should not throw
-  validateFileColumns(introspected);
+  validateFileColumnsAndConfigs(introspected);
 });
 
-Deno.test('validateFileColumns: rejects file column with string dataType', () => {
+Deno.test('validateFileColumnsAndConfigs: rejects file column with string dataType', () => {
   const introspected = {
     tables: [
       {
@@ -263,13 +439,13 @@ Deno.test('validateFileColumns: rejects file column with string dataType', () =>
     ],
   };
   assertThrows(
-    () => validateFileColumns(introspected),
+    () => validateFileColumnsAndConfigs(introspected),
     CmsConfigError,
     'users.avatar',
   );
 });
 
-Deno.test('validateFileColumns: rejects file column with number dataType', () => {
+Deno.test('validateFileColumnsAndConfigs: rejects file column with number dataType', () => {
   const introspected = {
     tables: [
       {
@@ -281,13 +457,13 @@ Deno.test('validateFileColumns: rejects file column with number dataType', () =>
     ],
   };
   assertThrows(
-    () => validateFileColumns(introspected),
+    () => validateFileColumnsAndConfigs(introspected),
     CmsConfigError,
     'posts.image',
   );
 });
 
-Deno.test('validateFileColumns: reports multiple errors', () => {
+Deno.test('validateFileColumnsAndConfigs: reports multiple errors', () => {
   const introspected = {
     tables: [
       {
@@ -305,10 +481,324 @@ Deno.test('validateFileColumns: reports multiple errors', () => {
     ],
   };
   try {
-    validateFileColumns(introspected);
+    validateFileColumnsAndConfigs(introspected);
   } catch (error) {
     const message = (error as CmsConfigError).message;
     assertEquals(message.includes('users.avatar'), true);
     assertEquals(message.includes('posts.image'), true);
   }
+});
+
+// =============================================================================
+// CSP validation tests
+// =============================================================================
+
+Deno.test('validateCspOptions: accepts valid https origins', () => {
+  validateCspOptions({
+    imgSrc: ['https://s3.amazonaws.com', 'https://cdn.example.com:8443'],
+  });
+});
+
+Deno.test('validateCspOptions: accepts valid http origins', () => {
+  validateCspOptions({
+    imgSrc: ['http://localhost:9000'],
+  });
+});
+
+Deno.test('validateCspOptions: accepts empty arrays', () => {
+  validateCspOptions({ imgSrc: [], connectSrc: [], frameSrc: [] });
+});
+
+Deno.test('validateCspOptions: accepts undefined directives', () => {
+  validateCspOptions({});
+});
+
+Deno.test('validateCspOptions: rejects non-URL strings', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['not-a-url'] }),
+    CmsConfigError,
+    'not a valid URL origin',
+  );
+});
+
+Deno.test('validateCspOptions: rejects javascript: scheme', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['javascript:alert(1)'] }),
+    CmsConfigError,
+    'http: or https:',
+  );
+});
+
+Deno.test('validateCspOptions: rejects data: scheme', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['data:text/html,<h1>hi</h1>'] }),
+    CmsConfigError,
+    'http: or https:',
+  );
+});
+
+Deno.test('validateCspOptions: rejects ftp: scheme', () => {
+  assertThrows(
+    () => validateCspOptions({ connectSrc: ['ftp://files.example.com'] }),
+    CmsConfigError,
+    'http: or https:',
+  );
+});
+
+Deno.test('validateCspOptions: rejects URLs with paths', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['https://s3.example.com/bucket'] }),
+    CmsConfigError,
+    'not a full URL with path',
+  );
+});
+
+Deno.test('validateCspOptions: rejects URLs with query strings', () => {
+  assertThrows(
+    () => validateCspOptions({ imgSrc: ['https://s3.example.com?key=val'] }),
+    CmsConfigError,
+    'not a full URL with path',
+  );
+});
+
+Deno.test('validateCspOptions: reports errors for multiple directives', () => {
+  try {
+    validateCspOptions({
+      imgSrc: ['not-valid'],
+      frameSrc: ['also-not-valid'],
+    });
+  } catch (error) {
+    const message = (error as CmsConfigError).message;
+    assertEquals(message.includes('csp.imgSrc'), true);
+    assertEquals(message.includes('csp.frameSrc'), true);
+  }
+});
+
+// =============================================================================
+// validateAutoDraft tests
+// =============================================================================
+
+Deno.test('validateAutoDraft: accepts table with all nullable columns', () => {
+  const introspected = {
+    tables: [{
+      name: 'media',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'file',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: false,
+        },
+        { name: 'alt', isPrimaryKey: false, hasDefault: false, notNull: false },
+      ],
+    }],
+  };
+  // Should not throw
+  validateAutoDraft(introspected);
+});
+
+Deno.test('validateAutoDraft: accepts table with all columns having defaults', () => {
+  const introspected = {
+    tables: [{
+      name: 'uploads',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'status',
+          isPrimaryKey: false,
+          hasDefault: true,
+          notNull: true,
+        },
+        {
+          name: 'created_at',
+          isPrimaryKey: false,
+          hasDefault: true,
+          notNull: true,
+        },
+      ],
+    }],
+  };
+  validateAutoDraft(introspected);
+});
+
+Deno.test('validateAutoDraft: accepts table with mix of nullable and defaulted', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'title',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: false,
+        },
+        {
+          name: 'published',
+          isPrimaryKey: false,
+          hasDefault: true,
+          notNull: true,
+        },
+      ],
+    }],
+  };
+  validateAutoDraft(introspected);
+});
+
+Deno.test('validateAutoDraft: rejects table with NOT NULL column without default', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'title',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: true,
+        },
+      ],
+    }],
+  };
+  assertThrows(
+    () => validateAutoDraft(introspected),
+    CmsConfigError,
+    'title',
+  );
+});
+
+Deno.test('validateAutoDraft: reports multiple blocking columns', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'title',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: true,
+        },
+        { name: 'slug', isPrimaryKey: false, hasDefault: false, notNull: true },
+      ],
+    }],
+  };
+  try {
+    validateAutoDraft(introspected);
+  } catch (error) {
+    const message = (error as CmsConfigError).message;
+    assertEquals(message.includes('title'), true);
+    assertEquals(message.includes('slug'), true);
+  }
+});
+
+Deno.test('validateAutoDraft: skips tables without autoDraft', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+        {
+          name: 'title',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: true,
+        },
+      ],
+    }],
+  };
+  // Should not throw — autoDraft is not set
+  validateAutoDraft(introspected);
+});
+
+Deno.test('validateAutoDraft: rejects PK without default', () => {
+  const introspected = {
+    tables: [{
+      name: 'media',
+      cmsOptions: { autoDraft: true },
+      columns: [
+        { name: 'id', isPrimaryKey: true, hasDefault: false, notNull: true },
+        {
+          name: 'file',
+          isPrimaryKey: false,
+          hasDefault: false,
+          notNull: false,
+        },
+      ],
+    }],
+  };
+  assertThrows(
+    () => validateAutoDraft(introspected),
+    CmsConfigError,
+    'id',
+  );
+});
+
+// =============================================================================
+// canAutoCreateDraft tests
+// =============================================================================
+
+import { canAutoCreateDraft } from '../crud-helpers.ts';
+import type { IntrospectedTable } from '@hotsauce/core';
+
+function makeTable(
+  columns: Array<
+    {
+      name: string;
+      isPrimaryKey: boolean;
+      hasDefault: boolean;
+      notNull: boolean;
+    }
+  >,
+): IntrospectedTable {
+  return {
+    name: 'test',
+    primaryKey: columns.filter((c) => c.isPrimaryKey).map((c) => c.name),
+    columns: columns.map((c) => ({
+      ...c,
+      propertyName: c.name,
+      columnType: 'string',
+      dataType: 'string',
+      isUnique: false,
+    })),
+    table: {},
+  };
+}
+
+Deno.test('canAutoCreateDraft: true when all columns nullable', () => {
+  const table = makeTable([
+    { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+    { name: 'file', isPrimaryKey: false, hasDefault: false, notNull: false },
+  ]);
+  assertEquals(canAutoCreateDraft(table), true);
+});
+
+Deno.test('canAutoCreateDraft: true when all columns have defaults', () => {
+  const table = makeTable([
+    { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+    { name: 'status', isPrimaryKey: false, hasDefault: true, notNull: true },
+  ]);
+  assertEquals(canAutoCreateDraft(table), true);
+});
+
+Deno.test('canAutoCreateDraft: false when NOT NULL column has no default', () => {
+  const table = makeTable([
+    { name: 'id', isPrimaryKey: true, hasDefault: true, notNull: true },
+    { name: 'title', isPrimaryKey: false, hasDefault: false, notNull: true },
+  ]);
+  assertEquals(canAutoCreateDraft(table), false);
+});
+
+Deno.test('canAutoCreateDraft: false when PK has no default', () => {
+  const table = makeTable([
+    { name: 'id', isPrimaryKey: true, hasDefault: false, notNull: true },
+    { name: 'file', isPrimaryKey: false, hasDefault: false, notNull: false },
+  ]);
+  assertEquals(canAutoCreateDraft(table), false);
 });

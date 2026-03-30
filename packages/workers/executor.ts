@@ -23,6 +23,37 @@ import { validateSerializable } from './validate.ts';
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Check whether a URL is safe for use in href/src attributes.
+ * Returns the URL if safe, null if unsafe.
+ *
+ * Allows: relative URLs (/path, ?query, #hash), http:, https:
+ * Blocks: javascript:, data:, vbscript:, scheme-relative (//),
+ *         control characters, and percent-encoded ASCII control characters
+ *         (%00–%1F, %7F).
+ *
+ * NOTE: Duplicated in packages/ui/html.ts — keep in sync.
+ */
+function getSafeUrl(url: string): string | null {
+  const input = url.trim();
+  if (!input) return null;
+
+  // Block control characters and backslashes (scheme obfuscation vectors)
+  // deno-lint-ignore no-control-regex
+  if (/[\x00-\x1f\x7f-\x9f\\]/.test(input)) return null;
+  if (/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(input)) return null;
+
+  // Block scheme-relative URLs (//evil.com)
+  if (input.startsWith('//')) return null;
+
+  // If it has a scheme (RFC 3986: ALPHA *(ALPHA/DIGIT/"+"/"-"/".")), only allow http(s)
+  if (/^[a-z][a-z0-9+\-.]*:/i.test(input)) {
+    if (!/^https?:\/\//i.test(input)) return null;
+  }
+
+  return input;
+}
+
+/**
  * Validate that a value is a valid FieldUIOverride.
  * Returns a descriptive error message if invalid, null if valid.
  */
@@ -34,26 +65,35 @@ function validateFieldUIOverride(value: unknown): string | null {
 
   // Must be an object
   if (typeof value !== 'object') {
-    return `Expected null or an object with 'link' and/or 'valueSummary', got ${typeof value}`;
+    return `Expected null or an object with 'link', 'valueSummary', and/or 'fileUrl', got ${typeof value}`;
   }
 
-  // Must have at least link or valueSummary
+  // Must have at least link, valueSummary, or fileUrl
   const obj = value as Record<string, unknown>;
-  if (!('link' in obj) && !('valueSummary' in obj)) {
-    return `Expected object with 'link' and/or 'valueSummary' property, got: ${
+  if (!('link' in obj) && !('valueSummary' in obj) && !('fileUrl' in obj)) {
+    return `Expected object with 'link', 'valueSummary', and/or 'fileUrl' property, got: ${
       JSON.stringify(Object.keys(obj))
     }`;
   }
 
-  // valueSummary-only is valid (no link required)
+  // valueSummary-only or fileUrl-only is valid (no link required)
   if (!('link' in obj)) {
-    // Only valueSummary provided - validate it's a string
-    if (typeof obj.valueSummary !== 'string') {
+    // Validate valueSummary is a string if present
+    if ('valueSummary' in obj && typeof obj.valueSummary !== 'string') {
       return `Expected 'valueSummary' to be a string, got ${typeof obj
         .valueSummary}`;
     }
+    // Optional: fileUrl (must be safe URL string if present)
+    if ('fileUrl' in obj) {
+      if (typeof obj.fileUrl !== 'string') {
+        return `Expected 'fileUrl' to be a string, got ${typeof obj.fileUrl}`;
+      }
+      if (getSafeUrl(obj.fileUrl) === null) {
+        return `Unsafe URL scheme in 'fileUrl'. Only http:, https:, and relative URLs are allowed.`;
+      }
+    }
     // Check for unexpected properties
-    const allowedRootProps = ['valueSummary'];
+    const allowedRootProps = ['valueSummary', 'fileUrl'];
     const unexpectedRootProps = Object.keys(obj).filter(
       (k) => !allowedRootProps.includes(k),
     );
@@ -79,9 +119,12 @@ function validateFieldUIOverride(value: unknown): string | null {
     return `Expected 'link.label' to be a string, got ${typeof linkObj.label}`;
   }
 
-  // Required: href (string)
+  // Required: href (string with safe URL scheme)
   if (typeof linkObj.href !== 'string') {
     return `Expected 'link.href' to be a string, got ${typeof linkObj.href}`;
+  }
+  if (getSafeUrl(linkObj.href) === null) {
+    return `Unsafe URL scheme in 'link.href'. Only http:, https:, and relative URLs are allowed.`;
   }
 
   // Optional: target (must be '_blank' if present)
@@ -108,8 +151,18 @@ function validateFieldUIOverride(value: unknown): string | null {
       .valueSummary}`;
   }
 
+  // Optional: fileUrl (must be safe URL string if present)
+  if ('fileUrl' in obj) {
+    if (typeof obj.fileUrl !== 'string') {
+      return `Expected 'fileUrl' to be a string, got ${typeof obj.fileUrl}`;
+    }
+    if (getSafeUrl(obj.fileUrl) === null) {
+      return `Unsafe URL scheme in 'fileUrl'. Only http:, https:, and relative URLs are allowed.`;
+    }
+  }
+
   // Check for unexpected properties on root object
-  const allowedRootProps = ['link', 'valueSummary'];
+  const allowedRootProps = ['link', 'valueSummary', 'fileUrl'];
   const unexpectedRootProps = Object.keys(obj).filter(
     (k) => !allowedRootProps.includes(k),
   );
@@ -220,6 +273,8 @@ export interface RegisteredPlugin {
  * Context for plugin error reporting
  */
 export interface PluginErrorContext {
+  /** Discriminator for ErrorContext union (always 'plugin') */
+  source: 'plugin';
   /** Plugin name that failed */
   plugin: string;
   /** Type of operation that failed */
@@ -232,6 +287,8 @@ export interface PluginErrorContext {
     | 'route:render';
   /** CRUD action (for action hooks) */
   action?: CrudAction;
+  /** The hook context that was active when the error occurred (varies by operation) */
+  hookContext?: Serializable;
 }
 
 /**
@@ -332,6 +389,8 @@ export class WorkerExecutor {
             ctx,
             data: result,
           } as unknown as Serializable,
+          undefined,
+          ctx as unknown as Serializable,
         );
 
         if (
@@ -343,7 +402,20 @@ export class WorkerExecutor {
         // Execute in-process hook (function form)
         const hook = this.getInProcessTransformHook(plugin.hooks, 'beforeSave');
         if (hook) {
-          result = await hook(ctx, result);
+          try {
+            result = await hook(ctx, result);
+          } catch (error) {
+            const err = error instanceof Error
+              ? error
+              : new Error(String(error));
+            this.onError?.(err, {
+              source: 'plugin',
+              plugin: plugin.name,
+              operation: 'transform:beforeSave',
+              hookContext: ctx as unknown as Serializable,
+            });
+            throw err;
+          }
         }
       }
     }
@@ -373,6 +445,8 @@ export class WorkerExecutor {
             ctx,
             data: result,
           } as unknown as Serializable,
+          undefined,
+          ctx as unknown as Serializable,
         );
 
         if (
@@ -384,7 +458,20 @@ export class WorkerExecutor {
         // Execute in-process hook (function form)
         const hook = this.getInProcessTransformHook(plugin.hooks, 'afterRead');
         if (hook) {
-          result = await hook(ctx, result);
+          try {
+            result = await hook(ctx, result);
+          } catch (error) {
+            const err = error instanceof Error
+              ? error
+              : new Error(String(error));
+            this.onError?.(err, {
+              source: 'plugin',
+              plugin: plugin.name,
+              operation: 'transform:afterRead',
+              hookContext: ctx as unknown as Serializable,
+            });
+            throw err;
+          }
         }
       }
     }
@@ -446,6 +533,8 @@ export class WorkerExecutor {
           plugin.name,
           'ui:renderField',
           pluginCtx as unknown as Serializable,
+          undefined,
+          pluginCtx as unknown as Serializable,
         );
 
         // Validate response
@@ -455,7 +544,12 @@ export class WorkerExecutor {
             new Error(
               `Plugin '${plugin.name}' returned invalid FieldUIOverride: ${validationError}`,
             ),
-            { plugin: plugin.name, operation: 'ui:renderField' },
+            {
+              source: 'plugin',
+              plugin: plugin.name,
+              operation: 'ui:renderField',
+              hookContext: pluginCtx as unknown as Serializable,
+            },
           );
           // Skip this plugin, continue to next
           continue;
@@ -478,7 +572,12 @@ export class WorkerExecutor {
               new Error(
                 `Plugin '${plugin.name}' returned invalid FieldUIOverride: ${validationError}`,
               ),
-              { plugin: plugin.name, operation: 'ui:renderField' },
+              {
+                source: 'plugin',
+                plugin: plugin.name,
+                operation: 'ui:renderField',
+                hookContext: pluginCtx as unknown as Serializable,
+              },
             );
             // Skip this plugin, continue to next
             continue;
@@ -540,7 +639,14 @@ export class WorkerExecutor {
           const blocking = this.isBlocking(hook);
           const handler = typeof hook === 'function' ? hook : hook.handler;
 
-          const promise = Promise.resolve(handler(ctx)).then(() => {});
+          const promise = new Promise<void>((resolve, reject) => {
+            try {
+              const result = handler(ctx);
+              Promise.resolve(result).then(() => resolve(), reject);
+            } catch (err) {
+              reject(err);
+            }
+          });
 
           if (!blocking) {
             fireAndForgetPromises.push(
@@ -550,21 +656,37 @@ export class WorkerExecutor {
                   ? error
                   : new Error(String(error));
                 this.onError?.(err, {
+                  source: 'plugin',
                   plugin: plugin.name,
                   operation: 'action',
                   action,
+                  hookContext: ctx as unknown as Serializable,
                 });
               }),
             );
           } else {
-            blockingPromises.push(promise);
+            blockingPromises.push(
+              promise.catch((error) => {
+                const err = error instanceof Error
+                  ? error
+                  : new Error(String(error));
+                this.onError?.(err, {
+                  source: 'plugin',
+                  plugin: plugin.name,
+                  operation: 'action',
+                  action,
+                  hookContext: ctx as unknown as Serializable,
+                });
+                throw err; // Re-throw so caller can handle
+              }),
+            );
           }
         }
       }
     }
 
-    // Wait for blocking hooks
-    await Promise.allSettled(blockingPromises);
+    // Wait for blocking hooks (re-thrown errors propagate to caller)
+    await Promise.all(blockingPromises);
 
     // Fire-and-forget hooks run in background (not awaited)
   }
@@ -607,6 +729,7 @@ export class WorkerExecutor {
       'action',
       { action, ctx } as unknown as Serializable,
       action,
+      ctx as unknown as Serializable,
     );
   }
 
@@ -624,13 +747,16 @@ export class WorkerExecutor {
     renderType: string,
     context: PluginRouteContext,
   ): Promise<string> {
+    const routePayload = {
+      renderType,
+      context,
+    } as unknown as Serializable;
     const response = await this.sendToWorker(
       pluginName,
       'route:render',
-      {
-        renderType,
-        context,
-      } as unknown as Serializable,
+      routePayload,
+      undefined,
+      routePayload,
     );
 
     // Worker should return { html: string }
@@ -648,7 +774,12 @@ export class WorkerExecutor {
       `Plugin '${pluginName}' route render '${renderType}' returned invalid response. ` +
         `Expected { html: string }, got: ${JSON.stringify(response)}`,
     );
-    this.onError?.(err, { plugin: pluginName, operation: 'route:render' });
+    this.onError?.(err, {
+      source: 'plugin',
+      plugin: pluginName,
+      operation: 'route:render',
+      hookContext: routePayload,
+    });
     throw err;
   }
 
@@ -685,6 +816,7 @@ export class WorkerExecutor {
     type: WorkerMessageType,
     payload: Serializable,
     action?: CrudAction,
+    hookContext?: Serializable,
   ): Promise<Serializable> {
     const worker = this.workers.get(pluginName);
     if (!worker) {
@@ -708,11 +840,13 @@ export class WorkerExecutor {
 
     // Build error context for this request
     const context: PluginErrorContext = {
+      source: 'plugin',
       plugin: pluginName,
       operation: type === 'init'
         ? 'init'
         : type as PluginErrorContext['operation'],
       action,
+      hookContext,
     };
 
     return new Promise((resolve, reject) => {

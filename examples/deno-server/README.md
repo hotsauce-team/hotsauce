@@ -52,7 +52,7 @@ The example includes commented-out policy configuration showing how to:
 - **Read-only tables:** Anyone can view but no one can modify
 - **Admin bypass:** Admins can access everything
 
-Uncomment the `auth.policies` section in `main.ts` to enable. See the CMS docs: [Row-Level Security (Policies)](../../packages/cms/README.md#row-level-security-policies).
+Uncomment the `policies` section in `main.ts` to enable. See the CMS docs: [Row-Level Security (Policies)](../../packages/cms/README.md#row-level-security-policies).
 
 ## Notes
 

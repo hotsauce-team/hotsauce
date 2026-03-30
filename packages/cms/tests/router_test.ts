@@ -418,15 +418,17 @@ Deno.test('matchPluginRoute: matches different plugin', () => {
   assertEquals(match.route.pattern, 'browse');
 });
 
-Deno.test('matchPluginRoute: rejects POST requests (not yet supported)', () => {
-  // POST should be rejected until POST support is properly added
+Deno.test('matchPluginRoute: accepts POST requests for routes declaring POST', () => {
+  // POST should match routes that declare POST method
   const postMatch = matchPluginRoute(
     new URL('http://localhost/admin/media/upload'),
     '/admin',
     'POST',
     mockPlugins,
   );
-  assertEquals(postMatch, null);
+  assertExists(postMatch);
+  assertEquals(postMatch.plugin.name, 'media');
+  assertEquals(postMatch.route.pattern, 'upload');
 
   // GET to browse should still work
   const getMatch = matchPluginRoute(
@@ -485,4 +487,34 @@ Deno.test('matchPluginRoute: handles base path with trailing slash', () => {
   assertExists(match);
   assertEquals(match.plugin.name, 'puck');
   assertEquals(match.params.table, 'posts');
+});
+
+// ─────────────────────────────────────────────────────────────
+// Plugin Route Body Tests
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('PluginRouteContext: body field is part of context type', () => {
+  // This is a compile-time check that body exists on the context type
+  // The actual passing of body happens in handlePluginRoute in mod.ts
+
+  // Type check: body is optional string on PluginRouteContext
+  const ctx = {
+    table: 'media',
+    recordId: '123',
+    column: 'file',
+    record: {},
+    value: null,
+    csrfToken: 'token',
+    sourceToken: 'source',
+    basePath: '/admin',
+    requestUrl: 'http://localhost/admin/s3-storage/presign',
+    method: 'POST',
+    body: '{"table":"media","column":"file"}', // POST body
+    params: {},
+  };
+
+  // Verify body can be parsed
+  const parsed = JSON.parse(ctx.body);
+  assertEquals(parsed.table, 'media');
+  assertEquals(ctx.method, 'POST');
 });

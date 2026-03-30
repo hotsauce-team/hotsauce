@@ -68,6 +68,7 @@ await db.execute(sql`
     file JSONB,
     alt TEXT,
     caption TEXT,
+    published BOOLEAN DEFAULT FALSE NOT NULL,
     created_at TIMESTAMP DEFAULT NOW() NOT NULL
   )
 `);
@@ -101,8 +102,8 @@ await db.execute(sql`
 await db.execute(sql`
   CREATE TABLE IF NOT EXISTS pages (
     id SERIAL PRIMARY KEY,
-    title VARCHAR(255) NOT NULL,
-    slug VARCHAR(255) NOT NULL UNIQUE,
+    title VARCHAR(255),
+    slug VARCHAR(255) UNIQUE,
     content JSONB,
     published BOOLEAN DEFAULT FALSE NOT NULL,
     sort_order INTEGER DEFAULT 0 NOT NULL,
@@ -127,6 +128,7 @@ await db.execute(sql`
     password_hash VARCHAR(255) NOT NULL,
     name VARCHAR(100) NOT NULL,
     role VARCHAR(50) DEFAULT 'editor' NOT NULL,
+    avatar JSONB,
     created_at TIMESTAMP DEFAULT NOW() NOT NULL
   )
 `);
@@ -190,39 +192,38 @@ const authorAlex = author2 ?? authorList.find((a) => a.slug === 'alex-writer');
 // Media items
 const [media1] = await db.insert(media).values({
   file: {
-    key: 'demo/hono-logo.png',
     filename: 'hono-logo.png',
     contentType: 'image/png',
     size: 87,
-    // 20x20 orange PNG placeholder - base64 encoded
+    // 20x20 orange PNG placeholder - base64 encoded (stored in DB, not S3)
     data:
       'iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAHklEQVR42mP438Dwn5qYYdTAUQNHDRw1cNTAkWogAE/x5Q5+gLGvAAAAAElFTkSuQmCC',
   },
   alt: 'Hono framework logo',
   caption: 'The lightweight web framework that works everywhere',
+  published: true,
 }).onConflictDoNothing().returning();
 
 const [media2] = await db.insert(media).values({
   file: {
-    key: 'demo/drizzle-logo.png',
     filename: 'drizzle-logo.png',
     contentType: 'image/png',
     size: 86,
-    // 20x20 blue PNG placeholder - base64 encoded
+    // 20x20 blue PNG placeholder - base64 encoded (stored in DB, not S3)
     data:
       'iVBORw0KGgoAAAANSUhEUgAAABQAAAAUCAYAAACNiR0NAAAAHUlEQVR42mNgqPj/n6p41MBRA0cNHDVw1MCRaiAAnUzYjujdTh0AAAAASUVORK5CYII=',
   },
   alt: 'Drizzle ORM logo',
   caption: 'TypeScript ORM that feels like magic',
+  published: true,
 }).onConflictDoNothing().returning();
 
 const [media3] = await db.insert(media).values({
   file: {
-    key: 'demo/deno-logo.svg',
     filename: 'deno-logo.svg',
     contentType: 'image/svg+xml',
     size: 387,
-    // Base64 blob stored in 'data' field - will be served via /admin/files/media/file/:id
+    // Base64 blob stored in DB - will be served via /admin/files/media/file/:id
     data:
       'PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NSIgZmlsbD0iIzAwMDAwMCIvPgogIDxjaXJjbGUgY3g9IjM1IiBjeT0iNDAiIHI9IjUiIGZpbGw9IiNmZmZmZmYiLz4KICA8Y2lyY2xlIGN4PSI2NSIgY3k9IjQwIiByPSI1IiBmaWxsPSIjZmZmZmZmIi8+CiAgPHBhdGggZD0iTSAzMCA3MCBRIDU0IDg1IDc4IDcwIiBzdHJva2U9IiNmZmZmZmYiIHN0cm9rZS13aWR0aD0iMyIgZmlsbD0ibm9uZSIvPgo8L3N2Zz4=',
   },

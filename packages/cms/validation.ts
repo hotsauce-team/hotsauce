@@ -231,18 +231,29 @@ export function validateResolvedSecrets(secrets: {
 }
 
 /**
- * Validate that file columns are on JSON-compatible column types.
- * File columns (marked with `$cms({ file: true })`) must be on jsonb/json columns.
+ * Validate file columns: JSON-compatible types and config shape.
+ * File columns (marked with `$cms({ file: true })` or `$cms({ file: { ... } })`)
+ * must be on jsonb/json columns. Also validates file config options.
  *
- * @throws {CmsConfigError} When file: true is used on a non-JSON column
+ * @throws {CmsConfigError} When file config is invalid
  */
-export function validateFileColumns(
+export function validateFileColumnsAndConfigs(
   introspected: {
     tables: Array<
       {
         name: string;
         columns: Array<
-          { name: string; dataType: string; cmsOptions?: { file?: boolean } }
+          {
+            name: string;
+            dataType: string;
+            cmsOptions?: {
+              file?: boolean | {
+                accept?: string;
+                maxSize?: number;
+                previewSvg?: boolean;
+              };
+            };
+          }
         >;
       }
     >;
@@ -252,12 +263,36 @@ export function validateFileColumns(
 
   for (const table of introspected.tables) {
     for (const column of table.columns) {
-      if (column.cmsOptions?.file && column.dataType !== 'json') {
+      const fileConfig = column.cmsOptions?.file;
+      if (!fileConfig) continue;
+
+      if (column.dataType !== 'json') {
         errors.push(
-          `  - ${table.name}.${column.name}: { file: true } requires a JSON column (jsonb/json), ` +
+          `  - ${table.name}.${column.name}: { file: ... } requires a JSON column (jsonb/json), ` +
             `but column has dataType '${column.dataType}'. ` +
             `Use jsonb() (Postgres), json() (MySQL), or text({ mode: 'json' }) (SQLite).`,
         );
+      }
+
+      if (typeof fileConfig === 'object') {
+        const { accept, maxSize, previewSvg } = fileConfig;
+        if (accept !== undefined && typeof accept !== 'string') {
+          errors.push(
+            `  - ${table.name}.${column.name}: file.accept must be a string when provided.`,
+          );
+        }
+        if (maxSize !== undefined) {
+          if (typeof maxSize !== 'number' || maxSize < 0) {
+            errors.push(
+              `  - ${table.name}.${column.name}: file.maxSize must be a non-negative number when provided.`,
+            );
+          }
+        }
+        if (previewSvg !== undefined && typeof previewSvg !== 'boolean') {
+          errors.push(
+            `  - ${table.name}.${column.name}: file.previewSvg must be a boolean when provided.`,
+          );
+        }
       }
     }
   }
@@ -266,5 +301,114 @@ export function validateFileColumns(
     throw new CmsConfigError(
       `Invalid file column configuration:\n${errors.join('\n')}`,
     );
+  }
+}
+
+/**
+ * Validate autoDraft table option.
+ *
+ * Tables with `$cms({ autoDraft: true })` must have every non-PK column
+ * either nullable or with a database default. Otherwise the CMS can't
+ * `INSERT … DEFAULT VALUES` to create a draft row.
+ *
+ * @throws {CmsConfigError} When autoDraft is set on incompatible tables
+ */
+export function validateAutoDraft(
+  introspected: {
+    tables: Array<
+      {
+        name: string;
+        cmsOptions?: { autoDraft?: boolean };
+        columns: Array<
+          {
+            name: string;
+            isPrimaryKey: boolean;
+            hasDefault: boolean;
+            notNull: boolean;
+          }
+        >;
+      }
+    >;
+  },
+): void {
+  const errors: string[] = [];
+
+  for (const table of introspected.tables) {
+    if (!table.cmsOptions?.autoDraft) continue;
+
+    const blocking = table.columns.filter((col) => {
+      if (col.isPrimaryKey && col.hasDefault) return false;
+      if (col.hasDefault) return false;
+      if (!col.notNull) return false;
+      return true;
+    });
+
+    if (blocking.length > 0) {
+      const cols = blocking.map((c) => c.name).join(', ');
+      errors.push(
+        `  - ${table.name}: autoDraft requires all non-PK columns to have defaults or be nullable. ` +
+          `Blocking column(s): ${cols}. ` +
+          `Add .default(...) or remove .notNull() from these columns.`,
+      );
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new CmsConfigError(
+      `Invalid autoDraft configuration:\n${errors.join('\n')}`,
+    );
+  }
+}
+
+/**
+ * Validate CSP origin strings.
+ * Each origin must be a valid http: or https: URL origin (scheme + host + optional port).
+ *
+ * @throws {CmsConfigError} When any origin is invalid
+ */
+export function validateCspOptions(
+  csp: { imgSrc?: string[]; connectSrc?: string[]; frameSrc?: string[] },
+): void {
+  const errors: string[] = [];
+
+  const directives: [string, string[] | undefined][] = [
+    ['imgSrc', csp.imgSrc],
+    ['connectSrc', csp.connectSrc],
+    ['frameSrc', csp.frameSrc],
+  ];
+
+  for (const [name, origins] of directives) {
+    if (!origins) continue;
+    for (const origin of origins) {
+      const err = validateOrigin(origin);
+      if (err) {
+        errors.push(`  - csp.${name}: ${err}`);
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new CmsConfigError(
+      `Invalid CSP configuration:\n${errors.join('\n')}`,
+    );
+  }
+}
+
+/**
+ * Validate a single CSP origin string.
+ * Must be scheme + host (+ optional port), no path/query/fragment.
+ */
+function validateOrigin(origin: string): string | null {
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return `'${origin}' must use http: or https: scheme`;
+    }
+    if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      return `'${origin}' must be an origin (scheme + host), not a full URL with path/query`;
+    }
+    return null;
+  } catch {
+    return `'${origin}' is not a valid URL origin`;
   }
 }

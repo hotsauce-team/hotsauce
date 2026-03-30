@@ -228,6 +228,7 @@ import type {
   FieldUIOverride,
   // Context types
   PluginContext,
+  PluginErrorContext,
   // Hook types
   PluginHooks,
   // Route types
@@ -240,6 +241,31 @@ import type {
   UIHooks,
   UIRenderFieldContext,
 } from '@hotsauce/workers';
+```
+
+### `PluginErrorContext`
+
+Passed to `onError` when a plugin fails. Part of the `ErrorContext` discriminated union in `@hotsauce/cms`:
+
+```typescript
+interface PluginErrorContext {
+  /** Always 'plugin' — discriminator for ErrorContext union */
+  source: 'plugin';
+  /** Plugin name that failed */
+  plugin: string;
+  /** Type of operation that failed */
+  operation:
+    | 'init'
+    | 'transform:beforeSave'
+    | 'transform:afterRead'
+    | 'ui:renderField'
+    | 'action'
+    | 'route:render';
+  /** CRUD action (for action hooks) */
+  action?: CrudAction;
+  /** Hook context active when the error occurred */
+  hookContext?: Serializable;
+}
 ```
 
 ## Why "workers"?

@@ -161,6 +161,61 @@ export const config = {
 
 See the [Puck documentation](https://puckeditor.com/docs) for component configuration options.
 
+### S3 Storage
+
+S3-compatible object storage for file uploads. Enables direct browser-to-S3 uploads using presigned URLs, keeping large files off your server.
+
+```typescript
+import { createS3StoragePlugin } from '@hotsauce/plugins/s3-storage';
+import { createCmsHandler } from '@hotsauce/cms';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  plugins: [
+    createS3StoragePlugin({
+      basePath: '/admin',
+      endpoint: 'https://s3.us-east-1.amazonaws.com',
+      region: 'us-east-1',
+      bucket: 'my-uploads',
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    }),
+  ],
+  // Route all file fields to S3 (simple string)
+  storage: 's3',
+  // Or use a function for per-column routing:
+  // storage: (ctx) => ctx.column === 'avatar' ? undefined : 's3',
+});
+```
+
+#### Schema Setup
+
+Mark JSON columns with `.$cms({ file: true })` to enable S3 uploads:
+
+```typescript
+file: jsonb('file').$cms({ file: true }),
+```
+
+#### Configuration Options
+
+| Option            | Type                 | Description                                       |
+| ----------------- | -------------------- | ------------------------------------------------- |
+| `basePath`        | `string`             | Base path of the CMS admin (e.g., `/admin`)       |
+| `endpoint`        | `string`             | S3 endpoint URL                                   |
+| `region`          | `string`             | AWS region (e.g., `us-east-1`)                    |
+| `bucket`          | `string \| Function` | Bucket name or function for dynamic routing       |
+| `accessKeyId`     | `string`             | AWS access key                                    |
+| `secretAccessKey` | `string`             | AWS secret key                                    |
+| `storageId`       | `string`             | Storage ID (default: `'s3'`)                      |
+| `publicEndpoint`  | `string`             | Browser-facing endpoint (for Docker/proxy setups) |
+| `expirySeconds`   | `number`             | Presigned URL expiry in seconds (default: 900)    |
+
+Works with AWS S3, MinIO, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, and any S3-compatible service.
+
+See [s3-storage/README.md](./s3-storage/README.md) for detailed documentation.
+
 ## Creating Custom Plugins
 
 Plugins run in isolated Web Workers. You provide the Worker instance, giving full control over permissions. See the [handlers README](../handlers/README.md#plugins) for detailed documentation.
@@ -219,3 +274,15 @@ filter: ((ctx) => ctx.user?.role !== 'admin');
 ```
 
 FilterContext contains: `{ hookType, table, action, user }`
+
+## Future Considerations
+
+### Client-Side Error Tracking (`onClientError`)
+
+Allow integrators to inject client-side JavaScript for error tracking (e.g., Sentry, LogRocket, Datadog RUM). This would require:
+
+1. **Configuration option** — `clientScripts.src` (URLs to load) and `clientScripts.init` (inline JS to run)
+2. **CSP modifications** — Integrators would need to allow external script sources and connect-src for the tracking service
+3. **Alternative approach** — Document how to wrap the CMS handler and inject scripts via response transformation, keeping the CMS secure by default
+
+Current workaround: Integrators can wrap responses and inject their own `<script>` tags while managing CSP at their server layer.

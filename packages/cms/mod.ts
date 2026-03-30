@@ -11,10 +11,15 @@ import type {
   ResolvedAuthOptions,
   ResolvedCmsOptions,
   RouteContext,
+  StorageId,
+  StorageOptions,
+  StorageProvider,
+  StorageRegistry,
 } from './types.ts';
 import type { Policies } from './policies/types.ts';
 import {
   introspectFullSchema,
+  isValidFileKey,
   isValidFileReference,
   mapColumnToFieldType,
 } from '@hotsauce/core';
@@ -27,10 +32,10 @@ import type {
 } from './plugins/types.ts';
 import {
   base64ToUint8Array,
+  buildSecurityHeaders,
   forbidden,
   methodNotAllowed,
   notFound,
-  SECURITY_HEADERS,
 } from './http.ts';
 import {
   generateCsrfToken,
@@ -38,13 +43,16 @@ import {
   validateCsrfToken,
 } from './csrf.ts';
 import {
+  validateAutoDraft,
   validateCmsOptions,
-  validateFileColumns,
+  validateCspOptions,
+  validateFileColumnsAndConfigs,
   validateResolvedSecrets,
 } from './validation.ts';
 import { getEnv } from './runtime-compat.ts';
 import { createPluginRegistry } from './plugins/registry.ts';
 import { createPluginService } from './plugins/service.ts';
+import type { PluginErrorHandler } from './plugins/service.ts';
 import {
   handleCreate,
   handleDashboard,
@@ -54,6 +62,7 @@ import {
   handleUpdate,
 } from './crud.ts';
 import { handleStylesheet } from './styles.ts';
+import { handleScript } from './scripts.ts';
 
 // Auth imports from @hotsauce/auth
 import {
@@ -97,6 +106,7 @@ export type {
   CmsOptionsWithAuth,
   CmsOptionsWithoutAuth,
   CrudAction,
+  CspOptions,
   ErrorContext,
   FlashMessage,
   Handler,
@@ -114,8 +124,9 @@ export {
   CmsConfigError,
   CmsOptionsSchema,
   ResolvedSecretsSchema,
+  validateAutoDraft,
   validateCmsOptions,
-  validateFileColumns,
+  validateFileColumnsAndConfigs,
   validateResolvedSecrets,
 } from './validation.ts';
 
@@ -217,6 +228,11 @@ export { getEnv, requireEnv } from './runtime-compat.ts';
 // Styles - CSS stylesheet served as external file
 // ─────────────────────────────────────────────────────────────
 export { cmsStylesheet, cssResponse, handleStylesheet } from './styles.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Scripts - JavaScript served as external file
+// ─────────────────────────────────────────────────────────────
+export { cmsScript, handleScript, jsResponse } from './scripts.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Policies - Row-level security for fine-grained authorization
@@ -409,6 +425,9 @@ async function handlePluginRoute(
 ): Promise<Response> {
   const { plugin, route, params } = match;
 
+  // Infer route action from method for policy and filter checks.
+  const routeAction = inferPluginRouteAction(request.method);
+
   // Extract table and recordId from params (common pattern)
   const table = params.table;
   const recordId = params.id;
@@ -421,9 +440,6 @@ async function handlePluginRoute(
   // ─────────────────────────────────────────────────────────────
   const pluginFilter = plugin.filter;
 
-  // Derive action from HTTP method: GET = read, POST = update (mutation)
-  const routeAction: CrudAction = request.method === 'POST' ? 'update' : 'read';
-
   const filterCtx: FilterContext = {
     hookType: 'route',
     table: table ?? '',
@@ -433,10 +449,13 @@ async function handlePluginRoute(
       : undefined,
   };
 
-  // Check filter - must explicitly allow route access
-  // (plugin filter is optional for schema-driven scoping, but routes are always explicit)
-  if (pluginFilter !== undefined && pluginFilter !== 'dangerously-open') {
-    const allowed = pluginFilter(filterCtx);
+  // Check filter - plugins with routes MUST have filter (validated at registration)
+  // If filter is 'dangerously-open', skip check; otherwise evaluate the function
+  if (pluginFilter !== 'dangerously-open') {
+    // Filter is guaranteed to be a function here (not undefined)
+    const allowed = (pluginFilter as (ctx: FilterContext) => boolean)(
+      filterCtx,
+    );
     if (!allowed) {
       return new Response('Plugin route not allowed for this table', {
         status: 403,
@@ -454,6 +473,10 @@ async function handlePluginRoute(
     csrfSecret,
   );
 
+  // Body is read lazily after validation to avoid processing large payloads
+  // for requests that will be rejected anyway (invalid table, record, or policy)
+  let body: string | undefined;
+
   // Build base context (without record data)
   const baseCtx: Omit<PluginRouteContext, 'record' | 'value' | 'field'> = {
     table: table ?? '',
@@ -470,6 +493,7 @@ async function handlePluginRoute(
     basePath: options.basePath,
     requestUrl: request.url,
     method: request.method,
+    body,
     params,
   };
 
@@ -503,8 +527,9 @@ async function handlePluginRoute(
     const tablePolicy = options.policies?.[table];
 
     // Apply ROW policy - determines if user can access this specific record
+    // Action derived from HTTP method: GET=read, POST=update
     const rowPolicy = extractRowPolicy(tablePolicy);
-    const policyResult = await applyPolicy(rowPolicy, policyCtx, 'read');
+    const policyResult = await applyPolicy(rowPolicy, policyCtx, routeAction);
 
     if (!policyResult.allowed) {
       return new Response('Access denied', { status: 403 });
@@ -551,20 +576,35 @@ async function handlePluginRoute(
 
     // Extract column value and field info (from FILTERED record)
     if (column) {
-      // Check if the requested column is readable
       const columnInfo = tableInfo.columns.find((c) => c.name === column);
-      if (columnInfo && columnResult.readableColumns.includes(column)) {
-        value = record[columnInfo.propertyName] as Serializable;
-        field = {
-          name: columnInfo.name,
-          type: mapColumnToFieldType(columnInfo),
-          config: (columnInfo.cmsOptions ?? {}) as Record<string, Serializable>,
-        };
-      } else if (columnInfo) {
-        // Column exists but user doesn't have read access
-        return new Response('Column not accessible', { status: 403 });
+      if (columnInfo) {
+        // For mutating actions, check write permission; for reads, check read permission
+        const isWrite = routeAction === 'update' || routeAction === 'delete';
+        const allowedColumns = isWrite
+          ? columnResult.writableColumns
+          : columnResult.readableColumns;
+
+        if (allowedColumns.includes(column)) {
+          value = record[columnInfo.propertyName] as Serializable;
+          field = {
+            name: columnInfo.name,
+            type: mapColumnToFieldType(columnInfo),
+            config: (columnInfo.cmsOptions ?? {}) as Record<
+              string,
+              Serializable
+            >,
+          };
+        } else {
+          // Column exists but user doesn't have access
+          return new Response('Column not accessible', { status: 403 });
+        }
       }
     }
+  }
+
+  // Read request body for mutating requests (deferred until after validation)
+  if (routeAction === 'update' || routeAction === 'delete') {
+    body = await request.text();
   }
 
   // Build full context
@@ -573,6 +613,7 @@ async function handlePluginRoute(
     record,
     value,
     field,
+    body, // Add body to context (overrides undefined from baseCtx)
   };
 
   // Dispatch based on route type
@@ -581,20 +622,41 @@ async function handlePluginRoute(
     try {
       const result = await route.handler(ctx);
       if (result instanceof Response) {
+        const ct = result.headers.get('content-type') ?? '';
+        if (ct.startsWith('text/html')) {
+          // Enforce all security headers for HTML responses
+          // (plugins cannot override CSP, X-Frame-Options, etc.)
+          for (const [k, v] of Object.entries(options.securityHeaders)) {
+            result.headers.set(k, v);
+          }
+        } else {
+          // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
+          result.headers.set('X-Content-Type-Options', 'nosniff');
+        }
         return result;
       }
-      // String result - wrap in HTML response
+      // String result - wrap in HTML response with security headers
       return new Response(result, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          ...options.securityHeaders,
+        },
       });
     } catch (error) {
+      // Generate request ID to correlate error logs with user-facing response
+      const requestId = crypto.randomUUID();
       options.onError?.(error as Error, {
+        source: 'handler',
         request,
         url: new URL(request.url),
         route: null, // Plugin routes don't use ParsedRoute
-        action: 'read',
+        action: routeAction,
+        requestId,
+        plugin: plugin.name,
       });
-      return new Response('Plugin error', { status: 500 });
+      return new Response(`Plugin error (request: ${requestId})`, {
+        status: 500,
+      });
     }
   }
 
@@ -607,21 +669,132 @@ async function handlePluginRoute(
         ctx,
       );
       return new Response(html, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          ...options.securityHeaders,
+        },
       });
     } catch (error) {
+      // Generate request ID to correlate error logs with user-facing response
+      const requestId = crypto.randomUUID();
       options.onError?.(error as Error, {
+        source: 'handler',
         request,
         url: new URL(request.url),
         route: null, // Plugin routes don't use ParsedRoute
-        action: 'read',
+        action: routeAction,
+        requestId,
+        plugin: plugin.name,
       });
-      return new Response('Plugin error', { status: 500 });
+      return new Response(`Plugin error (request: ${requestId})`, {
+        status: 500,
+      });
     }
   }
 
   // No handler or render configured (should be caught by validation)
   return new Response('Route not configured', { status: 500 });
+}
+
+/**
+ * Infer the required authorization action for plugin routes from HTTP method.
+ * Mutating methods require write-level access by default.
+ */
+function inferPluginRouteAction(method: string): CrudAction {
+  switch (method.toUpperCase()) {
+    case 'POST':
+    case 'PUT':
+    case 'PATCH':
+      return 'update';
+    case 'DELETE':
+      return 'delete';
+    case 'GET':
+    case 'HEAD':
+      return 'read';
+    default:
+      return 'read';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Storage provider extraction
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Extract storage providers from in-process plugins and build a registry.
+ * Only in-process plugins can provide storage providers (Worker plugins cannot).
+ *
+ * @param plugins - Plugin configurations to scan
+ * @param storageOptions - User-provided storage configuration
+ * @returns Storage registry or undefined if no providers
+ */
+function buildStorageRegistry(
+  plugins: import('./plugins/types.ts').PluginConfig[] | undefined,
+  storageOptions: StorageOptions | undefined,
+): StorageRegistry | undefined {
+  const instances = new Map<StorageId, StorageProvider>();
+
+  // Extract providers from plugins
+  if (plugins) {
+    for (const plugin of plugins) {
+      // Only in-process plugins can have storageProvider
+      if (!plugin.worker) {
+        const inProcessPlugin =
+          plugin as import('./plugins/types.ts').InProcessPluginConfig;
+        if (inProcessPlugin.storageProvider) {
+          const provider = inProcessPlugin.storageProvider;
+
+          // Check for duplicate IDs
+          if (instances.has(provider.id)) {
+            throw new Error(
+              `Storage provider "${provider.id}" already registered. ` +
+                `Plugin "${plugin.name}" conflicts with an existing provider.`,
+            );
+          }
+
+          instances.set(provider.id, provider);
+        }
+      }
+    }
+  }
+
+  // If no providers extracted and no storage options, return undefined
+  if (instances.size === 0 && !storageOptions) {
+    return undefined;
+  }
+
+  // Normalize storage options into registry format
+  // - string: all files go to that provider
+  // - function: dynamic routing
+  let defaultObjectStorageId: StorageId | undefined;
+  let resolveStorage: import('./types.ts').ResolveStorageFn | undefined;
+
+  if (typeof storageOptions === 'string') {
+    defaultObjectStorageId = storageOptions;
+  } else if (typeof storageOptions === 'function') {
+    resolveStorage = storageOptions;
+  }
+
+  // Build registry with normalized options
+  const registry: StorageRegistry = {
+    instances,
+    defaultObjectStorageId,
+    resolveStorage,
+  };
+
+  // If defaultObjectStorageId is set, validate it exists
+  if (
+    registry.defaultObjectStorageId &&
+    !instances.has(registry.defaultObjectStorageId)
+  ) {
+    throw new Error(
+      `Invalid storage configuration: defaultObjectStorageId "${registry.defaultObjectStorageId}" ` +
+        `does not match any registered storage provider. ` +
+        `Available providers: ${[...instances.keys()].join(', ') || '(none)'}`,
+    );
+  }
+
+  return registry;
 }
 
 export function createCmsHandler(options: CmsOptions): Handler {
@@ -656,7 +829,16 @@ export function createCmsHandler(options: CmsOptions): Handler {
     : introspectFullSchema(options.schema);
 
   // Validate file column configurations (file: true must be on JSON columns)
-  validateFileColumns(introspected);
+  validateFileColumnsAndConfigs(introspected);
+
+  // Validate autoDraft tables (all non-PK columns must have defaults or be nullable)
+  validateAutoDraft(introspected);
+
+  // Validate and build CSP security headers (computed once at startup)
+  if (options.csp) {
+    validateCspOptions(options.csp);
+  }
+  const securityHeaders = buildSecurityHeaders(options.csp);
 
   // Resolve policies:
   // - 'dangerously-open' → {} (full access)
@@ -684,7 +866,27 @@ export function createCmsHandler(options: CmsOptions): Handler {
     : undefined;
 
   // Create plugin service (lazy initialization - Workers start on first use)
-  const pluginService = createPluginService(pluginRegistry);
+  // Plugin errors flow through two paths:
+  // 1. Blocking/in-process: error propagates to CRUD handler's catch → options.onError with source: 'handler'
+  // 2. Fire-and-forget: error caught by WorkerExecutor → this bridge forwards to options.onError with source: 'plugin'
+  const pluginOnError: PluginErrorHandler = (error, ctx) => {
+    if (options.onError) {
+      options.onError(error, ctx);
+    } else {
+      // deno-lint-ignore no-console
+      console.error(
+        `[CMS Plugin Error] ${ctx.plugin}/${ctx.operation}:`,
+        error.message,
+      );
+    }
+  };
+  const pluginService = createPluginService(pluginRegistry, pluginOnError);
+
+  // Build storage registry from plugins and options
+  const storageRegistry = buildStorageRegistry(
+    options.plugins,
+    options.storage,
+  );
 
   // Apply defaults
   const opts: ResolvedCmsOptions = {
@@ -700,6 +902,8 @@ export function createCmsHandler(options: CmsOptions): Handler {
     policies: resolvedPolicies,
     auth: resolvedAuth,
     plugins: pluginRegistry,
+    storage: storageRegistry,
+    securityHeaders,
   };
 
   // Helper to check if request accepts JSON
@@ -722,6 +926,13 @@ export function createCmsHandler(options: CmsOptions): Handler {
       return handleStylesheet();
     }
 
+    // Serve script at {basePath}/admin.js
+    if (
+      pathname === `${opts.basePath}/admin.js` && request.method === 'GET'
+    ) {
+      return handleScript();
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Auth routes (when auth is configured)
     // ─────────────────────────────────────────────────────────────
@@ -740,7 +951,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               opts.basePath,
               isSecureRequest(request),
             ),
-            ...SECURITY_HEADERS,
+            ...opts.securityHeaders,
           },
         });
       }
@@ -767,7 +978,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 302,
               headers: {
                 'Location': opts.basePath,
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -784,7 +995,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           status: 200,
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
-            ...SECURITY_HEADERS,
+            ...opts.securityHeaders,
           },
         });
       }
@@ -811,7 +1022,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 403,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -845,7 +1056,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
                 status: 401,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',
-                  ...SECURITY_HEADERS,
+                  ...opts.securityHeaders,
                 },
               });
             }
@@ -871,7 +1082,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               headers: {
                 'Location': opts.basePath,
                 'Set-Cookie': cookie,
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -894,7 +1105,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 400,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -919,7 +1130,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 401,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -948,7 +1159,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
                 status: 200,
                 headers: {
                   'Content-Type': 'text/html; charset=utf-8',
-                  ...SECURITY_HEADERS,
+                  ...opts.securityHeaders,
                 },
               });
             }
@@ -966,7 +1177,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               status: 500,
               headers: {
                 'Content-Type': 'text/html; charset=utf-8',
-                ...SECURITY_HEADERS,
+                ...opts.securityHeaders,
               },
             });
           }
@@ -993,7 +1204,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             headers: {
               'Location': opts.basePath,
               'Set-Cookie': cookie,
-              ...SECURITY_HEADERS,
+              ...opts.securityHeaders,
             },
           });
         } catch (err) {
@@ -1001,6 +1212,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           if (opts.onError) {
             const error = err instanceof Error ? err : new Error(String(err));
             opts.onError(error, {
+              source: 'handler',
               request,
               url,
               route: null,
@@ -1020,7 +1232,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             status: 500,
             headers: {
               'Content-Type': 'text/html; charset=utf-8',
-              ...SECURITY_HEADERS,
+              ...opts.securityHeaders,
             },
           });
         }
@@ -1050,7 +1262,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             status: 401,
             headers: {
               'Content-Type': 'application/json',
-              ...SECURITY_HEADERS,
+              ...opts.securityHeaders,
             },
           });
         }
@@ -1058,7 +1270,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           status: 302,
           headers: {
             'Location': loginPath,
-            ...SECURITY_HEADERS,
+            ...opts.securityHeaders,
           },
         });
       }
@@ -1178,8 +1390,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
             (t) => t.name === pluginTable,
           );
           if (tableInfo) {
-            // Plugin routes that reference tables default to 'read' access check
-            const authorized = await opts.canAccess(request, tableInfo, 'read');
+            const pluginRouteAction = inferPluginRouteAction(request.method);
+            const authorized = await opts.canAccess(
+              request,
+              tableInfo,
+              pluginRouteAction,
+            );
             if (!authorized) {
               return forbidden('Access denied');
             }
@@ -1291,6 +1507,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
       // Call user's error handler if provided
       if (opts.onError) {
         opts.onError(error, {
+          source: 'handler',
           request,
           url,
           route,
@@ -1300,7 +1517,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
       }
       return new Response('Internal Server Error', {
         status: 500,
-        headers: SECURITY_HEADERS,
+        headers: opts.securityHeaders,
       });
     }
   };
@@ -1421,10 +1638,85 @@ async function handleFileServing(
       status: 302,
       headers: {
         'Location': fileData.url,
-        ...SECURITY_HEADERS,
+        ...options.securityHeaders,
         'Cache-Control': 'private, max-age=3600',
       },
     });
+  }
+
+  // If file has storage + key, get signed URL from provider
+  if (fileData.key) {
+    // Defense-in-depth: validate key belongs to this table/column/record
+    // Prevents signing arbitrary keys if DB is tampered with
+    if (!isValidFileKey(fileData.key, tableName, columnName, recordId)) {
+      return notFound('Invalid file key');
+    }
+
+    // Determine storage provider ID using fallback rules:
+    // 1. Use explicit storage field if present
+    // 2. Fall back to defaultObjectStorageId from config
+    const storageId = fileData.storage ??
+      options.storage?.defaultObjectStorageId;
+
+    if (!storageId) {
+      // No way to determine which provider to use
+      return notFound('File storage not configured');
+    }
+
+    const provider = options.storage?.instances.get(storageId);
+    if (!provider) {
+      // Provider not found in registry
+      return notFound('Storage provider not found');
+    }
+
+    if (!provider.signDownloadUrl) {
+      // Provider doesn't support signed downloads
+      return notFound('File serving not supported');
+    }
+
+    try {
+      const signedUrl = await provider.signDownloadUrl({
+        storage: storageId,
+        key: fileData.key,
+        filename: fileData.filename,
+        request,
+        user: jwtPayload
+          ? { sub: jwtPayload.sub, role: jwtPayload.role }
+          : null,
+      });
+
+      // Validate the signed URL
+      try {
+        const redirectUrl = new URL(signedUrl);
+        if (
+          redirectUrl.protocol !== 'http:' && redirectUrl.protocol !== 'https:'
+        ) {
+          return notFound('Not found');
+        }
+      } catch {
+        return notFound('Not found');
+      }
+
+      return new Response(null, {
+        status: 302,
+        headers: {
+          'Location': signedUrl,
+          ...options.securityHeaders,
+          'Cache-Control': 'private, no-store', // Signed URLs are short-lived
+        },
+      });
+    } catch (error) {
+      // Log error and return generic failure
+      options.onError?.(error as Error, {
+        source: 'handler',
+        request,
+        url: new URL(request.url),
+        route: null,
+        table,
+        action: 'read',
+      });
+      return notFound('File not available');
+    }
   }
 
   // If file has base64 data, serve it directly

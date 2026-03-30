@@ -7,6 +7,8 @@ import {
   type FileReference,
 } from '@hotsauce/core';
 import { escapeHtml } from '@hotsauce/ui';
+import { typeByExtension } from '@std/media-types';
+import type { CspOptions } from './types.ts';
 
 /**
  * Security headers for HTML responses
@@ -17,23 +19,71 @@ import { escapeHtml } from '@hotsauce/ui';
  * - X-Frame-Options: Prevents clickjacking
  * - Referrer-Policy: Limits referrer information leakage
  */
-export const SECURITY_HEADERS: Record<string, string> = {
-  'Content-Security-Policy':
-    "default-src 'self'; style-src 'self'; script-src 'self'; img-src 'self' data:; form-action 'self'; frame-ancestors 'none'",
-  'X-Content-Type-Options': 'nosniff',
-  'X-Frame-Options': 'DENY',
-  'Referrer-Policy': 'strict-origin-when-cross-origin',
-};
 
 /**
- * Create an HTML response with security headers
+ * Build security headers with optional CSP extensions.
+ * Called once at startup; the result is reused for every response.
  */
-export function htmlResponse(html: string, status = 200): Response {
+export function buildSecurityHeaders(
+  csp?: CspOptions,
+): Record<string, string> {
+  const imgSrc = `img-src 'self' data:${joinOrigins(csp?.imgSrc)}`;
+  const connectSrc = csp?.connectSrc?.length
+    ? `connect-src 'self'${joinOrigins(csp.connectSrc)}; `
+    : '';
+  const frameSrc = csp?.frameSrc?.length
+    ? `frame-src 'self'${joinOrigins(csp.frameSrc)}; `
+    : '';
+
+  return {
+    'Content-Security-Policy':
+      `default-src 'self'; style-src 'self'; script-src 'self'; ${connectSrc}${frameSrc}${imgSrc}; form-action 'self'; frame-ancestors 'none'`,
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Referrer-Policy': 'strict-origin-when-cross-origin',
+  };
+}
+
+/**
+ * Normalize a CSP source to an origin.
+ * URLs with paths are stripped to just the origin (CSP ignores paths for most directives).
+ * Non-URL values (like 'self' or blob:) are returned as-is.
+ */
+function normalizeOrigin(source: string): string {
+  try {
+    const url = new URL(source);
+    return url.origin;
+  } catch {
+    return source;
+  }
+}
+
+function joinOrigins(origins?: string[]): string {
+  if (!origins?.length) return '';
+  return ' ' + origins.map(normalizeOrigin).join(' ');
+}
+
+/** Default security headers (no CSP extensions) */
+export const SECURITY_HEADERS: Record<string, string> = buildSecurityHeaders();
+
+/**
+ * Create an HTML response with security headers.
+ *
+ * CRUD pages pass the resolved `securityHeaders` (which include user-configured
+ * CSP origins like S3 endpoints). Error helpers (notFound, forbidden) omit it
+ * and get the strict default — intentionally, since error pages render no
+ * external resources and a tighter CSP is preferable.
+ */
+export function htmlResponse(
+  html: string,
+  status = 200,
+  securityHeaders?: Record<string, string>,
+): Response {
   return new Response(html, {
     status,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
-      ...SECURITY_HEADERS,
+      ...(securityHeaders ?? SECURITY_HEADERS),
     },
   });
 }
@@ -185,6 +235,7 @@ export type FlashCode =
   | 'delete_success'
   | 'delete_fk_error'
   | 'delete_error'
+  | 'delete_csrf_error'
   | 'delete_forbidden'
   | 'delete_not_found'
   | 'create_success'
@@ -216,6 +267,10 @@ const FLASH_MESSAGES: Record<
   delete_error: {
     type: 'error',
     message: 'Failed to delete record. Please try again.',
+  },
+  delete_csrf_error: {
+    type: 'error',
+    message: 'Invalid or expired form. Please try again.',
   },
   delete_forbidden: {
     type: 'error',
@@ -394,7 +449,7 @@ export interface ParsedMultipartData {
  * Converts uploaded files to FileReference objects with base64 data.
  *
  * @param request The incoming request
- * @param fileColumns Columns that are file fields (have cmsOptions.file: true)
+ * @param fileColumns Columns that are file fields (have cmsOptions.file: true|{...})
  */
 export async function parseMultipartFormData(
   request: Request,
@@ -424,16 +479,44 @@ export async function parseMultipartFormData(
         continue;
       }
 
-      // Get column options
+      // Get column file options (supports `file: true` shorthand)
       const cmsOptions = column.cmsOptions ?? {};
-      const maxSize = cmsOptions.maxSize ?? FILE_DEFAULT_MAX_SIZE;
-      const accept = cmsOptions.accept ?? FILE_DEFAULT_ACCEPT;
+      const fileOptions = cmsOptions.file;
+      const fileConfig: Record<string, unknown> = fileOptions === true
+        ? {}
+        : fileOptions && typeof fileOptions === 'object'
+        ? fileOptions as Record<string, unknown>
+        : {};
+      const maxSize = typeof fileConfig.maxSize === 'number'
+        ? fileConfig.maxSize
+        : FILE_DEFAULT_MAX_SIZE;
+      const accept = typeof fileConfig.accept === 'string'
+        ? fileConfig.accept
+        : FILE_DEFAULT_ACCEPT;
 
       // Validate file size
       if (value.size > maxSize) {
         const maxSizeKb = Math.round(maxSize / 1000);
         errors[key] = `File too large. Maximum size is ${maxSizeKb}KB.`;
         continue;
+      }
+
+      // If a file extension is present, cross-validate the claimed content type
+      // against the extension. Files without extensions skip this check and
+      // rely on content-type + accept pattern validation alone.
+      // Duplicated in packages/plugins/s3-storage/mod.ts.
+      const extMatch = value.name.match(/\.[^.]+$/);
+      if (extMatch) {
+        const expectedType = typeByExtension(extMatch[0]!.toLowerCase());
+        if (!expectedType) {
+          errors[key] = `Unrecognised file extension: ${extMatch[0]}`;
+          continue;
+        }
+        if (value.type && value.type.toLowerCase() !== expectedType) {
+          errors[key] =
+            `Content type mismatch: file extension suggests ${expectedType}, but got ${value.type}`;
+          continue;
+        }
       }
 
       // Validate content type against accept pattern

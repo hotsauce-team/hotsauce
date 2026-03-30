@@ -1,10 +1,14 @@
 // Detail view - single record display
 
-import { attrs, escapeHtml, html, raw } from '../html.ts';
+import { attrs, escapeHtml, getSafeUrl, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import type { RelationOption } from '../forms/inputs.ts';
 import type { ManyToManyDisplayData } from './list.ts';
+import type { FieldUIOverride } from '../forms/form.ts';
+
+// Re-export FieldUIOverride for convenience
+export type { FieldUIOverride } from '../forms/form.ts';
 
 /**
  * Options for detail view
@@ -55,17 +59,23 @@ function formatValue(
   if (field.fieldType === 'file' && isValidFileReference(value)) {
     const sizeStr = formatFileSize(value.size);
     const isImage = value.contentType.startsWith('image/');
+    const isSvg = value.contentType === 'image/svg+xml';
+    const fileConfig = field.column.cmsOptions?.file;
+    const previewSvg = fileConfig && typeof fileConfig === 'object' &&
+      fileConfig.previewSvg === true;
+    const shouldRenderImagePreview = isImage && (!isSvg || previewSvg);
+    const safeValueUrl = value.url ? getSafeUrl(value.url) : null;
     // Determine image source: fileUrl (served endpoint), url (external), or data (base64)
-    const imgSrc = fileUrl ?? value.url ??
+    const imgSrc = fileUrl ?? safeValueUrl ??
       (value.data ? `data:${value.contentType};base64,${value.data}` : null);
-    const downloadUrl = fileUrl ?? value.url;
+    const downloadUrl = fileUrl ?? safeValueUrl;
     const link = downloadUrl
       ? `<a href="${
         escapeHtml(downloadUrl)
-      }" target="_blank" class="cms-file-link">Download</a>`
+      }" target="_blank" rel="noopener" class="cms-file-link">Download</a>`
       : '';
     // Show image preview for image files
-    const imagePreview = isImage && imgSrc
+    const imagePreview = shouldRenderImagePreview && imgSrc
       ? `<img src="${escapeHtml(imgSrc)}" alt="${
         escapeHtml(value.filename)
       }" class="cms-file-preview" />`
@@ -129,6 +139,7 @@ export function detailField(
   field: CMSField,
   value: unknown,
   relationOptions?: RelationOption[],
+  fileUrl?: string,
 ): string {
   if (field.hidden) {
     return '';
@@ -138,7 +149,7 @@ export function detailField(
     <div class="cms-detail-field">
       <dt class="cms-detail-label">${field.label}</dt>
       <dd class="cms-detail-value">${raw(
-        formatValue(value, field, relationOptions),
+        formatValue(value, field, relationOptions, fileUrl),
       )}</dd>
     </div>
   `;
@@ -154,16 +165,21 @@ export function detailView(
   options: DetailViewOptions,
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: ManyToManyDisplayData[] = [],
+  fieldOverrides: Record<string, FieldUIOverride> = {},
 ): string {
   const fieldRows = fields
     .filter((f) => !f.hidden)
-    .map((f) =>
-      detailField(
+    .map((f) => {
+      // Use fileUrl from plugin override if available
+      const override = fieldOverrides[f.column.propertyName];
+      const fileUrl = override?.fileUrl;
+      return detailField(
         f,
         record[f.column.propertyName],
         relationData[f.column.propertyName],
-      )
-    )
+        fileUrl,
+      );
+    })
     .join('\n  ');
 
   // Render M2M fields
@@ -212,10 +228,15 @@ export function detailView(
         action="${options.baseUrl}/${options.id}/delete"
         method="POST"
         class="cms-inline-form"
-        onsubmit="return confirm('Delete this record?')"
       >
         ${raw(csrfField)}
-        <button type="submit" class="cms-btn cms-btn-danger">Delete</button>
+        <button
+          type="submit"
+          class="cms-btn cms-btn-danger"
+          data-confirm="Delete this record?"
+        >
+          Delete
+        </button>
       </form>
     `);
   }

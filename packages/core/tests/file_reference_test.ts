@@ -1,7 +1,7 @@
 // Tests for FileReference type guard
 
 import { assertEquals } from '@std/assert';
-import { isValidFileReference } from '../extend/types.ts';
+import { isValidFileReference } from '../extend/file.ts';
 
 // =============================================================================
 // isValidFileReference tests

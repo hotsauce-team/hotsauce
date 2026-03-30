@@ -30,6 +30,23 @@ export type PluginColumnConfig =
     [key: string]: unknown;
   };
 
+/**
+ * Configuration for file fields.
+ *
+ * - `true`: Shorthand for using default file validation options
+ * - Object: Explicit file validation options
+ */
+export type FileColumnConfig =
+  | true
+  | {
+    /** MIME type filter for file input (default: 'image/*') */
+    accept?: string;
+    /** Maximum file size in bytes (default: 200000 = 200KB) */
+    maxSize?: number;
+    /** Allow SVG previews in UI (default: false) */
+    previewSvg?: boolean;
+  };
+
 // ─────────────────────────────────────────────────────────────
 // Column-level CMS options
 // ─────────────────────────────────────────────────────────────
@@ -40,11 +57,7 @@ export type PluginColumnConfig =
  */
 export type CmsColumnOptions = {
   /** Treat this column as a file reference (UI: file input). */
-  file?: boolean;
-  /** MIME type filter for file input (default: 'image/*'). Only used when file: true. */
-  accept?: string;
-  /** Maximum file size in bytes (default: 200000 = 200KB). Only used when file: true. */
-  maxSize?: number;
+  file?: FileColumnConfig;
   /** Hide this field from all CMS views (forms, lists, detail). Still saved to DB. */
   hidden?: boolean;
   /** Show this field but prevent editing. */
@@ -91,21 +104,17 @@ export type FileReference = {
   key?: string;
   /** Public URL (CDN/direct access) */
   url?: string;
+  /**
+   * Storage provider instance ID (e.g., 's3', 'r2', 'minio').
+   * Used to route reads/deletes to the correct provider.
+   *
+   * Fallback rules when missing:
+   * - If `data` exists: treat as 'db' (inline storage)
+   * - Else if `url` exists: treat as 'public' (no provider needed)
+   * - Else if `key` exists: use defaultObjectStorageId from config
+   */
+  storage?: string;
 };
-
-/**
- * Runtime check for valid FileReference shape.
- * Defensive check for data that may have been inserted outside CMS.
- */
-export function isValidFileReference(value: unknown): value is FileReference {
-  if (!value || typeof value !== 'object') return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.filename === 'string' &&
-    typeof obj.contentType === 'string' &&
-    typeof obj.size === 'number'
-  );
-}
 
 // ─────────────────────────────────────────────────────────────
 // Table-level CMS options
@@ -160,6 +169,27 @@ export type CmsTableOptions = {
    * Icon identifier for the sidebar (future use).
    */
   icon?: string;
+
+  /**
+   * Auto-create a draft row when visiting the create page.
+   *
+   * When true, "Create New" inserts a row with all defaults and redirects to
+   * the edit page. This enables features that need a record ID before saving
+   * (e.g. S3 uploads, Puck editor).
+   *
+   * Requires every non-PK column to have a default or be nullable.
+   * The CMS validates this at startup and throws if the schema doesn't support it.
+   *
+   * @example
+   * ```ts
+   * pgTable('media', {
+   *   id: uuid('id').primaryKey().defaultRandom(),
+   *   file: jsonb('file'),
+   *   published: boolean('published').notNull().default(false),
+   * }).$cms({ autoDraft: true });
+   * ```
+   */
+  autoDraft?: boolean;
 
   /**
    * Table-level plugin configuration, keyed by plugin name.

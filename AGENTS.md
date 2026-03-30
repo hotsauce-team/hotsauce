@@ -8,7 +8,7 @@ Guidelines for AI coding assistants working on this project.
 
 1. **NO `--allow-*` FLAGS** — Run tests with `deno task test` or `deno test -P`. Never pass `--allow-read`, `--allow-env`, `--allow-net`, etc. Permissions are configured in `deno.jsonc`.
 
-2. **NO NEW DEPENDENCIES** — Only `drizzle-orm`, `postgres`, `zod`, `drizzle-zod` are allowed in production. Do not suggest adding packages.
+2. **STRICT DEPENDENCY POLICY** — Only pre-approved packages are allowed in production (see Dependencies section). Do not suggest adding packages without meeting all approval criteria.
 
 3. **NO `npm`/`yarn`/`pnpm`** — This is a Deno project. Use `deno` commands only.
 
@@ -20,13 +20,19 @@ Guidelines for AI coding assistants working on this project.
 
 ### Dependencies
 
-- **ONLY** these production dependencies are allowed:
+- **Approved production dependencies:**
   - `drizzle-orm`
   - `postgres` (postgres.js driver)
   - `zod`
   - `drizzle-zod`
-- Do NOT suggest adding any other production packages
-- All four packages have zero transitive dependencies — keep it that way
+  - `@std/media-types` (Deno standard library — MIME type validation for file uploads)
+- All approved packages have **zero transitive dependencies** — keep it that way
+- Do NOT suggest adding packages without meeting **all** approval criteria:
+  1. Zero transitive dependencies
+  2. Pure data or pure functions (no runtime-specific APIs)
+  3. From a trusted source (Drizzle team or Deno standard library)
+  4. Published on JSR with integrity hashes
+  5. Could we realistically maintain our own version? (If no, dependency is justified)
 
 ### Optional Peer Dependencies
 
@@ -267,14 +273,16 @@ The CMS uses a **layered security model** for authorization. Understanding this 
 ### Security Layers (in order)
 
 1. **Type-level enforcement** (`CmsOptions` in `types.ts`)
-   - When `auth` is configured, `policies` is **required** inside `auth` by TypeScript
-   - Forces developers to explicitly choose an authorization strategy
-   - Options: `auth.policies: { ... }`, `auth.policies: {}`, or `auth.policies: 'dangerously-open'`
+
+- When `auth` is configured, `policies` is **required** at the top level by TypeScript
+- Forces developers to explicitly choose an authorization strategy
+- Options: `policies: { ... }`, `policies: {}`, or `policies: 'dangerously-open'`
 
 2. **Zod validation at startup** (`validateCmsOptions` in `validation.ts`)
    - Validates entire config when `createCmsHandler()` is called
    - Throws `CmsConfigError` with detailed messages for invalid config
-   - Enforces: `auth.policies` required when auth is configured
+
+- Enforces: `policies` required when auth is configured
 
 3. **Runtime column policy column policy validation** (`crud.ts` handlers)
    - If auth is enabled but policies somehow undefined, handlers return 403
@@ -297,26 +305,28 @@ The CMS uses a **layered security model** for authorization. Understanding this 
 
 ```typescript
 auth: {
-  policies: {
-    posts: ownedBy(schema.posts, 'authorId'), // Row-only
-  },
-}
+  provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+},
+policies: {
+  posts: ownedBy(schema.posts, 'authorId'), // Row-only
+},
 ```
 
 **Column policies** filter which fields within records are visible/editable:
 
 ```typescript
 auth: {
-  policies: {
-    posts: {
-      row: ownedBy(schema.posts, 'authorId'),   // Row filter
-      columns: {                                  // Column filter
-        salary: { read: adminOnly, write: adminOnly },
-        tenantId: { read: () => false, write: () => false, default: getTenant },
-      },
+  provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+},
+policies: {
+  posts: {
+    row: ownedBy(schema.posts, 'authorId'),   // Row filter
+    columns: {                                  // Column filter
+      salary: { read: adminOnly, write: adminOnly },
+      tenantId: { read: () => false, write: () => false, default: getTenant },
     },
   },
-}
+},
 ```
 
 The `TablePolicy` type enables either pattern:
@@ -653,3 +663,19 @@ slug: text().$cms({ plugins: { slugify: { role: 'output' } } });
 - Optional direct-to-bucket / presigned URL flow (S3/R2-style)
 - Virus scanning / transformations (if ever)
 - Cleanup policies (orphan GC, retention)
+
+## GitHub CLI Notes
+
+When replying to PR review comments (not just commenting on the PR):
+
+```bash
+# Reply to a specific review comment (use in_reply_to)
+gh api repos/OWNER/REPO/pulls/PR_NUMBER/comments -X POST \
+  -f body="Your reply" \
+  -F in_reply_to=COMMENT_ID
+
+# NOT this (creates new top-level PR comment):
+gh pr comment PR_NUMBER --body "..."
+```
+
+The `in_reply_to` field links the reply to the specific review comment thread.

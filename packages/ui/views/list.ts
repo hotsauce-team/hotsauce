@@ -45,6 +45,8 @@ export interface ListViewOptions {
   showDelete?: boolean;
   /** Show view action */
   showView?: boolean;
+  /** CSRF token for delete forms */
+  csrfToken?: string;
   /** Additional CSS classes */
   class?: string;
   /** Empty state message */
@@ -174,14 +176,25 @@ export function listTable(
       `);
     }
     if (options.showDelete) {
+      const csrfField = options.csrfToken
+        ? `<input type="hidden" name="_csrf" value="${
+          escapeHtml(options.csrfToken)
+        }" />`
+        : '';
       actions.push(html`
         <form
           action="${options.baseUrl}/${id}/delete"
           method="POST"
           class="cms-action-form"
-          onsubmit="return confirm('Delete this record?')"
         >
-          <button type="submit" class="cms-action cms-action-delete">Delete</button>
+          ${raw(csrfField)}
+          <button
+            type="submit"
+            class="cms-action cms-action-delete"
+            data-confirm="Delete this record?"
+          >
+            Delete
+          </button>
         </form>
       `);
     }

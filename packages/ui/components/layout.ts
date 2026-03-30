@@ -30,10 +30,10 @@ export interface LayoutOptions {
   user?: { name: string; logoutUrl: string; accountUrl?: string };
   /** URL to the stylesheet (default: 'styles.css') */
   stylesheetUrl?: string;
+  /** URL to the script (e.g., 'admin.js') */
+  scriptUrl?: string;
   /** Additional head content (CSS, meta tags) */
   head?: string;
-  /** Additional body end content (scripts) */
-  bodyEnd?: string;
 }
 
 /**
@@ -75,6 +75,9 @@ export function layout(content: string, options: LayoutOptions): string {
   const siteName = options.siteName ?? 'CMS';
   const navHtml = options.nav ? nav(options.nav) : '';
   const stylesheetUrl = options.stylesheetUrl ?? 'styles.css';
+  const scriptTag = options.scriptUrl
+    ? `<script src="${escapeHtml(options.scriptUrl)}"></script>`
+    : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -130,7 +133,7 @@ export function layout(content: string, options: LayoutOptions): string {
       </div>
     </main>
   </div>
-  ${options.bodyEnd ?? ''}
+  ${scriptTag}
 </body>
 </html>`;
 }

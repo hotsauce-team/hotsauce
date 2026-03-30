@@ -69,7 +69,13 @@ export function form(
       enctype: options.multipart ? 'multipart/form-data' : undefined,
     })}>
       ${raw(csrfField)}${raw(sourceField)} ${raw(
-        formFields(fields, values, errors, relationData, fieldOverrides),
+        formFields(
+          fields,
+          values,
+          errors,
+          relationData,
+          fieldOverrides,
+        ),
       )} ${raw(extraContent)}
 
       <div class="cms-form-actions">

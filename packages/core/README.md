@@ -182,6 +182,7 @@ const posts = pgTable('posts', {
 
 | Option        | Type                                                | Description                                         |
 | ------------- | --------------------------------------------------- | --------------------------------------------------- |
+| `autoDraft`   | `boolean`                                           | Auto-create a draft row on "Create New" (see below) |
 | `frontendUrl` | `(record: Record<string, unknown>) => string\|null` | Generate a "View on site" link on detail/edit views |
 | `label`       | `string`                                            | Singular label for the table (e.g., "Blog Post")    |
 | `labelPlural` | `string`                                            | Plural label for lists (e.g., "Blog Posts")         |
@@ -198,20 +199,40 @@ For security, prefer returning either:
 - A relative URL (e.g. `/blog/my-post`)
 - An absolute `https://...` (or `http://...`) URL
 
+#### Auto-draft creation
+
+When `autoDraft: true` is set, clicking "Create New" inserts a row with all defaults and redirects to the edit page. This enables features that need a record ID before saving (S3 uploads, Puck editor).
+
+```ts
+const media = pgTable('media', {
+  id: serial('id').primaryKey(),
+  file: jsonb('file'), // nullable — OK
+  published: boolean('published').default(false), // has default — OK
+}).$cms({ autoDraft: true });
+```
+
+Requirements:
+
+- Every non-PK column must have a database default or be nullable
+- The CMS validates this at startup and throws `CmsConfigError` if the schema doesn't support it
+
 #### File fields
 
 To model file uploads, mark a JSON/JSONB column with `$cms({ file: true })`.
 
 `CmsColumnOptions` supports:
 
-- `file?: boolean` — marks the column as a file field
-- `accept?: string` — MIME accept pattern(s) (e.g. `image/*`, `image/*,application/pdf`)
-- `maxSize?: number` — maximum size in bytes
+- `file?: true | { accept?: string; maxSize?: number }`
+  - `true` — shorthand: marks as file field with defaults
+  - object — explicit MIME/type limits
 
 The default constraints are:
 
 - `accept`: `image/*`
 - `maxSize`: `200_000` (200KB)
+
+> **Note:** The S3 storage plugin uses its own default of 10MB. See the
+> [S3 plugin docs](../plugins/s3-storage/README.md#file-validation) for details.
 
 #### UI Visibility
 
@@ -254,7 +275,7 @@ const pages = pgTable('pages', {
 
 | Value             | Meaning                                      |
 | ----------------- | -------------------------------------------- |
-| `true`            | Shorthand for `{ write: true }`              |
+| `true`            | Shorthand for `{ write: true, read: true }`  |
 | `{ write: true }` | Plugin can write to this column              |
 | `{ read: true }`  | Plugin can read this column (for future use) |
 
@@ -279,8 +300,10 @@ export type FileReference = {
   filename: string;
   contentType: string;
   size: number;
-  data?: string; // base64
-  url?: string; // external URL
+  data?: string; // base64 (MVP db storage)
+  key?: string; // storage key (S3/R2 plugin)
+  url?: string; // public URL (CDN/direct access)
+  storage?: string; // storage provider ID (e.g., 's3', 'r2')
 };
 ```
 

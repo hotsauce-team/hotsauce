@@ -593,7 +593,208 @@ Deno.test('createCmsHandler: plugin routes allow access when canAccess returns t
   assertEquals(capturedParams?.section, 'general');
 });
 
-Deno.test('createCmsHandler: plugin POST routes return 404 (not yet supported)', async () => {
+Deno.test('createCmsHandler: plugin table route GET passes read action to canAccess', async () => {
+  let capturedAction: string | undefined;
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, _table, action) => {
+      capturedAction = action;
+      return true;
+    },
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'browse/:table',
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const request = new Request('http://localhost/admin/editor/browse/users');
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(handlerCalled, true);
+  assertEquals(capturedAction, 'read');
+});
+
+Deno.test('createCmsHandler: plugin table route POST passes update action to canAccess', async () => {
+  let capturedAction: string | undefined;
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, _table, action) => {
+      capturedAction = action;
+      return true;
+    },
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'browse/:table',
+            methods: ['POST'],
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const { generateCsrfToken } = await import('../csrf.ts');
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+  const formData = new FormData();
+  formData.append('_csrf', csrfToken);
+
+  const request = new Request('http://localhost/admin/editor/browse/users', {
+    method: 'POST',
+    body: formData,
+  });
+  const response = await handler(request);
+
+  assertEquals(response.status, 200);
+  assertEquals(handlerCalled, true);
+  assertEquals(capturedAction, 'update');
+});
+
+Deno.test('createCmsHandler: plugin table route POST denied when canAccess blocks update', async () => {
+  let capturedAction: string | undefined;
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, _table, action) => {
+      capturedAction = action;
+      return action !== 'update';
+    },
+    plugins: [
+      {
+        name: 'editor',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'browse/:table',
+            methods: ['POST'],
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const { generateCsrfToken } = await import('../csrf.ts');
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+  const formData = new FormData();
+  formData.append('_csrf', csrfToken);
+
+  const request = new Request('http://localhost/admin/editor/browse/users', {
+    method: 'POST',
+    body: formData,
+  });
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(handlerCalled, false);
+  assertEquals(capturedAction, 'update');
+});
+
+Deno.test('createCmsHandler: presign-style plugin POST route requires update access', async () => {
+  let capturedAction: string | undefined;
+  let handlerCalled = false;
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    basePath: '/admin',
+    isAuthenticated: () => true,
+    canAccess: (_req, _table, action) => {
+      capturedAction = action;
+      return action !== 'update';
+    },
+    plugins: [
+      {
+        name: 'storage',
+        hooks: {},
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: ':table/:id/:column',
+            methods: ['POST'],
+            handler: () => {
+              handlerCalled = true;
+              return new Response('OK');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  const { generateCsrfToken } = await import('../csrf.ts');
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
+  const formData = new FormData();
+  formData.append('_csrf', csrfToken);
+
+  const request = new Request(
+    'http://localhost/admin/storage/users/123/email',
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+  const response = await handler(request);
+
+  assertEquals(response.status, 403);
+  assertEquals(handlerCalled, false);
+  assertEquals(capturedAction, 'update');
+});
+
+Deno.test('createCmsHandler: plugin POST routes work with valid CSRF', async () => {
   let handlerCalled = false;
 
   const handler = createCmsHandler({
@@ -623,8 +824,13 @@ Deno.test('createCmsHandler: plugin POST routes return 404 (not yet supported)',
     ],
   });
 
+  // Generate a valid CSRF token
+  const { generateCsrfToken } = await import('../csrf.ts');
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+
   const formData = new FormData();
   formData.append('data', 'test');
+  formData.append('_csrf', csrfToken);
 
   const request = new Request('http://localhost/admin/test-plugin/submit', {
     method: 'POST',
@@ -632,12 +838,12 @@ Deno.test('createCmsHandler: plugin POST routes return 404 (not yet supported)',
   });
   const response = await handler(request);
 
-  // POST to plugin routes is not yet supported - returns 404
-  assertEquals(response.status, 404);
+  // POST to plugin routes now works with valid CSRF
+  assertEquals(response.status, 200);
   assertEquals(
     handlerCalled,
-    false,
-    'Handler should NOT be called for POST (not supported)',
+    true,
+    'Handler should be called for POST with valid CSRF',
   );
 });
 
@@ -1037,4 +1243,126 @@ Deno.test('createCmsHandler: built-in routes take precedence over plugin routes'
     response.headers.get('Content-Type')?.includes('text/html'),
     true,
   );
+});
+
+Deno.test('createCmsHandler: plugin returning fileUrl: undefined calls console.error', async () => {
+  // Track console.error calls
+  const consoleErrors: Array<{ args: unknown[] }> = [];
+  // deno-lint-ignore no-console
+  const originalError = console.error;
+  // deno-lint-ignore no-console
+  console.error = (...args: unknown[]) => {
+    consoleErrors.push({ args });
+  };
+
+  try {
+    // Create a schema with a column that has plugins config
+    // This ensures renderField is called for this column
+    const tableWithPlugins: IntrospectedTable = {
+      name: 'content',
+      columns: [
+        {
+          name: 'id',
+          propertyName: 'id',
+          columnType: 'PgSerial',
+          dataType: 'number',
+          notNull: true,
+          hasDefault: true,
+          isPrimaryKey: true,
+          isUnique: false,
+        },
+        {
+          name: 'body',
+          propertyName: 'body',
+          columnType: 'PgJsonb',
+          dataType: 'json',
+          notNull: false,
+          hasDefault: false,
+          isPrimaryKey: false,
+          isUnique: false,
+          // This makes renderField get called for this column
+          cmsOptions: {
+            plugins: { 'bad-fileurl-plugin': true },
+          },
+        },
+      ],
+      primaryKey: ['id'],
+      table: {},
+    };
+
+    const schemaWithPlugins: IntrospectedSchema = {
+      tables: [tableWithPlugins],
+      relations: [],
+      junctions: [],
+    };
+
+    // Mock db that returns a record for edit view
+    const mockDbWithRecord = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: () => Promise.resolve([{ id: 1, body: { blocks: [] } }]),
+          }),
+          limit: () => ({ offset: () => Promise.resolve([]) }),
+        }),
+      }),
+      insert: () => ({
+        values: () => ({ returning: () => Promise.resolve([{ id: 1 }]) }),
+      }),
+      update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+      delete: () => ({ where: () => Promise.resolve() }),
+    };
+
+    // Create a plugin that returns invalid data: fileUrl: undefined
+    // This was a real bug - the validation rejects explicit undefined values
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      schema: schemaWithPlugins,
+      db: mockDbWithRecord,
+      basePath: '/admin',
+      isAuthenticated: () => true,
+      plugins: [
+        {
+          name: 'bad-fileurl-plugin',
+          filter: 'dangerously-open',
+          hooks: {
+            ui: {
+              // This returns invalid data - fileUrl must be string or omitted, not undefined
+              renderField: () => ({
+                valueSummary: 'Test file',
+                fileUrl: undefined,
+              }),
+            },
+          },
+        },
+      ],
+    });
+
+    // Request the edit page - this triggers renderField for columns with plugins config
+    const request = new Request('http://localhost/admin/content/1/edit');
+    await handler(request);
+
+    // console.error should have been called with plugin error message
+    assertEquals(
+      consoleErrors.length >= 1,
+      true,
+      'console.error should be called',
+    );
+    const errorCall = consoleErrors.find((e) =>
+      typeof e.args[0] === 'string' &&
+      e.args[0].includes('[CMS Plugin Error]') &&
+      e.args[0].includes('bad-fileurl-plugin')
+    );
+    assertEquals(
+      errorCall !== undefined,
+      true,
+      'console.error should include [CMS Plugin Error] prefix and plugin name',
+    );
+  } finally {
+    // Restore console.error
+    // deno-lint-ignore no-console
+    console.error = originalError;
+  }
 });

@@ -270,7 +270,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     assertEquals(response.status, 303);
     assertStringIncludes(
       response.headers.get('Location') ?? '',
-      '_flash=delete_error',
+      '_flash=delete_csrf_error',
     );
 
     const users_result = await db.select().from(users);

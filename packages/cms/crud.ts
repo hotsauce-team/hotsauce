@@ -10,7 +10,7 @@ import { listView } from '@hotsauce/ui';
 import { detailView } from '@hotsauce/ui';
 import { createView, editView } from '@hotsauce/ui';
 import { html, raw } from '@hotsauce/ui';
-import type { RouteContext } from './types.ts';
+import type { RouteContext, StorageRegistry } from './types.ts';
 import {
   coerceFormValues,
   getPagination,
@@ -49,6 +49,7 @@ import {
 } from './tokens/mod.ts';
 import {
   buildNavItems,
+  canAutoCreateDraft,
   fetchAllRelationOptions,
   fetchManyToManyData,
   fetchManyToManyDisplayData,
@@ -81,6 +82,180 @@ import {
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
 import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
 import type { CMSField } from '@hotsauce/core';
+import {
+  getFileKeyPrefix,
+  isValidFileKey,
+  isValidFileReference,
+} from '@hotsauce/core';
+
+// ─────────────────────────────────────────────────────────────
+// Storage deletion helpers
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Delete file objects from storage when they are cleared or replaced.
+ *
+ * This is called after a successful DB update. Failures are logged but
+ * don't fail the request - orphaned files are a storage leak, not a
+ * data integrity issue.
+ *
+ * @param storage - Storage registry
+ * @param tableName - Table name (for key validation)
+ * @param recordId - Record ID (for key validation)
+ * @param oldRecord - Record before update
+ * @param newValues - Values being written
+ * @param fileColumns - File column metadata
+ * @param request - Original request (for tenant context)
+ * @param authUser - Authenticated user (for tenant context)
+ * @param onError - Error handler for logging
+ */
+async function deleteOldFileObjects(
+  storage: StorageRegistry | undefined,
+  tableName: string,
+  recordId: string | number,
+  oldRecord: Record<string, unknown>,
+  newValues: Record<string, unknown>,
+  fileColumns: Array<{ propertyName: string; name: string }>,
+  request: Request,
+  authUser: { id: string; role?: string } | undefined,
+  onError?: (error: Error) => void,
+): Promise<void> {
+  if (!storage) return;
+
+  for (const col of fileColumns) {
+    const oldValue = oldRecord[col.propertyName];
+    const newValue = newValues[col.propertyName];
+
+    // Skip if old value wasn't a valid file reference
+    if (!isValidFileReference(oldValue)) continue;
+
+    // Skip if column was not in the form submission (no change).
+    // Explicit null (via _clear_ button) still falls through to delete.
+    if (newValue === undefined) continue;
+
+    // Skip if new value is the same (no change)
+    if (newValue && typeof newValue === 'object') {
+      const newRef = newValue as { key?: string; storage?: string };
+      if (newRef.key === oldValue.key && newRef.storage === oldValue.storage) {
+        continue;
+      }
+    }
+
+    // Old file is being cleared or replaced - delete it
+    if (oldValue.key) {
+      // Defense-in-depth: validate key belongs to this table/column/record
+      // Skip deletion if key is invalid (prevents deleting arbitrary keys if DB tampered)
+      if (!isValidFileKey(oldValue.key, tableName, col.name, recordId)) {
+        const expectedPrefix = getFileKeyPrefix(tableName, col.name, recordId);
+        onError?.(
+          new Error(
+            `Skipping deletion of invalid key: ${oldValue.key} (expected prefix: ${expectedPrefix})`,
+          ),
+        );
+        continue;
+      }
+
+      const storageId = oldValue.storage ?? storage.defaultObjectStorageId;
+      if (!storageId) continue;
+
+      const provider = storage.instances.get(storageId);
+      if (!provider?.deleteObject) continue;
+
+      try {
+        await provider.deleteObject({
+          storage: storageId,
+          key: oldValue.key,
+          request,
+          user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+        });
+      } catch (error) {
+        // Log error but don't fail the request
+        onError?.(error as Error);
+      }
+    }
+  }
+}
+
+/** Grace period (ms) — skip objects uploaded within the last 5 minutes to avoid deleting concurrent uploads. */
+const ORPHAN_GRACE_MS = 5 * 60 * 1000;
+
+/**
+ * After an update, list all objects under each file column's prefix and delete
+ * any that are neither the current key nor too recently uploaded.
+ *
+ * This catches "orphan" files left behind by abandoned uploads that were never
+ * saved to the record.  It is fail-soft: errors are logged but don't fail the
+ * request.  If the provider doesn't implement `listObjects`, this is a no-op.
+ */
+async function cleanupOrphanFileObjects(
+  storage: StorageRegistry | undefined,
+  tableName: string,
+  recordId: string | number,
+  oldRecord: Record<string, unknown>,
+  currentValues: Record<string, unknown>,
+  fileColumns: Array<{ propertyName: string; name: string }>,
+  request: Request,
+  authUser: { id: string; role?: string } | undefined,
+  onError?: (error: Error) => void,
+): Promise<void> {
+  if (!storage) return;
+
+  const now = Date.now();
+
+  for (const col of fileColumns) {
+    const curValue = currentValues[col.propertyName];
+    if (!isValidFileReference(curValue)) continue;
+
+    // Skip columns where the file didn't change
+    const oldValue = oldRecord[col.propertyName];
+    if (
+      isValidFileReference(oldValue) && oldValue.key === curValue.key &&
+      oldValue.storage === curValue.storage
+    ) {
+      continue;
+    }
+
+    const storageId = curValue.storage ?? storage.defaultObjectStorageId;
+    if (!storageId) continue;
+
+    const provider = storage.instances.get(storageId);
+    if (!provider?.listObjects) continue;
+    const deleteObject = provider.deleteObject;
+    if (!deleteObject) continue;
+
+    const prefix = getFileKeyPrefix(tableName, col.name, recordId);
+    const currentKey = curValue.key;
+
+    try {
+      const objects = await provider.listObjects(prefix);
+
+      // Filter to orphans (not current key, not recently uploaded)
+      const orphans = objects.filter((obj) => {
+        if (obj.key === currentKey) return false;
+        if (
+          obj.lastModified && now - obj.lastModified.getTime() < ORPHAN_GRACE_MS
+        ) return false;
+        return true;
+      });
+
+      // Delete all orphans concurrently
+      await Promise.all(orphans.map(async (obj) => {
+        try {
+          await deleteObject({
+            storage: storageId,
+            key: obj.key,
+            request,
+            user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+          });
+        } catch (err) {
+          onError?.(err as Error);
+        }
+      }));
+    } catch (error) {
+      onError?.(error as Error);
+    }
+  }
+}
 
 /**
  * Convert CMSField to serializable UIFieldInfo for plugin hooks
@@ -130,6 +305,7 @@ function buildLayoutOptions(
     siteName: options.title,
     nav: navItems,
     stylesheetUrl: `${basePath}/styles.css`,
+    scriptUrl: `${basePath}/admin.js`,
     user: authUser
       ? {
         name: authUser.identity ?? `User ${authUser.id}`,
@@ -186,6 +362,7 @@ function getFrontendUrl(
             `frontendUrl for table '${table.name}' returned a non-string (${typeof url})`,
           ),
           {
+            source: 'handler',
             request: ctx.request,
             url: ctx.url,
             route: ctx.route ?? null,
@@ -205,6 +382,7 @@ function getFrontendUrl(
             `frontendUrl for table '${table.name}' returned a disallowed URL`,
           ),
           {
+            source: 'handler',
             request: ctx.request,
             url: ctx.url,
             route: ctx.route ?? null,
@@ -223,6 +401,7 @@ function getFrontendUrl(
       ctx.options.onError(
         error instanceof Error ? error : new Error(String(error)),
         {
+          source: 'handler',
           request: ctx.request,
           url: ctx.url,
           route: ctx.route ?? null,
@@ -277,7 +456,7 @@ export function handleDashboard(ctx: RouteContext): Response {
 
   const page = layout(content, buildLayoutOptions(ctx, 'Dashboard', navItems));
 
-  return htmlResponse(page);
+  return htmlResponse(page, 200, ctx.options.securityHeaders);
 }
 
 /**
@@ -405,6 +584,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     recordIds,
   );
 
+  // Generate CSRF token for delete forms
+  const csrfToken = await generateCsrfToken(options.csrfSecret);
+
   // List view options
   const listOptions: ListViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
@@ -412,6 +594,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     showEdit: true,
     showDelete: true,
     showView: true,
+    csrfToken,
   };
 
   // Build content
@@ -447,7 +630,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     buildLayoutOptions(ctx, formatTableName(table.name), navItems),
   );
 
-  return htmlResponse(pageHtml);
+  return htmlResponse(pageHtml, 200, ctx.options.securityHeaders);
 }
 
 /**
@@ -562,6 +745,58 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   // Compute frontend URL from table's $cms() config
   const frontendUrl = getFrontendUrl(ctx, table, transformedRecord, 'read');
 
+  // Get field UI overrides from plugins (parallel for performance)
+  // Only process fields with plugin config OR file fields when storage is configured
+  const fieldOverrides: Record<string, FieldUIOverride> = {};
+  const pluginService = ctx.pluginService;
+  if (pluginService) {
+    const user = getPluginUser(ctx);
+    const pluginFields = cmsFields.filter((f) =>
+      f.column.cmsOptions?.plugins ||
+      (f.fieldType === 'file' && options.storage)
+    );
+    const results = await Promise.all(
+      pluginFields.map(async (field) => {
+        // Compute storageId for file fields
+        // For detail view, use the file's storage field (from existing data)
+        // rather than resolveStorage (which is for write operations)
+        let storageId: string | undefined;
+        if (field.fieldType === 'file' && options.storage) {
+          const fileValue = transformedRecord[field.column.propertyName];
+          if (
+            fileValue && typeof fileValue === 'object' &&
+            'storage' in fileValue
+          ) {
+            // Use the storage ID from the existing file
+            storageId = (fileValue as { storage?: string }).storage;
+          }
+          // Fall back to default if no file or no storage field
+          if (!storageId) {
+            storageId = options.storage.defaultObjectStorageId;
+          }
+        }
+
+        const uiCtx: UIRenderFieldContext = {
+          table: table.name,
+          field: toUIFieldInfo(field),
+          value: (transformedRecord[field.column.propertyName] ??
+            null) as UIRenderFieldContext['value'],
+          recordId: recordId,
+          view: 'detail',
+          user,
+          storageId,
+        };
+        return {
+          name: field.column.propertyName,
+          override: await pluginService.renderField(uiCtx),
+        };
+      }),
+    );
+    for (const { name, override } of results) {
+      if (override) fieldOverrides[name] = override;
+    }
+  }
+
   const detailOptions: DetailViewOptions = {
     baseUrl: cmsUrl(basePath, table.name),
     id: recordId,
@@ -588,6 +823,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     detailOptions,
     relationData,
     m2mDisplayData,
+    fieldOverrides,
   );
 
   const page = layout(
@@ -595,7 +831,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     buildLayoutOptions(ctx, `View ${formatTableName(table.name)}`, navItems),
   );
 
-  return htmlResponse(page);
+  return htmlResponse(page, 200, ctx.options.securityHeaders);
 }
 
 /**
@@ -777,6 +1013,36 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       }
     }
 
+    // Reject file references with storage keys during create
+    // The presign flow requires an existing record ID, so any key submission
+    // during create is either tampered or from an unsupported client workflow
+    if (fileColumns.length > 0) {
+      const fileKeyErrors: Record<string, string> = {};
+      for (const col of fileColumns) {
+        const value = values[col.propertyName];
+        if (!value || typeof value !== 'object') continue;
+
+        const fileRef = value as { key?: string };
+        if (fileRef.key) {
+          fileKeyErrors[col.propertyName] =
+            'Storage-backed files cannot be attached during create. Save the record first, then upload.';
+        }
+      }
+
+      if (Object.keys(fileKeyErrors).length > 0) {
+        if (isJsonRequest) {
+          return jsonValidationError('create', table.name, fileKeyErrors);
+        }
+        return await renderCreateForm(
+          ctx,
+          columnResult,
+          values,
+          undefined,
+          fileKeyErrors,
+        );
+      }
+    }
+
     // Inject default values for non-writable columns (source-aware)
     values = injectColumnDefaults(values, columnResultWithSource.defaults);
 
@@ -853,6 +1119,21 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
       }
       return redirect(cmsUrl(basePath, table.name, newId));
     } catch (error) {
+      // Log unexpected errors
+      if (options.onError) {
+        options.onError(
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            source: 'handler',
+            request,
+            url: new URL(request.url),
+            route: route,
+            table,
+            action: 'create',
+          },
+        );
+      }
+
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'create');
       if (isJsonRequest) {
@@ -864,7 +1145,39 @@ export async function handleCreate(ctx: RouteContext): Promise<Response> {
     }
   }
 
-  // Handle GET - show form
+  // Handle GET - show form (or auto-create draft if configured)
+  if (table.cmsOptions?.autoDraft && canAutoCreateDraft(table)) {
+    try {
+      // Insert a row with all defaults and redirect to edit
+      const result = await options.db
+        .insert(drizzleTable)
+        .values({} as Record<string, never>)
+        .returning();
+
+      const newRecord = result[0] as Record<string, unknown>;
+      const newId = getPrimaryKeyValue(table, newRecord);
+
+      return redirect(cmsUrl(basePath, table.name, newId, 'edit'));
+    } catch (error) {
+      // Log and fall through to normal create form
+      if (options.onError) {
+        options.onError(
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            source: 'handler',
+            request,
+            url: new URL(request.url),
+            route: route,
+            table,
+            action: 'create',
+          },
+        );
+      }
+      const safeMessage = getSafeErrorMessage(error, 'create');
+      return await renderCreateForm(ctx, columnResult, {}, safeMessage);
+    }
+  }
+
   return await renderCreateForm(ctx, columnResult);
 }
 
@@ -1065,6 +1378,87 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       }
     }
 
+    // Validate file reference keys match this record (prevents key tampering)
+    // This ensures clients can only submit keys that were presigned for this specific record
+    if (fileColumns.length > 0) {
+      const fileKeyErrors: Record<string, string> = {};
+
+      for (const col of fileColumns) {
+        const value = values[col.propertyName];
+        if (!value || typeof value !== 'object') continue;
+
+        const fileRef = value as { key?: string; storage?: string };
+        if (!fileRef.key) continue; // No key = inline data or URL-based, skip
+
+        // Validate key prefix: {table}/{column}/{recordId}/
+        if (!isValidFileKey(fileRef.key, table.name, col.name, recordId)) {
+          fileKeyErrors[col.propertyName] =
+            'Invalid file reference. Please re-upload the file.';
+          continue;
+        }
+
+        // Compute expected storage ID using same logic as presign:
+        // 1. Use resolveStorage callback if configured (same context as presign)
+        // 2. Fall back to defaultObjectStorageId
+        let expectedStorageId: string | undefined;
+        if (options.storage?.resolveStorage) {
+          expectedStorageId = options.storage.resolveStorage({
+            request,
+            user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+            table: table.name,
+            column: col.name,
+            action: 'update',
+            recordId: String(recordId),
+          });
+        } else {
+          expectedStorageId = options.storage?.defaultObjectStorageId;
+        }
+
+        // No storage provider expected — reject key (inline DB storage only)
+        if (expectedStorageId === undefined) {
+          fileKeyErrors[col.propertyName] =
+            'This field does not use external storage. Please re-upload the file.';
+          continue;
+        }
+
+        // Validate expectedStorageId is actually registered
+        if (!options.storage?.instances.has(expectedStorageId)) {
+          fileKeyErrors[col.propertyName] =
+            `Storage provider '${expectedStorageId}' is not registered. Check your CMS storage configuration.`;
+          continue;
+        }
+
+        // Normalize: if client omitted storage but sent a key, fill from config
+        if (fileRef.key && !fileRef.storage) {
+          fileRef.storage = expectedStorageId;
+        }
+
+        // Validate storage provider ID matches expected
+        if (fileRef.storage !== expectedStorageId) {
+          fileKeyErrors[col.propertyName] =
+            'Invalid storage provider. Please re-upload the file.';
+        }
+      }
+
+      if (Object.keys(fileKeyErrors).length > 0) {
+        if (isJsonRequest) {
+          return jsonValidationError(
+            'update',
+            table.name,
+            fileKeyErrors,
+            recordId,
+          );
+        }
+        return await renderEditForm(
+          ctx,
+          columnResult,
+          values,
+          undefined,
+          fileKeyErrors,
+        );
+      }
+    }
+
     // Validate form data (uses custom parser if provided, else drizzle-zod)
     const validation = validateWithParsers(
       options,
@@ -1144,6 +1538,55 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       // Save many-to-many relations
       await saveManyToManyData(options, table, recordId, formData);
 
+      // Delete old file objects from storage (eager delete)
+      // This happens after successful DB write - failures are logged but don't fail the request
+      if (fileColumns.length > 0) {
+        await deleteOldFileObjects(
+          options.storage,
+          table.name,
+          recordId,
+          record,
+          dataToUpdate,
+          fileColumns,
+          request,
+          authUser,
+          options.onError
+            ? (err) =>
+              options.onError!(err, {
+                source: 'handler',
+                request,
+                url: new URL(request.url),
+                route,
+                table,
+                action: 'update',
+              })
+            : undefined,
+        );
+
+        // Orphan cleanup: list all objects under the prefix and delete stale ones
+        await cleanupOrphanFileObjects(
+          options.storage,
+          table.name,
+          recordId,
+          record,
+          dataToUpdate,
+          fileColumns,
+          request,
+          authUser,
+          options.onError
+            ? (err) =>
+              options.onError!(err, {
+                source: 'handler',
+                request,
+                url: new URL(request.url),
+                route,
+                table,
+                action: 'update',
+              })
+            : undefined,
+        );
+      }
+
       // Fire update action hook (may be fire-and-forget)
       if (ctx.pluginService) {
         const pluginUser = getPluginUser(ctx);
@@ -1168,6 +1611,21 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
       }
       return redirect(cmsUrl(basePath, table.name, recordId));
     } catch (error) {
+      // Log unexpected errors
+      if (options.onError) {
+        options.onError(
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            source: 'handler',
+            request,
+            url: new URL(request.url),
+            route: route,
+            table,
+            action: 'update',
+          },
+        );
+      }
+
       // Re-render form with safe error message
       const safeMessage = getSafeErrorMessage(error, 'update');
       if (isJsonRequest) {
@@ -1258,13 +1716,23 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
           _form: 'Invalid or expired form. Please try again.',
         }, recordId);
       }
-      return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_error');
+      return redirectWithFlash(
+        cmsUrl(basePath, table.name),
+        'delete_csrf_error',
+      );
     }
   }
 
   try {
-    // Fetch record before deletion for audit purposes
-    const recordToDelete = ctx.pluginService
+    // Check if we need to fetch record before delete
+    // - For plugin hooks (audit log, etc.)
+    // - For storage cleanup (delete S3 objects)
+    const fileColumns = table.columns.filter((col) => col.cmsOptions?.file);
+    const needsStorageCleanup = options.storage && fileColumns.length > 0;
+    const needsRecordSnapshot = ctx.pluginService || needsStorageCleanup;
+
+    // Fetch record before deletion if needed
+    const recordToDelete = needsRecordSnapshot
       ? await findRecordWithPolicy(
         options.db,
         drizzleTable as Table,
@@ -1314,6 +1782,39 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
       );
     }
 
+    // Clean up storage objects for deleted record (fail-soft)
+    if (needsStorageCleanup && recordToDelete) {
+      // Build explicit null values so deleteOldFileObjects sees "cleared" (not "absent")
+      const clearedFileValues: Record<string, null> = {};
+      for (const col of fileColumns) {
+        clearedFileValues[col.propertyName] = null;
+      }
+      await deleteOldFileObjects(
+        options.storage,
+        table.name,
+        recordId,
+        recordToDelete,
+        clearedFileValues,
+        fileColumns.map((col) => ({
+          propertyName: col.propertyName,
+          name: col.name,
+        })),
+        request,
+        authUser ? { id: authUser.id, role: authUser.role } : undefined,
+        options.onError
+          ? (err) =>
+            options.onError!(err, {
+              source: 'handler',
+              request,
+              url: new URL(request.url),
+              route,
+              table,
+              action: 'delete',
+            })
+          : undefined,
+      );
+    }
+
     // Fire delete action hook (may be fire-and-forget)
     if (ctx.pluginService && recordToDelete) {
       const pluginUser = getPluginUser(ctx);
@@ -1347,6 +1848,21 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
         }, recordId);
       }
       return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_fk_error');
+    }
+
+    // Log unexpected errors
+    if (options.onError) {
+      options.onError(
+        error instanceof Error ? error : new Error(String(error)),
+        {
+          source: 'handler',
+          request,
+          url: new URL(request.url),
+          route: route,
+          table,
+          action: 'delete',
+        },
+      );
     }
 
     if (isJsonRequest) {
@@ -1409,11 +1925,33 @@ async function renderCreateForm(
   const hasFileFields = cmsFields.some((f) => f.fieldType === 'file');
 
   // Get field UI overrides from plugins (parallel for performance)
+  // Only process fields with plugin config OR file fields when storage is configured
   const fieldOverrides: Record<string, FieldUIOverride> = {};
   if (pluginService) {
     const user = getPluginUser(ctx);
+    const pluginFields = cmsFields.filter((f) =>
+      f.column.cmsOptions?.plugins ||
+      (f.fieldType === 'file' && options.storage)
+    );
     const results = await Promise.all(
-      cmsFields.map(async (field) => {
+      pluginFields.map(async (field) => {
+        // Compute storageId for file fields
+        let storageId: string | undefined;
+        if (field.fieldType === 'file' && options.storage) {
+          if (options.storage.resolveStorage) {
+            storageId = options.storage.resolveStorage({
+              request: ctx.request,
+              user: user ?? null,
+              table: table.name,
+              column: field.column.name,
+              action: 'create',
+              recordId: undefined,
+            });
+          } else {
+            storageId = options.storage.defaultObjectStorageId;
+          }
+        }
+
         const uiCtx: UIRenderFieldContext = {
           table: table.name,
           field: toUIFieldInfo(field),
@@ -1424,6 +1962,7 @@ async function renderCreateForm(
           recordId: undefined, // create view has no record ID
           view: 'create',
           user,
+          storageId,
         };
         return {
           name: field.column.propertyName,
@@ -1470,7 +2009,7 @@ async function renderCreateForm(
     buildLayoutOptions(ctx, `Create ${formatTableName(table.name)}`, navItems),
   );
 
-  return htmlResponse(page);
+  return htmlResponse(page, 200, ctx.options.securityHeaders);
 }
 
 async function renderEditForm(
@@ -1527,11 +2066,33 @@ async function renderEditForm(
   const frontendUrl = getFrontendUrl(ctx, table, record ?? values, 'update');
 
   // Get field UI overrides from plugins (parallel for performance)
+  // Only process fields with plugin config OR file fields when storage is configured
   const fieldOverrides: Record<string, FieldUIOverride> = {};
   if (pluginService) {
     const user = getPluginUser(ctx);
+    const pluginFields = cmsFields.filter((f) =>
+      f.column.cmsOptions?.plugins ||
+      (f.fieldType === 'file' && options.storage)
+    );
     const results = await Promise.all(
-      cmsFields.map(async (field) => {
+      pluginFields.map(async (field) => {
+        // Compute storageId for file fields
+        let storageId: string | undefined;
+        if (field.fieldType === 'file' && options.storage) {
+          if (options.storage.resolveStorage) {
+            storageId = options.storage.resolveStorage({
+              request: ctx.request,
+              user: user ?? null,
+              table: table.name,
+              column: field.column.name,
+              action: 'update',
+              recordId: String(recordId),
+            });
+          } else {
+            storageId = options.storage.defaultObjectStorageId;
+          }
+        }
+
         const uiCtx: UIRenderFieldContext = {
           table: table.name,
           field: toUIFieldInfo(field),
@@ -1542,6 +2103,7 @@ async function renderEditForm(
           recordId: recordId,
           view: 'edit',
           user,
+          storageId,
         };
         return {
           name: field.column.propertyName,
@@ -1589,5 +2151,5 @@ async function renderEditForm(
     buildLayoutOptions(ctx, `Edit ${formatTableName(table.name)}`, navItems),
   );
 
-  return htmlResponse(page);
+  return htmlResponse(page, 200, ctx.options.securityHeaders);
 }

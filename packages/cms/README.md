@@ -111,17 +111,19 @@ openssl rand -base64 32
 **Example:**
 
 ```ts
-import { createCmsHandler } from '@hotsauce/cms';
+import { createCmsHandler, PasswordProvider } from '@hotsauce/cms';
+import { ownedBy } from '@hotsauce/cms/policies';
 
 const handler = createCmsHandler({
   db,
   schema,
   basePath: '/admin',
   title: 'Blog Admin',
-  isAuthenticated: (req) => req.headers.get('X-User') !== null,
-  canAccess: (req, table, action) => {
-    // Custom authorization logic
-    return table.name !== 'settings' || action === 'read';
+  auth: {
+    provider: new PasswordProvider({ db, usersTable: schema.users }),
+  },
+  policies: {
+    posts: ownedBy(schema.posts, 'authorId'),
   },
 });
 ```
@@ -366,9 +368,11 @@ const handlePublish = async (data) => {
 File uploads are supported by storing a JSON `FileReference` object in a column that is marked as a file field via `$cms({ file: true })`.
 
 - Storage: uploaded bytes are converted to base64 and stored in the JSON field (as `data`).
-- Validation: controlled per-column via `$cms({ accept, maxSize })` (with sensible defaults).
+- Validation: controlled per-column via `$cms({ file: { accept, maxSize } })` (with sensible defaults).
 - Forms: the admin automatically switches to `multipart/form-data` when a table has file columns.
 - Clearing: file inputs can be cleared on update via a `_clear_<propertyName>` field.
+
+For external storage (S3, R2, MinIO), see the [S3 storage plugin](../plugins/s3-storage/README.md). When configured, uploads go to object storage instead of the database:
 
 **Schema example (Postgres):**
 
@@ -381,7 +385,37 @@ export const users = pgTable('users', {
   id: text('id').primaryKey(),
   avatar: jsonb('avatar')
     .$type<FileReference>()
-    .$cms({ file: true, accept: 'image/*', maxSize: 200_000 }),
+    .$cms({ file: { accept: 'image/*', maxSize: 200_000 } }),
+});
+```
+
+**With S3 storage:**
+
+```ts
+import { createS3StoragePlugin } from '@hotsauce/plugins/s3-storage';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  // Use the S3 storage provider by id
+  storage: 's3',
+  // Register the S3 storage plugin
+  plugins: [
+    createS3StoragePlugin({
+      storageId: 's3',
+      bucket: 'my-bucket',
+      region: 'us-east-1',
+      endpoint: 'https://s3.us-east-1.amazonaws.com',
+      basePath: '/my-bucket',
+      accessKeyId: '...',
+      secretAccessKey: '...',
+    }),
+  ],
+  // Optionally configure CSP for images served from S3
+  csp: {
+    imgSrc: ['https://my-bucket.s3.us-east-1.amazonaws.com'],
+  },
 });
 ```
 
@@ -606,37 +640,70 @@ const handler = createCmsHandler({
   schema,
 
   onError: (error: Error, context: ErrorContext) => {
-    // Log to your monitoring service
-    logger.error('CMS error', {
-      message: error.message,
-      stack: error.stack,
-      path: context.url.pathname,
-      table: context.table?.name,
-      action: context.action,
-    });
-
-    // Or send to Sentry, Datadog, etc.
-    Sentry.captureException(error, {
-      extra: {
+    if (context.source === 'handler') {
+      // HTTP request handler error — has request, url, route
+      logger.error('CMS handler error', {
+        message: error.message,
+        stack: error.stack,
+        path: context.url.pathname,
         table: context.table?.name,
         action: context.action,
-      },
-    });
+      });
+    } else {
+      // Plugin error (fire-and-forget or async) — has plugin name, operation
+      logger.error('CMS plugin error', {
+        message: error.message,
+        plugin: context.plugin,
+        operation: context.operation,
+        action: context.action,
+      });
+    }
   },
 });
 ```
 
-The `ErrorContext` includes:
+> Security note: `onError` context may include request metadata and plugin hook data that can contain secrets or PII. Avoid logging raw `context`, request headers, cookies, form bodies, or `hookContext` without redaction.
+>
+> Recommended practice:
+>
+> - Log an allowlist of fields (`requestId`, `plugin`, `operation`, `action`, `path`) instead of full objects.
+> - Redact sensitive keys before logging (`authorization`, `cookie`, `token`, `secret`, `password`, `apiKey`).
+> - Prefer structured logging with explicit fields over dumping full error/context payloads.
+
+`ErrorContext` is a discriminated union — narrow on `source` to access context-specific fields:
 
 ```ts
-interface ErrorContext {
-  request: Request; // Original request
-  url: URL; // Parsed URL
-  route: ParsedRoute | null; // Route info (if parsed)
-  table?: IntrospectedTable; // Table being accessed
-  action?: CrudAction | 'dashboard'; // Action attempted
+// Error from an HTTP request handler
+interface HandlerErrorContext {
+  source: 'handler';
+  request: Request;
+  url: URL;
+  route: ParsedRoute | null;
+  table?: IntrospectedTable;
+  action?: CrudAction | 'dashboard';
+  requestId?: string;
+  plugin?: string; // When error originated from a plugin within a handler
 }
+
+// Error from a plugin (fire-and-forget or async)
+interface PluginErrorContext {
+  source: 'plugin';
+  plugin: string;
+  operation:
+    | 'init'
+    | 'transform:beforeSave'
+    | 'transform:afterRead'
+    | 'ui:renderField'
+    | 'action'
+    | 'route:render';
+  action?: CrudAction;
+  hookContext?: Serializable; // Full hook context at time of error
+}
+
+type ErrorContext = HandlerErrorContext | PluginErrorContext;
 ```
+
+**Breaking change:** `ErrorContext` was previously a flat interface with `request`, `url`, etc. It is now a discriminated union. Update your `onError` handler to check `context.source` before accessing fields.
 
 ### Validation Schema
 
@@ -656,34 +723,64 @@ if (!result.success) {
 
 ### `CmsOptions`
 
+`CmsOptions` is a discriminated union — both `auth` and `policies` are required:
+
 ```ts
-interface CmsOptions {
-  /** Drizzle database instance */
-  db: any;
-  /** Drizzle schema object (e.g., { users, posts }) */
-  schema: Record<string, any>;
-  /** Base path for CMS routes (default: '/admin') */
-  basePath?: string;
-  /** Site title for the admin UI */
-  title?: string;
-  /**
-   * Secret for CSRF token signing (HMAC-SHA256).
-   * Must be at least 32 characters. Generate with: openssl rand -base64 32
-   * If not provided, a random secret is generated (tokens won't survive restarts).
-   */
-  csrfSecret?: string;
-  /** Custom authentication check */
-  isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
-  /** Custom authorization check per table/action */
-  canAccess?: (
-    request: Request,
-    table: IntrospectedTable,
-    action: CrudAction,
-  ) => Promise<boolean> | boolean;
-  /** Custom parsers for form validation (optional) */
-  parsers?: Parsers;
-}
+// With authentication
+createCmsHandler({
+  db,
+  schema,
+  auth: {
+    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
+  },
+  policies: { posts: ownedBy(schema.posts, 'authorId') },
+});
+
+// Without authentication (internal tool)
+createCmsHandler({
+  db,
+  schema,
+  auth: 'dangerously-open',
+  policies: 'dangerously-open',
+});
 ```
+
+**Base options** (shared by both variants):
+
+| Option            | Type                                                      | Default      | Description                                                                            |
+| ----------------- | --------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------- |
+| `db`              | `any`                                                     | _(required)_ | Drizzle database instance                                                              |
+| `schema`          | `Record<string, any>`                                     | _(required)_ | Drizzle schema object (e.g., `{ users, posts }`)                                       |
+| `basePath`        | `string`                                                  | `'/admin'`   | Base path for CMS routes                                                               |
+| `title`           | `string`                                                  | `'Admin'`    | Site title for the admin UI                                                            |
+| `csrfSecret`      | `string`                                                  | env var      | CSRF token signing secret (32+ chars). Falls back to `CMS_CSRF_SECRET` env var         |
+| `onError`         | `(error: Error, ctx: ErrorContext) => void`               | —            | Error handler for unexpected errors (see [Error Logging](#error-logging-with-onerror)) |
+| `parsers`         | `Parsers`                                                 | auto-gen     | Custom Zod parsers per table (overrides drizzle-zod)                                   |
+| `plugins`         | `PluginConfig[]`                                          | —            | Plugins (UI overrides, transforms, action hooks)                                       |
+| `storage`         | `string \| (ctx) => string \| undefined`                  | —            | Storage routing: provider ID or resolver function                                      |
+| `csp`             | `CspOptions`                                              | —            | Additional CSP origins (`imgSrc`, `connectSrc`, `frameSrc`)                            |
+| `isAuthenticated` | `(request: Request) => boolean \| Promise<boolean>`       | —            | Legacy: custom auth check (prefer `auth` option)                                       |
+| `canAccess`       | `(request, table, action) => boolean \| Promise<boolean>` | —            | Legacy: custom per-table authorization                                                 |
+
+**Auth options** (when `auth` is an object):
+
+| Option               | Type                   | Default         | Description                                                    |
+| -------------------- | ---------------------- | --------------- | -------------------------------------------------------------- |
+| `auth.provider`      | `AuthProvider`         | _(required)_    | Login provider (e.g., `PasswordProvider`)                      |
+| `auth.secret`        | `string`               | env var         | JWT signing secret (32+ chars). Falls back to `CMS_JWT_SECRET` |
+| `auth.maxAge`        | `number`               | `28800` (8hr)   | Token lifetime in seconds                                      |
+| `auth.cookieName`    | `string`               | `'cms_token'`   | Cookie name for JWT                                            |
+| `auth.loginTitle`    | `string`               | `'Admin Login'` | Title shown on login page                                      |
+| `auth.identityLabel` | `string`               | `'Email'`       | Label for identity field on login page                         |
+| `auth.isRevoked`     | `(payload) => boolean` | —               | Check if a token has been revoked                              |
+
+**Policies** (required when `auth` is configured):
+
+| Value                    | Behavior                                |
+| ------------------------ | --------------------------------------- |
+| `{ table: policy, ... }` | Apply row/column policies per table     |
+| `{}`                     | Full access for all authenticated users |
+| `'dangerously-open'`     | Bypass all policy checks                |
 
 ### `Handler`
 
@@ -1062,7 +1159,7 @@ class MyCustomProvider implements AuthProvider {
 
 ### Authorization (Permissions)
 
-> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use `auth.policies` (recommended) or the `canAccess` callback.
+> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use `policies` (recommended) or the `canAccess` callback.
 
 ## Row-Level Security (Policies)
 
@@ -1640,6 +1737,8 @@ For `content: json().$cms({ plugins: { puck: true } })`, the generated policy is
 
 See [Source Tokens](#source-tokens) for how the CMS identifies request origins.
 
+> **TODO:** Consider exposing an API to share the CMS's resolved policies with application developers. This would allow them to reuse the same policy definitions in their application code (e.g., for API routes, GraphQL resolvers) instead of duplicating authorization logic.
+
 ## Plugins
 
 Plugins extend CMS functionality with custom hooks that run during CRUD operations. Plugins are isolated in Web Workers for security, ensuring untrusted code cannot access your database or server internals.
@@ -2089,8 +2188,20 @@ interface PluginRouteContext {
 - Filter receives `hookType: 'route'` so you can handle routes separately from hooks
 - If `:table` param references a known table, `canAccess` is checked
 - POST requests validate CSRF tokens automatically
-- Row policies filter which records are accessible
-- Column policies filter which fields are visible in `ctx.record`
+- Row and column policies are applied only when both `:table` and `:id` are present
+
+**Authorization behavior by route shape:**
+
+- Route includes `:table` and `:id`:
+  - `filter` + `canAccess` + row policy + column policy are applied before populating `ctx.record`/`ctx.field`.
+- Route includes `:table` but no `:id`:
+  - `filter` + `canAccess` are applied.
+  - Row/column policy filtering does not run automatically because no specific record is loaded.
+- Route has no `:table` param:
+  - `filter` is the primary authorization guard (plus authentication + CSRF for POST).
+  - `canAccess` is not invoked because there is no table context.
+
+For routes without `:table`, use a restrictive `filter` and explicit checks inside your handler for any sensitive operation.
 
 **Important:** Plugin routes are subject to the same `filter` function as hooks. If your filter blocks a table, routes to that table will return 403 without fetching any data. This prevents data exfiltration via plugin routes:
 

@@ -7,7 +7,9 @@
     "./audit-log/worker": "./audit-log/worker.ts",
     "./puck": "./puck/mod.ts",
     "./puck/types": "./puck/types.ts",
-    "./puck/client/globals": "./puck/client/globals.ts"
+    "./puck/client/globals": "./puck/client/globals.ts",
+    "./s3-storage": "./s3-storage/mod.ts",
+    "./s3-storage/types": "./s3-storage/types.ts"
   },
   "tasks": {
     "build:puck": "deno run --unstable-bundle --allow-read --allow-write --allow-net puck/build.ts"
@@ -17,8 +19,12 @@
       "mod.ts",
       "audit-log/",
       "puck/",
+      "s3-storage/",
       "README.md",
       "LICENSE"
     ]
+  },
+  "imports": {
+    "@std/media-types": "jsr:@std/media-types@^1.1.0"
   }
 }

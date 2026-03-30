@@ -25,6 +25,7 @@
 
   // Shared import map for all packages
   "imports": {
+    "@std/media-types": "jsr:@std/media-types@^1.1.0",
     "drizzle-orm": "npm:drizzle-orm@^0.45.1",
     "drizzle-zod": "npm:drizzle-zod@^0.8.3",
     "postgres": "npm:postgres@^3.4.8",
@@ -42,6 +43,7 @@
     "@hotsauce/plugins/audit-log/worker": "./packages/plugins/audit-log/worker.ts",
     "@hotsauce/plugins/puck": "./packages/plugins/puck/mod.ts",
     "@hotsauce/plugins/puck/types": "./packages/plugins/puck/types.ts",
+    "@hotsauce/plugins/s3-storage": "./packages/plugins/s3-storage/mod.ts",
 
     // Optional peer dependency for 2FA QR code generation
     "qrcode-generator": "npm:qrcode-generator@^2.0.4",

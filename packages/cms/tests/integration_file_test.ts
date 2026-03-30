@@ -829,3 +829,1769 @@ Deno.test('integration: policy-gated file serving', async (t) => {
 
   await client.close();
 });
+
+// ============================================================================
+// File key tampering prevention tests (Finding 2)
+// ============================================================================
+
+Deno.test('integration: file key tampering prevention', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithFiles });
+
+  await createProfilesTable(db);
+
+  async function resetDb() {
+    await db.execute(sql`TRUNCATE TABLE profiles RESTART IDENTITY CASCADE`);
+  }
+
+  function createHandler() {
+    return createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+    });
+  }
+
+  function createHandlerWithStorage() {
+    return createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+      plugins: [
+        {
+          name: 'mock-s3',
+          storageProvider: {
+            id: 's3',
+            kind: 's3' as const,
+            presignUpload: () =>
+              Promise.resolve({
+                key: '',
+                upload: { method: 'PUT' as const, url: '' },
+              }),
+          },
+        },
+      ],
+      storage: 's3',
+    });
+  }
+
+  await t.step('create rejects file ref with storage key', async () => {
+    await resetDb();
+
+    const handler = createHandler();
+    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
+
+    // Attempt to submit a file reference with a storage key during CREATE
+    // This should be rejected - presign requires existing record ID
+    const formData = new FormData();
+    formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
+    formData.append('name', 'Tampered Create');
+    formData.append(
+      'avatar',
+      JSON.stringify({
+        filename: 'tampered.png',
+        contentType: 'image/png',
+        size: 1234,
+        key: 'profiles/avatar/999/fake-key.png',
+        storage: 's3',
+      }),
+    );
+
+    const request = new Request('http://localhost/admin/profiles/new', {
+      method: 'POST',
+      body: formData,
+    });
+    const response = await handler(request);
+
+    // Should render form with error, not redirect
+    assertEquals(response.status, 200);
+    const html = await response.text();
+    assertStringIncludes(
+      html,
+      'Storage-backed files cannot be attached during create',
+    );
+  });
+
+  await t.step(
+    'create rejects file ref with storage key (JSON API)',
+    async () => {
+      await resetDb();
+
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Tampered Create JSON');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'tampered.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/999/fake-key.png',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/new', {
+        method: 'POST',
+        body: formData,
+        headers: { Accept: 'application/json' },
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 400);
+      const json = await response.json();
+      assertEquals(json.success, false);
+      assertEquals(json.action, 'create');
+      assertStringIncludes(
+        json.errors.avatar[0],
+        'Storage-backed files cannot be attached',
+      );
+    },
+  );
+
+  await t.step(
+    'update rejects file ref with wrong record ID in key',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Original Profile' });
+
+      const handler = createHandlerWithStorage();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Attempt to submit a key that belongs to record ID 999 when editing record ID 1
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Tampered Update');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'stolen.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/999/stolen-file.png', // Wrong record ID!
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'Invalid file reference');
+    },
+  );
+
+  await t.step('update rejects file ref with wrong table in key', async () => {
+    await resetDb();
+    await db.insert(profiles).values({ name: 'Target Profile' });
+
+    const handler = createHandlerWithStorage();
+    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
+
+    // Key from a different table
+    const formData = new FormData();
+    formData.append('_csrf', csrfToken);
+    formData.append('_source', sourceToken);
+    formData.append('name', 'Cross-Table Attack');
+    formData.append(
+      'avatar',
+      JSON.stringify({
+        filename: 'cross-table.png',
+        contentType: 'image/png',
+        size: 1234,
+        key: 'other_table/avatar/1/cross-table.png', // Wrong table!
+        storage: 's3',
+      }),
+    );
+
+    const request = new Request('http://localhost/admin/profiles/1', {
+      method: 'POST',
+      body: formData,
+    });
+    const response = await handler(request);
+
+    assertEquals(response.status, 200);
+    const html = await response.text();
+    assertStringIncludes(html, 'Invalid file reference');
+  });
+
+  await t.step(
+    'update rejects file ref with wrong storage provider',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Storage Mismatch' });
+
+      const handler = createHandlerWithStorage();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Valid key prefix but wrong storage provider
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Storage Tampering');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'valid-key.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/valid-uuid-prefix.png', // Valid key for record 1
+          storage: 'malicious-provider', // Non-existent provider
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'Invalid storage provider');
+    },
+  );
+
+  await t.step(
+    'update normalizes missing storage field when storage is configured',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Missing Storage' });
+
+      const handler = createHandlerWithStorage();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Valid key prefix but storage field omitted — should be normalized
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Storage Field Missing');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'sneaky.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/valid-uuid-prefix.png', // Valid key for record 1
+          // storage field intentionally omitted — should be filled from config
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Should succeed (303 redirect) — storage normalized to 'test-s3'
+      assertEquals(response.status, 303);
+    },
+  );
+
+  await t.step(
+    'update accepts valid file ref with correct key prefix',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Valid Update' });
+
+      const handler = createHandlerWithStorage();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Valid key with correct prefix for record 1
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Valid Update');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'legitimate.png',
+          contentType: 'image/png',
+          size: 5678,
+          key: 'profiles/avatar/1/abc123-legitimate.png', // Correct prefix!
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Should succeed with redirect
+      assertEquals(response.status, 303);
+
+      // Verify the file reference was saved
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as
+        | { key?: string; storage?: string }
+        | null;
+      assertEquals(avatar?.key, 'profiles/avatar/1/abc123-legitimate.png');
+      assertEquals(avatar?.storage, 's3');
+    },
+  );
+
+  await t.step(
+    'update accepts valid storage when resolveStorage routes to non-default',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Resolver Test' });
+
+      // Create handler with resolveStorage that routes avatar column to 'archive'
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+          {
+            name: 'mock-archive',
+            storageProvider: {
+              id: 'archive',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+        ],
+        // Route avatar column to 'archive', everything else to s3
+        storage: (ctx) => ctx.column === 'avatar' ? 'archive' : 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Submit with 'archive' storage (matches resolver for avatar column)
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Resolver Test');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'resolved.png',
+          contentType: 'image/png',
+          size: 9999,
+          key: 'profiles/avatar/1/resolved-key.png',
+          storage: 'archive', // Matches resolveStorage result, not default!
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Should succeed - 'archive' matches resolver output for this column
+      assertEquals(response.status, 303);
+
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as
+        | { key?: string; storage?: string }
+        | null;
+      assertEquals(avatar?.storage, 'archive');
+    },
+  );
+
+  await t.step(
+    'update rejects storage mismatch when resolveStorage routes elsewhere',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Resolver Mismatch' });
+
+      // Same resolver: avatar -> 'archive'
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+          {
+            name: 'mock-archive',
+            storageProvider: {
+              id: 'archive',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+        ],
+        storage: (ctx) => ctx.column === 'avatar' ? 'archive' : 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Try to submit with 's3' but resolver routes avatar to 'archive'
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Resolver Mismatch');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'wrong-storage.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/wrong-storage.png',
+          storage: 's3', // Doesn't match resolver (should be 'archive')
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Should fail - 's3' doesn't match resolver's 'archive' for avatar
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'Invalid storage provider');
+    },
+  );
+
+  await t.step(
+    'update rejects key when no storage provider expected (DB-routed column)',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'DB Only' });
+
+      // Handler without storage — all file columns use inline DB storage
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'DB Only');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'sneaky.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/injected-key.png', // Key should not exist without storage
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'does not use external storage');
+    },
+  );
+
+  await t.step(
+    'update rejects when resolveStorage returns unregistered provider',
+    async () => {
+      await resetDb();
+      await db.insert(profiles).values({ name: 'Bad Config' });
+
+      // resolver returns 'nonexistent' which is not in instances
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+            },
+          },
+        ],
+        // Resolver returns an ID that no plugin registered
+        storage: () => 'nonexistent',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Bad Config');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'test.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/test-key.png',
+          storage: 'nonexistent',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      assertStringIncludes(html, 'is not registered');
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // Storage cleanup on record delete tests
+  // ─────────────────────────────────────────────────────────────
+
+  await t.step(
+    'delete cleans up storage objects for file columns',
+    async () => {
+      await resetDb();
+
+      // Track deleteObject calls
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      // Insert record with storage-backed file reference
+      await db.insert(profiles).values({
+        name: 'Profile with S3 file',
+        avatar: {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/uuid-avatar.png',
+          storage: 's3',
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+      assertStringIncludes(
+        response.headers.get('Location') ?? '',
+        '_flash=delete_success',
+      );
+
+      // Verify storage object was deleted
+      assertEquals(deletedKeys.length, 1);
+      assertEquals(deletedKeys[0], 'profiles/avatar/1/uuid-avatar.png');
+
+      // Verify DB record is gone
+      const remaining = await db.select().from(profiles);
+      assertEquals(remaining.length, 0);
+    },
+  );
+
+  await t.step(
+    'delete cleanup is fail-soft (storage error does not fail delete)',
+    async () => {
+      await resetDb();
+
+      let errorLogged = false;
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: () => {
+                throw new Error('S3 delete failed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+        onError: () => {
+          errorLogged = true;
+        },
+      });
+
+      // Insert record with storage-backed file
+      await db.insert(profiles).values({
+        name: 'Profile with failing cleanup',
+        avatar: {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+          size: 1234,
+          key: 'profiles/avatar/1/uuid-avatar.png',
+          storage: 's3',
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Delete should succeed even though storage cleanup failed
+      assertEquals(response.status, 303);
+      assertStringIncludes(
+        response.headers.get('Location') ?? '',
+        '_flash=delete_success',
+      );
+
+      // Error should have been logged
+      assertEquals(errorLogged, true);
+
+      // DB record should be gone
+      const remaining = await db.select().from(profiles);
+      assertEquals(remaining.length, 0);
+    },
+  );
+
+  await t.step(
+    'delete does not cleanup storage for DB-inline files (no key)',
+    async () => {
+      await resetDb();
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      // Insert record with DB-inline file (has data, no key)
+      await db.insert(profiles).values({
+        name: 'Profile with inline file',
+        avatar: {
+          filename: 'avatar.png',
+          contentType: 'image/png',
+          size: 100,
+          data: 'base64encodeddata',
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+      assertStringIncludes(
+        response.headers.get('Location') ?? '',
+        '_flash=delete_success',
+      );
+
+      // No storage cleanup for inline files
+      assertEquals(deletedKeys.length, 0);
+    },
+  );
+
+  await t.step(
+    'update without file in form data does not delete S3 object',
+    async () => {
+      await resetDb();
+
+      // Record has an existing S3 file
+      await db.insert(profiles).values({
+        name: 'Keep my file',
+        avatar: {
+          filename: 'photo.png',
+          contentType: 'image/png',
+          size: 5000,
+          key: 'profiles/avatar/1/keep-uuid-photo.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Submit form with only name changed — no file field at all
+      // This simulates the S3 edit form where file input is replaced by plugin UI
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Updated name only');
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // File should NOT be deleted — it wasn't in the form submission
+      assertEquals(deletedKeys.length, 0);
+
+      // DB record should still have the file
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as { key?: string } | null;
+      assertEquals(avatar?.key, 'profiles/avatar/1/keep-uuid-photo.png');
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────
+  // Orphan cleanup on save tests
+  // ─────────────────────────────────────────────────────────────
+
+  await t.step(
+    'update cleans up orphan files under same prefix',
+    async () => {
+      await resetDb();
+
+      // Simulate a record with an existing S3 file
+      await db.insert(profiles).values({
+        name: 'Profile with orphans',
+        avatar: {
+          filename: 'current.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'profiles/avatar/1/current-uuid-current.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+      const listedPrefixes: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+              listObjects: (prefix) => {
+                listedPrefixes.push(prefix);
+                return Promise.resolve([
+                  // The old key (already known — deleteOldFileObjects handles this)
+                  {
+                    key: 'profiles/avatar/1/current-uuid-current.png',
+                    lastModified: new Date('2025-01-01'),
+                    size: 1000,
+                  },
+                  // An orphan from an abandoned upload
+                  {
+                    key: 'profiles/avatar/1/orphan-uuid-abandoned.png',
+                    lastModified: new Date('2025-01-01'),
+                    size: 2000,
+                  },
+                  // The new file being saved
+                  {
+                    key: 'profiles/avatar/1/new-uuid-photo.png',
+                    lastModified: new Date(),
+                    size: 3000,
+                  },
+                ]);
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Update the file field with a new S3 key
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Profile with orphans');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'photo.png',
+          contentType: 'image/png',
+          size: 3000,
+          key: 'profiles/avatar/1/new-uuid-photo.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // Should have listed the prefix for orphan detection
+      assertEquals(listedPrefixes.length, 1);
+      assertEquals(listedPrefixes[0], 'profiles/avatar/1/');
+
+      // Should have deleted the old key AND the orphan, but NOT the new key
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/current-uuid-current.png'),
+        true,
+      );
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/orphan-uuid-abandoned.png'),
+        true,
+      );
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/new-uuid-photo.png'),
+        false,
+      );
+    },
+  );
+
+  await t.step(
+    'update with same file does not trigger orphan cleanup',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'No change',
+        avatar: {
+          filename: 'same.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/same-uuid-same.png',
+          storage: 's3',
+        },
+      });
+
+      const listedPrefixes: string[] = [];
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+              listObjects: (prefix) => {
+                listedPrefixes.push(prefix);
+                return Promise.resolve([]);
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Submit with the same file reference (no change)
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'No change');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'same.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/same-uuid-same.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // No listing or deletions when file hasn't changed
+      assertEquals(listedPrefixes.length, 0);
+      assertEquals(deletedKeys.length, 0);
+    },
+  );
+
+  await t.step(
+    'orphan cleanup is fail-soft (listObjects error does not fail update)',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'Error test',
+        avatar: {
+          filename: 'old.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/old-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      let errorLogged = false;
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: () => Promise.resolve(),
+              listObjects: () => {
+                throw new Error('S3 ListObjects exploded');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+        onError: () => {
+          errorLogged = true;
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Error test');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 600,
+          key: 'profiles/avatar/1/new-uuid.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Update should still succeed despite listObjects failure
+      assertEquals(response.status, 303);
+
+      // Error should have been logged
+      assertEquals(errorLogged, true);
+
+      // DB should have the new file
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as { key?: string } | null;
+      assertEquals(avatar?.key, 'profiles/avatar/1/new-uuid.png');
+    },
+  );
+
+  await t.step(
+    'orphan cleanup skips providers without listObjects',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'No listObjects',
+        avatar: {
+          filename: 'old.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/old-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+              // No listObjects — orphan cleanup should be skipped
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'No listObjects');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 600,
+          key: 'profiles/avatar/1/new-uuid.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // Only the old key should be deleted (eager delete), no orphan scan
+      assertEquals(deletedKeys.length, 1);
+      assertEquals(deletedKeys[0], 'profiles/avatar/1/old-uuid.png');
+    },
+  );
+
+  await t.step(
+    'orphan cleanup skips providers without deleteObject',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'No deleteObject',
+        avatar: {
+          filename: 'old.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/old-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      let errorLogged = false;
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              listObjects: () => {
+                return Promise.resolve([
+                  {
+                    key: 'profiles/avatar/1/old-orphan.png',
+                    lastModified: new Date('2025-01-01'),
+                    size: 1000,
+                  },
+                  {
+                    key: 'profiles/avatar/1/new-uuid.png',
+                    lastModified: new Date(),
+                    size: 3000,
+                  },
+                ]);
+              },
+              // No deleteObject — orphan cleanup (and eager delete) should be skipped
+            },
+          },
+        ],
+        storage: 's3',
+        onError: () => {
+          errorLogged = true;
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'No deleteObject');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 600,
+          key: 'profiles/avatar/1/new-uuid.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Update should succeed; orphan cleanup should be a no-op without deleteObject
+      assertEquals(response.status, 303);
+      assertEquals(errorLogged, false);
+
+      const [profile] = await db.select().from(profiles);
+      const avatar = profile?.avatar as { key?: string } | null;
+      assertEquals(avatar?.key, 'profiles/avatar/1/new-uuid.png');
+    },
+  );
+
+  await t.step(
+    'orphan cleanup skips recently uploaded files (grace period)',
+    async () => {
+      await resetDb();
+
+      await db.insert(profiles).values({
+        name: 'Grace period test',
+        avatar: {
+          filename: 'old.png',
+          contentType: 'image/png',
+          size: 500,
+          key: 'profiles/avatar/1/old-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+              listObjects: () => {
+                return Promise.resolve([
+                  // Old orphan — should be deleted
+                  {
+                    key: 'profiles/avatar/1/old-orphan.png',
+                    lastModified: new Date('2025-01-01'),
+                    size: 1000,
+                  },
+                  // Recent upload — should be kept (within grace period)
+                  {
+                    key: 'profiles/avatar/1/recent-concurrent.png',
+                    lastModified: new Date(), // just now
+                    size: 2000,
+                  },
+                  // The new key being saved
+                  {
+                    key: 'profiles/avatar/1/new-uuid.png',
+                    lastModified: new Date(),
+                    size: 3000,
+                  },
+                ]);
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+      formData.append('_source', sourceToken);
+      formData.append('name', 'Grace period test');
+      formData.append(
+        'avatar',
+        JSON.stringify({
+          filename: 'new.png',
+          contentType: 'image/png',
+          size: 3000,
+          key: 'profiles/avatar/1/new-uuid.png',
+          storage: 's3',
+        }),
+      );
+
+      const request = new Request('http://localhost/admin/profiles/1', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      assertEquals(response.status, 303);
+
+      // Old key (from deleteOldFileObjects) and old orphan should be deleted
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/old-uuid.png'),
+        true,
+      );
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/old-orphan.png'),
+        true,
+      );
+
+      // Recent concurrent upload should NOT be deleted (grace period)
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/recent-concurrent.png'),
+        false,
+      );
+
+      // New key should NOT be deleted
+      assertEquals(
+        deletedKeys.includes('profiles/avatar/1/new-uuid.png'),
+        false,
+      );
+    },
+  );
+
+  // ──────────────────────────────────────────────────────────
+  // Defense-in-depth: key validation in file serving and deletion
+  // ──────────────────────────────────────────────────────────
+
+  await t.step(
+    'file serving returns 404 for tampered key (wrong prefix)',
+    async () => {
+      await resetDb();
+
+      // Simulate DB tampering: insert a record with a key that
+      // doesn't match the expected {table}/{column}/{recordId}/ prefix
+      await db.insert(profiles).values({
+        name: 'Tampered Record',
+        avatar: {
+          filename: 'tampered.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'other-table/other-column/999/secret-file.png', // Wrong prefix
+          storage: 's3',
+        },
+      });
+
+      let signCalled = false;
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              signDownloadUrl: () => {
+                signCalled = true;
+                return Promise.resolve('https://s3.example.com/signed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+      );
+      const response = await handler(request);
+
+      // Should return 404, not sign the tampered key
+      assertEquals(response.status, 404);
+      assertEquals(signCalled, false);
+    },
+  );
+
+  await t.step(
+    'file serving accepts valid key (correct prefix)',
+    async () => {
+      await resetDb();
+
+      // Valid key with correct prefix
+      await db.insert(profiles).values({
+        name: 'Valid Record',
+        avatar: {
+          filename: 'valid.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'profiles/avatar/1/valid-uuid.png', // Correct prefix
+          storage: 's3',
+        },
+      });
+
+      let signedKey: string | null = null;
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              signDownloadUrl: (ctx) => {
+                signedKey = ctx.key;
+                return Promise.resolve('https://s3.example.com/signed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+      );
+      const response = await handler(request);
+
+      // Should redirect to signed URL
+      assertEquals(response.status, 302);
+      assertEquals(signedKey, 'profiles/avatar/1/valid-uuid.png');
+    },
+  );
+
+  await t.step(
+    'delete skips invalid key and calls onError (defense-in-depth)',
+    async () => {
+      await resetDb();
+
+      // Simulate DB tampering: record has a key with wrong prefix
+      await db.insert(profiles).values({
+        name: 'Tampered for Delete',
+        avatar: {
+          filename: 'tampered.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'other-table/other-column/999/should-not-delete.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+      const errors: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+            },
+          },
+        ],
+        storage: 's3',
+        onError: (err) => {
+          errors.push(err.message);
+        },
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Delete should succeed (DB record removed)
+      assertEquals(response.status, 303);
+
+      // But the tampered key should NOT be deleted from storage
+      assertEquals(deletedKeys.length, 0);
+
+      // onError should be called with the validation failure
+      assertEquals(errors.length > 0, true);
+      assertStringIncludes(errors[0] ?? '', 'Skipping deletion of invalid key');
+    },
+  );
+
+  await t.step(
+    'delete removes valid key (correct prefix)',
+    async () => {
+      await resetDb();
+
+      // Valid key with correct prefix
+      await db.insert(profiles).values({
+        name: 'Valid for Delete',
+        avatar: {
+          filename: 'valid.png',
+          contentType: 'image/png',
+          size: 1000,
+          key: 'profiles/avatar/1/valid-uuid.png',
+          storage: 's3',
+        },
+      });
+
+      const deletedKeys: string[] = [];
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              deleteObject: (ctx) => {
+                deletedKeys.push(ctx.key);
+                return Promise.resolve();
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const formData = new FormData();
+      formData.append('_csrf', csrfToken);
+
+      const request = new Request('http://localhost/admin/profiles/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
+      const response = await handler(request);
+
+      // Delete should succeed
+      assertEquals(response.status, 303);
+
+      // Valid key should be deleted
+      assertEquals(deletedKeys.length, 1);
+      assertEquals(deletedKeys[0], 'profiles/avatar/1/valid-uuid.png');
+    },
+  );
+
+  await client.close();
+});

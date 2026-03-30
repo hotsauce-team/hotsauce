@@ -46,6 +46,25 @@ export function formField(
   if (options.override?.link) {
     const { label, href, target } = options.override.link;
 
+    // For file fields, show image preview only if it's actually an image
+    // SVG previews require explicit opt-in (previewSvg: true) due to XSS risk
+    const fileValue = options.value as
+      | { contentType?: string; filename?: string }
+      | undefined;
+    const isImage = fileValue?.contentType?.startsWith('image/') ?? false;
+    const isSvg = fileValue?.contentType === 'image/svg+xml';
+    const fileConfig = field.column.cmsOptions?.file;
+    const previewSvg = fileConfig && typeof fileConfig === 'object' &&
+      fileConfig.previewSvg === true;
+    const shouldRenderImagePreview = isImage && (!isSvg || previewSvg);
+    const altText = fileValue?.filename ?? `${field.label} preview`;
+    const imagePreview = options.override.fileUrl && shouldRenderImagePreview
+      ? html`
+        <img src="${options.override
+          .fileUrl}" alt="${altText}" class="cms-file-preview" />
+      `
+      : '';
+
     // For read-only fields, show summary (or value) and the link
     // This allows users to see what the current value is and access the plugin editor
     const valueSummary = options.override.valueSummary;
@@ -57,7 +76,7 @@ export function formField(
           <label ${attrs({ for: id, class: 'cms-label' })}>
             ${field.label}
           </label>
-          ${raw(
+          ${raw(imagePreview)} ${raw(
             valueSummary
               ? html`
                 <p class="cms-value-summary">${valueSummary}</p>
@@ -83,7 +102,7 @@ export function formField(
       `;
     }
 
-    // Non-readonly fields: show summary (if provided) + link (replaces raw input)
+    // Non-readonly fields: show preview + summary (if provided) + link (replaces raw input)
     return html`
       <div ${attrs({
         class: 'cms-field',
@@ -91,7 +110,7 @@ export function formField(
         <label ${attrs({ class: 'cms-label' })}>
           ${field.label}
         </label>
-        ${raw(
+        ${raw(imagePreview)} ${raw(
           valueSummary
             ? html`
               <p class="cms-value-summary">${valueSummary}</p>
@@ -117,11 +136,13 @@ export function formField(
     `;
   }
 
-  // valueSummary without link: show summary for read-only fields (hides raw JSON)
-  if (options.override?.valueSummary && field.readOnly) {
+  // valueSummary without link: show summary instead of input
+  // Used for: read-only fields (hides raw JSON), or when plugin wants to replace input with a message
+  // (e.g., S3 plugin on create: "Save record first to upload files via S3")
+  if (options.override?.valueSummary && !options.override?.link) {
     return html`
       <div ${attrs({
-        class: 'cms-field cms-field-readonly',
+        class: `cms-field ${field.readOnly ? 'cms-field-readonly' : ''}`.trim(),
       })}>
         <label ${attrs({ for: id, class: 'cms-label' })}>
           ${field.label}

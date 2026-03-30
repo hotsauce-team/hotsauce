@@ -197,7 +197,7 @@ export class PluginRegistry {
     }
 
     // Validate filter type if provided
-    // (schema-driven scoping is default when filter is omitted)
+    // (schema-driven scoping is default when filter is omitted for hooks)
     if (
       plugin.filter !== undefined &&
       plugin.filter !== 'dangerously-open' &&
@@ -206,6 +206,19 @@ export class PluginRegistry {
       throw new PluginValidationError(
         plugin.name,
         "filter must be a function or 'dangerously-open'",
+      );
+    }
+
+    // SECURITY: Plugins with routes MUST have an explicit filter
+    // Routes accept URL params (e.g., :table/:id) which could expose all tables.
+    // Schema-driven scoping only applies to hooks (data flow), not routes (URL access).
+    if (
+      plugin.routes && plugin.routes.length > 0 && plugin.filter === undefined
+    ) {
+      throw new PluginValidationError(
+        plugin.name,
+        "Plugins with routes must specify a 'filter' function or 'dangerously-open'. " +
+          'Routes can be accessed for any table via URL params - filter controls which tables are allowed.',
       );
     }
 

@@ -70,11 +70,6 @@ export function matchPluginRoute(
   method: string,
   plugins: PluginConfig[],
 ): PluginRouteMatch | null {
-  // Only GET is currently supported for plugin routes
-  if (method.toUpperCase() !== 'GET') {
-    return null;
-  }
-
   // Normalize paths
   const normalizedBase = basePath.replace(/\/+$/, '');
   const pathname = url.pathname.replace(/\/+$/, '') || '/';

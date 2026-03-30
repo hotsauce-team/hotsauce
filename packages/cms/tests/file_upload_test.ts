@@ -154,7 +154,7 @@ const mockFileColumn: IntrospectedColumn = {
 
 const mockFileColumnWithLimits: IntrospectedColumn = {
   ...mockFileColumn,
-  cmsOptions: { file: true, maxSize: 100, accept: 'image/png' },
+  cmsOptions: { file: { maxSize: 100, accept: 'image/png' } },
 };
 
 Deno.test('parseMultipartFormData: parses file upload', async () => {
@@ -255,5 +255,75 @@ Deno.test('parseMultipartFormData: ignores file not in fileColumns', async () =>
 
   // Should not have the file (column name doesn't match)
   assertEquals(result.files.unknownField, undefined);
+  assertEquals(Object.keys(result.errors).length, 0);
+});
+
+// =============================================================================
+// Content-type cross-validation tests (extension ↔ claimed MIME type)
+// =============================================================================
+
+Deno.test('parseMultipartFormData: rejects unrecognised file extension', async () => {
+  const file = createMockFile(
+    'data.xyz999',
+    'content',
+    'application/octet-stream',
+  );
+  const formData = createFormDataWithFile('avatar', file);
+  const request = createMultipartRequest(formData);
+
+  const result = await parseMultipartFormData(request, [mockFileColumn]);
+
+  assertEquals(result.files.avatar, undefined);
+  assertExists(result.errors.avatar);
+  assertEquals(
+    result.errors.avatar.includes('Unrecognised file extension'),
+    true,
+  );
+});
+
+Deno.test('parseMultipartFormData: rejects content-type mismatch', async () => {
+  // Claim image/png but filename says .exe
+  const file = createMockFile('malware.exe', 'content', 'image/png');
+  const formData = createFormDataWithFile('avatar', file);
+  const request = createMultipartRequest(formData);
+
+  const result = await parseMultipartFormData(request, [mockFileColumn]);
+
+  assertEquals(result.files.avatar, undefined);
+  assertExists(result.errors.avatar);
+  assertEquals(result.errors.avatar.includes('Content type mismatch'), true);
+});
+
+Deno.test('parseMultipartFormData: .jpg with image/jpeg passes', async () => {
+  const file = createMockFile('photo.jpg', 'img', 'image/jpeg');
+  const formData = createFormDataWithFile('avatar', file);
+  const request = createMultipartRequest(formData);
+
+  const result = await parseMultipartFormData(request, [mockFileColumn]);
+
+  assertExists(result.files.avatar);
+  assertEquals(result.files.avatar.contentType, 'image/jpeg');
+  assertEquals(Object.keys(result.errors).length, 0);
+});
+
+Deno.test('parseMultipartFormData: .jpeg with image/jpeg passes', async () => {
+  const file = createMockFile('photo.jpeg', 'img', 'image/jpeg');
+  const formData = createFormDataWithFile('avatar', file);
+  const request = createMultipartRequest(formData);
+
+  const result = await parseMultipartFormData(request, [mockFileColumn]);
+
+  assertExists(result.files.avatar);
+  assertEquals(Object.keys(result.errors).length, 0);
+});
+
+Deno.test('parseMultipartFormData: uppercase extension is validated', async () => {
+  const file = createMockFile('photo.PNG', 'img', 'image/png');
+  const formData = createFormDataWithFile('avatar', file);
+  const request = createMultipartRequest(formData);
+
+  const result = await parseMultipartFormData(request, [mockFileColumn]);
+
+  assertExists(result.files.avatar);
   assertEquals(Object.keys(result.errors).length, 0);
 });

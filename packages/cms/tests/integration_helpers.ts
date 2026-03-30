@@ -77,9 +77,10 @@ export const profiles = pgTable('profiles', {
   name: varchar('name', { length: 100 }).notNull(),
   avatar: json('avatar').$cms({ file: true }),
   document: json('document').$cms({
-    file: true,
-    accept: 'application/pdf',
-    maxSize: 1024 * 1024, // 1MB
+    file: {
+      accept: 'application/pdf',
+      maxSize: 1024 * 1024, // 1MB
+    },
   }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
