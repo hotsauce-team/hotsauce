@@ -1,6 +1,6 @@
 // Form field wrapper component
 
-import { attrs, html, raw } from '../html.ts';
+import { attrs, getSafeUrl, html, raw } from '../html.ts';
 import {
   type FieldInputOptions,
   type RelationOption,
@@ -42,6 +42,11 @@ export function formField(
   const helpText = options.helpText ?? field.helpText;
   const isRequired = field.column.notNull && !field.column.hasDefault;
 
+  // Sanitize plugin-provided URL at the public API boundary
+  const safeFileUrl = options.override?.fileUrl
+    ? getSafeUrl(options.override.fileUrl)
+    : null;
+
   // If there's a link override, render a link (and value display if read-only)
   if (options.override?.link) {
     const { label, href, target } = options.override.link;
@@ -58,10 +63,9 @@ export function formField(
       fileConfig.previewSvg === true;
     const shouldRenderImagePreview = isImage && (!isSvg || previewSvg);
     const altText = fileValue?.filename ?? `${field.label} preview`;
-    const imagePreview = options.override.fileUrl && shouldRenderImagePreview
+    const imagePreview = safeFileUrl && shouldRenderImagePreview
       ? html`
-        <img src="${options.override
-          .fileUrl}" alt="${altText}" class="cms-file-preview" />
+        <img src="${safeFileUrl}" alt="${altText}" class="cms-file-preview" />
       `
       : '';
 

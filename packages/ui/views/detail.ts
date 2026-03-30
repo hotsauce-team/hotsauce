@@ -145,11 +145,14 @@ export function detailField(
     return '';
   }
 
+  // Sanitize plugin-provided URL at the public API boundary
+  const safeFileUrl = fileUrl ? getSafeUrl(fileUrl) ?? undefined : undefined;
+
   return html`
     <div class="cms-detail-field">
       <dt class="cms-detail-label">${field.label}</dt>
       <dd class="cms-detail-value">${raw(
-        formatValue(value, field, relationOptions, fileUrl),
+        formatValue(value, field, relationOptions, safeFileUrl),
       )}</dd>
     </div>
   `;
