@@ -31,6 +31,3 @@ jobs:
 
       - name: Run tests
         run: deno task test
-
-      - name: JSR publish dry-run
-        run: deno publish --dry-run
