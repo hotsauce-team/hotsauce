@@ -1,6 +1,6 @@
 # hotsauce-cms
 
-A schema-driven CMS derived from your Drizzle ORM definitions. Define your database schema once — get a type-safe admin interface for free.
+A schema-driven headless CMS derived from your Drizzle ORM definitions. Define your database schema once — get a type-safe admin interface for free.
 
 ## Philosophy
 
