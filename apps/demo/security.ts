@@ -10,41 +10,50 @@ import type { MiddlewareHandler } from 'hono';
  * - Forms only submit to same origin
  * - No embedding in frames (clickjacking protection)
  */
-const CSP_POLICY = [
-  "default-src 'self'",
-  "script-src 'none'", // No JavaScript at all (pure SSR)
-  "style-src 'self'", // Only external stylesheets from same origin
-  "img-src 'self' data:", // Images from same origin + data URIs
-  "font-src 'self'", // Fonts from same origin
-  "connect-src 'self'", // XHR/fetch to same origin only
-  "form-action 'self'", // Forms submit to same origin only
-  "frame-ancestors 'none'", // Prevent clickjacking
-  "base-uri 'self'", // Restrict <base> tag
-  "object-src 'none'", // No plugins (Flash, etc.)
-].join('; ');
+function buildCspPolicy(imgSrc: string[] = []): string {
+  const imgSources = ["'self'", ...imgSrc, 'data:'].join(' ');
+  return [
+    "default-src 'self'",
+    "script-src 'none'", // No JavaScript at all (pure SSR)
+    "style-src 'self'", // Only external stylesheets from same origin
+    `img-src ${imgSources}`, // Images from same origin + storage + data URIs
+    "font-src 'self'", // Fonts from same origin
+    "connect-src 'self'", // XHR/fetch to same origin only
+    "form-action 'self'", // Forms submit to same origin only
+    "frame-ancestors 'none'", // Prevent clickjacking
+    "base-uri 'self'", // Restrict <base> tag
+    "object-src 'none'", // No plugins (Flash, etc.)
+  ].join('; ');
+}
 
 /**
- * Security headers middleware
- * Applies strict CSP and other security headers to responses
+ * Create security headers middleware
+ * @param imgSrc - Additional trusted img-src origins (e.g., S3 public endpoint)
  */
-export const securityHeaders: MiddlewareHandler = async (c, next) => {
-  await next();
+export function createSecurityHeaders(
+  imgSrc: string[] = [],
+): MiddlewareHandler {
+  const cspPolicy = buildCspPolicy(imgSrc);
 
-  // Content Security Policy
-  c.header('Content-Security-Policy', CSP_POLICY);
+  return async (c, next) => {
+    await next();
 
-  // Prevent MIME type sniffing
-  c.header('X-Content-Type-Options', 'nosniff');
+    // Content Security Policy
+    c.header('Content-Security-Policy', cspPolicy);
 
-  // Referrer policy - don't leak URLs to external sites
-  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Prevent MIME type sniffing
+    c.header('X-Content-Type-Options', 'nosniff');
 
-  // Permissions policy - disable sensitive browser features
-  c.header(
-    'Permissions-Policy',
-    'camera=(), microphone=(), geolocation=(), interest-cohort=()',
-  );
-};
+    // Referrer policy - don't leak URLs to external sites
+    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+
+    // Permissions policy - disable sensitive browser features
+    c.header(
+      'Permissions-Policy',
+      'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+    );
+  };
+}
 
 /**
  * CSP policy that allows HTMX (if you add it later)

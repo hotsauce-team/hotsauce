@@ -1,6 +1,6 @@
 {
   "name": "@hotsauce/plugins",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "exports": {
     ".": "./mod.ts",
     "./audit-log": "./audit-log/mod.ts",
@@ -9,6 +9,7 @@
     "./puck/types": "./puck/types.ts",
     "./puck/client/globals": "./puck/client/globals.ts",
     "./s3-storage": "./s3-storage/mod.ts",
+    "./s3-storage/signing": "./s3-storage/signing.ts",
     "./s3-storage/types": "./s3-storage/types.ts"
   },
   "tasks": {
