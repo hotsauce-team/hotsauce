@@ -2,6 +2,11 @@
 // These routes serve the public-facing blog pages
 import { Hono } from 'hono';
 import { and, desc, eq, sql } from 'drizzle-orm';
+import {
+  buildObjectUrl,
+  presignUrl,
+} from '@hotsauce/plugins/s3-storage/signing';
+import { getDemoS3Config } from '../lib/s3-config.ts';
 
 import type { Database } from '../db.ts';
 import {
@@ -97,6 +102,7 @@ function htmlResponse(body: string, status = 200): Response {
 
 export function createSiteRoutes(db: Database): Hono {
   const app = new Hono();
+  const s3 = getDemoS3Config();
 
   /**
    * Homepage - list recent published posts
@@ -288,38 +294,75 @@ export function createSiteRoutes(db: Database): Hono {
   });
 
   /**
-   * Public file serving for media
+   * Public file serving for published media
    */
   app.get('/files/media/:id', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id)) return c.notFound();
+
     const [item] = await db.select().from(media).where(
-      eq(media.id, parseInt(c.req.param('id'))),
+      eq(media.id, id),
     ).limit(1);
-    if (!item?.file?.data) return c.notFound();
+    if (!item?.published || !item.file) return c.notFound();
 
-    const bytes = Uint8Array.from(atob(item.file.data), (c) => c.charCodeAt(0));
-    const contentType = (item.file.contentType || 'application/octet-stream')
-      .toLowerCase();
-    const filename = item.file.filename || 'file';
+    const file = item.file;
 
-    // Serve images inline except SVG, which can be scriptable when opened directly.
-    const isImage = contentType.startsWith('image/');
-    const isSvg = contentType === 'image/svg+xml' ||
-      contentType.endsWith('+svg');
-    const disposition = isImage && !isSvg ? 'inline' : 'attachment';
+    // Check file.url here if you are using a CDN.
+    // For this demo, we assume direct S3 access without a CDN, so we generate
+    // presigned URLs on the fly instead of storing them in the database.
 
-    return new Response(bytes, {
-      headers: {
-        'Content-Type': contentType,
-        'Content-Disposition': `${disposition}; filename="${
-          encodeURIComponent(filename)
-        }"`,
-        'Content-Security-Policy':
-          "default-src 'none'; img-src 'self' data:; style-src 'none'; script-src 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
-        'X-Content-Type-Options': 'nosniff',
-        'X-Frame-Options': 'DENY',
-        'Referrer-Policy': 'strict-origin-when-cross-origin',
-      },
-    });
+    // Object storage — presign and redirect
+    if (file.key && s3) {
+      try {
+        const objectUrl = buildObjectUrl(
+          s3.publicEndpoint,
+          s3.bucket,
+          file.key,
+          s3.urlStyle,
+        );
+        const signedUrl = await presignUrl({
+          method: 'GET',
+          url: objectUrl,
+          region: s3.region,
+          accessKeyId: s3.accessKeyId,
+          secretAccessKey: s3.secretAccessKey,
+          expirySeconds: 900,
+        });
+        return c.redirect(signedUrl);
+      } catch {
+        // Invalid object-storage config or signing failure — fall through
+        // to the inline data / 404 path instead of returning a 500.
+      }
+    }
+
+    // Inline base64 — decode and serve
+    if (file.data) {
+      const bytes = Uint8Array.from(atob(file.data), (ch) => ch.charCodeAt(0));
+      const contentType = (file.contentType || 'application/octet-stream')
+        .toLowerCase();
+      const filename = file.filename || 'file';
+
+      const isImage = contentType.startsWith('image/');
+      const isSvg = contentType === 'image/svg+xml' ||
+        contentType.endsWith('+svg');
+      const disposition = isImage && !isSvg ? 'inline' : 'attachment';
+
+      return new Response(bytes, {
+        headers: {
+          'Content-Type': contentType,
+          'Content-Disposition': `${disposition}; filename="${
+            encodeURIComponent(filename)
+          }"`,
+          'Content-Security-Policy':
+            "default-src 'none'; img-src 'self' data:; style-src 'none'; script-src 'none'; form-action 'none'; frame-ancestors 'none'; sandbox",
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'Referrer-Policy': 'strict-origin-when-cross-origin',
+        },
+      });
+    }
+
+    return c.notFound();
   });
 
   /**

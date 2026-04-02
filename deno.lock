@@ -6,6 +6,7 @@
     "jsr:@std/assert@1.0.18": "1.0.18",
     "jsr:@std/internal@^1.0.12": "1.0.12",
     "jsr:@std/media-types@^1.1.0": "1.1.0",
+    "jsr:@std/path@*": "1.1.4",
     "npm:@electric-sql/pglite@~0.3.15": "0.3.15",
     "npm:@puckeditor/core@0.21.1": "0.21.1_react@19.2.4_react-dom@19.2.4__react@19.2.4",
     "npm:@puckeditor/core@latest": "0.21.1_react@19.2.4_react-dom@19.2.4__react@19.2.4",
@@ -56,6 +57,12 @@
     },
     "@std/media-types@1.1.0": {
       "integrity": "c9d093f0c05c3512932b330e3cc1fe1d627b301db33a4c2c2185c02471d6eaa4"
+    },
+    "@std/path@1.1.4": {
+      "integrity": "1d2d43f39efb1b42f0b1882a25486647cb851481862dc7313390b2bb044314b5",
+      "dependencies": [
+        "jsr:@std/internal"
+      ]
     }
   },
   "npm": {

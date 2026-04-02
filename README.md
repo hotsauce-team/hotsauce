@@ -287,10 +287,10 @@ interface TableParsers {
 - [x] Plugin system with Worker isolation (Deno + Node.js 20+)
 - [x] File uploads (base64 in DB, validation, serving route)
 - [x] Publish alpha release to jsr (Deno support)
+- [x] File uploads (S3/R2 cloud storage adapter)
 - [ ] Shared policy API (reuse CMS row/column policies in your app routes)
 - [ ] Security disclosure policy
 - [ ] Add tests for NodeJS runtime
-- [ ] File uploads (S3/R2 cloud storage adapter)
 - [ ] S3 orphan garbage collection (cleanup objects not referenced by any record)
 - [ ] Expose plugin utilities for frontend use (e.g., S3 signed download URLs)
 - [ ] Media library UI (browse, search, reuse previously uploaded files)

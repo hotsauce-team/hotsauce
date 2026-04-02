@@ -6,7 +6,8 @@ import { Hono } from 'hono';
 import { serveStatic } from 'hono/deno';
 import { db } from './db.ts';
 import { createSiteRoutes } from './site/routes.ts';
-import { securityHeaders } from './security.ts';
+import { createSecurityHeaders } from './security.ts';
+import { getDemoS3Config } from './lib/s3-config.ts';
 
 // ─────────────────────────────────────────────────────────────
 // App Setup
@@ -34,6 +35,10 @@ app.get('/admin/components.js', async (c) => {
 });
 
 // Security headers for public site (not admin - CMS has its own)
+const s3Config = getDemoS3Config();
+const securityHeaders = createSecurityHeaders(
+  s3Config ? [s3Config.publicEndpoint] : [],
+);
 app.use('*', (c, next) => {
   // Skip CSP for admin routes (CMS has inline styles)
   if (c.req.path.startsWith('/admin')) {
