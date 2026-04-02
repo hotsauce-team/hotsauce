@@ -307,16 +307,9 @@ export function createSiteRoutes(db: Database): Hono {
 
     const file = item.file;
 
-    // CDN / public URL — redirect directly
-    if (file.url) {
-      try {
-        const parsed = new URL(file.url);
-        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-          return c.redirect(file.url);
-        }
-      } catch { /* invalid URL — fall through */ }
-      return c.notFound();
-    }
+    // Check file.url here if you are using a CDN.
+    // For this demo, we assume direct S3 access without a CDN, so we generate
+    // presigned URLs on the fly instead of storing them in the database.
 
     // Object storage — presign and redirect
     if (file.key && s3) {
