@@ -320,21 +320,26 @@ export function createSiteRoutes(db: Database): Hono {
 
     // Object storage — presign and redirect
     if (file.key && s3) {
-      const objectUrl = buildObjectUrl(
-        s3.publicEndpoint,
-        s3.bucket,
-        file.key,
-        s3.urlStyle,
-      );
-      const signedUrl = await presignUrl({
-        method: 'GET',
-        url: objectUrl,
-        region: s3.region,
-        accessKeyId: s3.accessKeyId,
-        secretAccessKey: s3.secretAccessKey,
-        expirySeconds: 900,
-      });
-      return c.redirect(signedUrl);
+      try {
+        const objectUrl = buildObjectUrl(
+          s3.publicEndpoint,
+          s3.bucket,
+          file.key,
+          s3.urlStyle,
+        );
+        const signedUrl = await presignUrl({
+          method: 'GET',
+          url: objectUrl,
+          region: s3.region,
+          accessKeyId: s3.accessKeyId,
+          secretAccessKey: s3.secretAccessKey,
+          expirySeconds: 900,
+        });
+        return c.redirect(signedUrl);
+      } catch {
+        // Invalid object-storage config or signing failure — fall through
+        // to the inline data / 404 path instead of returning a 500.
+      }
     }
 
     // Inline base64 — decode and serve
