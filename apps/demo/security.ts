@@ -11,7 +11,18 @@ import type { MiddlewareHandler } from 'hono';
  * - No embedding in frames (clickjacking protection)
  */
 function buildCspPolicy(imgSrc: string[] = []): string {
-  const imgSources = ["'self'", ...imgSrc, 'data:'].join(' ');
+  const validatedImgSrc = imgSrc.flatMap((value) => {
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return [parsed.origin];
+      }
+    } catch {
+      // Invalid URL — drop silently
+    }
+    return [];
+  });
+  const imgSources = ["'self'", ...validatedImgSrc, 'data:'].join(' ');
   return [
     "default-src 'self'",
     "script-src 'none'", // No JavaScript at all (pure SSR)
