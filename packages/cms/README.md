@@ -522,7 +522,7 @@ csp: {
 
 #### Route-Level CSP (Plugins)
 
-Plugins can declare CSP overrides on individual routes via `PluginRoute.csp`. These are merged with the global CSP at startup — only that specific route gets the extra sources. Other routes remain strict.
+Plugins can declare CSP overrides on individual routes via `PluginRoute.csp`. Route directives are combined with the global CSP at startup — if both the global config and a route set the same directive, the route's value **replaces** the global one for that directive. Other directives are inherited from the global config.
 
 ```ts
 // Plugin route with relaxed style-src (only for this route)

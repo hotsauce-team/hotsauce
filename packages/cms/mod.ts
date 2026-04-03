@@ -43,6 +43,7 @@ import {
   validateCsrfToken,
 } from './csrf.ts';
 import {
+  CmsConfigError,
   validateAutoDraft,
   validateCmsOptions,
   validateCspOptions,
@@ -909,8 +910,22 @@ export function createCmsHandler(options: CmsOptions): Handler {
 
   // Validate and pre-compute route-specific CSP headers
   if (pluginRegistry) {
+    const ALLOWED_ROUTE_CSP_KEYS = new Set(['styleSrc']);
     for (const { pluginName, route } of pluginRegistry.getAllRoutes()) {
       if (route.csp) {
+        const unknownKeys = Object.keys(route.csp).filter(
+          (k) => !ALLOWED_ROUTE_CSP_KEYS.has(k),
+        );
+        if (unknownKeys.length > 0) {
+          throw new CmsConfigError(
+            `Plugin '${pluginName}' route '${route.pattern}' has unsupported csp keys: ${
+              unknownKeys.join(', ')
+            }. ` +
+              `Only ${
+                [...ALLOWED_ROUTE_CSP_KEYS].join(', ')
+              } are allowed in route-level CSP.`,
+          );
+        }
         validateCspOptions(route.csp);
         routeSecurityHeaders.set(
           `${pluginName}/${route.pattern}`,

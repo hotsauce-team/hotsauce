@@ -1,7 +1,7 @@
 // Plugin Route Security Headers Tests
 // Verifies that security headers are correctly applied to plugin route responses
 
-import { assertEquals } from '@std/assert';
+import { assertEquals, assertThrows } from '@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import {
@@ -223,4 +223,36 @@ Deno.test('plugin route: route CSP merges with global CSP', async (t) => {
     // Global imgSrc is preserved
     assertEquals(csp.includes('https://cdn.example.com'), true);
   });
+});
+
+Deno.test('plugin route: rejects unknown csp keys', () => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema });
+
+  assertThrows(
+    () =>
+      createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'bad-csp',
+            filter: 'dangerously-open' as const,
+            routes: [
+              {
+                pattern: 'editor',
+                handler: () => '<h1>Bad</h1>',
+                csp: { imgSrc: ['https://evil.com'] } as never,
+              },
+            ],
+          },
+        ],
+      }),
+    Error,
+    'unsupported csp keys: imgSrc',
+  );
 });

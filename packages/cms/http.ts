@@ -27,14 +27,14 @@ import type { CspOptions } from './types.ts';
 export function buildSecurityHeaders(
   csp?: CspOptions,
 ): Record<string, string> {
-  const imgSrc = `img-src 'self' data:${joinOrigins(csp?.imgSrc)}`;
+  const imgSrc = `img-src 'self' data:${joinCspValues(csp?.imgSrc)}`;
   const connectSrc = csp?.connectSrc?.length
-    ? `connect-src 'self'${joinOrigins(csp.connectSrc)}; `
+    ? `connect-src 'self'${joinCspValues(csp.connectSrc)}; `
     : '';
   const frameSrc = csp?.frameSrc?.length
-    ? `frame-src 'self'${joinOrigins(csp.frameSrc)}; `
+    ? `frame-src 'self'${joinCspValues(csp.frameSrc)}; `
     : '';
-  const styleSrc = `style-src 'self'${joinOrigins(csp?.styleSrc)}`;
+  const styleSrc = `style-src 'self'${joinCspValues(csp?.styleSrc)}`;
 
   return {
     'Content-Security-Policy':
@@ -46,11 +46,11 @@ export function buildSecurityHeaders(
 }
 
 /**
- * Normalize a CSP source to an origin.
- * URLs with paths are stripped to just the origin (CSP ignores paths for most directives).
- * Non-URL values (like 'self' or blob:) are returned as-is.
+ * Normalize a CSP source value.
+ * URL sources are stripped to just the origin (CSP ignores paths for most directives).
+ * Non-URL values (keywords like 'unsafe-inline', hashes, nonces) are returned as-is.
  */
-function normalizeOrigin(source: string): string {
+function normalizeCspValue(source: string): string {
   try {
     const url = new URL(source);
     return url.origin;
@@ -59,9 +59,9 @@ function normalizeOrigin(source: string): string {
   }
 }
 
-function joinOrigins(origins?: string[]): string {
-  if (!origins?.length) return '';
-  return ' ' + origins.map(normalizeOrigin).join(' ');
+function joinCspValues(sources?: string[]): string {
+  if (!sources?.length) return '';
+  return ' ' + sources.map(normalizeCspValue).join(' ');
 }
 
 /** Default security headers (no CSP extensions) */
