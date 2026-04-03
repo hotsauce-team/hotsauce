@@ -297,6 +297,7 @@ interface TableParsers {
 - [ ] Media library UI (browse, search, reuse previously uploaded files)
 - [ ] Native CDN support (public + private files, cache invalidation)
 - [ ] Plugin config - timeout, worker response validation, load testing
+- [ ] Plugin permission approval (env var hash or DB table gate for CSP/capability changes)
 - [ ] Plugin data obfuscation (PII/credential redaction)
 - [ ] Audit logging
 - [ ] 2FA backup codes (recovery codes for lost authenticator)
