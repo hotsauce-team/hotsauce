@@ -225,34 +225,41 @@ Deno.test('plugin route: route CSP merges with global CSP', async (t) => {
   });
 });
 
-Deno.test('plugin route: rejects unknown csp keys', () => {
-  const client = new PGlite();
-  const db = drizzle(client, { schema });
+Deno.test({
+  name: 'plugin route: rejects unknown csp keys',
+  // PGlite starts async I/O on construction; we only test that config
+  // validation throws synchronously, so disable leak checks.
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn() {
+    const client = new PGlite();
+    const db = drizzle(client, { schema });
 
-  assertThrows(
-    () =>
-      createCmsHandler({
-        csrfSecret: TEST_CSRF_SECRET,
-        auth: 'dangerously-open',
-        policies: 'dangerously-open',
-        db,
-        schema,
-        basePath: '/admin',
-        plugins: [
-          {
-            name: 'bad-csp',
-            filter: 'dangerously-open' as const,
-            routes: [
-              {
-                pattern: 'editor',
-                handler: () => '<h1>Bad</h1>',
-                csp: { imgSrc: ['https://evil.com'] } as never,
-              },
-            ],
-          },
-        ],
-      }),
-    Error,
-    'unsupported csp keys: imgSrc',
-  );
+    assertThrows(
+      () =>
+        createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          auth: 'dangerously-open',
+          policies: 'dangerously-open',
+          db,
+          schema,
+          basePath: '/admin',
+          plugins: [
+            {
+              name: 'bad-csp',
+              filter: 'dangerously-open' as const,
+              routes: [
+                {
+                  pattern: 'editor',
+                  handler: () => '<h1>Bad</h1>',
+                  csp: { imgSrc: ['https://evil.com'] } as never,
+                },
+              ],
+            },
+          ],
+        }),
+      Error,
+      'unsupported csp keys: imgSrc',
+    );
+  },
 });
