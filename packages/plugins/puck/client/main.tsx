@@ -53,7 +53,8 @@ interface UserComponentsModule {
 
 /**
  * Initialize the Puck editor.
- * Call this from your page with configuration options.
+ * Reads configuration from a `<script type="application/json" id="puck-config">` element.
+ * Called automatically when this module is loaded as `<script type="module" src="...">`.
  */
 export async function initPuckEditor(
   options: PuckEditorOptions,
@@ -144,3 +145,15 @@ export async function initPuckEditor(
 
 // Also export for direct use if needed
 export { Puck, React };
+
+// Auto-initialize from DOM config when loaded as <script type="module" src="...">
+const configEl = document.getElementById('puck-config');
+if (configEl?.textContent) {
+  try {
+    const options: PuckEditorOptions = JSON.parse(configEl.textContent);
+    initPuckEditor(options);
+  } catch (err) {
+    // deno-lint-ignore no-console
+    console.error('[Puck] Failed to parse config from #puck-config:', err);
+  }
+}

@@ -33,6 +33,13 @@ import { PUCK_CSS } from './css-embedded.ts';
 // Re-export types for convenience
 export type { InProcessPluginConfig, PluginRouteContext };
 
+/** Editor page layout CSS (served as external stylesheet) */
+const PUCK_EDITOR_CSS = `\
+* { box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 0; background: #f5f5f5; }
+#puck-root { min-height: 100vh; }
+`;
+
 /**
  * Configuration options for the Puck plugin.
  */
@@ -114,6 +121,7 @@ function renderEditorPage(
   // Fixed paths for embedded bundles served by this plugin
   const editorBundleUrl = `${opts.basePath}/puck/_assets/puck-editor.js`;
   const puckCssUrl = `${opts.basePath}/puck/_assets/puck.css`;
+  const puckEditorCssUrl = `${opts.basePath}/puck/_assets/puck-editor.css`;
   const componentsCssLink = opts.componentsCss
     ? `<link rel="stylesheet" href="${opts.componentsCss}">`
     : '';
@@ -127,35 +135,24 @@ function renderEditorPage(
     escapeHtml(column ?? '')
   }</title>
   <link rel="stylesheet" href="${puckCssUrl}">
+  <link rel="stylesheet" href="${puckEditorCssUrl}">
   ${componentsCssLink}
-  <style>
-    * { box-sizing: border-box; }
-    body { 
-      font-family: system-ui, -apple-system, sans-serif; 
-      margin: 0; 
-      padding: 0;
-      background: #f5f5f5;
-    }
-    #puck-root {
-      min-height: 100vh;
-    }
-  </style>
 </head>
 <body>
   <div id="puck-root"></div>
-  <script type="module">
-    import { initPuckEditor } from '${editorBundleUrl}';
-    initPuckEditor({
-      componentsUrl: '${opts.componentsJs}',
-      table: ${safeJsonForInlineHtml(table)},
-      recordId: ${safeJsonForInlineHtml(recordId)},
-      column: ${safeJsonForInlineHtml(column)},
-      csrfToken: ${safeJsonForInlineHtml(csrfToken)},
-      sourceToken: ${safeJsonForInlineHtml(sourceToken)},
-      basePath: ${safeJsonForInlineHtml(basePath)},
-      data: ${safeJsonForInlineHtml(initialPuckData)},
-    });
-  </script>
+  <script type="application/json" id="puck-config">${
+    safeJsonForInlineHtml({
+      componentsUrl: opts.componentsJs,
+      table,
+      recordId,
+      column,
+      csrfToken,
+      sourceToken,
+      basePath,
+      data: initialPuckData,
+    })
+  }</script>
+  <script type="module" src="${editorBundleUrl}"></script>
 </body>
 </html>`;
 }
@@ -251,6 +248,15 @@ export function createPuckPlugin(
         methods: ['GET'],
         handler: () =>
           new Response(PUCK_CSS, {
+            headers: { 'Content-Type': 'text/css; charset=utf-8' },
+          }),
+      },
+      // Serve editor page CSS (layout reset)
+      {
+        pattern: '_assets/puck-editor.css',
+        methods: ['GET'],
+        handler: () =>
+          new Response(PUCK_EDITOR_CSS, {
             headers: { 'Content-Type': 'text/css; charset=utf-8' },
           }),
       },
