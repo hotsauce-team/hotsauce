@@ -402,4 +402,15 @@ export interface PluginRoute {
    * @example 'renderEditor' → Worker receives { type: 'renderEditor', id, context }
    */
   render?: string;
+
+  /**
+   * Route-specific CSP overrides.
+   * Merged with the global CSP at startup — only this route gets the extra sources.
+   *
+   * @example csp: { styleSrc: ["'unsafe-inline'"] }
+   */
+  csp?: {
+    /** Additional sources for style-src (e.g., "'unsafe-inline'" for runtime styles) */
+    styleSrc?: string[];
+  };
 }

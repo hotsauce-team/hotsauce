@@ -508,6 +508,31 @@ This policy:
 - Blocks the CMS from being embedded in iframes (clickjacking protection)
 - Limits referrer information leakage
 
+Customize CSP per-directive via the `csp` option:
+
+```ts
+csp: {
+  imgSrc: ['https://my-bucket.s3.amazonaws.com'],
+  connectSrc: ['https://my-bucket.s3.amazonaws.com'],
+  styleSrc: ["'unsafe-inline'"], // Only if needed (e.g., runtime style injection)
+}
+```
+
+`styleSrc` accepts CSP keywords (`'unsafe-inline'`, `'unsafe-hashes'`), hash sources (`'sha256-...'`), nonce sources (`'nonce-...'`), and URL origins. `'unsafe-eval'` is blocked.
+
+#### Route-Level CSP (Plugins)
+
+Plugins can declare CSP overrides on individual routes via `PluginRoute.csp`. These are merged with the global CSP at startup — only that specific route gets the extra sources. Other routes remain strict.
+
+```ts
+// Plugin route with relaxed style-src (only for this route)
+{
+  pattern: ':table/:id/:column',
+  handler: (ctx) => renderEditor(ctx),
+  csp: { styleSrc: ["'unsafe-inline'"] },
+}
+```
+
 ### CSRF Protection
 
 Forms include CSRF tokens validated on POST. See `csrf.ts` exports.
@@ -758,7 +783,7 @@ createCmsHandler({
 | `parsers`         | `Parsers`                                                 | auto-gen     | Custom Zod parsers per table (overrides drizzle-zod)                                   |
 | `plugins`         | `PluginConfig[]`                                          | —            | Plugins (UI overrides, transforms, action hooks)                                       |
 | `storage`         | `string \| (ctx) => string \| undefined`                  | —            | Storage routing: provider ID or resolver function                                      |
-| `csp`             | `CspOptions`                                              | —            | Additional CSP origins (`imgSrc`, `connectSrc`, `frameSrc`)                            |
+| `csp`             | `CspOptions`                                              | —            | Additional CSP sources (`imgSrc`, `connectSrc`, `frameSrc`, `styleSrc`)                |
 | `isAuthenticated` | `(request: Request) => boolean \| Promise<boolean>`       | —            | Legacy: custom auth check (prefer `auth` option)                                       |
 | `canAccess`       | `(request, table, action) => boolean \| Promise<boolean>` | —            | Legacy: custom per-table authorization                                                 |
 

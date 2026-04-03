@@ -554,3 +554,34 @@ Deno.test('htmlResponse: uses custom security headers when provided', () => {
   const csp = response.headers.get('Content-Security-Policy')!;
   assertEquals(csp.includes('https://s3.example.com'), true);
 });
+
+Deno.test('buildSecurityHeaders: adds styleSrc sources', () => {
+  const headers = buildSecurityHeaders({
+    styleSrc: ["'unsafe-inline'"],
+  });
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(
+    csp.includes("style-src 'self' 'unsafe-inline'"),
+    true,
+  );
+});
+
+Deno.test('buildSecurityHeaders: no extra style-src when styleSrc not given', () => {
+  const headers = buildSecurityHeaders();
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(csp.includes("style-src 'self'"), true);
+  assertEquals(csp.includes('unsafe-inline'), false);
+});
+
+Deno.test('buildSecurityHeaders: combines styleSrc with other directives', () => {
+  const headers = buildSecurityHeaders({
+    imgSrc: ['https://cdn.example.com'],
+    styleSrc: ["'unsafe-inline'"],
+  });
+  const csp = headers['Content-Security-Policy']!;
+
+  assertEquals(csp.includes("style-src 'self' 'unsafe-inline'"), true);
+  assertEquals(csp.includes('https://cdn.example.com'), true);
+});

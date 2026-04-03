@@ -73,6 +73,8 @@ form-action 'self';
 frame-ancestors 'none'
 ```
 
+Directives can be extended globally via the `csp` option (e.g., `imgSrc`, `connectSrc`, `styleSrc`). Plugins can also declare route-level CSP overrides that are merged with the global policy at startup — only the specific route is relaxed.
+
 **Best Practices:**
 
 ```typescript

@@ -34,10 +34,11 @@ export function buildSecurityHeaders(
   const frameSrc = csp?.frameSrc?.length
     ? `frame-src 'self'${joinOrigins(csp.frameSrc)}; `
     : '';
+  const styleSrc = `style-src 'self'${joinOrigins(csp?.styleSrc)}`;
 
   return {
     'Content-Security-Policy':
-      `default-src 'self'; style-src 'self'; script-src 'self'; ${connectSrc}${frameSrc}${imgSrc}; form-action 'self'; frame-ancestors 'none'`,
+      `default-src 'self'; ${styleSrc}; script-src 'self'; ${connectSrc}${frameSrc}${imgSrc}; form-action 'self'; frame-ancestors 'none'`,
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',

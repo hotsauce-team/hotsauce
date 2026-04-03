@@ -130,3 +130,97 @@ Deno.test('plugin route: security headers', async (t) => {
     },
   );
 });
+
+Deno.test('plugin route: route-level CSP override', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema });
+  await createBasicTables(db);
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    db,
+    schema,
+    basePath: '/admin',
+    plugins: [
+      {
+        name: 'csp-test',
+        filter: 'dangerously-open' as const,
+        routes: [
+          {
+            pattern: 'no-csp',
+            handler: () => '<h1>Default CSP</h1>',
+          },
+          {
+            pattern: 'with-csp',
+            handler: () => '<h1>Custom CSP</h1>',
+            csp: { styleSrc: ["'unsafe-inline'"] },
+          },
+        ],
+      },
+    ],
+  });
+
+  await t.step('route without csp gets default style-src', async () => {
+    const res = await handler(
+      new Request('http://localhost/admin/csp-test/no-csp'),
+    );
+    assertEquals(res.status, 200);
+    const csp = res.headers.get('Content-Security-Policy')!;
+    assertEquals(csp.includes("style-src 'self'"), true);
+    assertEquals(csp.includes('unsafe-inline'), false);
+  });
+
+  await t.step('route with csp gets merged style-src', async () => {
+    const res = await handler(
+      new Request('http://localhost/admin/csp-test/with-csp'),
+    );
+    assertEquals(res.status, 200);
+    const csp = res.headers.get('Content-Security-Policy')!;
+    assertEquals(csp.includes("style-src 'self' 'unsafe-inline'"), true);
+    // Other headers still enforced
+    assertEquals(res.headers.get('X-Frame-Options'), 'DENY');
+    assertEquals(csp.includes("frame-ancestors 'none'"), true);
+  });
+});
+
+Deno.test('plugin route: route CSP merges with global CSP', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema });
+  await createBasicTables(db);
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    db,
+    schema,
+    basePath: '/admin',
+    csp: { imgSrc: ['https://cdn.example.com'] },
+    plugins: [
+      {
+        name: 'merge-test',
+        filter: 'dangerously-open' as const,
+        routes: [
+          {
+            pattern: 'editor',
+            handler: () => '<h1>Editor</h1>',
+            csp: { styleSrc: ["'unsafe-inline'"] },
+          },
+        ],
+      },
+    ],
+  });
+
+  await t.step('route CSP includes both global and route sources', async () => {
+    const res = await handler(
+      new Request('http://localhost/admin/merge-test/editor'),
+    );
+    const csp = res.headers.get('Content-Security-Policy')!;
+    // Route's styleSrc is applied
+    assertEquals(csp.includes("style-src 'self' 'unsafe-inline'"), true);
+    // Global imgSrc is preserved
+    assertEquals(csp.includes('https://cdn.example.com'), true);
+  });
+});
