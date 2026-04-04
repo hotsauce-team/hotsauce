@@ -7,6 +7,7 @@ import { eq, sql, type Table } from 'drizzle-orm';
 import type {
   CmsOptions,
   CrudAction,
+  CspOptions,
   Handler,
   ResolvedAuthOptions,
   ResolvedCmsOptions,
@@ -628,7 +629,8 @@ async function handlePluginRoute(
   };
 
   // Use route-specific headers if plugin route has CSP overrides
-  const routeKey = `${plugin.name}/${route.pattern}`;
+  const methods = [...(route.methods ?? ['GET'])].sort().join(',');
+  const routeKey = `${plugin.name}/${route.pattern}/${methods}`;
   const effectiveHeaders = options.routeSecurityHeaders.get(routeKey) ??
     options.securityHeaders;
 
@@ -927,9 +929,21 @@ export function createCmsHandler(options: CmsOptions): Handler {
           );
         }
         validateCspOptions(route.csp);
+        const mergedCsp: CspOptions = { ...options.csp };
+        for (
+          const key of Object.keys(route.csp) as ('styleSrc' | 'connectSrc')[]
+        ) {
+          const routeValues = route.csp[key];
+          if (!routeValues?.length) continue;
+          const global = mergedCsp[key];
+          mergedCsp[key] = global?.length
+            ? [...global, ...routeValues]
+            : [...routeValues];
+        }
+        const methods = [...(route.methods ?? ['GET'])].sort().join(',');
         routeSecurityHeaders.set(
-          `${pluginName}/${route.pattern}`,
-          buildSecurityHeaders({ ...options.csp, ...route.csp }),
+          `${pluginName}/${route.pattern}/${methods}`,
+          buildSecurityHeaders(mergedCsp),
         );
       }
     }

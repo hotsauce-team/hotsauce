@@ -47,7 +47,7 @@ export function buildSecurityHeaders(
 
 /**
  * Normalize a CSP source value.
- * URL sources are stripped to just the origin (CSP ignores paths for most directives).
+ * URL sources are reduced to the origin (scheme + host + port).
  * Non-URL values (keywords like 'unsafe-inline', hashes, nonces) are returned as-is.
  */
 function normalizeCspValue(source: string): string {

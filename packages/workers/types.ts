@@ -404,15 +404,16 @@ export interface PluginRoute {
   render?: string;
 
   /**
-   * Route-specific CSP overrides.
-   * Merged with the global CSP at startup — only this route gets the extra sources.
+   * Route-specific CSP extensions.
+   * Concatenated with the global CSP at startup — route sources are appended
+   * to the global directive arrays, so both global and route values apply.
    *
    * @example csp: { styleSrc: ["'unsafe-inline'"] }
    */
   csp?: {
-    /** Additional sources for style-src (e.g., "'unsafe-inline'" for runtime styles) */
+    /** Additional sources appended to style-src (e.g., "'unsafe-inline'" for runtime styles) */
     styleSrc?: string[];
-    /** Additional origins for connect-src (e.g., S3 endpoint for direct uploads) */
+    /** Additional origins appended to connect-src (e.g., S3 endpoint for direct uploads) */
     connectSrc?: string[];
   };
 }

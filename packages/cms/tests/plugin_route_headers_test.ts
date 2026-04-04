@@ -206,7 +206,7 @@ Deno.test('plugin route: route-level CSP override', async (t) => {
   });
 });
 
-Deno.test('plugin route: route CSP merges with global CSP', async (t) => {
+Deno.test('plugin route: route CSP concatenates with global CSP', async (t) => {
   const client = new PGlite();
   const db = drizzle(client, { schema });
   await createBasicTables(db);
@@ -218,7 +218,10 @@ Deno.test('plugin route: route CSP merges with global CSP', async (t) => {
     db,
     schema,
     basePath: '/admin',
-    csp: { imgSrc: ['https://cdn.example.com'] },
+    csp: {
+      imgSrc: ['https://cdn.example.com'],
+      styleSrc: ["'sha256-abc123='"],
+    },
     plugins: [
       {
         name: 'merge-test',
@@ -234,13 +237,16 @@ Deno.test('plugin route: route CSP merges with global CSP', async (t) => {
     ],
   });
 
-  await t.step('route CSP includes both global and route sources', async () => {
+  await t.step('route styleSrc is appended to global styleSrc', async () => {
     const res = await handler(
       new Request('http://localhost/admin/merge-test/editor'),
     );
     const csp = res.headers.get('Content-Security-Policy')!;
-    // Route's styleSrc is applied
-    assertEquals(csp.includes("style-src 'self' 'unsafe-inline'"), true);
+    // Both global and route styleSrc values present
+    assertEquals(
+      csp.includes("style-src 'self' 'sha256-abc123=' 'unsafe-inline'"),
+      true,
+    );
     // Global imgSrc is preserved
     assertEquals(csp.includes('https://cdn.example.com'), true);
   });
