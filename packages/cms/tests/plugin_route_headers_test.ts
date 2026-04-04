@@ -153,9 +153,14 @@ Deno.test('plugin route: route-level CSP override', async (t) => {
             handler: () => '<h1>Default CSP</h1>',
           },
           {
-            pattern: 'with-csp',
+            pattern: 'with-style-csp',
             handler: () => '<h1>Custom CSP</h1>',
             csp: { styleSrc: ["'unsafe-inline'"] },
+          },
+          {
+            pattern: 'with-connect-csp',
+            handler: () => '<h1>Upload</h1>',
+            csp: { connectSrc: ['https://s3.example.com'] },
           },
         ],
       },
@@ -170,11 +175,12 @@ Deno.test('plugin route: route-level CSP override', async (t) => {
     const csp = res.headers.get('Content-Security-Policy')!;
     assertEquals(csp.includes("style-src 'self'"), true);
     assertEquals(csp.includes('unsafe-inline'), false);
+    assertEquals(csp.includes('connect-src'), false);
   });
 
-  await t.step('route with csp gets merged style-src', async () => {
+  await t.step('route with styleSrc gets merged style-src', async () => {
     const res = await handler(
-      new Request('http://localhost/admin/csp-test/with-csp'),
+      new Request('http://localhost/admin/csp-test/with-style-csp'),
     );
     assertEquals(res.status, 200);
     const csp = res.headers.get('Content-Security-Policy')!;
@@ -182,6 +188,21 @@ Deno.test('plugin route: route-level CSP override', async (t) => {
     // Other headers still enforced
     assertEquals(res.headers.get('X-Frame-Options'), 'DENY');
     assertEquals(csp.includes("frame-ancestors 'none'"), true);
+  });
+
+  await t.step('route with connectSrc gets connect-src directive', async () => {
+    const res = await handler(
+      new Request('http://localhost/admin/csp-test/with-connect-csp'),
+    );
+    assertEquals(res.status, 200);
+    const csp = res.headers.get('Content-Security-Policy')!;
+    assertEquals(
+      csp.includes("connect-src 'self' https://s3.example.com"),
+      true,
+    );
+    // Default style-src unchanged
+    assertEquals(csp.includes("style-src 'self'"), true);
+    assertEquals(csp.includes('unsafe-inline'), false);
   });
 });
 

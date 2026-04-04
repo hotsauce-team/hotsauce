@@ -910,7 +910,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
 
   // Validate and pre-compute route-specific CSP headers
   if (pluginRegistry) {
-    const ALLOWED_ROUTE_CSP_KEYS = new Set(['styleSrc']);
+    const ALLOWED_ROUTE_CSP_KEYS = new Set(['styleSrc', 'connectSrc']);
     for (const { pluginName, route } of pluginRegistry.getAllRoutes()) {
       if (route.csp) {
         const unknownKeys = Object.keys(route.csp).filter(

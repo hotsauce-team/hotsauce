@@ -412,5 +412,7 @@ export interface PluginRoute {
   csp?: {
     /** Additional sources for style-src (e.g., "'unsafe-inline'" for runtime styles) */
     styleSrc?: string[];
+    /** Additional origins for connect-src (e.g., S3 endpoint for direct uploads) */
+    connectSrc?: string[];
   };
 }

@@ -513,7 +513,7 @@ Customize CSP per-directive via the `csp` option:
 ```ts
 csp: {
   imgSrc: ['https://my-bucket.s3.amazonaws.com'],
-  connectSrc: ['https://my-bucket.s3.amazonaws.com'],
+  connectSrc: ['https://api.example.com'],
   styleSrc: ["'unsafe-inline'"], // Only if needed (e.g., runtime style injection)
 }
 ```
@@ -530,6 +530,13 @@ Plugins can declare CSP overrides on individual routes via `PluginRoute.csp`. Ro
   pattern: ':table/:id/:column',
   handler: (ctx) => renderEditor(ctx),
   csp: { styleSrc: ["'unsafe-inline'"] },
+}
+
+// Plugin route that needs to fetch from an external origin
+{
+  pattern: ':table/:id/:column',
+  handler: (ctx) => renderUploadPage(ctx),
+  csp: { connectSrc: ['https://s3.us-east-1.amazonaws.com'] },
 }
 ```
 
