@@ -265,6 +265,7 @@ export function createPuckPlugin(
         pattern: ':table/:id/:column',
         methods: ['GET'],
         handler: (ctx) => renderEditorPage(ctx, opts),
+        csp: { styleSrc: ["'unsafe-inline'"] },
       },
     ],
   };

@@ -7,6 +7,7 @@ import { eq, sql, type Table } from 'drizzle-orm';
 import type {
   CmsOptions,
   CrudAction,
+  CspOptions,
   Handler,
   ResolvedAuthOptions,
   ResolvedCmsOptions,
@@ -43,6 +44,7 @@ import {
   validateCsrfToken,
 } from './csrf.ts';
 import {
+  CmsConfigError,
   validateAutoDraft,
   validateCmsOptions,
   validateCspOptions,
@@ -626,6 +628,12 @@ async function handlePluginRoute(
     body, // Add body to context (overrides undefined from baseCtx)
   };
 
+  // Use route-specific headers if plugin route has CSP overrides
+  const methods = [...(route.methods ?? ['GET'])].sort().join(',');
+  const routeKey = `${plugin.name}/${route.pattern}/${methods}`;
+  const effectiveHeaders = options.routeSecurityHeaders.get(routeKey) ??
+    options.securityHeaders;
+
   // Dispatch based on route type
   if (route.handler) {
     // In-process handler
@@ -636,7 +644,7 @@ async function handlePluginRoute(
         if (ct.startsWith('text/html')) {
           // Enforce all security headers for HTML responses
           // (plugins cannot override CSP, X-Frame-Options, etc.)
-          for (const [k, v] of Object.entries(options.securityHeaders)) {
+          for (const [k, v] of Object.entries(effectiveHeaders)) {
             result.headers.set(k, v);
           }
         } else {
@@ -649,7 +657,7 @@ async function handlePluginRoute(
       return new Response(result, {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          ...options.securityHeaders,
+          ...effectiveHeaders,
         },
       });
     } catch (error) {
@@ -681,7 +689,7 @@ async function handlePluginRoute(
       return new Response(html, {
         headers: {
           'Content-Type': 'text/html; charset=utf-8',
-          ...options.securityHeaders,
+          ...effectiveHeaders,
         },
       });
     } catch (error) {
@@ -850,6 +858,10 @@ export function createCmsHandler(options: CmsOptions): Handler {
   }
   const securityHeaders = buildSecurityHeaders(options.csp);
 
+  // Pre-compute route-specific security headers for plugin routes with CSP overrides.
+  // Each route's CSP is merged with (and extends) the global CSP.
+  const routeSecurityHeaders = new Map<string, Record<string, string>>();
+
   // Resolve policies:
   // - 'dangerously-open' → {} (full access)
   // - object → use as-is
@@ -898,6 +910,45 @@ export function createCmsHandler(options: CmsOptions): Handler {
     options.storage,
   );
 
+  // Validate and pre-compute route-specific CSP headers
+  if (pluginRegistry) {
+    const ALLOWED_ROUTE_CSP_KEYS = new Set(['styleSrc', 'connectSrc']);
+    for (const { pluginName, route } of pluginRegistry.getAllRoutes()) {
+      if (route.csp) {
+        const unknownKeys = Object.keys(route.csp).filter(
+          (k) => !ALLOWED_ROUTE_CSP_KEYS.has(k),
+        );
+        if (unknownKeys.length > 0) {
+          throw new CmsConfigError(
+            `Plugin '${pluginName}' route '${route.pattern}' has unsupported csp keys: ${
+              unknownKeys.join(', ')
+            }. ` +
+              `Only ${
+                [...ALLOWED_ROUTE_CSP_KEYS].join(', ')
+              } are allowed in route-level CSP.`,
+          );
+        }
+        validateCspOptions(route.csp);
+        const mergedCsp: CspOptions = { ...options.csp };
+        for (
+          const key of Object.keys(route.csp) as ('styleSrc' | 'connectSrc')[]
+        ) {
+          const routeValues = route.csp[key];
+          if (!routeValues?.length) continue;
+          const global = mergedCsp[key];
+          mergedCsp[key] = global?.length
+            ? [...global, ...routeValues]
+            : [...routeValues];
+        }
+        const methods = [...(route.methods ?? ['GET'])].sort().join(',');
+        routeSecurityHeaders.set(
+          `${pluginName}/${route.pattern}/${methods}`,
+          buildSecurityHeaders(mergedCsp),
+        );
+      }
+    }
+  }
+
   // Apply defaults
   const opts: ResolvedCmsOptions = {
     introspected,
@@ -914,6 +965,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     plugins: pluginRegistry,
     storage: storageRegistry,
     securityHeaders,
+    routeSecurityHeaders,
   };
 
   // Helper to check if request accepts JSON

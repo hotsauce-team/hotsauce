@@ -575,6 +575,56 @@ Deno.test('validateCspOptions: reports errors for multiple directives', () => {
 });
 
 // =============================================================================
+// CSP styleSrc validation tests
+// =============================================================================
+
+Deno.test("validateCspOptions: accepts 'unsafe-inline' in styleSrc", () => {
+  validateCspOptions({ styleSrc: ["'unsafe-inline'"] });
+});
+
+Deno.test("validateCspOptions: accepts 'unsafe-hashes' in styleSrc", () => {
+  validateCspOptions({ styleSrc: ["'unsafe-hashes'"] });
+});
+
+Deno.test('validateCspOptions: accepts hash source in styleSrc', () => {
+  validateCspOptions({
+    styleSrc: ["'sha256-abc123+/='"],
+  });
+});
+
+Deno.test('validateCspOptions: accepts nonce source in styleSrc', () => {
+  validateCspOptions({
+    styleSrc: ["'nonce-abc123'"],
+  });
+});
+
+Deno.test('validateCspOptions: accepts URL origin in styleSrc', () => {
+  validateCspOptions({
+    styleSrc: ['https://fonts.googleapis.com'],
+  });
+});
+
+Deno.test("validateCspOptions: rejects 'unsafe-eval' in styleSrc", () => {
+  assertThrows(
+    () => validateCspOptions({ styleSrc: ["'unsafe-eval'"] }),
+    CmsConfigError,
+    'unsafe-eval',
+  );
+});
+
+Deno.test('validateCspOptions: rejects unrecognized CSP keyword in styleSrc', () => {
+  assertThrows(
+    () => validateCspOptions({ styleSrc: ["'bad-keyword'"] }),
+    CmsConfigError,
+    'not a recognized CSP source',
+  );
+});
+
+Deno.test('validateCspOptions: accepts empty styleSrc array', () => {
+  validateCspOptions({ styleSrc: [] });
+});
+
+// =============================================================================
 // validateAutoDraft tests
 // =============================================================================
 

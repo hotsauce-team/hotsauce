@@ -145,6 +145,10 @@ export const pages = sqliteTable('pages', {
 | ------------------------------------ | ----------------------------- |
 | `GET /admin/puck/:table/:id/:column` | Puck editor page (HTML shell) |
 
+### CSP
+
+The editor route automatically declares `csp: { styleSrc: ["'unsafe-inline'"] }` because Puck/React sets inline `style` attributes on DOM elements at runtime (drag handles, overlays, positioning). This is merged with the global CSP at startup — only the editor route is relaxed; asset routes remain strict. No user configuration needed.
+
 ## Frontend Rendering (SSR)
 
 For server-side rendering of Puck content, use the `/rsc` export to avoid browser dependencies:

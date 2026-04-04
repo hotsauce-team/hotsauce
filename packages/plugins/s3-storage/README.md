@@ -38,12 +38,12 @@ const handler = createCmsHandler({
   schema,
   plugins: [s3Plugin],
   storage: 's3', // Route file fields to this plugin
-  // Required: allow browser to upload directly to S3
-  csp: { connectSrc: [s3Endpoint] },
+  // Allow S3 images on CMS edit/detail pages
+  csp: { imgSrc: [s3Endpoint] },
 });
 ```
 
-> **Important:** You must configure `csp.connectSrc` with your S3 endpoint for uploads to work. The CMS enforces security headers — plugins cannot override them.
+The plugin automatically configures `connectSrc` for its upload page via route-level CSP — no global `connectSrc` needed. Add `imgSrc` if you display S3-hosted images on CMS pages (previews on edit/detail views).
 
 ## Configuration Options
 
