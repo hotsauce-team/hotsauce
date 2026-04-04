@@ -2,6 +2,7 @@
 // Validates CmsOptions at startup and throws on invalid config
 
 import { z } from 'zod';
+import type { CspOptions } from './types.ts';
 
 /**
  * Zod schema for CmsOptions validation
@@ -361,18 +362,14 @@ export function validateAutoDraft(
 }
 
 /**
- * Validate CSP origin strings.
- * Each origin must be a valid http: or https: URL origin (scheme + host + optional port).
+ * Validate CSP directive values.
+ * Origin-only directives (imgSrc, connectSrc, frameSrc) must be http/https URL origins.
+ * Source directives (styleSrc) also accept CSP keywords, hashes, and nonces.
  *
- * @throws {CmsConfigError} When any origin is invalid
+ * @throws {CmsConfigError} When any value is invalid
  */
 export function validateCspOptions(
-  csp: {
-    imgSrc?: string[];
-    connectSrc?: string[];
-    frameSrc?: string[];
-    styleSrc?: string[];
-  },
+  csp: CspOptions,
 ): void {
   const errors: string[] = [];
 
