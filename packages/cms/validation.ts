@@ -395,6 +395,49 @@ export function validateCspOptions(
 }
 
 /**
+ * Validate that tables have at most one thumbnail column.
+ * Multiple thumbnail columns would be ambiguous for grid view rendering.
+ *
+ * @throws {CmsConfigError} When a table has multiple thumbnail columns
+ */
+export function validateThumbnailColumns(
+  introspected: {
+    tables: Array<
+      {
+        name: string;
+        columns: Array<
+          {
+            name: string;
+            cmsOptions?: {
+              thumbnail?: boolean;
+            };
+          }
+        >;
+      }
+    >;
+  },
+): void {
+  const errors: string[] = [];
+
+  for (const table of introspected.tables) {
+    const thumbnailCols = table.columns.filter((c) => c.cmsOptions?.thumbnail);
+    if (thumbnailCols.length > 1) {
+      const colNames = thumbnailCols.map((c) => c.name).join(', ');
+      errors.push(
+        `  - ${table.name}: multiple thumbnail columns found (${colNames}). ` +
+          `Only one column per table may have thumbnail: true.`,
+      );
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new CmsConfigError(
+      `Invalid thumbnail configuration:\n${errors.join('\n')}`,
+    );
+  }
+}
+
+/**
  * Validate a single CSP origin string.
  * Must be scheme + host (+ optional port), no path/query/fragment.
  */

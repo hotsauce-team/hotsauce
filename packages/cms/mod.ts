@@ -48,6 +48,7 @@ import {
   validateCspOptions,
   validateFileColumnsAndConfigs,
   validateResolvedSecrets,
+  validateThumbnailColumns,
 } from './validation.ts';
 import { getEnv } from './runtime-compat.ts';
 import { createPluginRegistry } from './plugins/registry.ts';
@@ -138,6 +139,7 @@ export {
   validateCmsOptions,
   validateFileColumnsAndConfigs,
   validateResolvedSecrets,
+  validateThumbnailColumns,
 } from './validation.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -840,6 +842,9 @@ export function createCmsHandler(options: CmsOptions): Handler {
 
   // Validate file column configurations (file: true must be on JSON columns)
   validateFileColumnsAndConfigs(introspected);
+
+  // Validate thumbnail columns (at most one per table)
+  validateThumbnailColumns(introspected);
 
   // Validate autoDraft tables (all non-PK columns must have defaults or be nullable)
   validateAutoDraft(introspected);

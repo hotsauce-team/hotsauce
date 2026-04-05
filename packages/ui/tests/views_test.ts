@@ -886,6 +886,35 @@ Deno.test('gridDetailPanel: renders placeholder when no thumbnail', () => {
   assertStringIncludes(result, 'cms-panel-preview-placeholder');
 });
 
+Deno.test('gridDetailPanel: renders many-to-many checkboxes', () => {
+  const panel = createMockPanelData({
+    manyToManyData: [
+      {
+        fieldName: 'categoryIds',
+        label: 'Categories',
+        relatedTable: 'categories',
+        options: [
+          { value: '1', label: 'News' },
+          { value: '2', label: 'Sports' },
+          { value: '3', label: 'Tech' },
+        ],
+        selectedValues: ['1', '3'],
+      },
+    ],
+  });
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  // Should render M2M label
+  assertStringIncludes(result, 'Categories');
+  // Should render checkboxes with correct name
+  assertStringIncludes(result, 'name="categoryIds"');
+  // Should render all options
+  assertStringIncludes(result, 'News');
+  assertStringIncludes(result, 'Sports');
+  assertStringIncludes(result, 'Tech');
+});
+
 Deno.test('gridView: renders panel when panelData provided', () => {
   const thumbnails: GridThumbnail[] = [
     { id: 1, thumbnailUrl: 'https://example.com/a.jpg', label: 'Photo A' },
