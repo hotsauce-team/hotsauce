@@ -273,6 +273,7 @@ export function gridDetailPanel(
           href: closeHref,
           class: 'cms-panel-close',
           title: 'Close panel',
+          'aria-label': 'Close panel',
         })}>✕</a>
       </div>
       ${raw(previewHtml)} ${raw(metaHtml)} ${raw(formHtml)}
