@@ -1,7 +1,7 @@
 // Plugin Route Security Headers Tests
 // Verifies that security headers are correctly applied to plugin route responses
 
-import { assertEquals } from '@std/assert';
+import { assertEquals, assertThrows } from '@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import {
@@ -129,4 +129,164 @@ Deno.test('plugin route: security headers', async (t) => {
       assertEquals(res.headers.get('Content-Security-Policy'), null);
     },
   );
+});
+
+Deno.test('plugin route: route-level CSP override', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema });
+  await createBasicTables(db);
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    db,
+    schema,
+    basePath: '/admin',
+    plugins: [
+      {
+        name: 'csp-test',
+        filter: 'dangerously-open' as const,
+        routes: [
+          {
+            pattern: 'no-csp',
+            handler: () => '<h1>Default CSP</h1>',
+          },
+          {
+            pattern: 'with-style-csp',
+            handler: () => '<h1>Custom CSP</h1>',
+            csp: { styleSrc: ["'unsafe-inline'"] },
+          },
+          {
+            pattern: 'with-connect-csp',
+            handler: () => '<h1>Upload</h1>',
+            csp: { connectSrc: ['https://s3.example.com'] },
+          },
+        ],
+      },
+    ],
+  });
+
+  await t.step('route without csp gets default style-src', async () => {
+    const res = await handler(
+      new Request('http://localhost/admin/csp-test/no-csp'),
+    );
+    assertEquals(res.status, 200);
+    const csp = res.headers.get('Content-Security-Policy')!;
+    assertEquals(csp.includes("style-src 'self'"), true);
+    assertEquals(csp.includes('unsafe-inline'), false);
+    assertEquals(csp.includes('connect-src'), false);
+  });
+
+  await t.step('route with styleSrc gets merged style-src', async () => {
+    const res = await handler(
+      new Request('http://localhost/admin/csp-test/with-style-csp'),
+    );
+    assertEquals(res.status, 200);
+    const csp = res.headers.get('Content-Security-Policy')!;
+    assertEquals(csp.includes("style-src 'self' 'unsafe-inline'"), true);
+    // Other headers still enforced
+    assertEquals(res.headers.get('X-Frame-Options'), 'DENY');
+    assertEquals(csp.includes("frame-ancestors 'none'"), true);
+  });
+
+  await t.step('route with connectSrc gets connect-src directive', async () => {
+    const res = await handler(
+      new Request('http://localhost/admin/csp-test/with-connect-csp'),
+    );
+    assertEquals(res.status, 200);
+    const csp = res.headers.get('Content-Security-Policy')!;
+    assertEquals(
+      csp.includes("connect-src 'self' https://s3.example.com"),
+      true,
+    );
+    // Default style-src unchanged
+    assertEquals(csp.includes("style-src 'self'"), true);
+    assertEquals(csp.includes('unsafe-inline'), false);
+  });
+});
+
+Deno.test('plugin route: route CSP concatenates with global CSP', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema });
+  await createBasicTables(db);
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    db,
+    schema,
+    basePath: '/admin',
+    csp: {
+      imgSrc: ['https://cdn.example.com'],
+      styleSrc: ["'sha256-abc123='"],
+    },
+    plugins: [
+      {
+        name: 'merge-test',
+        filter: 'dangerously-open' as const,
+        routes: [
+          {
+            pattern: 'editor',
+            handler: () => '<h1>Editor</h1>',
+            csp: { styleSrc: ["'unsafe-inline'"] },
+          },
+        ],
+      },
+    ],
+  });
+
+  await t.step('route styleSrc is appended to global styleSrc', async () => {
+    const res = await handler(
+      new Request('http://localhost/admin/merge-test/editor'),
+    );
+    const csp = res.headers.get('Content-Security-Policy')!;
+    // Both global and route styleSrc values present
+    assertEquals(
+      csp.includes("style-src 'self' 'sha256-abc123=' 'unsafe-inline'"),
+      true,
+    );
+    // Global imgSrc is preserved
+    assertEquals(csp.includes('https://cdn.example.com'), true);
+  });
+});
+
+Deno.test({
+  name: 'plugin route: rejects unknown csp keys',
+  // PGlite starts async I/O on construction; we only test that config
+  // validation throws synchronously, so disable leak checks.
+  sanitizeOps: false,
+  sanitizeResources: false,
+  fn() {
+    const client = new PGlite();
+    const db = drizzle(client, { schema });
+
+    assertThrows(
+      () =>
+        createCmsHandler({
+          csrfSecret: TEST_CSRF_SECRET,
+          auth: 'dangerously-open',
+          policies: 'dangerously-open',
+          db,
+          schema,
+          basePath: '/admin',
+          plugins: [
+            {
+              name: 'bad-csp',
+              filter: 'dangerously-open' as const,
+              routes: [
+                {
+                  pattern: 'editor',
+                  handler: () => '<h1>Bad</h1>',
+                  csp: { imgSrc: ['https://evil.com'] } as never,
+                },
+              ],
+            },
+          ],
+        }),
+      Error,
+      'unsupported csp keys: imgSrc',
+    );
+  },
 });

@@ -317,6 +317,8 @@ export interface CspOptions {
   connectSrc?: string[];
   /** Additional origins for frame-src (iframes) */
   frameSrc?: string[];
+  /** Additional sources for style-src (e.g., "'unsafe-inline'" for runtime styles) */
+  styleSrc?: string[];
 }
 
 /**
@@ -619,6 +621,8 @@ export interface ResolvedCmsOptions {
   storage?: StorageRegistry;
   /** Computed security headers (CSP + other headers), built once at startup */
   securityHeaders: Record<string, string>;
+  /** Pre-computed route-specific security headers (plugin routes with CSP overrides) */
+  routeSecurityHeaders: Map<string, Record<string, string>>;
 }
 
 /**

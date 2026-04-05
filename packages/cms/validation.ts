@@ -2,6 +2,7 @@
 // Validates CmsOptions at startup and throws on invalid config
 
 import { z } from 'zod';
+import type { CspOptions } from './types.ts';
 
 /**
  * Zod schema for CmsOptions validation
@@ -361,26 +362,43 @@ export function validateAutoDraft(
 }
 
 /**
- * Validate CSP origin strings.
- * Each origin must be a valid http: or https: URL origin (scheme + host + optional port).
+ * Validate CSP directive values.
+ * Origin-only directives (imgSrc, connectSrc, frameSrc) must be http/https URL origins.
+ * Source directives (styleSrc) also accept CSP keywords, hashes, and nonces.
  *
- * @throws {CmsConfigError} When any origin is invalid
+ * @throws {CmsConfigError} When any value is invalid
  */
 export function validateCspOptions(
-  csp: { imgSrc?: string[]; connectSrc?: string[]; frameSrc?: string[] },
+  csp: CspOptions,
 ): void {
   const errors: string[] = [];
 
-  const directives: [string, string[] | undefined][] = [
+  // Origin-only directives (only http/https URLs allowed)
+  const originDirectives: [string, string[] | undefined][] = [
     ['imgSrc', csp.imgSrc],
     ['connectSrc', csp.connectSrc],
     ['frameSrc', csp.frameSrc],
   ];
 
-  for (const [name, origins] of directives) {
+  for (const [name, origins] of originDirectives) {
     if (!origins) continue;
     for (const origin of origins) {
       const err = validateOrigin(origin);
+      if (err) {
+        errors.push(`  - csp.${name}: ${err}`);
+      }
+    }
+  }
+
+  // Directives that also allow CSP keywords (e.g., 'unsafe-inline', hashes, nonces)
+  const sourceDirectives: [string, string[] | undefined][] = [
+    ['styleSrc', csp.styleSrc],
+  ];
+
+  for (const [name, sources] of sourceDirectives) {
+    if (!sources) continue;
+    for (const source of sources) {
+      const err = validateCspSource(source);
       if (err) {
         errors.push(`  - csp.${name}: ${err}`);
       }
@@ -454,4 +472,37 @@ function validateOrigin(origin: string): string | null {
   } catch {
     return `'${origin}' is not a valid URL origin`;
   }
+}
+
+/** Recognized CSP keyword sources */
+const CSP_KEYWORDS = new Set(["'unsafe-inline'", "'unsafe-hashes'"]);
+
+/** Pattern for CSP hash sources: 'sha256-...', 'sha384-...', 'sha512-...' */
+const CSP_HASH_RE = /^'(sha256|sha384|sha512)-[A-Za-z0-9+/]+=*'$/;
+
+/** Pattern for CSP nonce sources: 'nonce-...' */
+const CSP_NONCE_RE = /^'nonce-[A-Za-z0-9+/=_-]+'$/;
+
+/**
+ * Validate a CSP source value.
+ * Accepts URL origins AND CSP keywords/hashes/nonces.
+ * Blocks dangerous keywords like 'unsafe-eval'.
+ */
+function validateCspSource(source: string): string | null {
+  // CSP keyword (single-quoted)
+  if (source.startsWith("'") && source.endsWith("'")) {
+    if (source === "'unsafe-eval'") {
+      return `'unsafe-eval' is not allowed — it enables arbitrary code execution`;
+    }
+    if (
+      CSP_KEYWORDS.has(source) ||
+      CSP_HASH_RE.test(source) ||
+      CSP_NONCE_RE.test(source)
+    ) {
+      return null;
+    }
+    return `${source} is not a recognized CSP source`;
+  }
+  // URL origin
+  return validateOrigin(source);
 }

@@ -510,6 +510,38 @@ This policy:
 - Blocks the CMS from being embedded in iframes (clickjacking protection)
 - Limits referrer information leakage
 
+Customize CSP per-directive via the `csp` option:
+
+```ts
+csp: {
+  imgSrc: ['https://my-bucket.s3.amazonaws.com'],
+  connectSrc: ['https://api.example.com'],
+  styleSrc: ["'unsafe-inline'"], // Only if needed (e.g., runtime style injection)
+}
+```
+
+`styleSrc` accepts CSP keywords (`'unsafe-inline'`, `'unsafe-hashes'`), hash sources (`'sha256-...'`), nonce sources (`'nonce-...'`), and URL origins. `'unsafe-eval'` is blocked.
+
+#### Route-Level CSP (Plugins)
+
+Plugins can declare additional CSP sources on individual routes via `PluginRoute.csp`. Route sources are **concatenated** with the global CSP at startup — the route's values are appended to the global directive arrays, so both global and route-level sources apply. Directives not specified on the route inherit the global values unchanged.
+
+```ts
+// Plugin route with relaxed style-src (only for this route)
+{
+  pattern: ':table/:id/:column',
+  handler: (ctx) => renderEditor(ctx),
+  csp: { styleSrc: ["'unsafe-inline'"] },
+}
+
+// Plugin route that needs to fetch from an external origin
+{
+  pattern: ':table/:id/:column',
+  handler: (ctx) => renderUploadPage(ctx),
+  csp: { connectSrc: ['https://s3.us-east-1.amazonaws.com'] },
+}
+```
+
 ### CSRF Protection
 
 Forms include CSRF tokens validated on POST. See `csrf.ts` exports.
@@ -760,7 +792,7 @@ createCmsHandler({
 | `parsers`         | `Parsers`                                                 | auto-gen     | Custom Zod parsers per table (overrides drizzle-zod)                                   |
 | `plugins`         | `PluginConfig[]`                                          | —            | Plugins (UI overrides, transforms, action hooks)                                       |
 | `storage`         | `string \| (ctx) => string \| undefined`                  | —            | Storage routing: provider ID or resolver function                                      |
-| `csp`             | `CspOptions`                                              | —            | Additional CSP origins (`imgSrc`, `connectSrc`, `frameSrc`)                            |
+| `csp`             | `CspOptions`                                              | —            | Additional CSP sources (`imgSrc`, `connectSrc`, `frameSrc`, `styleSrc`)                |
 | `isAuthenticated` | `(request: Request) => boolean \| Promise<boolean>`       | —            | Legacy: custom auth check (prefer `auth` option)                                       |
 | `canAccess`       | `(request, table, action) => boolean \| Promise<boolean>` | —            | Legacy: custom per-table authorization                                                 |
 

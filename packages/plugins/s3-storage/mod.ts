@@ -571,6 +571,7 @@ export function createS3StoragePlugin(
       {
         pattern: ':table/:id/:column',
         methods: ['GET'],
+        csp: { connectSrc: [options.publicEndpoint] },
         handler: (ctx) => {
           const { table, id, column } = ctx.params;
 
