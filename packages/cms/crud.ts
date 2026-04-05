@@ -680,6 +680,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
         policyResult,
         thumbnailField,
         relationData,
+        url,
       );
     }
 
@@ -2367,10 +2368,10 @@ async function buildGridPanelData(
   policyResult: PolicyApplicationResult,
   thumbnailField: CMSField,
   relationData: Record<string, import('@hotsauce/ui').RelationOption[]>,
+  currentUrl: URL,
 ): Promise<GridPanelData | undefined> {
   const { request, options, authUser } = ctx;
   const drizzleTable = table.table;
-  const basePath = options.basePath;
 
   // Fetch the selected record with policy condition
   const record = await findRecordWithPolicy(
@@ -2502,22 +2503,20 @@ async function buildGridPanelData(
     }
   }
 
+  // Build return URL from current list URL, preserving page/sort/view params
+  const returnUrlObj = new URL(currentUrl.href);
+  returnUrlObj.searchParams.delete('_flash');
+  returnUrlObj.searchParams.set('selected', selectedId);
+  const returnUrl = `${returnUrlObj.pathname}${returnUrlObj.search}`;
+
   // Append ?return= to any plugin link hrefs so external pages (e.g. S3 upload)
   // can redirect back to the grid panel after completing their flow
-  const panelReturnUrl = `${
-    cmsUrl(basePath, table.name)
-  }?selected=${selectedId}`;
   for (const override of Object.values(fieldOverrides)) {
     if (override?.link?.href) {
       const sep = override.link.href.includes('?') ? '&' : '?';
-      override.link.href += `${sep}return=${
-        encodeURIComponent(panelReturnUrl)
-      }`;
+      override.link.href += `${sep}return=${encodeURIComponent(returnUrl)}`;
     }
   }
-
-  // Build return URL — includes ?selected=<id> to keep panel open after save
-  const returnUrl = `${cmsUrl(basePath, table.name)}?selected=${selectedId}`;
 
   return {
     id: selectedId,
