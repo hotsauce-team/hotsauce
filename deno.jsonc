@@ -62,6 +62,8 @@
     "test:watch": "deno test -P --watch",
     "test:drizzle-compat": "deno test -P packages/core/tests/drizzle_compat_test.ts",
     "test:npm": "./scripts/npm/test-npm.sh", // builds + tests in Docker
+    // Benchmarks
+    "bench": "deno bench packages/*/benches/",
     // Code quality tasks
     "check": "deno check packages/*/mod.ts",
     "lint": "deno lint",

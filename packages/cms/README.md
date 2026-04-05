@@ -2518,3 +2518,46 @@ app.all('/admin', async (c) => {
 ### Note on Workers
 
 Worker plugins (like audit-log) are created inside your `createAdminHandler` function. With lazy loading, they're only instantiated when the CMS module loads — i.e., on the first admin request. No additional `createWorker` factory pattern is needed.
+
+## Pre-Introspected Schema for Faster Cold Starts
+
+By default, `createCmsHandler` calls `introspectFullSchema()` on every cold start to extract table metadata from your Drizzle schema. For serverless environments where cold starts are frequent, you can run introspection once at **build time** and pass the result directly — eliminating that cost entirely.
+
+### How It Works
+
+`createCmsHandler` detects whether the `schema` option is a raw Drizzle schema or an already-introspected object. If it has a `tables` array, introspection is skipped:
+
+```ts
+import { introspectFullSchema } from '@hotsauce/core';
+import * as schema from './schema.ts';
+
+// At build time (or in a setup script):
+const introspected = introspectFullSchema(schema);
+// Save to a file, environment variable, or embed in the bundle
+```
+
+### Usage
+
+```ts
+import { createCmsHandler } from '@hotsauce/cms';
+import introspected from './introspected-schema.json' with { type: 'json' };
+
+// Skips introspection — handler creation is faster
+const handler = createCmsHandler({
+  db,
+  schema: introspected,
+  auth: 'dangerously-open',
+  policies: 'dangerously-open',
+});
+```
+
+### When to Use Pre-Introspection
+
+| Environment                          | Recommendation                              |
+| ------------------------------------ | ------------------------------------------- |
+| Long-lived server (Deno.serve, Node) | Not needed — introspection cost paid once   |
+| Serverless (Lambda, Workers)         | **Recommended** — eliminates cold-start I/O |
+| Edge (Cloudflare Workers, Vercel)    | **Recommended** — tight CPU time budgets    |
+| Admin-only application               | Optional — depends on cold-start frequency  |
+
+> **Tip:** Combine with [lazy loading](#lazy-loading-for-serverless--mixed-applications) for the best cold-start performance — defer the import *and* skip introspection.
