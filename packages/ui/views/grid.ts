@@ -252,7 +252,7 @@ export function gridDetailPanel(
     panel.values,
     panel.errors,
     panel.relationData,
-    // Extra content: _return hidden field + M2M sections
+    // Extra content: __cms_return hidden field + M2M sections
     renderPanelExtraContent(panel),
     panel.fieldOverrides,
   );

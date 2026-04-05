@@ -101,7 +101,7 @@ avatarUrl: varchar('avatar_url').$cms({ thumbnail: true });
 
 ### Summary
 
-When a grid item is clicked, instead of navigating to the detail/edit page, the grid view shows a right-hand side panel with a larger thumbnail preview, file metadata, and all editable fields inline. The panel uses `?selected=<id>` as a URL parameter — the server re-renders the page with the panel populated. Forms use standard POST to the existing update endpoint, with a `_return` hidden field to redirect back to the grid.
+When a grid item is clicked, instead of navigating to the detail/edit page, the grid view shows a right-hand side panel with a larger thumbnail preview, file metadata, and all editable fields inline. The panel uses `?selected=<id>` as a URL parameter — the server re-renders the page with the panel populated. Forms use standard POST to the existing update endpoint, with a `__cms_return` hidden field to redirect back to the grid.
 
 ### Checklist
 
@@ -112,7 +112,7 @@ When a grid item is clicked, instead of navigating to the detail/edit page, the 
 - [x] Panel renders: file metadata (filename, size, content type) for file fields
 - [x] Panel renders: edit form with all writable fields (reusing `form()` from forms/form.ts)
 - [x] Panel renders: delete button
-- [x] Panel includes hidden `_return` field pointing back to grid URL
+- [x] Panel includes hidden `__cms_return` field pointing back to grid URL
 - [x] Panel form `action` targets `/{table}/{id}` (existing update endpoint)
 - [x] Panel form includes CSRF + source tokens
 - [x] Panel supports multipart encoding when file columns exist
@@ -146,16 +146,16 @@ When a grid item is clicked, instead of navigating to the detail/edit page, the 
 
 #### 15. CMS: Update/delete redirect from panel
 
-- [x] In `handleUpdate`: check for `_return` form field
-- [x] Validate `_return` is a relative URL under basePath (prevent open redirect)
-- [x] Redirect to `_return` on success instead of detail page
-- [x] In `handleDelete`: check for `_return` form field with same validation
-- [x] Redirect to `_return` on success instead of list page
+- [x] In `handleUpdate`: check for `__cms_return` form field
+- [x] Validate `__cms_return` is a relative URL under basePath (prevent open redirect)
+- [x] Redirect to `__cms_return` on success instead of detail page
+- [x] In `handleDelete`: check for `__cms_return` form field with same validation
+- [x] Redirect to `__cms_return` on success instead of list page
 
 #### 16. Tests
 
 - [x] Test `gridDetailPanel()` renders thumbnail, metadata, form fields
 - [x] Test grid items link to `?selected=<id>` when panel mode active
 - [x] Test `handleList` with `?selected=<id>` returns panel HTML
-- [x] Test `handleUpdate` redirects to `_return` when present
-- [x] Test `_return` validation rejects absolute URLs / other origins
+- [x] Test `handleUpdate` redirects to `__cms_return` when present
+- [x] Test `__cms_return` validation rejects absolute URLs / other origins

@@ -1718,7 +1718,7 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           cmsUrl(basePath, table.name, recordId),
         );
       }
-      // Check for _return field (grid panel redirect)
+      // Check for __cms_return field (grid panel redirect)
       const returnUrl = getSafeReturnUrl(formData, basePath);
       return redirect(returnUrl ?? cmsUrl(basePath, table.name, recordId));
     } catch (error) {
@@ -2287,7 +2287,9 @@ function getSafeReturnUrl(
   if (!returnUrl || typeof returnUrl !== 'string') return undefined;
 
   // Must be a relative path starting with basePath
-  if (!returnUrl.startsWith(basePath)) return undefined;
+  if (returnUrl !== basePath && !returnUrl.startsWith(basePath + '/')) {
+    return undefined;
+  }
 
   // Must not contain protocol or authority markers (prevent //evil.com)
   if (returnUrl.includes('://') || returnUrl.startsWith('//')) return undefined;

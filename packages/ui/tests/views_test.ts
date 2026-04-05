@@ -844,7 +844,7 @@ Deno.test('gridDetailPanel: renders delete button', () => {
   assertStringIncludes(result, '/admin/media/1/delete');
 });
 
-Deno.test('gridDetailPanel: includes _return hidden field', () => {
+Deno.test('gridDetailPanel: includes __cms_return hidden field', () => {
   const panel = createMockPanelData({ returnUrl: '/admin/media' });
   const options = createGridOptions({ selectedId: 1 });
 

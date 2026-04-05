@@ -601,7 +601,8 @@ export function createS3StoragePlugin(
             // Validate: must start with basePath, no protocol markers
             if (
               returnParam &&
-              returnParam.startsWith(options.basePath) &&
+              (returnParam === options.basePath ||
+                returnParam.startsWith(options.basePath + '/')) &&
               !returnParam.includes('://') &&
               !returnParam.startsWith('//')
             ) {
