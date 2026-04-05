@@ -2390,6 +2390,18 @@ async function buildGridPanelData(
     table.columns,
   );
 
+  // Execute afterRead transform
+  let transformedRecord = filteredRecord;
+  if (ctx.pluginService) {
+    transformedRecord = await ctx.pluginService.afterRead(
+      table.name,
+      'read',
+      filteredRecord,
+      getPluginUser(ctx),
+      table,
+    );
+  }
+
   // Determine writable fields for the form
   const allCmsFields = tableToCmsFields(table, true);
   const panelFields = allCmsFields
@@ -2410,8 +2422,11 @@ async function buildGridPanelData(
       return field;
     });
 
+  // Fetch many-to-many data for this record
+  const manyToManyData = await fetchManyToManyData(options, table, selectedId);
+
   // Resolve thumbnail URL for the panel preview
-  const thumbValue = filteredRecord[thumbnailField.column.propertyName];
+  const thumbValue = transformedRecord[thumbnailField.column.propertyName];
   const fileUrl = await signThumbnailUrl(
     thumbnailField,
     thumbValue,
@@ -2454,7 +2469,7 @@ async function buildGridPanelData(
       pluginFields.map(async (field) => {
         let storageId: string | undefined;
         if (field.fieldType === 'file' && options.storage) {
-          const fileValue = filteredRecord[field.column.propertyName];
+          const fileValue = transformedRecord[field.column.propertyName];
           if (
             fileValue && typeof fileValue === 'object' &&
             'storage' in fileValue
@@ -2469,7 +2484,7 @@ async function buildGridPanelData(
         const uiCtx: UIRenderFieldContext = {
           table: table.name,
           field: toUIFieldInfo(field),
-          value: (filteredRecord[field.column.propertyName] ??
+          value: (transformedRecord[field.column.propertyName] ??
             null) as UIRenderFieldContext['value'],
           recordId: selectedId,
           view: 'edit',
@@ -2509,10 +2524,10 @@ async function buildGridPanelData(
     thumbnailUrl,
     fileMeta,
     fields: panelFields,
-    values: filteredRecord,
+    values: transformedRecord,
     errors: {},
     relationData,
-    manyToManyData: [],
+    manyToManyData,
     fieldOverrides,
     csrfToken,
     sourceToken,
