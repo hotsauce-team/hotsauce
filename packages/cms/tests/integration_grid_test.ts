@@ -188,8 +188,8 @@ Deno.test('integration: grid view tests', async (t) => {
     // Panel should have Save and Delete buttons
     assertStringIncludes(html, 'Save');
     assertStringIncludes(html, 'Delete');
-    // Panel should have _return hidden field pointing back with ?selected to keep panel open
-    assertStringIncludes(html, '_return');
+    // Panel should have __cms_return hidden field pointing back with ?selected to keep panel open
+    assertStringIncludes(html, '__cms_return');
     assertStringIncludes(html, '?selected=1');
     // Selected grid item should be highlighted
     assertStringIncludes(html, 'cms-grid-item-selected');
@@ -238,9 +238,9 @@ Deno.test('integration: grid view tests', async (t) => {
   );
 });
 
-// ─── Update/Delete _return redirect tests ──────────────────────
+// ─── Update/Delete __cms_return redirect tests ──────────────────────
 
-Deno.test('integration: _return redirect tests', async (t) => {
+Deno.test('integration: __cms_return redirect tests', async (t) => {
   const client = new PGlite();
   const db = drizzle(client, { schema: schemaWithMedia });
 
@@ -261,38 +261,44 @@ Deno.test('integration: _return redirect tests', async (t) => {
     });
   }
 
-  await t.step('update redirects to _return URL when present', async () => {
-    await resetDb();
-    await db.insert(media).values([
-      {
-        title: 'Original',
-        file: { filename: 'orig.jpg', contentType: 'image/jpeg', size: 100 },
-      },
-    ]);
+  await t.step(
+    'update redirects to __cms_return URL when present',
+    async () => {
+      await resetDb();
+      await db.insert(media).values([
+        {
+          title: 'Original',
+          file: { filename: 'orig.jpg', contentType: 'image/jpeg', size: 100 },
+        },
+      ]);
 
-    const handler = createHandler();
-    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
-    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
 
-    const formData = createFormData({
-      _csrf: csrfToken,
-      _source: sourceToken,
-      title: 'Updated',
-      _return: '/admin/media',
-    });
+      const formData = createFormData({
+        _csrf: csrfToken,
+        _source: sourceToken,
+        title: 'Updated',
+        __cms_return: '/admin/media',
+      });
 
-    const request = new Request('http://localhost/admin/media/1/edit', {
-      method: 'POST',
-      body: formData,
-    });
+      const request = new Request('http://localhost/admin/media/1/edit', {
+        method: 'POST',
+        body: formData,
+      });
 
-    const response = await handler(request);
-    assertEquals(response.status, 303);
-    assertEquals(response.headers.get('Location'), '/admin/media');
-  });
+      const response = await handler(request);
+      assertEquals(response.status, 303);
+      assertEquals(response.headers.get('Location'), '/admin/media');
+    },
+  );
 
   await t.step(
-    'update ignores _return with absolute URL (security)',
+    'update ignores __cms_return with absolute URL (security)',
     async () => {
       await resetDb();
       await db.insert(media).values([
@@ -313,7 +319,7 @@ Deno.test('integration: _return redirect tests', async (t) => {
         _csrf: csrfToken,
         _source: sourceToken,
         title: 'Updated',
-        _return: 'https://evil.com/steal',
+        __cms_return: 'https://evil.com/steal',
       });
 
       const request = new Request('http://localhost/admin/media/1/edit', {
@@ -328,7 +334,7 @@ Deno.test('integration: _return redirect tests', async (t) => {
     },
   );
 
-  await t.step('update ignores _return outside basePath', async () => {
+  await t.step('update ignores __cms_return outside basePath', async () => {
     await resetDb();
     await db.insert(media).values([
       {
@@ -345,7 +351,7 @@ Deno.test('integration: _return redirect tests', async (t) => {
       _csrf: csrfToken,
       _source: sourceToken,
       title: 'Updated',
-      _return: '/other-path',
+      __cms_return: '/other-path',
     });
 
     const request = new Request('http://localhost/admin/media/1/edit', {
@@ -358,33 +364,39 @@ Deno.test('integration: _return redirect tests', async (t) => {
     assertEquals(response.headers.get('Location'), '/admin/media/1');
   });
 
-  await t.step('delete redirects to _return URL when present', async () => {
-    await resetDb();
-    await db.insert(media).values([
-      {
-        title: 'To Delete',
-        file: { filename: 'del.jpg', contentType: 'image/jpeg', size: 100 },
-      },
-    ]);
+  await t.step(
+    'delete redirects to __cms_return URL when present',
+    async () => {
+      await resetDb();
+      await db.insert(media).values([
+        {
+          title: 'To Delete',
+          file: { filename: 'del.jpg', contentType: 'image/jpeg', size: 100 },
+        },
+      ]);
 
-    const handler = createHandler();
-    const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
-    const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
 
-    const formData = createFormData({
-      _csrf: csrfToken,
-      _source: sourceToken,
-      _return: '/admin/media',
-    });
+      const formData = createFormData({
+        _csrf: csrfToken,
+        _source: sourceToken,
+        __cms_return: '/admin/media',
+      });
 
-    const request = new Request('http://localhost/admin/media/1/delete', {
-      method: 'POST',
-      body: formData,
-    });
+      const request = new Request('http://localhost/admin/media/1/delete', {
+        method: 'POST',
+        body: formData,
+      });
 
-    const response = await handler(request);
-    assertEquals(response.status, 303);
-    const location = response.headers.get('Location') ?? '';
-    assertEquals(location.startsWith('/admin/media'), true);
-  });
+      const response = await handler(request);
+      assertEquals(response.status, 303);
+      const location = response.headers.get('Location') ?? '';
+      assertEquals(location.startsWith('/admin/media'), true);
+    },
+  );
 });

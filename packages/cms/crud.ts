@@ -2295,14 +2295,14 @@ async function renderEditForm(
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Extract and validate a _return URL from form data.
+ * Extract and validate a __cms_return URL from form data.
  * Only allows relative URLs that start with the CMS basePath (prevents open redirect).
  */
 function getSafeReturnUrl(
   formData: Record<string, string | string[]>,
   basePath: string,
 ): string | undefined {
-  const returnVal = formData['_return'];
+  const returnVal = formData['__cms_return'];
   const returnUrl = Array.isArray(returnVal) ? returnVal[0] : returnVal;
   if (!returnUrl || typeof returnUrl !== 'string') return undefined;
 

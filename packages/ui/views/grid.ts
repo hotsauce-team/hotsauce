@@ -262,7 +262,7 @@ export function gridDetailPanel(
   const csrfField = `<input type="hidden" name="_csrf" value="${
     escapeHtml(panel.csrfToken)
   }" />`;
-  const returnField = `<input type="hidden" name="_return" value="${
+  const returnField = `<input type="hidden" name="__cms_return" value="${
     escapeHtml(panel.returnUrl)
   }" />`;
 
@@ -295,9 +295,9 @@ export function gridDetailPanel(
 /** Render extra hidden fields and M2M sections for the panel form */
 function renderPanelExtraContent(panel: GridPanelData): string {
   const parts: string[] = [];
-  // _return hidden field so update redirects back to grid
+  // __cms_return hidden field so update redirects back to grid
   parts.push(
-    `<input type="hidden" name="_return" value="${
+    `<input type="hidden" name="__cms_return" value="${
       escapeHtml(panel.returnUrl)
     }" />`,
   );

@@ -849,7 +849,7 @@ Deno.test('gridDetailPanel: includes _return hidden field', () => {
   const options = createGridOptions({ selectedId: 1 });
 
   const result = gridDetailPanel(panel, options);
-  assertStringIncludes(result, 'name="_return"');
+  assertStringIncludes(result, 'name="__cms_return"');
   assertStringIncludes(result, 'value="/admin/media"');
 });
 
