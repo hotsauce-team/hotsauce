@@ -166,8 +166,9 @@ export const UPLOAD_JS = `
       status.textContent = 'Upload complete! Redirecting...';
       status.className = 'status success';
 
+      var redirectUrl = config.returnUrl || (config.basePath + '/' + config.table + '/' + config.recordId + '/edit');
       setTimeout(function() {
-        window.location.href = config.basePath + '/' + config.table + '/' + config.recordId + '/edit';
+        window.location.href = redirectUrl;
       }, 1000);
     });
   }

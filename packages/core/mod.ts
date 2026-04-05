@@ -50,6 +50,7 @@ export {
 // ─────────────────────────────────────────────────────────────
 export type { CMSField, CMSFieldType } from './fields/mapping.ts';
 export {
+  getThumbnailField,
   mapColumnsToFields,
   mapColumnToField,
   mapColumnToFieldType,

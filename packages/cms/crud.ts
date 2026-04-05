@@ -6,11 +6,21 @@ import type { Table } from 'drizzle-orm';
 import type { IntrospectedTable } from '@hotsauce/core';
 
 import { alert, layout, pagination } from '@hotsauce/ui';
-import { listView } from '@hotsauce/ui';
+import { listTable, listView } from '@hotsauce/ui';
+import { gridView, resolveThumbnailUrl, viewToggle } from '@hotsauce/ui';
+import type {
+  GridPanelData,
+  GridThumbnail,
+  GridViewOptions,
+} from '@hotsauce/ui';
 import { detailView } from '@hotsauce/ui';
 import { createView, editView } from '@hotsauce/ui';
 import { html, raw } from '@hotsauce/ui';
-import type { RouteContext, StorageRegistry } from './types.ts';
+import type {
+  ResolvedCmsOptions,
+  RouteContext,
+  StorageRegistry,
+} from './types.ts';
 import {
   coerceFormValues,
   getPagination,
@@ -79,11 +89,15 @@ import {
   updateWithPolicy,
   validateHiddenRequiredColumns,
 } from './policies/mod.ts';
-import type { EvaluatedColumnPolicies } from './policies/mod.ts';
+import type {
+  EvaluatedColumnPolicies,
+  PolicyApplicationResult,
+} from './policies/mod.ts';
 import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
 import type { CMSField } from '@hotsauce/core';
 import {
   getFileKeyPrefix,
+  getThumbnailField,
   isValidFileKey,
   isValidFileReference,
 } from '@hotsauce/core';
@@ -565,6 +579,16 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Generate navigation
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
+  // Detect thumbnail field for grid view
+  const cmsFields = tableToCmsFields(table);
+  const thumbnailField = getThumbnailField(cmsFields);
+
+  // Determine view mode: default to grid if thumbnail exists, otherwise table
+  const viewParam = url.searchParams.get('view');
+  const viewMode = thumbnailField
+    ? (viewParam === 'table' ? 'table' as const : 'grid' as const)
+    : 'table' as const;
+
   // Build columns for list, filtered by readable columns
   const listColumns = getListColumns(table).filter(
     (col) => columnResult.readableColumns.includes(col.name ?? col.key),
@@ -587,16 +611,6 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Generate CSRF token for delete forms
   const csrfToken = await generateCsrfToken(options.csrfSecret);
 
-  // List view options
-  const listOptions: ListViewOptions = {
-    baseUrl: cmsUrl(basePath, table.name),
-    primaryKey: getPrimaryKeyColumn(table).name,
-    showEdit: true,
-    showDelete: true,
-    showView: true,
-    csrfToken,
-  };
-
   // Build content
   let content = '';
 
@@ -606,15 +620,130 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     content += alert(flash.message, flash.type);
   }
 
-  // Add list view
-  content += listView(
-    formatTableName(table.name),
-    listColumns,
-    records,
-    listOptions,
-    relationData,
-    m2mDisplayData,
-  );
+  if (viewMode === 'grid' && thumbnailField) {
+    // Resolve thumbnail URLs for each record
+    const thumbnails: GridThumbnail[] = await Promise.all(
+      records.map(async (record) => {
+        const id = record[pkCol.propertyName] as string | number;
+        const value = record[thumbnailField.column.propertyName];
+        const fileUrl = await signThumbnailUrl(
+          thumbnailField,
+          value,
+          options,
+          request,
+          authUser,
+        );
+
+        const thumbnailUrl = resolveThumbnailUrl(
+          value,
+          thumbnailField.fieldType,
+          fileUrl,
+        );
+
+        // Try to find a label from alt/caption text columns
+        let label = '';
+        for (const col of table.columns) {
+          if (
+            col.propertyName !== thumbnailField.column.propertyName &&
+            col.dataType === 'string' && !col.isPrimaryKey
+          ) {
+            const v = record[col.propertyName];
+            if (typeof v === 'string' && v.length > 0) {
+              label = v;
+              break;
+            }
+          }
+        }
+        // Fall back to filename or record ID
+        if (!label) {
+          if (isValidFileReference(value)) {
+            label = value.filename;
+          } else {
+            label = String(id);
+          }
+        }
+
+        return { id, thumbnailUrl, label };
+      }),
+    );
+
+    // Check for selected record (RHS detail panel)
+    const selectedParam = url.searchParams.get('selected');
+    let panelData: GridPanelData | undefined;
+
+    if (selectedParam) {
+      panelData = await buildGridPanelData(
+        ctx,
+        table,
+        selectedParam,
+        columnResult,
+        policyResult,
+        thumbnailField,
+        relationData,
+      );
+    }
+
+    const gridOptions: GridViewOptions = {
+      baseUrl: cmsUrl(basePath, table.name),
+      primaryKey: pkCol.propertyName,
+      thumbnailField,
+      currentView: 'grid',
+      currentUrl: url.href,
+      selectedId: selectedParam ?? undefined,
+    };
+
+    content += gridView(
+      formatTableName(table.name),
+      records,
+      thumbnails,
+      gridOptions,
+      panelData,
+    );
+  } else {
+    // Table view (default for non-thumbnail tables, or explicit ?view=table)
+    const listOptions: ListViewOptions = {
+      baseUrl: cmsUrl(basePath, table.name),
+      primaryKey: getPrimaryKeyColumn(table).name,
+      showEdit: true,
+      showDelete: true,
+      showView: true,
+      csrfToken,
+    };
+
+    // Add view toggle header when thumbnail exists but table view is selected
+    if (thumbnailField) {
+      const toggle = viewToggle('table', url.href);
+      content += `<div class="cms-list-view">
+        <header class="cms-list-header">
+          <h1>${formatTableName(table.name)}</h1>
+          <div class="cms-list-actions">
+            ${toggle}
+            <a href="${
+        cmsUrl(basePath, table.name)
+      }/new" class="cms-btn cms-btn-primary">Create New</a>
+          </div>
+        </header>
+        ${
+        listTable(
+          listColumns,
+          records,
+          listOptions,
+          relationData,
+          m2mDisplayData,
+        )
+      }
+      </div>`;
+    } else {
+      content += listView(
+        formatTableName(table.name),
+        listColumns,
+        records,
+        listOptions,
+        relationData,
+        m2mDisplayData,
+      );
+    }
+  }
 
   // Add pagination if needed
   if (totalPages > 1) {
@@ -1609,7 +1738,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           cmsUrl(basePath, table.name, recordId),
         );
       }
-      return redirect(cmsUrl(basePath, table.name, recordId));
+      // Check for _return field (grid panel redirect)
+      const returnUrl = getSafeReturnUrl(formData, basePath);
+      return redirect(returnUrl ?? cmsUrl(basePath, table.name, recordId));
     } catch (error) {
       // Log unexpected errors
       if (options.onError) {
@@ -1707,6 +1838,7 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   }
 
   // For delete, also validate CSRF from form data
+  let deleteReturnUrl: string | undefined;
   if (request.method === 'POST') {
     const formData = await parseFormData(request);
     const csrfToken = getCsrfTokenFromFormData(formData);
@@ -1721,6 +1853,7 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
         'delete_csrf_error',
       );
     }
+    deleteReturnUrl = getSafeReturnUrl(formData, basePath);
   }
 
   try {
@@ -1837,7 +1970,10 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
         cmsUrl(basePath, table.name),
       );
     }
-    return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');
+    return redirectWithFlash(
+      deleteReturnUrl ?? cmsUrl(basePath, table.name),
+      'delete_success',
+    );
   } catch (error) {
     // Use helper to check for FK violation
     if (isForeignKeyViolation(error)) {
@@ -2152,4 +2288,235 @@ async function renderEditForm(
   );
 
   return htmlResponse(page, 200, ctx.options.securityHeaders);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Return URL validation
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Extract and validate a _return URL from form data.
+ * Only allows relative URLs that start with the CMS basePath (prevents open redirect).
+ */
+function getSafeReturnUrl(
+  formData: Record<string, string | string[]>,
+  basePath: string,
+): string | undefined {
+  const returnVal = formData['_return'];
+  const returnUrl = Array.isArray(returnVal) ? returnVal[0] : returnVal;
+  if (!returnUrl || typeof returnUrl !== 'string') return undefined;
+
+  // Must be a relative path starting with basePath
+  if (!returnUrl.startsWith(basePath)) return undefined;
+
+  // Must not contain protocol or authority markers (prevent //evil.com)
+  if (returnUrl.includes('://') || returnUrl.startsWith('//')) return undefined;
+
+  return returnUrl;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Grid panel helpers
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Sign a download URL for a thumbnail's FileReference value.
+ * Returns the signed URL or undefined if not applicable.
+ */
+async function signThumbnailUrl(
+  thumbnailField: CMSField,
+  value: unknown,
+  options: ResolvedCmsOptions,
+  request: Request,
+  authUser: RouteContext['authUser'],
+): Promise<string | undefined> {
+  if (
+    thumbnailField.fieldType === 'file' &&
+    isValidFileReference(value) && value.key && options.storage
+  ) {
+    const storageId = value.storage ?? options.storage.defaultObjectStorageId;
+    if (storageId) {
+      const provider = options.storage.instances.get(storageId);
+      if (provider?.signDownloadUrl) {
+        try {
+          return await provider.signDownloadUrl({
+            storage: storageId,
+            key: value.key,
+            filename: value.filename,
+            request,
+            user: authUser ? { sub: authUser.id, role: authUser.role } : null,
+          });
+        } catch {
+          // Fall through
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Build the GridPanelData for the RHS detail panel.
+ * Returns undefined if the selected record doesn't exist or is not accessible.
+ */
+async function buildGridPanelData(
+  ctx: RouteContext,
+  table: IntrospectedTable,
+  selectedId: string,
+  columnResult: EvaluatedColumnPolicies,
+  policyResult: PolicyApplicationResult,
+  thumbnailField: CMSField,
+  relationData: Record<string, import('@hotsauce/ui').RelationOption[]>,
+): Promise<GridPanelData | undefined> {
+  const { request, options, authUser } = ctx;
+  const drizzleTable = table.table;
+  const basePath = options.basePath;
+
+  // Fetch the selected record with policy condition
+  const record = await findRecordWithPolicy(
+    options.db,
+    drizzleTable as Table,
+    table,
+    selectedId,
+    policyResult.condition,
+  );
+
+  if (!record) return undefined;
+
+  // Filter by readable columns
+  const filteredRecord = filterRecordColumns(
+    record,
+    columnResult.readableColumns,
+    table.columns,
+  );
+
+  // Determine writable fields for the form
+  const allCmsFields = tableToCmsFields(table, true);
+  const panelFields = allCmsFields
+    .filter((field) => {
+      if (columnResult.writableColumns.includes(field.column.name)) return true;
+      if (
+        columnResult.readableColumns.includes(field.column.name) &&
+        field.column.cmsOptions?.plugins
+      ) {
+        return true;
+      }
+      return false;
+    })
+    .map((field) => {
+      if (!columnResult.writableColumns.includes(field.column.name)) {
+        return { ...field, readOnly: true };
+      }
+      return field;
+    });
+
+  // Resolve thumbnail URL for the panel preview
+  const thumbValue = filteredRecord[thumbnailField.column.propertyName];
+  const fileUrl = await signThumbnailUrl(
+    thumbnailField,
+    thumbValue,
+    options,
+    request,
+    authUser,
+  );
+  const thumbnailUrl = resolveThumbnailUrl(
+    thumbValue,
+    thumbnailField.fieldType,
+    fileUrl,
+  );
+
+  // Extract file metadata if it's a file field
+  let fileMeta: GridPanelData['fileMeta'];
+  if (thumbnailField.fieldType === 'file' && isValidFileReference(thumbValue)) {
+    fileMeta = {
+      filename: thumbValue.filename,
+      contentType: thumbValue.contentType,
+      size: thumbValue.size,
+    };
+  }
+
+  // Generate tokens
+  const csrfToken = await generateCsrfToken(options.csrfSecret);
+  const sourceToken = await generateSourceToken(SOURCE.CMS, options.csrfSecret);
+
+  // Check if any writable fields are file fields
+  const hasFileFields = panelFields.some((f) => f.fieldType === 'file');
+
+  // Get field UI overrides from plugins
+  const fieldOverrides: Record<string, FieldUIOverride> = {};
+  if (ctx.pluginService) {
+    const user = getPluginUser(ctx);
+    const pluginFields = panelFields.filter((f) =>
+      f.column.cmsOptions?.plugins ||
+      (f.fieldType === 'file' && options.storage)
+    );
+    const results = await Promise.all(
+      pluginFields.map(async (field) => {
+        let storageId: string | undefined;
+        if (field.fieldType === 'file' && options.storage) {
+          const fileValue = filteredRecord[field.column.propertyName];
+          if (
+            fileValue && typeof fileValue === 'object' &&
+            'storage' in fileValue
+          ) {
+            storageId = (fileValue as { storage?: string }).storage;
+          }
+          if (!storageId) {
+            storageId = options.storage.defaultObjectStorageId;
+          }
+        }
+
+        const uiCtx: UIRenderFieldContext = {
+          table: table.name,
+          field: toUIFieldInfo(field),
+          value: (filteredRecord[field.column.propertyName] ??
+            null) as UIRenderFieldContext['value'],
+          recordId: selectedId,
+          view: 'edit',
+          user,
+          storageId,
+        };
+        return {
+          name: field.column.propertyName,
+          override: await ctx.pluginService!.renderField(uiCtx),
+        };
+      }),
+    );
+    for (const { name, override } of results) {
+      if (override) fieldOverrides[name] = override;
+    }
+  }
+
+  // Append ?return= to any plugin link hrefs so external pages (e.g. S3 upload)
+  // can redirect back to the grid panel after completing their flow
+  const panelReturnUrl = `${
+    cmsUrl(basePath, table.name)
+  }?selected=${selectedId}`;
+  for (const override of Object.values(fieldOverrides)) {
+    if (override?.link?.href) {
+      const sep = override.link.href.includes('?') ? '&' : '?';
+      override.link.href += `${sep}return=${
+        encodeURIComponent(panelReturnUrl)
+      }`;
+    }
+  }
+
+  // Build return URL — includes ?selected=<id> to keep panel open after save
+  const returnUrl = `${cmsUrl(basePath, table.name)}?selected=${selectedId}`;
+
+  return {
+    id: selectedId,
+    thumbnailUrl,
+    fileMeta,
+    fields: panelFields,
+    values: filteredRecord,
+    errors: {},
+    relationData,
+    manyToManyData: [],
+    fieldOverrides,
+    csrfToken,
+    sourceToken,
+    multipart: hasFileFields,
+    returnUrl,
+  };
 }

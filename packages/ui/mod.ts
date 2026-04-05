@@ -67,6 +67,20 @@ export type {
 
 export { fieldsToListColumns, listTable, listView } from './views/list.ts';
 
+export type {
+  GridPanelData,
+  GridThumbnail,
+  GridViewOptions,
+} from './views/grid.ts';
+export {
+  getGridItemLabel,
+  gridDetailPanel,
+  gridItems,
+  gridView,
+  resolveThumbnailUrl,
+  viewToggle,
+} from './views/grid.ts';
+
 export type { DetailViewOptions } from './views/detail.ts';
 export { detailField, detailView } from './views/detail.ts';
 

@@ -2,6 +2,7 @@
 
 import { assertEquals } from '@std/assert';
 import {
+  getThumbnailField,
   mapColumnsToFields,
   mapColumnToField,
   mapColumnToFieldType,
@@ -331,4 +332,70 @@ Deno.test('mapColumnToField: multiple cmsOptions work together', () => {
 
   assertEquals(field.hidden, true);
   assertEquals(field.readOnly, true);
+});
+
+// thumbnail tests
+Deno.test('mapColumnToField: thumbnail option is propagated', () => {
+  const column = createMockColumn({
+    propertyName: 'file',
+    dataType: 'json',
+    cmsOptions: { file: { accept: 'image/*' }, thumbnail: true },
+  });
+
+  const field = mapColumnToField(column);
+  assertEquals(field.thumbnail, true);
+});
+
+Deno.test('mapColumnToField: thumbnail is undefined when not set', () => {
+  const column = createMockColumn({
+    propertyName: 'file',
+    dataType: 'json',
+    cmsOptions: { file: true },
+  });
+
+  const field = mapColumnToField(column);
+  assertEquals(field.thumbnail, undefined);
+});
+
+Deno.test('getThumbnailField: returns the thumbnail field', () => {
+  const fields = [
+    mapColumnToField(
+      createMockColumn({
+        propertyName: 'id',
+        isPrimaryKey: true,
+        hasDefault: true,
+      }),
+    ),
+    mapColumnToField(
+      createMockColumn({
+        propertyName: 'file',
+        dataType: 'json',
+        cmsOptions: { file: true, thumbnail: true },
+      }),
+    ),
+    mapColumnToField(
+      createMockColumn({ propertyName: 'alt', dataType: 'string' }),
+    ),
+  ];
+
+  const thumb = getThumbnailField(fields);
+  assertEquals(thumb?.column.propertyName, 'file');
+});
+
+Deno.test('getThumbnailField: returns undefined when no thumbnail', () => {
+  const fields = [
+    mapColumnToField(
+      createMockColumn({
+        propertyName: 'id',
+        isPrimaryKey: true,
+        hasDefault: true,
+      }),
+    ),
+    mapColumnToField(
+      createMockColumn({ propertyName: 'name', dataType: 'string' }),
+    ),
+  ];
+
+  const thumb = getThumbnailField(fields);
+  assertEquals(thumb, undefined);
 });

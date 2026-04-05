@@ -63,6 +63,12 @@ export type CmsColumnOptions = {
   /** Show this field but prevent editing. */
   readOnly?: boolean;
   /**
+   * Use this column as the thumbnail in list views.
+   * When set, the table defaults to grid view with a toggle to switch to table.
+   * Works with file columns (FileReference) and plain URL string columns.
+   */
+  thumbnail?: boolean;
+  /**
    * Plugin-specific configuration, keyed by plugin name.
    * Controls which plugins can read/write this column.
    *

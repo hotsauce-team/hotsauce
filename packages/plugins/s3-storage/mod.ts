@@ -593,6 +593,22 @@ export function createS3StoragePlugin(
           const uploadJsUrl =
             `${options.basePath}/s3-storage/_assets/upload.js`;
 
+          // Check for ?return= query param (e.g. from grid panel)
+          let returnUrl: string | undefined;
+          try {
+            const reqUrl = new URL(ctx.requestUrl);
+            const returnParam = reqUrl.searchParams.get('return');
+            // Validate: must start with basePath, no protocol markers
+            if (
+              returnParam &&
+              returnParam.startsWith(options.basePath) &&
+              !returnParam.includes('://') &&
+              !returnParam.startsWith('//')
+            ) {
+              returnUrl = returnParam;
+            }
+          } catch { /* ignore malformed URL */ }
+
           const configJson = safeJsonForHtml({
             basePath: options.basePath,
             table,
@@ -604,6 +620,7 @@ export function createS3StoragePlugin(
               ? maxSizeValue
               : S3_DEFAULT_MAX_SIZE,
             accept: typeof acceptValue === 'string' ? acceptValue : null,
+            ...(returnUrl && { returnUrl }),
           });
 
           const page = html`
@@ -645,9 +662,10 @@ export function createS3StoragePlugin(
 
                   <p class="back-link">
                     <a
-                      href="${options.basePath}/${table}/${id}/edit"
+                      href="${returnUrl ??
+                        `${options.basePath}/${table}/${id}/edit`}"
                       class="btn btn-secondary"
-                    >← Back to record</a>
+                    >← Back</a>
                   </p>
                 </div>
 

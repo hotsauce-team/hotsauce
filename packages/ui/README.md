@@ -173,15 +173,21 @@ For fields marked as file fields (via `@hotsauce/core` `$cms({ file: true })` me
 
 Complete page views for CRUD operations.
 
-| Export                        | Purpose                         |
-| ----------------------------- | ------------------------------- |
-| `listView(opts)`              | Table listing with pagination   |
-| `listTable(opts)`             | Just the data table             |
-| `fieldsToListColumns(fields)` | Convert fields to table columns |
-| `detailView(opts)`            | Read-only record view           |
-| `detailField(field, value)`   | Single field display            |
-| `editView(opts)`              | Edit form for existing record   |
-| `createView(opts)`            | Create form for new record      |
+| Export                         | Purpose                          |
+| ------------------------------ | -------------------------------- |
+| `listView(opts)`               | Table listing with pagination    |
+| `listTable(opts)`              | Just the data table              |
+| `fieldsToListColumns(fields)`  | Convert fields to table columns  |
+| `detailView(opts)`             | Read-only record view            |
+| `detailField(field, value)`    | Single field display             |
+| `editView(opts)`               | Edit form for existing record    |
+| `createView(opts)`             | Create form for new record       |
+| `gridView(opts)`               | Thumbnail grid with detail panel |
+| `gridItems(opts)`              | Just the grid thumbnails         |
+| `gridDetailPanel(data)`        | RHS detail/edit panel            |
+| `viewToggle(current, url)`     | Grid ↔ table toggle buttons      |
+| `resolveThumbnailUrl(val)`     | Extract image URL from value     |
+| `getGridItemLabel(rec, field)` | Label for a grid thumbnail       |
 
 **Types:**
 
@@ -262,6 +268,29 @@ layout({
 ```
 
 ## Types
+
+### `GridViewOptions`
+
+```ts
+interface GridViewOptions {
+  baseUrl: string; // e.g. "/admin/media"
+  primaryKey: string; // PK property name
+  thumbnailField: CMSField; // Field with thumbnail: true
+  currentView: 'grid' | 'table';
+  currentUrl: string; // Current page URL (for toggle links)
+  selectedId?: string; // Currently selected record
+}
+```
+
+### `GridThumbnail`
+
+```ts
+interface GridThumbnail {
+  id: string | number;
+  thumbnailUrl: string | null;
+  label: string;
+}
+```
 
 ### `RelationOption`
 
