@@ -13,13 +13,18 @@ import * as schema from '../../core/tests/fixtures/schema-pg.ts';
 
 const csrfSecret = 'bench-csrf-secret-must-be-at-least-32-chars!';
 
+// The db handle is not accessed during handler creation — it's only used
+// when the returned handler processes actual HTTP requests. An empty object
+// is safe here because we're measuring startup cost, not request handling.
+const db = {};
+
 // ── Fresh schema (introspection happens inside createCmsHandler) ──
 
 Deno.bench(
   'createCmsHandler — fresh schema (includes introspection)',
   () => {
     createCmsHandler({
-      db: {},
+      db,
       schema,
       auth: 'dangerously-open',
       policies: 'dangerously-open',
@@ -36,7 +41,7 @@ Deno.bench(
   'createCmsHandler — pre-introspected schema (no introspection)',
   () => {
     createCmsHandler({
-      db: {},
+      db,
       schema: preIntrospected,
       auth: 'dangerously-open',
       policies: 'dangerously-open',

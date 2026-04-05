@@ -2536,6 +2536,22 @@ const introspected = introspectFullSchema(schema);
 // Save to a file, environment variable, or embed in the bundle
 ```
 
+#### Generating the JSON file
+
+```ts
+// scripts/introspect.ts
+import { introspectFullSchema } from '@hotsauce/core';
+import * as schema from '../src/schema.ts';
+
+const introspected = introspectFullSchema(schema);
+await Deno.writeTextFile(
+  'introspected-schema.json',
+  JSON.stringify(introspected),
+);
+```
+
+Run once during your build step: `deno run -A scripts/introspect.ts`
+
 ### Usage
 
 ```ts
