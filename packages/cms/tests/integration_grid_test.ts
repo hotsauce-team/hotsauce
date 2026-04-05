@@ -69,8 +69,8 @@ Deno.test('integration: grid view tests', async (t) => {
       assertEquals(response.status, 200);
       const html = await response.text();
       assertStringIncludes(html, 'cms-grid');
-      assertStringIncludes(html, 'Photo One');
-      assertStringIncludes(html, 'Photo Two');
+      assertStringIncludes(html, 'photo1.jpg');
+      assertStringIncludes(html, 'photo2.png');
       assertStringIncludes(html, 'cms-view-toggle');
     },
   );

@@ -640,28 +640,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
           fileUrl,
         );
 
-        // Try to find a label from alt/caption text columns
-        let label = '';
-        for (const col of table.columns) {
-          if (
-            col.propertyName !== thumbnailField.column.propertyName &&
-            col.dataType === 'string' && !col.isPrimaryKey
-          ) {
-            const v = record[col.propertyName];
-            if (typeof v === 'string' && v.length > 0) {
-              label = v;
-              break;
-            }
-          }
-        }
-        // Fall back to filename or record ID
-        if (!label) {
-          if (isValidFileReference(value)) {
-            label = value.filename;
-          } else {
-            label = String(id);
-          }
-        }
+        const label = isValidFileReference(value) ? value.filename : String(id);
 
         return { id, thumbnailUrl, label };
       }),
