@@ -144,11 +144,13 @@ export function viewToggle(
         href: gridUrl,
         class: `cms-view-toggle-btn${gridActive}`,
         title: 'Grid view',
+        'aria-label': 'Grid view',
       })}>▦</a>
       <a ${attrs({
         href: tableUrl,
         class: `cms-view-toggle-btn${tableActive}`,
         title: 'Table view',
+        'aria-label': 'Table view',
       })}>☰</a>
     </div>
   `;
