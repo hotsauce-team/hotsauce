@@ -3,7 +3,7 @@
 import type { Table } from 'drizzle-orm';
 
 import type { CMSField, IntrospectedTable } from '@hotsauce/core';
-import { isValidFileReference } from '@hotsauce/core';
+import { isValidFileKey, isValidFileReference } from '@hotsauce/core';
 
 import { resolveThumbnailUrl } from '@hotsauce/ui';
 import type { FieldUIOverride, GridPanelData } from '@hotsauce/ui';
@@ -59,7 +59,8 @@ function getPluginUser(
 
 /**
  * Sign a download URL for a thumbnail's FileReference value.
- * Returns the signed URL or undefined if not applicable.
+ * Validates the key belongs to the expected table/column/record before signing.
+ * Returns the signed URL or undefined if not applicable or key is invalid.
  */
 export async function signThumbnailUrl(
   thumbnailField: CMSField,
@@ -67,11 +68,24 @@ export async function signThumbnailUrl(
   options: ResolvedCmsOptions,
   request: Request,
   authUser: RouteContext['authUser'],
+  tableName: string,
+  recordId: string | number,
 ): Promise<string | undefined> {
   if (
     thumbnailField.fieldType === 'file' &&
     isValidFileReference(value) && value.key && options.storage
   ) {
+    // Validate key belongs to this table/column/record (defense-in-depth)
+    if (
+      !isValidFileKey(
+        value.key,
+        tableName,
+        thumbnailField.column.name,
+        recordId,
+      )
+    ) {
+      return undefined;
+    }
     const storageId = value.storage ?? options.storage.defaultObjectStorageId;
     if (storageId) {
       const provider = options.storage.instances.get(storageId);
@@ -171,6 +185,8 @@ export async function buildGridPanelData(
     options,
     request,
     authUser,
+    table.name,
+    selectedId,
   );
   const thumbnailUrl = resolveThumbnailUrl(
     thumbValue,

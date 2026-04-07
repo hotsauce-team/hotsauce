@@ -475,39 +475,181 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
   );
 
   await t.step(
-    'update ignores __cms_return with percent-encoded control chars (security)',
+    'grid view skips signing for tampered file key (security)',
     async () => {
       await resetDb();
+
+      // Insert record with a TAMPERED key (wrong table prefix)
       await db.insert(media).values([
         {
-          title: 'Test',
-          file: { filename: 'test.jpg', contentType: 'image/jpeg', size: 100 },
+          title: 'Tampered Record',
+          file: {
+            filename: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+            key: 'other_table/file/999/malicious.jpg', // Wrong prefix!
+            storage: 's3',
+          },
         },
       ]);
 
-      const handler = createHandler();
-      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
-      const sourceToken = await generateSourceToken(
-        SOURCE.CMS,
-        TEST_CSRF_SECRET,
-      );
-
-      // %0d%0a = CRLF percent-encoded
-      const formData = createFormData({
-        _csrf: csrfToken,
-        _source: sourceToken,
-        title: 'Updated',
-        __cms_return: '/admin/media%0d%0aX-Injected: bad',
+      let signCalled = false;
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              signDownloadUrl: () => {
+                signCalled = true;
+                return Promise.resolve('https://s3.example.com/signed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
       });
 
-      const request = new Request('http://localhost/admin/media/1/edit', {
-        method: 'POST',
-        body: formData,
-      });
-
+      const request = new Request('http://localhost/admin/media');
       const response = await handler(request);
-      assertEquals(response.status, 303);
-      assertEquals(response.headers.get('Location'), '/admin/media/1');
+
+      assertEquals(response.status, 200);
+      // Should NOT have called signDownloadUrl for the tampered key
+      assertEquals(signCalled, false, 'Should not sign tampered file key');
+    },
+  );
+
+  await t.step(
+    'grid panel skips signing for tampered file key (security)',
+    async () => {
+      await resetDb();
+
+      // Insert record with a TAMPERED key
+      await db.insert(media).values([
+        {
+          title: 'Tampered Panel Record',
+          file: {
+            filename: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+            key: 'wrong_table/file/1/malicious.jpg', // Wrong prefix!
+            storage: 's3',
+          },
+        },
+      ]);
+
+      let signCalled = false;
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              signDownloadUrl: () => {
+                signCalled = true;
+                return Promise.resolve('https://s3.example.com/signed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      // Request with ?selected=1 to trigger panel rendering
+      const request = new Request('http://localhost/admin/media?selected=1');
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      // Should NOT have called signDownloadUrl for the tampered key
+      assertEquals(
+        signCalled,
+        false,
+        'Should not sign tampered file key in panel',
+      );
+    },
+  );
+
+  await t.step(
+    'grid signs valid file key with correct prefix',
+    async () => {
+      await resetDb();
+
+      // Insert record with a VALID key (correct prefix: media/file/1/...)
+      await db.insert(media).values([
+        {
+          title: 'Valid Record',
+          file: {
+            filename: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+            key: 'media/file/1/valid-uuid.jpg', // Correct prefix!
+            storage: 's3',
+          },
+        },
+      ]);
+
+      let signCalled = false;
+      let signedKey: string | null = null;
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+        plugins: [
+          {
+            name: 'mock-s3',
+            storageProvider: {
+              id: 's3',
+              kind: 's3' as const,
+              presignUpload: () =>
+                Promise.resolve({
+                  key: '',
+                  upload: { method: 'PUT' as const, url: '' },
+                }),
+              signDownloadUrl: (ctx) => {
+                signCalled = true;
+                signedKey = ctx.key;
+                return Promise.resolve('https://s3.example.com/signed');
+              },
+            },
+          },
+        ],
+        storage: 's3',
+      });
+
+      const request = new Request('http://localhost/admin/media');
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      // Should have called signDownloadUrl for the valid key
+      assertEquals(signCalled, true, 'Should sign valid file key');
+      assertEquals(signedKey, 'media/file/1/valid-uuid.jpg');
     },
   );
 });

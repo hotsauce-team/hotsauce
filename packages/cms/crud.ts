@@ -626,6 +626,8 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
           options,
           request,
           authUser,
+          table.name,
+          id,
         );
 
         const thumbnailUrl = resolveThumbnailUrl(
