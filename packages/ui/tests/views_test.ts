@@ -647,6 +647,29 @@ Deno.test('resolveThumbnailUrl: returns null for empty string', () => {
   assertEquals(resolveThumbnailUrl('', 'text'), null);
 });
 
+Deno.test('resolveThumbnailUrl: skips SVG by default', () => {
+  const ref = {
+    filename: 'icon.svg',
+    contentType: 'image/svg+xml',
+    size: 500,
+    url: 'https://cdn.example.com/icon.svg',
+  };
+  assertEquals(resolveThumbnailUrl(ref, 'file'), null);
+});
+
+Deno.test('resolveThumbnailUrl: allows SVG when previewSvg is true', () => {
+  const ref = {
+    filename: 'icon.svg',
+    contentType: 'image/svg+xml',
+    size: 500,
+    url: 'https://cdn.example.com/icon.svg',
+  };
+  assertEquals(
+    resolveThumbnailUrl(ref, 'file', undefined, { previewSvg: true }),
+    'https://cdn.example.com/icon.svg',
+  );
+});
+
 Deno.test('viewToggle: renders with grid active', () => {
   const result = viewToggle('grid', '/admin/media');
   assertStringIncludes(result, 'cms-view-toggle-active');

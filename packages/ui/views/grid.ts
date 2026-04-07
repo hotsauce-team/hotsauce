@@ -77,14 +77,19 @@ export interface GridPanelData {
  * Resolve a thumbnail URL from a record value based on field type.
  * For FileReference: uses fileUrl (presigned) → url → data: URI.
  * For plain strings: uses the value directly.
+ * SVG files are skipped by default (XSS defense-in-depth) unless previewSvg is true.
  */
 export function resolveThumbnailUrl(
   value: unknown,
   fieldType: string,
   fileUrl?: string,
+  options?: { previewSvg?: boolean },
 ): string | null {
   if (fieldType === 'file') {
     if (!isValidFileReference(value)) return null;
+    // Skip SVG unless explicitly opted-in (matches fileInput behavior)
+    const isSvg = value.contentType === 'image/svg+xml';
+    if (isSvg && !options?.previewSvg) return null;
     if (fileUrl) return getSafeUrl(fileUrl);
     const safeUrl = value.url ? getSafeUrl(value.url) : null;
     if (safeUrl) return safeUrl;
