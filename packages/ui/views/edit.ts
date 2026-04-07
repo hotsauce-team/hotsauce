@@ -6,7 +6,7 @@ import {
   form,
   type RelationOption,
 } from '../forms/form.ts';
-import { checkboxListInput, type ManyToManyData } from '../forms/inputs.ts';
+import { type ManyToManyData, manyToManyField } from '../forms/inputs.ts';
 import type { CMSField } from '@hotsauce/core';
 
 // Re-export FieldUIOverride for convenience
@@ -39,20 +39,7 @@ export interface EditViewOptions {
  */
 function renderManyToManySections(manyToManyData: ManyToManyData[]): string {
   if (manyToManyData.length === 0) return '';
-
-  return manyToManyData.map((m2m) =>
-    html`
-      <div class="cms-field">
-        <label class="cms-label">${m2m.label}</label>
-        ${raw(checkboxListInput({
-          name: m2m.fieldName,
-          label: m2m.label,
-          options: m2m.options,
-          selectedValues: m2m.selectedValues,
-        }))}
-      </div>
-    `
-  ).join('\n');
+  return manyToManyData.map(manyToManyField).join('\n');
 }
 
 /**

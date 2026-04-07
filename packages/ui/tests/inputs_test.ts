@@ -9,6 +9,7 @@ import {
   fileInput,
   hiddenInput,
   jsonInput,
+  manyToManyField,
   numberInput,
   relationInput,
   renderFieldInput,
@@ -574,4 +575,51 @@ Deno.test('checkboxListInput: generates unique ids', () => {
 
   assertStringIncludes(result, 'id="cats-0"');
   assertStringIncludes(result, 'id="cats-1"');
+});
+
+// manyToManyField tests
+Deno.test('manyToManyField: renders field wrapper with label', () => {
+  const result = manyToManyField({
+    fieldName: 'categoryIds',
+    label: 'Categories',
+    relatedTable: 'categories',
+    options: [{ value: 1, label: 'Tech' }],
+    selectedValues: [],
+  });
+
+  assertStringIncludes(result, 'class="cms-field"');
+  assertStringIncludes(result, 'class="cms-label"');
+  assertStringIncludes(result, '>Categories</label>');
+});
+
+Deno.test('manyToManyField: includes checkbox list', () => {
+  const result = manyToManyField({
+    fieldName: 'tagIds',
+    label: 'Tags',
+    relatedTable: 'tags',
+    options: [
+      { value: 1, label: 'JavaScript' },
+      { value: 2, label: 'TypeScript' },
+    ],
+    selectedValues: [2],
+  });
+
+  assertStringIncludes(result, 'class="cms-checkbox-list');
+  assertStringIncludes(result, 'name="tagIds"');
+  assertStringIncludes(result, '>JavaScript</span>');
+  assertStringIncludes(result, '>TypeScript</span>');
+  assertStringIncludes(result, 'value="2" checked');
+});
+
+Deno.test('manyToManyField: handles empty options', () => {
+  const result = manyToManyField({
+    fieldName: 'categoryIds',
+    label: 'Categories',
+    relatedTable: 'categories',
+    options: [],
+    selectedValues: [],
+  });
+
+  assertStringIncludes(result, 'class="cms-field"');
+  assertStringIncludes(result, 'No categories available');
 });

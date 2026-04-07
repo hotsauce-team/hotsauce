@@ -8,7 +8,7 @@ import {
   form,
   type RelationOption,
 } from '../forms/form.ts';
-import { checkboxListInput, type ManyToManyData } from '../forms/inputs.ts';
+import { type ManyToManyData, manyToManyField } from '../forms/inputs.ts';
 
 /**
  * Options for grid view
@@ -303,19 +303,9 @@ function renderPanelExtraContent(panel: GridPanelData): string {
     }" />`,
   );
 
-  // Render M2M checkbox sections (same as edit view)
+  // Render M2M checkbox sections using shared helper
   for (const m2m of panel.manyToManyData) {
-    parts.push(html`
-      <div class="cms-field">
-        <label class="cms-label">${m2m.label}</label>
-        ${raw(checkboxListInput({
-          name: m2m.fieldName,
-          label: m2m.label,
-          options: m2m.options,
-          selectedValues: m2m.selectedValues,
-        }))}
-      </div>
-    `);
+    parts.push(manyToManyField(m2m));
   }
 
   return parts.join('\n');
