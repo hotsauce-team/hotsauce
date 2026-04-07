@@ -399,4 +399,115 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
       assertEquals(location.startsWith('/admin/media'), true);
     },
   );
+
+  await t.step(
+    'update ignores __cms_return with control characters (security)',
+    async () => {
+      await resetDb();
+      await db.insert(media).values([
+        {
+          title: 'Test',
+          file: { filename: 'test.jpg', contentType: 'image/jpeg', size: 100 },
+        },
+      ]);
+
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Newline could enable header injection
+      const formData = createFormData({
+        _csrf: csrfToken,
+        _source: sourceToken,
+        title: 'Updated',
+        __cms_return: '/admin/media\r\nX-Injected: bad',
+      });
+
+      const request = new Request('http://localhost/admin/media/1/edit', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const response = await handler(request);
+      assertEquals(response.status, 303);
+      assertEquals(response.headers.get('Location'), '/admin/media/1');
+    },
+  );
+
+  await t.step(
+    'update ignores __cms_return with backslash (security)',
+    async () => {
+      await resetDb();
+      await db.insert(media).values([
+        {
+          title: 'Test',
+          file: { filename: 'test.jpg', contentType: 'image/jpeg', size: 100 },
+        },
+      ]);
+
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // Backslash can be interpreted as / by some browsers
+      const formData = createFormData({
+        _csrf: csrfToken,
+        _source: sourceToken,
+        title: 'Updated',
+        __cms_return: '/admin\\evil.com',
+      });
+
+      const request = new Request('http://localhost/admin/media/1/edit', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const response = await handler(request);
+      assertEquals(response.status, 303);
+      assertEquals(response.headers.get('Location'), '/admin/media/1');
+    },
+  );
+
+  await t.step(
+    'update ignores __cms_return with percent-encoded control chars (security)',
+    async () => {
+      await resetDb();
+      await db.insert(media).values([
+        {
+          title: 'Test',
+          file: { filename: 'test.jpg', contentType: 'image/jpeg', size: 100 },
+        },
+      ]);
+
+      const handler = createHandler();
+      const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+      const sourceToken = await generateSourceToken(
+        SOURCE.CMS,
+        TEST_CSRF_SECRET,
+      );
+
+      // %0d%0a = CRLF percent-encoded
+      const formData = createFormData({
+        _csrf: csrfToken,
+        _source: sourceToken,
+        title: 'Updated',
+        __cms_return: '/admin/media%0d%0aX-Injected: bad',
+      });
+
+      const request = new Request('http://localhost/admin/media/1/edit', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const response = await handler(request);
+      assertEquals(response.status, 303);
+      assertEquals(response.headers.get('Location'), '/admin/media/1');
+    },
+  );
 });

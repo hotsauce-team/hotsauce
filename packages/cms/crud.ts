@@ -2271,6 +2271,8 @@ async function renderEditForm(
 /**
  * Extract and validate a __cms_return URL from form data.
  * Only allows relative URLs that start with the CMS basePath (prevents open redirect).
+ *
+ * Defense-in-depth checks aligned with packages/ui/html.ts:getSafeUrl.
  */
 function getSafeReturnUrl(
   formData: Record<string, string | string[]>,
@@ -2279,6 +2281,12 @@ function getSafeReturnUrl(
   const returnVal = formData['__cms_return'];
   const returnUrl = Array.isArray(returnVal) ? returnVal[0] : returnVal;
   if (!returnUrl || typeof returnUrl !== 'string') return undefined;
+
+  // Block control characters and backslashes (scheme obfuscation / header injection vectors)
+  // deno-lint-ignore no-control-regex
+  if (/[\x00-\x1f\x7f-\x9f\\]/.test(returnUrl)) return undefined;
+  // Block percent-encoded control chars (%00-%1F, %7F)
+  if (/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(returnUrl)) return undefined;
 
   // Must be a relative path starting with basePath
   if (returnUrl !== basePath && !returnUrl.startsWith(basePath + '/')) {
