@@ -595,17 +595,23 @@ export function createS3StoragePlugin(
             `${options.basePath}/s3-storage/_assets/upload.js`;
 
           // Check for ?return= query param (e.g. from grid panel)
+          // Defense-in-depth checks aligned with packages/cms/crud.ts:getSafeReturnUrl
           let returnUrl: string | undefined;
           try {
             const reqUrl = new URL(ctx.requestUrl);
             const returnParam = reqUrl.searchParams.get('return');
-            // Validate: must start with basePath, no protocol markers
+            // Validate: must start with basePath, no protocol markers, no dangerous chars
             if (
               returnParam &&
               (returnParam === options.basePath ||
                 returnParam.startsWith(options.basePath + '/')) &&
               !returnParam.includes('://') &&
-              !returnParam.startsWith('//')
+              !returnParam.startsWith('//') &&
+              // Block control characters and backslashes (scheme obfuscation / header injection)
+              // deno-lint-ignore no-control-regex
+              !/[\x00-\x1f\x7f-\x9f\\]/.test(returnParam) &&
+              // Block percent-encoded control chars (%00-%1F, %7F)
+              !/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(returnParam)
             ) {
               returnUrl = returnParam;
             }
