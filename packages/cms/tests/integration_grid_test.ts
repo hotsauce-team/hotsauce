@@ -4,17 +4,53 @@
 import { assertEquals, assertStringIncludes } from '@std/assert';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
+import {
+  integer,
+  json,
+  pgTable,
+  serial,
+  text,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
+  AUTH_SECRET,
   createMediaTable,
   media,
   schemaWithMedia,
   TEST_CSRF_SECRET,
 } from './integration_helpers.ts';
-import { createCmsHandler } from '../mod.ts';
+import {
+  createCmsHandler,
+  createJwtPayload,
+  ownedBy,
+  signJwt,
+} from '../mod.ts';
 import { generateCsrfToken } from '../csrf.ts';
 import { generateSourceToken, SOURCE } from '../tokens/mod.ts';
 import { createFormData } from './integration_helpers.ts';
+import type { AuthProvider } from '@hotsauce/auth';
+
+// Import extend module for side effects (patches Drizzle prototypes)
+import '@hotsauce/core/extend';
+
+// Minimal no-op AuthProvider for policy tests
+const noopAuthProvider: AuthProvider = {
+  authenticate() {
+    return Promise.resolve(null);
+  },
+};
+
+// Schema with thumbnail + ownerId for row policy testing
+const ownedMedia = pgTable('owned_media', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 200 }).notNull(),
+  ownerId: integer('owner_id').notNull(),
+  file: json('file').$cms({ file: { accept: 'image/*' }, thumbnail: true }),
+  secretField: text('secret_field'),
+});
+
+const schemaWithOwnedMedia = { ownedMedia };
 
 Deno.test('integration: grid view tests', async (t) => {
   const client = new PGlite();
@@ -650,6 +686,214 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
       // Should have called signDownloadUrl for the valid key
       assertEquals(signCalled, true, 'Should sign valid file key');
       assertEquals(signedKey, 'media/file/1/valid-uuid.jpg');
+    },
+  );
+});
+
+// ============================================================================
+// Grid Policy Tests
+// ============================================================================
+
+Deno.test('integration: grid policy tests', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithOwnedMedia });
+
+  // Create owned_media table
+  await db.execute(sql`
+    CREATE TABLE owned_media (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      owner_id INTEGER NOT NULL,
+      file JSON,
+      secret_field TEXT
+    )
+  `);
+
+  async function resetDb() {
+    await db.execute(sql`TRUNCATE TABLE owned_media RESTART IDENTITY CASCADE`);
+  }
+
+  await t.step(
+    'grid panel denies access to record user does not own (row policy)',
+    async () => {
+      await resetDb();
+
+      // Insert record owned by user 2
+      await db.insert(ownedMedia).values([
+        {
+          title: 'User 2 Photo',
+          ownerId: 2,
+          file: {
+            filename: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+            url: 'https://example.com/photo.jpg',
+          },
+        },
+      ]);
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithOwnedMedia,
+        basePath: '/admin',
+        auth: {
+          secret: AUTH_SECRET,
+          provider: noopAuthProvider,
+        },
+        policies: {
+          owned_media: ownedBy(ownedMedia, 'ownerId'),
+        },
+      });
+
+      // User 1 requests ?selected=1 (record owned by user 2)
+      const user1Payload = createJwtPayload('1');
+      const user1Token = await signJwt(user1Payload, AUTH_SECRET);
+
+      const request = new Request(
+        'http://localhost/admin/owned_media?selected=1',
+        {
+          headers: { Cookie: `cms_token=${user1Token}` },
+        },
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+
+      // Should render grid but no panel (record not accessible)
+      assertStringIncludes(html, 'cms-grid');
+      assertEquals(
+        html.includes('cms-grid-panel'),
+        false,
+        'Panel should not render for inaccessible record',
+      );
+    },
+  );
+
+  await t.step(
+    'grid panel shows record to owner (row policy allows)',
+    async () => {
+      await resetDb();
+
+      // Insert record owned by user 1
+      await db.insert(ownedMedia).values([
+        {
+          title: 'User 1 Photo',
+          ownerId: 1,
+          file: {
+            filename: 'my-photo.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+            url: 'https://example.com/my-photo.jpg',
+          },
+        },
+      ]);
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithOwnedMedia,
+        basePath: '/admin',
+        auth: {
+          secret: AUTH_SECRET,
+          provider: noopAuthProvider,
+        },
+        policies: {
+          owned_media: ownedBy(ownedMedia, 'ownerId'),
+        },
+      });
+
+      // User 1 requests ?selected=1 (their own record)
+      const user1Payload = createJwtPayload('1');
+      const user1Token = await signJwt(user1Payload, AUTH_SECRET);
+
+      const request = new Request(
+        'http://localhost/admin/owned_media?selected=1',
+        {
+          headers: { Cookie: `cms_token=${user1Token}` },
+        },
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+
+      // Should render panel for owned record
+      assertStringIncludes(html, 'cms-grid-panel');
+      assertStringIncludes(html, 'User 1 Photo');
+    },
+  );
+
+  await t.step(
+    'grid panel hides columns per column policy',
+    async () => {
+      await resetDb();
+
+      // Insert record with secret field
+      await db.insert(ownedMedia).values([
+        {
+          title: 'Photo with Secret',
+          ownerId: 1,
+          file: {
+            filename: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+            url: 'https://example.com/photo.jpg',
+          },
+          secretField: 'TOP SECRET DATA',
+        },
+      ]);
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithOwnedMedia,
+        basePath: '/admin',
+        auth: {
+          secret: AUTH_SECRET,
+          provider: noopAuthProvider,
+        },
+        policies: {
+          owned_media: {
+            row: ownedBy(ownedMedia, 'ownerId'),
+            columns: {
+              secretField: { read: () => false }, // Always hidden
+            },
+          },
+        },
+      });
+
+      // User 1 requests their record
+      const user1Payload = createJwtPayload('1');
+      const user1Token = await signJwt(user1Payload, AUTH_SECRET);
+
+      const request = new Request(
+        'http://localhost/admin/owned_media?selected=1',
+        {
+          headers: { Cookie: `cms_token=${user1Token}` },
+        },
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+
+      // Should render panel
+      assertStringIncludes(html, 'cms-grid-panel');
+      assertStringIncludes(html, 'Photo with Secret');
+
+      // secretField should NOT appear (column policy hides it)
+      assertEquals(
+        html.includes('TOP SECRET DATA'),
+        false,
+        'Secret field value should be hidden',
+      );
+      assertEquals(
+        html.includes('secret_field'),
+        false,
+        'Secret field name should not appear in form',
+      );
     },
   );
 });
