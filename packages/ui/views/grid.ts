@@ -69,7 +69,7 @@ export interface GridPanelData {
   sourceToken: string;
   /** Whether form needs multipart encoding */
   multipart?: boolean;
-  /** URL to return to after save/delete (grid URL with ?selected removed) */
+  /** URL to return to after save/delete */
   returnUrl: string;
 }
 
