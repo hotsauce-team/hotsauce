@@ -102,7 +102,7 @@ export function resolveThumbnailUrl(
 
 /**
  * Get a display label for a grid item from the record.
- * Tries: alt text, filename from FileReference, or the record ID.
+ * Tries: filename from FileReference, or the record ID.
  */
 export function getGridItemLabel(
   record: Record<string, unknown>,
