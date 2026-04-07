@@ -394,7 +394,6 @@ body {
 }
 
 /* Grid + Panel Layout */
-.cms-grid-content { }
 .cms-grid-panel-layout {
   display: flex;
   gap: 1.5rem;
