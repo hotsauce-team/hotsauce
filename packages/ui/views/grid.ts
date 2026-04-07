@@ -85,7 +85,7 @@ export function resolveThumbnailUrl(
 ): string | null {
   if (fieldType === 'file') {
     if (!isValidFileReference(value)) return null;
-    if (fileUrl) return fileUrl;
+    if (fileUrl) return getSafeUrl(fileUrl);
     const safeUrl = value.url ? getSafeUrl(value.url) : null;
     if (safeUrl) return safeUrl;
     if (value.data) {
