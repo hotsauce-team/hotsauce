@@ -274,11 +274,11 @@ layout({
 ```ts
 interface GridViewOptions {
   baseUrl: string; // e.g. "/admin/media"
-  primaryKey: string; // PK property name
+  primaryKey?: string; // PK property name (defaults to "id")
   thumbnailField: CMSField; // Field with thumbnail: true
   currentView: 'grid' | 'table';
   currentUrl: string; // Current page URL (for toggle links)
-  selectedId?: string; // Currently selected record
+  selectedId?: string | number; // Currently selected record
 }
 ```
 
