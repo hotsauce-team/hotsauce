@@ -18,8 +18,11 @@ export const cmsStylesheet: string = `
   --cms-gray-100: #f3f4f6;
   --cms-gray-200: #e5e7eb;
   --cms-gray-300: #d1d5db;
+  --cms-gray-400: #9ca3af;
   --cms-gray-500: #6b7280;
+  --cms-gray-600: #4b5563;
   --cms-gray-700: #374151;
+  --cms-gray-800: #1f2937;
   --cms-gray-900: #111827;
   --cms-radius: 6px;
   --cms-shadow: 0 1px 3px rgba(0,0,0,0.1);
