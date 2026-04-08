@@ -25,6 +25,23 @@ import type { Serializable } from '@hotsauce/workers';
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Append a `return` query param to a URL, handling fragments correctly.
+ * Uses URL API to avoid breaking URLs with existing query params or fragments.
+ */
+function appendReturnParam(href: string, returnUrl: string): string {
+  try {
+    const url = new URL(href);
+    url.searchParams.set('return', returnUrl);
+    return url.href;
+  } catch {
+    // Relative URL - parse with dummy base, then reconstruct
+    const url = new URL(href, 'http://localhost');
+    url.searchParams.set('return', returnUrl);
+    return `${url.pathname}${url.search}${url.hash}`;
+  }
+}
+
+/**
  * Convert CMSField to serializable UIFieldInfo for plugin hooks
  */
 function toUIFieldInfo(field: CMSField): UIFieldInfo {
@@ -266,8 +283,7 @@ export async function buildGridPanelData(
   // can redirect back to the grid panel after completing their flow
   for (const override of Object.values(fieldOverrides)) {
     if (override?.link?.href) {
-      const sep = override.link.href.includes('?') ? '&' : '?';
-      override.link.href += `${sep}return=${encodeURIComponent(returnUrl)}`;
+      override.link.href = appendReturnParam(override.link.href, returnUrl);
     }
   }
 
