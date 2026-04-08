@@ -226,10 +226,13 @@ export function gridDetailPanel(
   const closeHref = `${closeUrl.pathname}${closeUrl.search}`;
 
   // Thumbnail preview
+  const altText = panel.fileMeta?.filename
+    ? `Preview of ${panel.fileMeta.filename}`
+    : `Preview for record ${panel.id}`;
   const previewHtml = panel.thumbnailUrl
-    ? `<img src="${
-      escapeHtml(panel.thumbnailUrl)
-    }" alt="" class="cms-panel-preview" />`
+    ? `<img src="${escapeHtml(panel.thumbnailUrl)}" alt="${
+      escapeHtml(altText)
+    }" class="cms-panel-preview" />`
     : '<div class="cms-panel-preview-placeholder">No image</div>';
 
   // File metadata

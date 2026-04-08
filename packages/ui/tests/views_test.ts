@@ -926,6 +926,31 @@ Deno.test('gridDetailPanel: renders close button', () => {
   assertStringIncludes(result, 'href="/admin/media"');
 });
 
+Deno.test('gridDetailPanel: uses filename in alt text when available', () => {
+  const panel = createMockPanelData({
+    fileMeta: {
+      filename: 'vacation.jpg',
+      contentType: 'image/jpeg',
+      size: 1024,
+    },
+  });
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'alt="Preview of vacation.jpg"');
+});
+
+Deno.test('gridDetailPanel: uses record ID in alt text when no fileMeta', () => {
+  const panel = createMockPanelData({
+    id: 42,
+    fileMeta: undefined,
+  });
+  const options = createGridOptions({ selectedId: 42 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'alt="Preview for record 42"');
+});
+
 Deno.test('gridDetailPanel: renders placeholder when no thumbnail', () => {
   const panel = createMockPanelData({
     thumbnailUrl: null,
