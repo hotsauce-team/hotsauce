@@ -38,15 +38,18 @@ import { editView, html, layout, raw } from '@hotsauce/ui';
 
 Tagged template literal with automatic XSS escaping.
 
-| Export                     | Purpose                                  |
-| -------------------------- | ---------------------------------------- |
-| `html`                     | Tagged template that auto-escapes values |
-| `raw(string)`              | Mark trusted HTML (skip escaping)        |
-| `escapeHtml(value)`        | Manual HTML escaping                     |
-| `attrs(object)`            | Build attribute strings safely           |
-| `when(condition, content)` | Conditional rendering helper             |
-| `join(items, separator)`   | Join with SafeHtml support               |
-| `SafeHtml`                 | Class for pre-escaped content            |
+| Export                     | Purpose                                   |
+| -------------------------- | ----------------------------------------- |
+| `html`                     | Tagged template that auto-escapes values  |
+| `raw(string)`              | Mark trusted HTML (skip escaping)         |
+| `escapeHtml(value)`        | Manual HTML escaping                      |
+| `escapeUrlPath(segment)`   | Percent-encode URL path segments          |
+| `getSafeUrl(url)`          | Validate URL (blocks `javascript:` etc.)  |
+| `attrs(object)`            | Build attribute strings safely            |
+| `when(condition, content)` | Conditional rendering helper              |
+| `join(items, separator)`   | Join with SafeHtml support                |
+| `formatFileSize(bytes)`    | Human-readable file size (e.g., "1.5 MB") |
+| `SafeHtml`                 | Class for pre-escaped content             |
 
 **Example:**
 
