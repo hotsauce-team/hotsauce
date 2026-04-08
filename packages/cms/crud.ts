@@ -679,7 +679,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     // Table view (default for non-thumbnail tables, or explicit ?view=table)
     const listOptions: ListViewOptions = {
       baseUrl: cmsUrl(basePath, table.name),
-      primaryKey: getPrimaryKeyColumn(table).name,
+      primaryKey: getPrimaryKeyColumn(table).propertyName,
       showEdit: true,
       showDelete: true,
       showView: true,
