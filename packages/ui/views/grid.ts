@@ -1,6 +1,13 @@
 // Grid view - thumbnail grid for tables with visual content
 
-import { attrs, escapeHtml, getSafeUrl, html, raw } from '../html.ts';
+import {
+  attrs,
+  escapeHtml,
+  formatFileSize,
+  getSafeUrl,
+  html,
+  raw,
+} from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import {
@@ -324,13 +331,6 @@ function renderPanelExtraContent(panel: GridPanelData): string {
   }
 
   return parts.join('\n');
-}
-
-/** Format file size in human-readable form */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**

@@ -1,6 +1,6 @@
 // Form field input renderers by field type
 
-import { attrs, getSafeUrl, html, raw } from '../html.ts';
+import { attrs, formatFileSize, getSafeUrl, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import {
   FILE_DEFAULT_ACCEPT,
@@ -537,15 +537,6 @@ export function fileInput(
       </p>
     </div>
   `;
-}
-
-/**
- * Format file size for display
- */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**
