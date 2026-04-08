@@ -670,6 +670,34 @@ Deno.test('resolveThumbnailUrl: allows SVG when previewSvg is true', () => {
   );
 });
 
+Deno.test('resolveThumbnailUrl: falls back to value.url when fileUrl is invalid', () => {
+  const ref = {
+    filename: 'test.jpg',
+    contentType: 'image/jpeg',
+    size: 1000,
+    url: 'https://cdn.example.com/test.jpg',
+  };
+  // fileUrl with javascript: scheme fails getSafeUrl validation
+  assertEquals(
+    resolveThumbnailUrl(ref, 'file', 'javascript:alert(1)'),
+    'https://cdn.example.com/test.jpg',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: falls back to data URI when fileUrl is invalid', () => {
+  const ref = {
+    filename: 'test.jpg',
+    contentType: 'image/jpeg',
+    size: 1000,
+    data: 'abc123',
+  };
+  // Invalid fileUrl, should fall back to data URI
+  assertEquals(
+    resolveThumbnailUrl(ref, 'file', 'javascript:alert(1)'),
+    'data:image/jpeg;base64,abc123',
+  );
+});
+
 Deno.test('viewToggle: renders with grid active', () => {
   const result = viewToggle('grid', '/admin/media');
   assertStringIncludes(result, 'cms-view-toggle-active');

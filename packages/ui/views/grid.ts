@@ -90,7 +90,11 @@ export function resolveThumbnailUrl(
     // Skip SVG unless explicitly opted-in (matches fileInput behavior)
     const isSvg = value.contentType === 'image/svg+xml';
     if (isSvg && !options?.previewSvg) return null;
-    if (fileUrl) return getSafeUrl(fileUrl);
+    // Try fileUrl first, but fall back if it fails validation
+    if (fileUrl) {
+      const safeFileUrl = getSafeUrl(fileUrl);
+      if (safeFileUrl) return safeFileUrl;
+    }
     const safeUrl = value.url ? getSafeUrl(value.url) : null;
     if (safeUrl) return safeUrl;
     if (value.data) {
