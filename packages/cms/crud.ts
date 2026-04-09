@@ -86,8 +86,8 @@ import {
   validateHiddenRequiredColumns,
 } from './policies/mod.ts';
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
-import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
-import type { CMSField } from '@hotsauce/core';
+import type { UIRenderFieldContext } from './plugins/types.ts';
+import { toUIFieldInfo } from './ui-field-info.ts';
 import {
   getFileKeyPrefix,
   getThumbnailField,
@@ -263,27 +263,6 @@ async function cleanupOrphanFileObjects(
       onError?.(error as Error);
     }
   }
-}
-
-/**
- * Convert CMSField to serializable UIFieldInfo for plugin hooks
- */
-function toUIFieldInfo(field: CMSField): UIFieldInfo {
-  const plugins = field.column.cmsOptions?.plugins as
-    | Record<string, unknown>
-    | undefined;
-  return {
-    name: field.column.name,
-    label: field.label,
-    fieldType: field.fieldType,
-    columnType: field.column.columnType,
-    required: field.column.notNull && !field.column.hasDefault,
-    readOnly: field.readOnly ?? false,
-    // Pass all plugin configs; executor extracts per-plugin
-    _plugins: plugins as
-      | Record<string, import('@hotsauce/workers').Serializable>
-      | undefined,
-  };
 }
 
 /**

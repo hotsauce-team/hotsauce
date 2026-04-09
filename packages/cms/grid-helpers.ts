@@ -17,8 +17,8 @@ import type {
 } from './policies/mod.ts';
 import { generateSourceToken, SOURCE } from './tokens/mod.ts';
 import type { ResolvedCmsOptions, RouteContext } from './types.ts';
-import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
-import type { Serializable } from '@hotsauce/workers';
+import type { UIRenderFieldContext } from './plugins/types.ts';
+import { toUIFieldInfo } from './ui-field-info.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Local utility functions (avoid circular imports from crud.ts)
@@ -40,24 +40,6 @@ export function appendReturnParam(href: string, returnUrl: string): string {
     url.searchParams.set('return', returnUrl);
     return `${url.pathname}${url.search}${url.hash}`;
   }
-}
-
-/**
- * Convert CMSField to serializable UIFieldInfo for plugin hooks
- */
-function toUIFieldInfo(field: CMSField): UIFieldInfo {
-  const plugins = field.column.cmsOptions?.plugins as
-    | Record<string, unknown>
-    | undefined;
-  return {
-    name: field.column.name,
-    label: field.label,
-    fieldType: field.fieldType,
-    columnType: field.column.columnType,
-    required: field.column.notNull && !field.column.hasDefault,
-    readOnly: field.readOnly ?? false,
-    _plugins: plugins as Record<string, Serializable> | undefined,
-  };
 }
 
 /**
