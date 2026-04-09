@@ -65,7 +65,7 @@ import {
   handleUpdate,
 } from './crud.ts';
 import { handleStylesheet } from './styles.ts';
-import { handleScript } from './scripts.ts';
+import { handlePickerScript, handleScript } from './scripts.ts';
 
 // Auth imports from @hotsauce/auth
 import {
@@ -246,7 +246,13 @@ export { cmsStylesheet, cssResponse, handleStylesheet } from './styles.ts';
 // ─────────────────────────────────────────────────────────────
 // Scripts - JavaScript served as external file
 // ─────────────────────────────────────────────────────────────
-export { cmsScript, handleScript, jsResponse } from './scripts.ts';
+export {
+  cmsScript,
+  handlePickerScript,
+  handleScript,
+  jsResponse,
+  pickerScript,
+} from './scripts.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Policies - Row-level security for fine-grained authorization
@@ -998,6 +1004,13 @@ export function createCmsHandler(options: CmsOptions): Handler {
       pathname === `${opts.basePath}/admin.js` && request.method === 'GET'
     ) {
       return handleScript();
+    }
+
+    // Serve picker script at {basePath}/picker.js
+    if (
+      pathname === `${opts.basePath}/picker.js` && request.method === 'GET'
+    ) {
+      return handlePickerScript();
     }
 
     // ─────────────────────────────────────────────────────────────

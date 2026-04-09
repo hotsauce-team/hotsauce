@@ -13,6 +13,243 @@ import { DropZone, React } from '@hotsauce/plugins/puck/client/globals';
 import type { ComponentConfig, PuckProps } from '@hotsauce/plugins/puck/types';
 
 // ============================================================================
+// Media Reference type (matches CMS media table structure)
+// ============================================================================
+
+/**
+ * Reference to a media record stored in the CMS.
+ * Used by Puck components to reference images from the media table.
+ */
+type MediaReference = {
+  /** Primary key from the media table */
+  id: number;
+  /** Resolved URL for display (may be presigned S3 URL or data: URI) */
+  url: string;
+  /** Alt text for accessibility */
+  alt?: string;
+  /** Original filename */
+  filename?: string;
+};
+
+// ============================================================================
+// ImagePicker - Custom field component for selecting images from CMS media
+// ============================================================================
+
+/**
+ * Custom Puck field component that opens a media picker dialog.
+ *
+ * Opens the CMS grid view in an iframe with `?picker=true` mode.
+ * When the user clicks an image, the picker posts a `cms:media-selected`
+ * message containing the record data and resolved URL.
+ *
+ * @example
+ * ```tsx
+ * // In a Puck component config:
+ * fields: {
+ *   image: {
+ *     type: 'custom',
+ *     label: 'Image',
+ *     render: ({ value, onChange }) => (
+ *       <ImagePickerField value={value} onChange={onChange} />
+ *     ),
+ *   },
+ * }
+ * ```
+ */
+function ImagePickerField({
+  value,
+  onChange,
+  basePath = '/admin',
+}: {
+  value: MediaReference | null;
+  onChange: (value: MediaReference | null) => void;
+  /** Base path where the CMS is mounted (default: '/admin') */
+  basePath?: string;
+}) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const dialogRef = React.useRef<HTMLDialogElement>(null);
+
+  // Handle postMessage from picker iframe
+  React.useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (event.data?.type === 'cms:media-selected') {
+        const record = event.data.record;
+        const file = record?.file;
+        // Use resolved URL from picker (handles S3 presigned URLs)
+        // Fall back to file.url or data: URI for DB-stored files
+        const url = event.data.url ||
+          file?.url ||
+          (file?.data ? `data:${file.contentType};base64,${file.data}` : null);
+
+        if (url) {
+          onChange({
+            id: record.id,
+            url,
+            alt: record.alt || '',
+            filename: file?.filename || '',
+          });
+        }
+        setIsOpen(false);
+        dialogRef.current?.close();
+      }
+    }
+
+    if (isOpen) {
+      // deno-lint-ignore no-window no-window-prefix
+      window.addEventListener('message', handleMessage);
+      // deno-lint-ignore no-window no-window-prefix
+      return () => window.removeEventListener('message', handleMessage);
+    }
+  }, [isOpen, onChange]);
+
+  const openPicker = () => {
+    setIsOpen(true);
+    dialogRef.current?.showModal();
+  };
+
+  const clearSelection = () => {
+    onChange(null);
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+      {value?.url
+        ? (
+          <div style={{ position: 'relative' }}>
+            <img
+              src={value.url}
+              alt={value.alt || ''}
+              style={{
+                width: '100%',
+                maxHeight: '200px',
+                objectFit: 'contain',
+                borderRadius: '4px',
+                backgroundColor: '#f0f0f0',
+              }}
+            />
+            <div style={{ marginTop: '4px', fontSize: '12px', color: '#666' }}>
+              {value.filename || `ID: ${value.id}`}
+            </div>
+          </div>
+        )
+        : (
+          <div
+            style={{
+              width: '100%',
+              height: '100px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#f5f5f5',
+              borderRadius: '4px',
+              color: '#999',
+            }}
+          >
+            No image selected
+          </div>
+        )}
+
+      <div style={{ display: 'flex', gap: '8px' }}>
+        <button
+          type='button'
+          onClick={openPicker}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            backgroundColor: '#0066cc',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            fontSize: '14px',
+          }}
+        >
+          {value ? 'Change Image' : 'Pick Image'}
+        </button>
+        {value && (
+          <button
+            type='button'
+            onClick={clearSelection}
+            style={{
+              padding: '8px 12px',
+              backgroundColor: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '14px',
+            }}
+          >
+            Remove
+          </button>
+        )}
+      </div>
+
+      <dialog
+        ref={dialogRef}
+        style={{
+          width: '90vw',
+          maxWidth: '900px',
+          height: '80vh',
+          padding: 0,
+          border: 'none',
+          borderRadius: '8px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+        }}
+        onClose={() => setIsOpen(false)}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '12px 16px',
+              borderBottom: '1px solid #eee',
+              backgroundColor: '#f9f9f9',
+            }}
+          >
+            <strong>Select Image</strong>
+            <button
+              type='button'
+              onClick={() => {
+                setIsOpen(false);
+                dialogRef.current?.close();
+              }}
+              style={{
+                padding: '4px 12px',
+                border: '1px solid #ccc',
+                borderRadius: '4px',
+                backgroundColor: 'white',
+                cursor: 'pointer',
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+          {isOpen && (
+            <iframe
+              src={`${basePath}/media?picker=true`}
+              style={{
+                flex: 1,
+                width: '100%',
+                border: 'none',
+              }}
+            />
+          )}
+        </div>
+      </dialog>
+    </div>
+  );
+}
+
+// ============================================================================
 // Heading
 // ============================================================================
 
@@ -136,14 +373,22 @@ const Button: ComponentConfig = {
 };
 
 // ============================================================================
-// Image
+// Image - Uses ImagePickerField to select images from CMS media table
 // ============================================================================
 
 const Image: ComponentConfig = {
   label: 'Image',
   fields: {
-    url: { type: 'text', label: 'Image URL' },
-    alt: { type: 'text', label: 'Alt text' },
+    media: {
+      type: 'custom',
+      label: 'Image',
+      render: ({ value, onChange }) => (
+        <ImagePickerField
+          value={value as MediaReference | null}
+          onChange={onChange}
+        />
+      ),
+    },
     aspectRatio: {
       type: 'select',
       label: 'Aspect Ratio',
@@ -156,11 +401,11 @@ const Image: ComponentConfig = {
     },
   },
   defaultProps: {
-    url: 'https://placehold.co/600x400',
-    alt: 'Placeholder image',
+    media: null,
     aspectRatio: 'auto',
   },
-  render: ({ url, alt, aspectRatio }) => {
+  render: ({ media, aspectRatio }) => {
+    const m = media as MediaReference | null;
     const ratioMod = aspectRatio === '16:9'
       ? 'image--ratio-16-9'
       : aspectRatio === '4:3'
@@ -168,10 +413,29 @@ const Image: ComponentConfig = {
       : aspectRatio === '1:1'
       ? 'image--ratio-1-1'
       : 'image--ratio-auto';
+
+    if (!m?.url) {
+      return (
+        <div
+          className={`image image--placeholder ${ratioMod}`}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#f0f0f0',
+            color: '#666',
+            minHeight: '150px',
+          }}
+        >
+          No image selected
+        </div>
+      );
+    }
+
     return (
       <img
-        src={url as string}
-        alt={alt as string}
+        src={m.url}
+        alt={m.alt || ''}
         className={`image ${ratioMod}`}
       />
     );

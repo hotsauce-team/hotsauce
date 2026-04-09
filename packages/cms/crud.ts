@@ -7,7 +7,12 @@ import type { IntrospectedTable } from '@hotsauce/core';
 
 import { alert, layout, pagination } from '@hotsauce/ui';
 import { listView } from '@hotsauce/ui';
-import { gridView, resolveThumbnailUrl } from '@hotsauce/ui';
+import {
+  gridView,
+  pickerGridView,
+  pickerLayout,
+  resolveThumbnailUrl,
+} from '@hotsauce/ui';
 import type {
   GridPanelData,
   GridThumbnail,
@@ -563,6 +568,73 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     : 'table' as const;
 
   const pkCol = getPrimaryKeyColumn(table);
+
+  // Picker mode: minimal grid UI for iframe embedding (e.g., Puck media picker)
+  const pickerMode = url.searchParams.get('picker') === 'true';
+  if (pickerMode && thumbnailField) {
+    // Build thumbnails with full record data for postMessage
+    const thumbnails: GridThumbnail[] = await Promise.all(
+      records.map(async (record) => {
+        const id = record[pkCol.propertyName] as string | number;
+        const value = record[thumbnailField.column.propertyName];
+        const fileUrl = await signThumbnailUrl(
+          thumbnailField,
+          value,
+          options,
+          request,
+          authUser,
+          table.name,
+          id,
+        );
+
+        const thumbnailUrl = resolveThumbnailUrl(
+          value,
+          thumbnailField.fieldType,
+          fileUrl,
+        );
+
+        const label = isValidFileReference(value) ? value.filename : String(id);
+
+        return { id, thumbnailUrl, label, record };
+      }),
+    );
+
+    const gridOptions: GridViewOptions = {
+      baseUrl: cmsUrl(basePath, table.name),
+      primaryKey: pkCol.propertyName,
+      thumbnailField,
+      currentView: 'grid',
+      currentUrl: url.href,
+      pickerMode: true,
+      tableName: table.name,
+    };
+
+    const pickerContent = pickerGridView(
+      formatTableName(table.name),
+      records,
+      thumbnails,
+      gridOptions,
+    );
+
+    const pageHtml = pickerLayout(pickerContent, {
+      title: formatTableName(table.name),
+      stylesheetUrl: cmsUrl(basePath, 'styles.css'),
+      scriptUrl: cmsUrl(basePath, 'picker.js'),
+    });
+
+    // Allow iframe embedding with frame-ancestors
+    const headers: Record<string, string> = {
+      ...ctx.options.securityHeaders,
+      'X-Frame-Options': 'SAMEORIGIN',
+    };
+    // Update CSP to allow framing from same origin
+    if (headers['Content-Security-Policy']) {
+      headers['Content-Security-Policy'] = headers['Content-Security-Policy']
+        .replace(/frame-ancestors[^;]*(;|$)/g, "frame-ancestors 'self'$1");
+    }
+
+    return htmlResponse(pageHtml, 200, headers);
+  }
 
   // Build content
   let content = '';

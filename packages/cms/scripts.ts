@@ -1,10 +1,10 @@
 // Script route handler
 // JavaScript content lives in @hotsauce/ui, this file handles HTTP serving
 
-import { cmsScript } from '@hotsauce/ui';
+import { cmsScript, pickerScript } from '@hotsauce/ui';
 
 // Re-export for convenience
-export { cmsScript } from '@hotsauce/ui';
+export { cmsScript, pickerScript } from '@hotsauce/ui';
 
 /**
  * Create a JavaScript response with caching headers
@@ -24,4 +24,11 @@ export function jsResponse(js: string): Response {
  */
 export function handleScript(): Response {
   return jsResponse(cmsScript);
+}
+
+/**
+ * Handle picker script request at {basePath}/picker.js
+ */
+export function handlePickerScript(): Response {
+  return jsResponse(pickerScript);
 }

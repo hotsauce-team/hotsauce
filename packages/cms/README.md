@@ -197,6 +197,8 @@ Internal handlers for each CRUD operation. These are called by the main handler.
 
 > **Grid view:** Tables with a `thumbnail: true` column automatically use a thumbnail grid instead of a table. Users can toggle between grid and table via `?view=grid` / `?view=table`. Clicking a grid item opens an RHS detail panel (`?selected=<id>`) for inline editing without leaving the list.
 
+> **Picker mode:** Add `?picker=true` to the list URL to get a minimal iframe-embeddable grid (no sidebar, navigation, or create button). Clicking a grid item posts a `cms:media-selected` message to `window.parent`. This enables media selection in visual editors like Puck. See the `@hotsauce/ui` README for postMessage shape details.
+
 ### `http.ts` - HTTP Response Helpers
 
 | Export                            | Purpose                       |
@@ -489,6 +491,20 @@ CSS served as an external file for strict CSP compliance.
 | `cssResponse(css)`   | Create a CSS response with caching headers |
 
 The stylesheet is automatically served at `{basePath}/styles.css`. This enables strict Content Security Policy (`style-src 'self'`) without requiring nonces.
+
+### `scripts.ts` - JavaScript Assets
+
+JavaScript for interactive features, served as external files for CSP compliance.
+
+| Export                 | Purpose                                   |
+| ---------------------- | ----------------------------------------- |
+| `handleScript()`       | Main admin.js (sidebar toggle, etc.)      |
+| `handlePickerScript()` | Picker JS (postMessage for iframe picker) |
+
+Routes:
+
+- `{basePath}/admin.js` — Main admin JavaScript
+- `{basePath}/picker.js` — postMessage handler for picker mode
 
 ## Security
 

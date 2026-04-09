@@ -78,6 +78,9 @@ export {
   gridDetailPanel,
   gridItems,
   gridView,
+  pickerGridView,
+  pickerLayout,
+  pickerScript,
   resolveThumbnailUrl,
 } from './views/grid.ts';
 

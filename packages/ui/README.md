@@ -191,6 +191,9 @@ Complete page views for CRUD operations.
 | `viewToggle(opts)`                                | Grid ↔ table toggle buttons      |
 | `resolveThumbnailUrl(value, fieldType, fileUrl?)` | Extract image URL from value     |
 | `getGridItemLabel(record, field, primaryKey)`     | Label for a grid thumbnail       |
+| `pickerGridView(title, records, thumbs, opts)`    | Minimal grid for picker iframe   |
+| `pickerLayout(content, opts)`                     | Minimal HTML for picker iframe   |
+| `pickerScript`                                    | postMessage click handler JS     |
 
 **Types:**
 
@@ -240,6 +243,49 @@ const html = editView({
   fields: postFields,
   record: post,
   action: '/admin/posts/1',
+});
+```
+
+#### Picker Mode (Iframe Embedding)
+
+The grid view supports a **picker mode** for embedding in iframes (e.g., media selection in Puck visual editor). When `pickerMode: true`:
+
+- Grid items render as `<button>` instead of `<a>` links
+- Clicking posts a message to the parent window via `postMessage()`
+- Minimal layout with no sidebar or navigation
+
+**postMessage shape:**
+
+```ts
+{
+  type: 'cms:media-selected',
+  table: 'media',           // Table name
+  id: '123',                // Primary key
+  url: 'https://...',       // Resolved thumbnail URL (handles S3 presigned URLs)
+  record: { ... }           // Full record data
+}
+```
+
+**Example:**
+
+```ts
+import { pickerGridView, pickerLayout, pickerScript } from '@hotsauce/ui';
+
+// Render minimal picker grid
+const content = pickerGridView('Media', records, thumbnails, {
+  baseUrl: '/admin/media',
+  thumbnailField,
+  currentView: 'grid',
+  currentUrl: url.href,
+  pickerMode: true,
+  tableName: 'media',
+});
+
+// Wrap in minimal layout with external script
+const html = pickerLayout(content, {
+  title: 'Media',
+  stylesheetUrl: '/admin/styles.css',
+  scriptUrl: '/admin/picker.js', // Serves pickerScript
 });
 ```
 
