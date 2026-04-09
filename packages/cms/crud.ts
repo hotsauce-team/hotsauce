@@ -591,16 +591,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Fetch relation data for FK columns
   const relationData = await fetchAllRelationOptions(options, table);
 
-  // Fetch M2M display data for all records
   const pkCol = getPrimaryKeyColumn(table);
-  const recordIds = records.map((r) =>
-    r[pkCol.propertyName] as string | number
-  );
-  const m2mDisplayData = await fetchManyToManyDisplayData(
-    options,
-    table,
-    recordIds,
-  );
 
   // Generate CSRF token for delete forms
   const csrfToken = await generateCsrfToken(options.csrfSecret);
@@ -677,6 +668,16 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     );
   } else {
     // Table view (default for non-thumbnail tables, or explicit ?view=table)
+    // Fetch M2M display data only for table view (grid panel fetches its own)
+    const recordIds = records.map((r) =>
+      r[pkCol.propertyName] as string | number
+    );
+    const m2mDisplayData = await fetchManyToManyDisplayData(
+      options,
+      table,
+      recordIds,
+    );
+
     const listOptions: ListViewOptions = {
       baseUrl: cmsUrl(basePath, table.name),
       primaryKey: getPrimaryKeyColumn(table).propertyName,
