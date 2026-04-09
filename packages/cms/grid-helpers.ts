@@ -3,7 +3,7 @@
 import type { Table } from 'drizzle-orm';
 
 import type { CMSField, IntrospectedTable } from '@hotsauce/core';
-import { isValidFileKey, isValidFileReference } from '@hotsauce/core';
+import { isValidFileReference } from '@hotsauce/core';
 
 import { resolveThumbnailUrl } from '@hotsauce/ui';
 import type { FieldUIOverride, GridPanelData } from '@hotsauce/ui';
@@ -16,7 +16,7 @@ import type {
   PolicyApplicationResult,
 } from './policies/mod.ts';
 import { generateSourceToken, SOURCE } from './tokens/mod.ts';
-import type { ResolvedCmsOptions, RouteContext } from './types.ts';
+import type { RouteContext } from './types.ts';
 import type { UIRenderFieldContext } from './plugins/types.ts';
 import { toUIFieldInfo } from './ui-field-info.ts';
 
@@ -58,56 +58,6 @@ function getPluginUser(
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Sign a download URL for a thumbnail's FileReference value.
- * Validates the key belongs to the expected table/column/record before signing.
- * Returns the signed URL or undefined if not applicable or key is invalid.
- */
-export async function signThumbnailUrl(
-  thumbnailField: CMSField,
-  value: unknown,
-  options: ResolvedCmsOptions,
-  request: Request,
-  authUser: RouteContext['authUser'],
-  tableName: string,
-  recordId: string | number,
-): Promise<string | undefined> {
-  if (
-    thumbnailField.fieldType === 'file' &&
-    isValidFileReference(value) && value.key && options.storage
-  ) {
-    // Validate key belongs to this table/column/record (defense-in-depth)
-    if (
-      !isValidFileKey(
-        value.key,
-        tableName,
-        thumbnailField.column.name,
-        recordId,
-      )
-    ) {
-      return undefined;
-    }
-    const storageId = value.storage ?? options.storage.defaultObjectStorageId;
-    if (storageId) {
-      const provider = options.storage.instances.get(storageId);
-      if (provider?.signDownloadUrl) {
-        try {
-          return await provider.signDownloadUrl({
-            storage: storageId,
-            key: value.key,
-            filename: value.filename,
-            request,
-            user: authUser ? { sub: authUser.id, role: authUser.role } : null,
-          });
-        } catch {
-          // Fall through
-        }
-      }
-    }
-  }
-  return undefined;
-}
-
-/**
  * Build the GridPanelData for the RHS detail panel.
  * Returns undefined if the selected record doesn't exist or is not accessible.
  */
@@ -121,7 +71,7 @@ export async function buildGridPanelData(
   relationData: Record<string, import('@hotsauce/ui').RelationOption[]>,
   currentUrl: URL,
 ): Promise<GridPanelData | undefined> {
-  const { request, options, authUser } = ctx;
+  const { options } = ctx;
   const drizzleTable = table.table;
 
   // Fetch the selected record with policy condition
@@ -179,15 +129,8 @@ export async function buildGridPanelData(
 
   // Resolve thumbnail URL for the panel preview
   const thumbValue = transformedRecord[thumbnailField.column.propertyName];
-  const fileUrl = await signThumbnailUrl(
-    thumbnailField,
-    thumbValue,
-    options,
-    request,
-    authUser,
-    table.name,
-    selectedId,
-  );
+  const fileUrl =
+    `${options.basePath}/files/${table.name}/${thumbnailField.column.name}/${selectedId}`;
   const thumbnailUrl = resolveThumbnailUrl(
     thumbValue,
     thumbnailField.fieldType,

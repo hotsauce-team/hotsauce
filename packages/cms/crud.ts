@@ -99,7 +99,7 @@ import {
   isValidFileKey,
   isValidFileReference,
 } from '@hotsauce/core';
-import { buildGridPanelData, signThumbnailUrl } from './grid-helpers.ts';
+import { buildGridPanelData } from './grid-helpers.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Storage deletion helpers
@@ -573,31 +573,24 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   const pickerMode = url.searchParams.get('picker') === 'true';
   if (pickerMode && thumbnailField) {
     // Build thumbnails with full record data for postMessage
-    const thumbnails: GridThumbnail[] = await Promise.all(
-      records.map(async (record) => {
-        const id = record[pkCol.propertyName] as string | number;
-        const value = record[thumbnailField.column.propertyName];
-        const fileUrl = await signThumbnailUrl(
-          thumbnailField,
-          value,
-          options,
-          request,
-          authUser,
-          table.name,
-          id,
-        );
+    const thumbnails: GridThumbnail[] = records.map((record) => {
+      const id = record[pkCol.propertyName] as string | number;
+      const value = record[thumbnailField.column.propertyName];
+      // Proxy URL — the /files/ route serves both DB-stored and S3 files.
+      // Avoids inline base64 (smaller HTML, browser-cacheable).
+      const fileUrl =
+        `${basePath}/files/${table.name}/${thumbnailField.column.name}/${id}`;
 
-        const thumbnailUrl = resolveThumbnailUrl(
-          value,
-          thumbnailField.fieldType,
-          fileUrl,
-        );
+      const thumbnailUrl = resolveThumbnailUrl(
+        value,
+        thumbnailField.fieldType,
+        fileUrl,
+      );
 
-        const label = isValidFileReference(value) ? value.filename : String(id);
+      const label = isValidFileReference(value) ? value.filename : String(id);
 
-        return { id, thumbnailUrl, label, record };
-      }),
-    );
+      return { id, thumbnailUrl, label, record };
+    });
 
     const gridOptions: GridViewOptions = {
       baseUrl: cmsUrl(basePath, table.name),
@@ -647,31 +640,22 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
   if (viewMode === 'grid' && thumbnailField) {
     // Resolve thumbnail URLs for each record
-    const thumbnails: GridThumbnail[] = await Promise.all(
-      records.map(async (record) => {
-        const id = record[pkCol.propertyName] as string | number;
-        const value = record[thumbnailField.column.propertyName];
-        const fileUrl = await signThumbnailUrl(
-          thumbnailField,
-          value,
-          options,
-          request,
-          authUser,
-          table.name,
-          id,
-        );
+    const thumbnails: GridThumbnail[] = records.map((record) => {
+      const id = record[pkCol.propertyName] as string | number;
+      const value = record[thumbnailField.column.propertyName];
+      const fileUrl =
+        `${basePath}/files/${table.name}/${thumbnailField.column.name}/${id}`;
 
-        const thumbnailUrl = resolveThumbnailUrl(
-          value,
-          thumbnailField.fieldType,
-          fileUrl,
-        );
+      const thumbnailUrl = resolveThumbnailUrl(
+        value,
+        thumbnailField.fieldType,
+        fileUrl,
+      );
 
-        const label = isValidFileReference(value) ? value.filename : String(id);
+      const label = isValidFileReference(value) ? value.filename : String(id);
 
-        return { id, thumbnailUrl, label };
-      }),
-    );
+      return { id, thumbnailUrl, label };
+    });
 
     // Check for selected record (RHS detail panel)
     const selectedParam = url.searchParams.get('selected');

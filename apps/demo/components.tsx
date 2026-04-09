@@ -18,16 +18,18 @@ import type { ComponentConfig, PuckProps } from '@hotsauce/plugins/puck/types';
 
 /**
  * Reference to a media record stored in the CMS.
- * Used by Puck components to reference images from the media table.
+ * Stores only identifiers — URLs are constructed at render time.
  */
 type MediaReference = {
   /** Primary key from the media table */
   id: number;
-  /** Resolved URL for display (may be presigned S3 URL or data: URI) */
-  url: string;
-  /** Alt text for accessibility */
+  /** Table name (e.g. 'media', 'assets') */
+  table: string;
+  /** File column name (e.g. 'file', 'image') */
+  column: string;
+  /** Alt text seeded from the media record (can be overridden per usage) */
   alt?: string;
-  /** Original filename */
+  /** Original filename (display only) */
   filename?: string;
 };
 
@@ -60,11 +62,20 @@ function ImagePickerField({
   value,
   onChange,
   basePath = '/admin',
+  table = 'media',
+  column = 'file',
+  altField = 'alt',
 }: {
   value: MediaReference | null;
   onChange: (value: MediaReference | null) => void;
   /** Base path where the CMS is mounted (default: '/admin') */
   basePath?: string;
+  /** Table name to pick from (default: 'media') */
+  table?: string;
+  /** File column name on the table (default: 'file') */
+  column?: string;
+  /** Column name for alt text on the record (default: 'alt') */
+  altField?: string;
 }) {
   const [isOpen, setIsOpen] = React.useState(false);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
@@ -74,18 +85,14 @@ function ImagePickerField({
     function handleMessage(event: MessageEvent) {
       if (event.data?.type === 'cms:media-selected') {
         const record = event.data.record;
-        const file = record?.file;
-        // Use resolved URL from picker (handles S3 presigned URLs)
-        // Fall back to file.url or data: URI for DB-stored files
-        const url = event.data.url ||
-          file?.url ||
-          (file?.data ? `data:${file.contentType};base64,${file.data}` : null);
+        const file = record?.[column];
 
-        if (url) {
+        if (record?.id != null) {
           onChange({
             id: record.id,
-            url,
-            alt: record.alt || '',
+            table: event.data.table || table,
+            column,
+            alt: (altField && record[altField]) || '',
             filename: file?.filename || '',
           });
         }
@@ -113,11 +120,11 @@ function ImagePickerField({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {value?.url
+      {value?.id
         ? (
           <div style={{ position: 'relative' }}>
             <img
-              src={value.url}
+              src={`${basePath}/files/${value.table}/${value.column}/${value.id}`}
               alt={value.alt || ''}
               style={{
                 width: '100%',
@@ -235,7 +242,7 @@ function ImagePickerField({
           </div>
           {isOpen && (
             <iframe
-              src={`${basePath}/media?picker=true`}
+              src={`${basePath}/${table}?picker=true`}
               style={{
                 flex: 1,
                 width: '100%',
@@ -389,6 +396,10 @@ const Image: ComponentConfig = {
         />
       ),
     },
+    alt: {
+      type: 'text',
+      label: 'Alt Text',
+    },
     aspectRatio: {
       type: 'select',
       label: 'Aspect Ratio',
@@ -402,10 +413,25 @@ const Image: ComponentConfig = {
   },
   defaultProps: {
     media: null,
+    alt: '',
     aspectRatio: 'auto',
   },
-  render: ({ media, aspectRatio }) => {
+  resolveFields: (data) => {
+    const m = data.props.media as MediaReference | null;
+    return {
+      media: Image.fields!.media,
+      alt: {
+        type: 'text' as const,
+        label: 'Alt Text',
+        placeholder: m?.alt || 'Describe this image…',
+      },
+      aspectRatio: Image.fields!.aspectRatio,
+    };
+  },
+  render: ({ media, alt, aspectRatio, puck }) => {
     const m = media as MediaReference | null;
+    // Puck alt field takes precedence; fall back to alt seeded from media record
+    const altText = (alt as string) || m?.alt || '';
     const ratioMod = aspectRatio === '16:9'
       ? 'image--ratio-16-9'
       : aspectRatio === '4:3'
@@ -414,7 +440,7 @@ const Image: ComponentConfig = {
       ? 'image--ratio-1-1'
       : 'image--ratio-auto';
 
-    if (!m?.url) {
+    if (!m?.id) {
       return (
         <div
           className={`image image--placeholder ${ratioMod}`}
@@ -432,10 +458,16 @@ const Image: ComponentConfig = {
       );
     }
 
+    // In the editor, use the private CMS URL; on the public site, use /files/:table/:id
+    const isEditing = (puck as { isEditing?: boolean })?.isEditing;
+    const src = isEditing
+      ? `/admin/files/${m.table}/${m.column}/${m.id}`
+      : `/files/${m.table}/${m.id}`;
+
     return (
       <img
-        src={m.url}
-        alt={m.alt || ''}
+        src={src}
+        alt={altText}
         className={`image ${ratioMod}`}
       />
     );
