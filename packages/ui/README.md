@@ -176,21 +176,21 @@ For fields marked as file fields (via `@hotsauce/core` `$cms({ file: true })` me
 
 Complete page views for CRUD operations.
 
-| Export                         | Purpose                          |
-| ------------------------------ | -------------------------------- |
-| `listView(opts)`               | Table listing with pagination    |
-| `listTable(opts)`              | Just the data table              |
-| `fieldsToListColumns(fields)`  | Convert fields to table columns  |
-| `detailView(opts)`             | Read-only record view            |
-| `detailField(field, value)`    | Single field display             |
-| `editView(opts)`               | Edit form for existing record    |
-| `createView(opts)`             | Create form for new record       |
-| `gridView(opts)`               | Thumbnail grid with detail panel |
-| `gridItems(opts)`              | Just the grid thumbnails         |
-| `gridDetailPanel(data)`        | RHS detail/edit panel            |
-| `viewToggle(current, url)`     | Grid ↔ table toggle buttons      |
-| `resolveThumbnailUrl(val)`     | Extract image URL from value     |
-| `getGridItemLabel(rec, field)` | Label for a grid thumbnail       |
+| Export                                            | Purpose                          |
+| ------------------------------------------------- | -------------------------------- |
+| `listView(opts)`                                  | Table listing with pagination    |
+| `listTable(opts)`                                 | Just the data table              |
+| `fieldsToListColumns(fields)`                     | Convert fields to table columns  |
+| `detailView(opts)`                                | Read-only record view            |
+| `detailField(field, value)`                       | Single field display             |
+| `editView(opts)`                                  | Edit form for existing record    |
+| `createView(opts)`                                | Create form for new record       |
+| `gridView(title, records, thumbs, opts, panel?)`  | Thumbnail grid with detail panel |
+| `gridItems(records, thumbs, opts)`                | Just the grid thumbnails         |
+| `gridDetailPanel(panel, opts)`                    | RHS detail/edit panel            |
+| `viewToggle(opts)`                                | Grid ↔ table toggle buttons      |
+| `resolveThumbnailUrl(value, fieldType, fileUrl?)` | Extract image URL from value     |
+| `getGridItemLabel(record, field, primaryKey)`     | Label for a grid thumbnail       |
 
 **Types:**
 
