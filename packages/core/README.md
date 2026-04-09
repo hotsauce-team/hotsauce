@@ -188,6 +188,7 @@ const posts = pgTable('posts', {
 | `labelPlural` | `string`                                            | Plural label for lists (e.g., "Blog Posts")         |
 | `hidden`      | `boolean`                                           | Hide the table from the CMS sidebar                 |
 | `icon`        | `string`                                            | Icon identifier for the sidebar                     |
+| `plugins`     | `Record<string, PluginColumnConfig>`                | Plugin-specific configuration (see Plugins section) |
 
 The `frontendUrl` function receives the full record and should return:
 
@@ -247,6 +248,7 @@ const posts = pgTable('posts', {
 
 - `hidden?: boolean` — hide from all CMS views (forms, lists, detail). Still saved to DB.
 - `readOnly?: boolean` — show the field but prevent editing
+- `thumbnail?: boolean` — use this column as the thumbnail in list views. When set on a file or URL column, the table defaults to a grid view with image previews and a toggle to switch to the standard table view. **Only one column per table may have `thumbnail: true`**; the CMS will throw a config error at startup if multiple are found.
 
 > **Note:** `hidden` and `readOnly` are UI hints only. A crafted POST request could still submit values for these columns. To enforce write protection server-side, use column policies with `write: () => false`.
 

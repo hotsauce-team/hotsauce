@@ -186,14 +186,16 @@ cmsUrl('/admin', 'posts', 'new'); // '/admin/posts/new'
 
 Internal handlers for each CRUD operation. These are called by the main handler.
 
-| Handler           | Action                          | Description          |
-| ----------------- | ------------------------------- | -------------------- |
-| `handleDashboard` | GET `/admin`                    | Shows table list     |
-| `handleList`      | GET `/admin/:table`             | Paginated table view |
-| `handleRead`      | GET `/admin/:table/:id`         | Single record view   |
-| `handleCreate`    | GET/POST `/admin/:table/new`    | Create form/submit   |
-| `handleUpdate`    | POST `/admin/:table/:id/edit`   | Update record        |
-| `handleDelete`    | POST `/admin/:table/:id/delete` | Delete record        |
+| Handler           | Action                          | Description               |
+| ----------------- | ------------------------------- | ------------------------- |
+| `handleDashboard` | GET `/admin`                    | Shows table list          |
+| `handleList`      | GET `/admin/:table`             | Paginated table/grid view |
+| `handleRead`      | GET `/admin/:table/:id`         | Single record view        |
+| `handleCreate`    | GET/POST `/admin/:table/new`    | Create form/submit        |
+| `handleUpdate`    | POST `/admin/:table/:id/edit`   | Update record             |
+| `handleDelete`    | POST `/admin/:table/:id/delete` | Delete record             |
+
+> **Grid view:** Tables with a `thumbnail: true` column automatically use a thumbnail grid instead of a table. Users can toggle between grid and table via `?view=grid` / `?view=table`. Clicking a grid item opens an RHS detail panel (`?selected=<id>`) for inline editing without leaving the list.
 
 ### `http.ts` - HTTP Response Helpers
 

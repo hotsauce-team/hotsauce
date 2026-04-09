@@ -57,6 +57,7 @@ export const media = pgTable('media', {
   id: serial('id').primaryKey(),
   file: jsonb('file').$type<FileReference>().$cms({
     file: { accept: 'image/*' },
+    thumbnail: true,
   }),
   alt: text('alt'),
   caption: text('caption'),

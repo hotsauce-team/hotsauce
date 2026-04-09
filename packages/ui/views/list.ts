@@ -4,6 +4,10 @@ import { attrs, escapeHtml, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import type { RelationOption } from '../forms/inputs.ts';
+import {
+  viewToggle,
+  type ViewToggleOptions,
+} from '../components/view-toggle.ts';
 
 /**
  * Display data for many-to-many relations in list/detail views
@@ -51,6 +55,8 @@ export interface ListViewOptions {
   class?: string;
   /** Empty state message */
   emptyMessage?: string;
+  /** View toggle configuration (renders grid/table toggle buttons) */
+  viewToggle?: ViewToggleOptions;
 }
 
 /**
@@ -252,12 +258,19 @@ export function listView(
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: Map<string | number, ManyToManyDisplayData[]> = new Map(),
 ): string {
+  const viewToggleHtml = options.viewToggle
+    ? viewToggle(options.viewToggle)
+    : '';
+
   return html`
     <div class="cms-list-view">
       <header class="cms-list-header">
         <h1>${title}</h1>
-        <a href="${options
-          .baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
+        <div class="cms-list-actions">
+          ${raw(viewToggleHtml)}
+          <a href="${options
+            .baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
+        </div>
       </header>
       ${raw(listTable(columns, records, options, relationData, manyToManyData))}
     </div>

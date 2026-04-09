@@ -38,15 +38,18 @@ import { editView, html, layout, raw } from '@hotsauce/ui';
 
 Tagged template literal with automatic XSS escaping.
 
-| Export                     | Purpose                                  |
-| -------------------------- | ---------------------------------------- |
-| `html`                     | Tagged template that auto-escapes values |
-| `raw(string)`              | Mark trusted HTML (skip escaping)        |
-| `escapeHtml(value)`        | Manual HTML escaping                     |
-| `attrs(object)`            | Build attribute strings safely           |
-| `when(condition, content)` | Conditional rendering helper             |
-| `join(items, separator)`   | Join with SafeHtml support               |
-| `SafeHtml`                 | Class for pre-escaped content            |
+| Export                     | Purpose                                   |
+| -------------------------- | ----------------------------------------- |
+| `html`                     | Tagged template that auto-escapes values  |
+| `raw(string)`              | Mark trusted HTML (skip escaping)         |
+| `escapeHtml(value)`        | Manual HTML escaping                      |
+| `escapeUrlPath(segment)`   | Percent-encode URL path segments          |
+| `getSafeUrl(url)`          | Validate URL (blocks `javascript:` etc.)  |
+| `attrs(object)`            | Build attribute strings safely            |
+| `when(condition, content)` | Conditional rendering helper              |
+| `join(items, separator)`   | Join with SafeHtml support                |
+| `formatFileSize(bytes)`    | Human-readable file size (e.g., "1.5 MB") |
+| `SafeHtml`                 | Class for pre-escaped content             |
 
 **Example:**
 
@@ -173,15 +176,21 @@ For fields marked as file fields (via `@hotsauce/core` `$cms({ file: true })` me
 
 Complete page views for CRUD operations.
 
-| Export                        | Purpose                         |
-| ----------------------------- | ------------------------------- |
-| `listView(opts)`              | Table listing with pagination   |
-| `listTable(opts)`             | Just the data table             |
-| `fieldsToListColumns(fields)` | Convert fields to table columns |
-| `detailView(opts)`            | Read-only record view           |
-| `detailField(field, value)`   | Single field display            |
-| `editView(opts)`              | Edit form for existing record   |
-| `createView(opts)`            | Create form for new record      |
+| Export                                            | Purpose                          |
+| ------------------------------------------------- | -------------------------------- |
+| `listView(opts)`                                  | Table listing with pagination    |
+| `listTable(opts)`                                 | Just the data table              |
+| `fieldsToListColumns(fields)`                     | Convert fields to table columns  |
+| `detailView(opts)`                                | Read-only record view            |
+| `detailField(field, value)`                       | Single field display             |
+| `editView(opts)`                                  | Edit form for existing record    |
+| `createView(opts)`                                | Create form for new record       |
+| `gridView(title, records, thumbs, opts, panel?)`  | Thumbnail grid with detail panel |
+| `gridItems(records, thumbs, opts)`                | Just the grid thumbnails         |
+| `gridDetailPanel(panel, opts)`                    | RHS detail/edit panel            |
+| `viewToggle(opts)`                                | Grid ↔ table toggle buttons      |
+| `resolveThumbnailUrl(value, fieldType, fileUrl?)` | Extract image URL from value     |
+| `getGridItemLabel(record, field, primaryKey)`     | Label for a grid thumbnail       |
 
 **Types:**
 
@@ -262,6 +271,29 @@ layout({
 ```
 
 ## Types
+
+### `GridViewOptions`
+
+```ts
+interface GridViewOptions {
+  baseUrl: string; // e.g. "/admin/media"
+  primaryKey?: string; // PK property name (defaults to "id")
+  thumbnailField: CMSField; // Field with thumbnail: true
+  currentView: 'grid' | 'table';
+  currentUrl: string; // Current page URL (for toggle links)
+  selectedId?: string | number; // Currently selected record
+}
+```
+
+### `GridThumbnail`
+
+```ts
+interface GridThumbnail {
+  id: string | number;
+  thumbnailUrl: string | null;
+  label: string;
+}
+```
 
 ### `RelationOption`
 

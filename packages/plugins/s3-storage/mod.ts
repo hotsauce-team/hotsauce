@@ -594,6 +594,29 @@ export function createS3StoragePlugin(
           const uploadJsUrl =
             `${options.basePath}/s3-storage/_assets/upload.js`;
 
+          // Check for ?return= query param (e.g. from grid panel)
+          // Defense-in-depth checks aligned with packages/cms/crud.ts:getSafeReturnUrl
+          let returnUrl: string | undefined;
+          try {
+            const reqUrl = new URL(ctx.requestUrl);
+            const returnParam = reqUrl.searchParams.get('return')?.trim();
+            // Validate: must start with basePath, no protocol markers, no dangerous chars
+            if (
+              returnParam &&
+              (returnParam === options.basePath ||
+                returnParam.startsWith(options.basePath + '/')) &&
+              !returnParam.includes('://') &&
+              !returnParam.startsWith('//') &&
+              // Block control characters and backslashes (scheme obfuscation / header injection)
+              // deno-lint-ignore no-control-regex
+              !/[\x00-\x1f\x7f-\x9f\\]/.test(returnParam) &&
+              // Block percent-encoded control chars (%00-%1F, %7F)
+              !/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(returnParam)
+            ) {
+              returnUrl = returnParam;
+            }
+          } catch { /* ignore malformed URL */ }
+
           const configJson = safeJsonForHtml({
             basePath: options.basePath,
             table,
@@ -605,6 +628,7 @@ export function createS3StoragePlugin(
               ? maxSizeValue
               : S3_DEFAULT_MAX_SIZE,
             accept: typeof acceptValue === 'string' ? acceptValue : null,
+            ...(returnUrl && { returnUrl }),
           });
 
           const page = html`
@@ -646,9 +670,10 @@ export function createS3StoragePlugin(
 
                   <p class="back-link">
                     <a
-                      href="${options.basePath}/${table}/${id}/edit"
+                      href="${returnUrl ??
+                        `${options.basePath}/${table}/${id}/edit`}"
                       class="btn btn-secondary"
-                    >← Back to record</a>
+                    >← Back</a>
                   </p>
                 </div>
 

@@ -93,11 +93,20 @@ export const pages = pgTable('pages', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+// Schema with thumbnail column for grid view testing
+export const media = pgTable('media', {
+  id: serial('id').primaryKey(),
+  title: varchar('title', { length: 200 }).notNull(),
+  file: json('file').$cms({ file: { accept: 'image/*' }, thumbnail: true }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 // Combined schemas
 export const schema = { users, posts, usersRelations, postsRelations };
 export const schemaWithAuth = { ...schema, adminUsers };
 export const schemaWithFiles = { profiles };
 export const schemaWithPlugins = { pages };
+export const schemaWithMedia = { media };
 
 // ============================================================================
 // Database Setup Helpers
@@ -177,6 +186,20 @@ export async function createPagesTable(db: AnyDb): Promise<void> {
       id SERIAL PRIMARY KEY,
       title VARCHAR(200) NOT NULL,
       content JSON,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+}
+
+/**
+ * Create media table for grid view / thumbnail tests
+ */
+export async function createMediaTable(db: AnyDb): Promise<void> {
+  await db.execute(sql`
+    CREATE TABLE media (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      file JSON,
       created_at TIMESTAMP NOT NULL DEFAULT NOW()
     )
   `);

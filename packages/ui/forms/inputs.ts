@@ -1,6 +1,6 @@
 // Form field input renderers by field type
 
-import { attrs, getSafeUrl, html, raw } from '../html.ts';
+import { attrs, formatFileSize, getSafeUrl, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import {
   FILE_DEFAULT_ACCEPT,
@@ -412,6 +412,24 @@ export function checkboxListInput(
 }
 
 /**
+ * Render a single many-to-many field with label and checkbox list.
+ * Used by both edit view and grid panel to ensure consistent rendering.
+ */
+export function manyToManyField(m2m: ManyToManyData): string {
+  return html`
+    <div class="cms-field">
+      <label class="cms-label">${m2m.label}</label>
+      ${raw(checkboxListInput({
+        name: m2m.fieldName,
+        label: m2m.label,
+        options: m2m.options,
+        selectedValues: m2m.selectedValues,
+      }))}
+    </div>
+  `;
+}
+
+/**
  * Render a file upload input
  *
  * Shows:
@@ -519,15 +537,6 @@ export function fileInput(
       </p>
     </div>
   `;
-}
-
-/**
- * Format file size for display
- */
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 /**

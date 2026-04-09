@@ -4,6 +4,19 @@ import { assertEquals, assertStringIncludes } from '@std/assert';
 import { fieldsToListColumns, listTable, listView } from '../views/list.ts';
 import { detailField, detailView } from '../views/detail.ts';
 import { createView, editView } from '../views/edit.ts';
+import {
+  getGridItemLabel,
+  gridDetailPanel,
+  gridItems,
+  gridView,
+  resolveThumbnailUrl,
+} from '../views/grid.ts';
+import { viewToggle } from '../components/view-toggle.ts';
+import type {
+  GridPanelData,
+  GridThumbnail,
+  GridViewOptions,
+} from '../views/grid.ts';
 import type { CMSField, IntrospectedColumn } from '@hotsauce/core';
 
 // Helper to create mock CMSField
@@ -548,4 +561,601 @@ Deno.test('editView: shows validation errors', () => {
 
   assertStringIncludes(result, 'Invalid email address');
   assertStringIncludes(result, 'cms-error');
+});
+
+// ─── Grid View Tests ─────────────────────────────────────────
+
+function createGridOptions(
+  overrides: Partial<GridViewOptions> = {},
+): GridViewOptions {
+  return {
+    baseUrl: '/admin/media',
+    thumbnailField: createMockField({
+      column: {
+        name: 'file',
+        propertyName: 'file',
+        dataType: 'json',
+        columnType: 'PgJsonb',
+        notNull: false,
+        hasDefault: false,
+        isPrimaryKey: false,
+        isUnique: false,
+        isArray: false,
+        cmsOptions: { file: { accept: 'image/*' }, thumbnail: true },
+      },
+      fieldType: 'file',
+      label: 'File',
+      thumbnail: true,
+    }),
+    currentView: 'grid',
+    currentUrl: '/admin/media',
+    ...overrides,
+  };
+}
+
+Deno.test('resolveThumbnailUrl: returns fileUrl when provided', () => {
+  const ref = {
+    filename: 'test.jpg',
+    contentType: 'image/jpeg',
+    size: 1000,
+    key: 'media/file/1/test.jpg',
+  };
+  assertEquals(
+    resolveThumbnailUrl(ref, 'file', 'https://signed.example.com/test.jpg'),
+    'https://signed.example.com/test.jpg',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: returns url from FileReference', () => {
+  const ref = {
+    filename: 'test.jpg',
+    contentType: 'image/jpeg',
+    size: 1000,
+    url: 'https://cdn.example.com/test.jpg',
+  };
+  assertEquals(
+    resolveThumbnailUrl(ref, 'file'),
+    'https://cdn.example.com/test.jpg',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: returns data URI from base64', () => {
+  const ref = {
+    filename: 'test.jpg',
+    contentType: 'image/jpeg',
+    size: 1000,
+    data: 'abc123',
+  };
+  const result = resolveThumbnailUrl(ref, 'file');
+  assertEquals(result, 'data:image/jpeg;base64,abc123');
+});
+
+Deno.test('resolveThumbnailUrl: returns null for invalid FileReference', () => {
+  assertEquals(resolveThumbnailUrl(null, 'file'), null);
+  assertEquals(resolveThumbnailUrl(undefined, 'file'), null);
+  assertEquals(resolveThumbnailUrl({}, 'file'), null);
+});
+
+Deno.test('resolveThumbnailUrl: handles plain URL string', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.jpg', 'text'),
+    'https://example.com/img.jpg',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: returns null for empty string', () => {
+  assertEquals(resolveThumbnailUrl('', 'text'), null);
+});
+
+Deno.test('resolveThumbnailUrl: skips SVG by default', () => {
+  const ref = {
+    filename: 'icon.svg',
+    contentType: 'image/svg+xml',
+    size: 500,
+    url: 'https://cdn.example.com/icon.svg',
+  };
+  assertEquals(resolveThumbnailUrl(ref, 'file'), null);
+});
+
+Deno.test('resolveThumbnailUrl: allows SVG when previewSvg is true', () => {
+  const ref = {
+    filename: 'icon.svg',
+    contentType: 'image/svg+xml',
+    size: 500,
+    url: 'https://cdn.example.com/icon.svg',
+  };
+  assertEquals(
+    resolveThumbnailUrl(ref, 'file', undefined, { previewSvg: true }),
+    'https://cdn.example.com/icon.svg',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: skips SVG URL string by default', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/icon.svg', 'text'),
+    null,
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/logo.SVG', 'text'),
+    null,
+  );
+});
+
+Deno.test('resolveThumbnailUrl: allows SVG URL string when previewSvg is true', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/icon.svg', 'text', undefined, {
+      previewSvg: true,
+    }),
+    'https://example.com/icon.svg',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: falls back to value.url when fileUrl is invalid', () => {
+  const ref = {
+    filename: 'test.jpg',
+    contentType: 'image/jpeg',
+    size: 1000,
+    url: 'https://cdn.example.com/test.jpg',
+  };
+  // fileUrl with javascript: scheme fails getSafeUrl validation
+  assertEquals(
+    resolveThumbnailUrl(ref, 'file', 'javascript:alert(1)'),
+    'https://cdn.example.com/test.jpg',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: falls back to data URI when fileUrl is invalid', () => {
+  const ref = {
+    filename: 'test.jpg',
+    contentType: 'image/jpeg',
+    size: 1000,
+    data: 'abc123',
+  };
+  // Invalid fileUrl, should fall back to data URI
+  assertEquals(
+    resolveThumbnailUrl(ref, 'file', 'javascript:alert(1)'),
+    'data:image/jpeg;base64,abc123',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: returns null for non-image file contentType', () => {
+  const pdfRef = {
+    filename: 'doc.pdf',
+    contentType: 'application/pdf',
+    size: 5000,
+    url: 'https://cdn.example.com/doc.pdf',
+  };
+  assertEquals(resolveThumbnailUrl(pdfRef, 'file'), null);
+
+  const textRef = {
+    filename: 'readme.txt',
+    contentType: 'text/plain',
+    size: 100,
+    url: 'https://cdn.example.com/readme.txt',
+  };
+  assertEquals(resolveThumbnailUrl(textRef, 'file'), null);
+
+  const videoRef = {
+    filename: 'video.mp4',
+    contentType: 'video/mp4',
+    size: 100000,
+    url: 'https://cdn.example.com/video.mp4',
+  };
+  assertEquals(resolveThumbnailUrl(videoRef, 'file'), null);
+});
+
+Deno.test('resolveThumbnailUrl: returns null for non-image URL strings', () => {
+  // URL without extension
+  assertEquals(resolveThumbnailUrl('https://example.com/file', 'url'), null);
+  // PDF URL
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/doc.pdf', 'text'),
+    null,
+  );
+  // Video URL
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/video.mp4', 'text'),
+    null,
+  );
+  // HTML URL
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/page.html', 'text'),
+    null,
+  );
+});
+
+Deno.test('resolveThumbnailUrl: accepts various image URL extensions', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.jpg', 'text'),
+    'https://example.com/img.jpg',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.jpeg', 'text'),
+    'https://example.com/img.jpeg',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.png', 'text'),
+    'https://example.com/img.png',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.gif', 'text'),
+    'https://example.com/img.gif',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.webp', 'text'),
+    'https://example.com/img.webp',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.avif', 'text'),
+    'https://example.com/img.avif',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: handles query strings in image URLs', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.png?width=100', 'text'),
+    'https://example.com/img.png?width=100',
+  );
+});
+
+Deno.test('viewToggle: renders with grid active', () => {
+  const result = viewToggle({
+    currentView: 'grid',
+    currentUrl: '/admin/media',
+  });
+  assertStringIncludes(result, 'cms-view-toggle-active');
+  assertStringIncludes(result, '?view=grid');
+  assertStringIncludes(result, '?view=table');
+});
+
+Deno.test('viewToggle: renders with table active', () => {
+  const result = viewToggle({
+    currentView: 'table',
+    currentUrl: '/admin/media',
+  });
+  assertStringIncludes(result, 'cms-view-toggle-active');
+});
+
+Deno.test('viewToggle: preserves existing query params', () => {
+  const result = viewToggle({
+    currentView: 'grid',
+    currentUrl: '/admin/media?page=2',
+  });
+  assertStringIncludes(result, 'page=2');
+  assertStringIncludes(result, 'view=grid');
+});
+
+Deno.test('gridItems: renders thumbnails', () => {
+  const thumbnails: GridThumbnail[] = [
+    { id: 1, thumbnailUrl: 'https://example.com/a.jpg', label: 'Photo A' },
+    { id: 2, thumbnailUrl: 'https://example.com/b.jpg', label: 'Photo B' },
+  ];
+  const records = [
+    { id: 1, file: null },
+    { id: 2, file: null },
+  ];
+  const options = createGridOptions();
+
+  const result = gridItems(records, thumbnails, options);
+  assertStringIncludes(result, 'cms-grid');
+  assertStringIncludes(result, 'cms-grid-item');
+  assertStringIncludes(result, 'Photo A');
+  assertStringIncludes(result, 'Photo B');
+  assertStringIncludes(result, 'loading="lazy"');
+});
+
+Deno.test('gridItems: renders placeholder for missing thumbnails', () => {
+  const thumbnails: GridThumbnail[] = [
+    { id: 1, thumbnailUrl: null, label: 'No image' },
+  ];
+  const records = [{ id: 1, file: null }];
+  const options = createGridOptions();
+
+  const result = gridItems(records, thumbnails, options);
+  assertStringIncludes(result, 'cms-grid-placeholder');
+});
+
+Deno.test('gridItems: renders empty state', () => {
+  const options = createGridOptions();
+  const result = gridItems([], [], options);
+  assertStringIncludes(result, 'cms-empty');
+  assertStringIncludes(result, 'No records found');
+  assertStringIncludes(result, 'Create New');
+});
+
+Deno.test('gridView: renders complete view with toggle', () => {
+  const thumbnails: GridThumbnail[] = [
+    { id: 1, thumbnailUrl: 'https://example.com/a.jpg', label: 'Photo A' },
+  ];
+  const records = [{ id: 1, file: null }];
+  const options = createGridOptions();
+
+  const result = gridView('Media', records, thumbnails, options);
+  assertStringIncludes(result, 'cms-list-view');
+  assertStringIncludes(result, 'cms-view-toggle');
+  assertStringIncludes(result, 'Media');
+  assertStringIncludes(result, 'Create New');
+  assertStringIncludes(result, 'cms-grid');
+});
+
+// ─── Grid Item Selection Tests ───────────────────────────────
+
+Deno.test('gridItems: links to ?selected=<id> instead of /<id>', () => {
+  const thumbnails: GridThumbnail[] = [
+    { id: 1, thumbnailUrl: 'https://example.com/a.jpg', label: 'Photo A' },
+  ];
+  const records = [{ id: 1, file: null }];
+  const options = createGridOptions();
+
+  const result = gridItems(records, thumbnails, options);
+  assertStringIncludes(result, '?selected=1');
+  // Should NOT link directly to detail page
+  assertEquals(result.includes('href="/admin/media/1"'), false);
+});
+
+Deno.test('gridItems: highlights selected item', () => {
+  const thumbnails: GridThumbnail[] = [
+    { id: 1, thumbnailUrl: 'https://example.com/a.jpg', label: 'Photo A' },
+    { id: 2, thumbnailUrl: 'https://example.com/b.jpg', label: 'Photo B' },
+  ];
+  const records = [
+    { id: 1, file: null },
+    { id: 2, file: null },
+  ];
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridItems(records, thumbnails, options);
+  assertStringIncludes(result, 'cms-grid-item-selected');
+});
+
+Deno.test('gridItems: preserves query params in selected link', () => {
+  const thumbnails: GridThumbnail[] = [
+    { id: 1, thumbnailUrl: null, label: 'Test' },
+  ];
+  const records = [{ id: 1, file: null }];
+  const options = createGridOptions({
+    currentUrl: '/admin/media?page=2&sort=title',
+  });
+
+  const result = gridItems(records, thumbnails, options);
+  assertStringIncludes(result, 'page=2');
+  assertStringIncludes(result, 'sort=title');
+  assertStringIncludes(result, 'selected=1');
+});
+
+// ─── Grid Detail Panel Tests ─────────────────────────────────
+
+function createMockPanelData(
+  overrides: Partial<GridPanelData> = {},
+): GridPanelData {
+  return {
+    id: 1,
+    thumbnailUrl: 'https://example.com/photo.jpg',
+    fileMeta: {
+      filename: 'photo.jpg',
+      contentType: 'image/jpeg',
+      size: 1024,
+    },
+    fields: [
+      createMockField({
+        column: {
+          name: 'title',
+          propertyName: 'title',
+          dataType: 'string',
+          columnType: 'PgVarchar',
+          notNull: true,
+          hasDefault: false,
+          isPrimaryKey: false,
+          isUnique: false,
+        },
+        fieldType: 'text',
+        label: 'Title',
+      }),
+    ],
+    values: { title: 'My Photo' },
+    errors: {},
+    relationData: {},
+    manyToManyData: [],
+    fieldOverrides: {},
+    csrfToken: 'test-csrf-token',
+    sourceToken: 'test-source-token',
+    returnUrl: '/admin/media',
+    ...overrides,
+  };
+}
+
+Deno.test('gridDetailPanel: renders thumbnail preview', () => {
+  const panel = createMockPanelData();
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'cms-panel-preview');
+  assertStringIncludes(result, 'https://example.com/photo.jpg');
+});
+
+Deno.test('gridDetailPanel: renders file metadata', () => {
+  const panel = createMockPanelData();
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'photo.jpg');
+  assertStringIncludes(result, 'image/jpeg');
+  assertStringIncludes(result, '1.0 KB');
+});
+
+Deno.test('gridDetailPanel: renders edit form with fields', () => {
+  const panel = createMockPanelData();
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'cms-panel-form');
+  assertStringIncludes(result, 'name="title"');
+  assertStringIncludes(result, 'My Photo');
+  assertStringIncludes(result, 'Save');
+});
+
+Deno.test('gridDetailPanel: renders delete button', () => {
+  const panel = createMockPanelData();
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'Delete');
+  assertStringIncludes(result, 'data-confirm');
+  assertStringIncludes(result, '/admin/media/1/delete');
+});
+
+Deno.test('gridDetailPanel: includes __cms_return hidden field', () => {
+  const panel = createMockPanelData({ returnUrl: '/admin/media' });
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'name="__cms_return"');
+  assertStringIncludes(result, 'value="/admin/media"');
+});
+
+Deno.test('gridDetailPanel: includes CSRF token', () => {
+  const panel = createMockPanelData({ csrfToken: 'my-csrf-token' });
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'name="_csrf"');
+  assertStringIncludes(result, 'my-csrf-token');
+});
+
+Deno.test('gridDetailPanel: renders close button', () => {
+  const panel = createMockPanelData();
+  const options = createGridOptions({
+    selectedId: 1,
+    currentUrl: '/admin/media?selected=1',
+  });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'cms-panel-close');
+  // Close link should remove ?selected param
+  assertStringIncludes(result, 'href="/admin/media"');
+});
+
+Deno.test('gridDetailPanel: uses filename in alt text when available', () => {
+  const panel = createMockPanelData({
+    fileMeta: {
+      filename: 'vacation.jpg',
+      contentType: 'image/jpeg',
+      size: 1024,
+    },
+  });
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'alt="Preview of vacation.jpg"');
+});
+
+Deno.test('gridDetailPanel: uses record ID in alt text when no fileMeta', () => {
+  const panel = createMockPanelData({
+    id: 42,
+    fileMeta: undefined,
+  });
+  const options = createGridOptions({ selectedId: 42 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'alt="Preview for record 42"');
+});
+
+Deno.test('gridDetailPanel: renders placeholder when no thumbnail', () => {
+  const panel = createMockPanelData({
+    thumbnailUrl: null,
+    fileMeta: undefined,
+  });
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  assertStringIncludes(result, 'cms-panel-preview-placeholder');
+});
+
+Deno.test('gridDetailPanel: renders many-to-many checkboxes', () => {
+  const panel = createMockPanelData({
+    manyToManyData: [
+      {
+        fieldName: 'categoryIds',
+        label: 'Categories',
+        relatedTable: 'categories',
+        options: [
+          { value: '1', label: 'News' },
+          { value: '2', label: 'Sports' },
+          { value: '3', label: 'Tech' },
+        ],
+        selectedValues: ['1', '3'],
+      },
+    ],
+  });
+  const options = createGridOptions({ selectedId: 1 });
+
+  const result = gridDetailPanel(panel, options);
+  // Should render M2M label
+  assertStringIncludes(result, 'Categories');
+  // Should render checkboxes with correct name
+  assertStringIncludes(result, 'name="categoryIds"');
+  // Should render all options
+  assertStringIncludes(result, 'News');
+  assertStringIncludes(result, 'Sports');
+  assertStringIncludes(result, 'Tech');
+});
+
+Deno.test('gridView: renders panel when panelData provided', () => {
+  const thumbnails: GridThumbnail[] = [
+    { id: 1, thumbnailUrl: 'https://example.com/a.jpg', label: 'Photo A' },
+  ];
+  const records = [{ id: 1, file: null }];
+  const options = createGridOptions({ selectedId: 1 });
+  const panel = createMockPanelData();
+
+  const result = gridView('Media', records, thumbnails, options, panel);
+  assertStringIncludes(result, 'cms-grid-panel-layout');
+  assertStringIncludes(result, 'cms-grid-panel');
+  assertStringIncludes(result, 'cms-grid-main');
+});
+
+// --- getGridItemLabel tests ---
+
+Deno.test('getGridItemLabel: returns filename for file field', () => {
+  const field = createMockField({ fieldType: 'file' });
+  const record = {
+    testField: {
+      key: 'a/b.jpg',
+      filename: 'photo.jpg',
+      contentType: 'image/jpeg',
+      size: 1024,
+    },
+    id: 42,
+  };
+  assertEquals(getGridItemLabel(record, field, 'id'), 'photo.jpg');
+});
+
+Deno.test('getGridItemLabel: returns record ID when no file reference', () => {
+  const field = createMockField({ fieldType: 'file' });
+  const record = { test_field: null, id: 7 };
+  assertEquals(getGridItemLabel(record, field, 'id'), '7');
+});
+
+Deno.test('getGridItemLabel: returns record ID for non-file field', () => {
+  const field = createMockField({ fieldType: 'text' });
+  const record = { testField: 'https://example.com/img.png', id: 99 };
+  assertEquals(getGridItemLabel(record, field, 'id'), '99');
+});
+
+Deno.test('getGridItemLabel: returns empty string when no ID', () => {
+  const field = createMockField({ fieldType: 'text' });
+  const record = { testField: null };
+  assertEquals(getGridItemLabel(record, field, 'id'), '');
+});
+
+Deno.test('gridView: no panel layout class when no panelData', () => {
+  const thumbnails: GridThumbnail[] = [
+    { id: 1, thumbnailUrl: 'https://example.com/a.jpg', label: 'Photo A' },
+  ];
+  const records = [{ id: 1, file: null }];
+  const options = createGridOptions();
+
+  const result = gridView('Media', records, thumbnails, options);
+  assertEquals(result.includes('cms-grid-panel-layout'), false);
+  assertEquals(result.includes('cms-grid-panel'), false);
 });

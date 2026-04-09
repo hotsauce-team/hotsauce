@@ -7,6 +7,7 @@ import {
   validateAutoDraft,
   validateCmsOptions,
   validateCspOptions,
+  validateThumbnailColumns,
 } from '../validation.ts';
 
 // Mock minimal valid options
@@ -622,6 +623,100 @@ Deno.test('validateCspOptions: rejects unrecognized CSP keyword in styleSrc', ()
 
 Deno.test('validateCspOptions: accepts empty styleSrc array', () => {
   validateCspOptions({ styleSrc: [] });
+});
+
+// =============================================================================
+// validateThumbnailColumns tests
+// =============================================================================
+
+Deno.test('validateThumbnailColumns: accepts table with single thumbnail column', () => {
+  const introspected = {
+    tables: [{
+      name: 'media',
+      columns: [
+        { name: 'id' },
+        { name: 'file', cmsOptions: { thumbnail: true } },
+        { name: 'title' },
+      ],
+    }],
+  };
+  validateThumbnailColumns(introspected); // Should not throw
+});
+
+Deno.test('validateThumbnailColumns: accepts table with no thumbnail columns', () => {
+  const introspected = {
+    tables: [{
+      name: 'posts',
+      columns: [
+        { name: 'id' },
+        { name: 'title' },
+        { name: 'body' },
+      ],
+    }],
+  };
+  validateThumbnailColumns(introspected); // Should not throw
+});
+
+Deno.test('validateThumbnailColumns: rejects table with multiple thumbnail columns', () => {
+  const introspected = {
+    tables: [{
+      name: 'media',
+      columns: [
+        { name: 'id' },
+        { name: 'file', cmsOptions: { thumbnail: true } },
+        { name: 'preview', cmsOptions: { thumbnail: true } },
+      ],
+    }],
+  };
+  assertThrows(
+    () => validateThumbnailColumns(introspected),
+    CmsConfigError,
+    'multiple thumbnail columns',
+  );
+});
+
+Deno.test('validateThumbnailColumns: reports column names in error', () => {
+  const introspected = {
+    tables: [{
+      name: 'media',
+      columns: [
+        { name: 'id' },
+        { name: 'file', cmsOptions: { thumbnail: true } },
+        { name: 'preview', cmsOptions: { thumbnail: true } },
+      ],
+    }],
+  };
+  try {
+    validateThumbnailColumns(introspected);
+    throw new Error('Expected to throw');
+  } catch (error) {
+    const message = (error as CmsConfigError).message;
+    assertEquals(message.includes('file'), true);
+    assertEquals(message.includes('preview'), true);
+    assertEquals(message.includes('media'), true);
+  }
+});
+
+Deno.test('validateThumbnailColumns: checks each table independently', () => {
+  const introspected = {
+    tables: [
+      {
+        name: 'media',
+        columns: [
+          { name: 'id' },
+          { name: 'file', cmsOptions: { thumbnail: true } },
+        ],
+      },
+      {
+        name: 'gallery',
+        columns: [
+          { name: 'id' },
+          { name: 'image', cmsOptions: { thumbnail: true } },
+        ],
+      },
+    ],
+  };
+  validateThumbnailColumns(introspected); // Should not throw - one per table is fine
 });
 
 // =============================================================================

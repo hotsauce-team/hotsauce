@@ -7,6 +7,12 @@ import type { IntrospectedTable } from '@hotsauce/core';
 
 import { alert, layout, pagination } from '@hotsauce/ui';
 import { listView } from '@hotsauce/ui';
+import { gridView, resolveThumbnailUrl } from '@hotsauce/ui';
+import type {
+  GridPanelData,
+  GridThumbnail,
+  GridViewOptions,
+} from '@hotsauce/ui';
 import { detailView } from '@hotsauce/ui';
 import { createView, editView } from '@hotsauce/ui';
 import { html, raw } from '@hotsauce/ui';
@@ -80,13 +86,15 @@ import {
   validateHiddenRequiredColumns,
 } from './policies/mod.ts';
 import type { EvaluatedColumnPolicies } from './policies/mod.ts';
-import type { UIFieldInfo, UIRenderFieldContext } from './plugins/types.ts';
-import type { CMSField } from '@hotsauce/core';
+import type { UIRenderFieldContext } from './plugins/types.ts';
+import { toUIFieldInfo } from './ui-field-info.ts';
 import {
   getFileKeyPrefix,
+  getThumbnailField,
   isValidFileKey,
   isValidFileReference,
 } from '@hotsauce/core';
+import { buildGridPanelData, signThumbnailUrl } from './grid-helpers.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Storage deletion helpers
@@ -255,27 +263,6 @@ async function cleanupOrphanFileObjects(
       onError?.(error as Error);
     }
   }
-}
-
-/**
- * Convert CMSField to serializable UIFieldInfo for plugin hooks
- */
-function toUIFieldInfo(field: CMSField): UIFieldInfo {
-  const plugins = field.column.cmsOptions?.plugins as
-    | Record<string, unknown>
-    | undefined;
-  return {
-    name: field.column.name,
-    label: field.label,
-    fieldType: field.fieldType,
-    columnType: field.column.columnType,
-    required: field.column.notNull && !field.column.hasDefault,
-    readOnly: field.readOnly ?? false,
-    // Pass all plugin configs; executor extracts per-plugin
-    _plugins: plugins as
-      | Record<string, import('@hotsauce/workers').Serializable>
-      | undefined,
-  };
 }
 
 /**
@@ -565,37 +552,17 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Generate navigation
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
-  // Build columns for list, filtered by readable columns
-  const listColumns = getListColumns(table).filter(
-    (col) => columnResult.readableColumns.includes(col.name ?? col.key),
-  );
+  // Detect thumbnail field for grid view
+  const cmsFields = tableToCmsFields(table);
+  const thumbnailField = getThumbnailField(cmsFields);
 
-  // Fetch relation data for FK columns
-  const relationData = await fetchAllRelationOptions(options, table);
+  // Determine view mode: default to grid if thumbnail exists, otherwise table
+  const viewParam = url.searchParams.get('view');
+  const viewMode = thumbnailField
+    ? (viewParam === 'table' ? 'table' as const : 'grid' as const)
+    : 'table' as const;
 
-  // Fetch M2M display data for all records
   const pkCol = getPrimaryKeyColumn(table);
-  const recordIds = records.map((r) =>
-    r[pkCol.propertyName] as string | number
-  );
-  const m2mDisplayData = await fetchManyToManyDisplayData(
-    options,
-    table,
-    recordIds,
-  );
-
-  // Generate CSRF token for delete forms
-  const csrfToken = await generateCsrfToken(options.csrfSecret);
-
-  // List view options
-  const listOptions: ListViewOptions = {
-    baseUrl: cmsUrl(basePath, table.name),
-    primaryKey: getPrimaryKeyColumn(table).name,
-    showEdit: true,
-    showDelete: true,
-    showView: true,
-    csrfToken,
-  };
 
   // Build content
   let content = '';
@@ -606,15 +573,116 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     content += alert(flash.message, flash.type);
   }
 
-  // Add list view
-  content += listView(
-    formatTableName(table.name),
-    listColumns,
-    records,
-    listOptions,
-    relationData,
-    m2mDisplayData,
-  );
+  if (viewMode === 'grid' && thumbnailField) {
+    // Resolve thumbnail URLs for each record
+    const thumbnails: GridThumbnail[] = await Promise.all(
+      records.map(async (record) => {
+        const id = record[pkCol.propertyName] as string | number;
+        const value = record[thumbnailField.column.propertyName];
+        const fileUrl = await signThumbnailUrl(
+          thumbnailField,
+          value,
+          options,
+          request,
+          authUser,
+          table.name,
+          id,
+        );
+
+        const thumbnailUrl = resolveThumbnailUrl(
+          value,
+          thumbnailField.fieldType,
+          fileUrl,
+        );
+
+        const label = isValidFileReference(value) ? value.filename : String(id);
+
+        return { id, thumbnailUrl, label };
+      }),
+    );
+
+    // Check for selected record (RHS detail panel)
+    const selectedParam = url.searchParams.get('selected');
+    let panelData: GridPanelData | undefined;
+
+    if (selectedParam) {
+      // Only fetch relation data when panel is shown (deferred for perf)
+      const relationData = await fetchAllRelationOptions(options, table);
+      panelData = await buildGridPanelData(
+        ctx,
+        table,
+        selectedParam,
+        columnResult,
+        policyResult,
+        thumbnailField,
+        relationData,
+        url,
+      );
+    }
+
+    const gridOptions: GridViewOptions = {
+      baseUrl: cmsUrl(basePath, table.name),
+      primaryKey: pkCol.propertyName,
+      thumbnailField,
+      currentView: 'grid',
+      currentUrl: url.href,
+      selectedId: selectedParam ?? undefined,
+    };
+
+    content += gridView(
+      formatTableName(table.name),
+      records,
+      thumbnails,
+      gridOptions,
+      panelData,
+    );
+  } else {
+    // Table view (default for non-thumbnail tables, or explicit ?view=table)
+
+    // Build columns for list, filtered by readable columns
+    const listColumns = getListColumns(table).filter(
+      (col) => columnResult.readableColumns.includes(col.name ?? col.key),
+    );
+
+    // Fetch relation data for FK columns
+    const relationData = await fetchAllRelationOptions(options, table);
+
+    // Generate CSRF token for delete forms
+    const csrfToken = await generateCsrfToken(options.csrfSecret);
+
+    // Fetch M2M display data only for table view (grid panel fetches its own)
+    const recordIds = records.map((r) =>
+      r[pkCol.propertyName] as string | number
+    );
+    const m2mDisplayData = await fetchManyToManyDisplayData(
+      options,
+      table,
+      recordIds,
+    );
+
+    const listOptions: ListViewOptions = {
+      baseUrl: cmsUrl(basePath, table.name),
+      primaryKey: getPrimaryKeyColumn(table).propertyName,
+      showEdit: true,
+      showDelete: true,
+      showView: true,
+      csrfToken,
+    };
+
+    // Add view toggle when thumbnail field exists
+    if (thumbnailField) {
+      listOptions.viewToggle = { currentView: 'table', currentUrl: url.href };
+    }
+
+    content += listView(
+      formatTableName(table.name),
+      listColumns,
+      records,
+      listOptions,
+      relationData,
+      m2mDisplayData,
+    );
+  }
 
   // Add pagination if needed
   if (totalPages > 1) {
@@ -1609,7 +1677,9 @@ export async function handleUpdate(ctx: RouteContext): Promise<Response> {
           cmsUrl(basePath, table.name, recordId),
         );
       }
-      return redirect(cmsUrl(basePath, table.name, recordId));
+      // Check for __cms_return field (grid panel redirect)
+      const returnUrl = getSafeReturnUrl(formData, basePath);
+      return redirect(returnUrl ?? cmsUrl(basePath, table.name, recordId));
     } catch (error) {
       // Log unexpected errors
       if (options.onError) {
@@ -1707,6 +1777,7 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
   }
 
   // For delete, also validate CSRF from form data
+  let deleteReturnUrl: string | undefined;
   if (request.method === 'POST') {
     const formData = await parseFormData(request);
     const csrfToken = getCsrfTokenFromFormData(formData);
@@ -1721,6 +1792,7 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
         'delete_csrf_error',
       );
     }
+    deleteReturnUrl = getSafeReturnUrl(formData, basePath);
   }
 
   try {
@@ -1837,7 +1909,10 @@ export async function handleDelete(ctx: RouteContext): Promise<Response> {
         cmsUrl(basePath, table.name),
       );
     }
-    return redirectWithFlash(cmsUrl(basePath, table.name), 'delete_success');
+    return redirectWithFlash(
+      deleteReturnUrl ?? cmsUrl(basePath, table.name),
+      'delete_success',
+    );
   } catch (error) {
     // Use helper to check for FK violation
     if (isForeignKeyViolation(error)) {
@@ -2153,3 +2228,42 @@ async function renderEditForm(
 
   return htmlResponse(page, 200, ctx.options.securityHeaders);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Return URL validation
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Extract and validate a __cms_return URL from form data.
+ * Only allows relative URLs that start with the CMS basePath (prevents open redirect).
+ *
+ * Defense-in-depth checks aligned with packages/ui/html.ts:getSafeUrl.
+ */
+function getSafeReturnUrl(
+  formData: Record<string, string | string[]>,
+  basePath: string,
+): string | undefined {
+  const returnVal = formData['__cms_return'];
+  const raw = Array.isArray(returnVal) ? returnVal[0] : returnVal;
+  if (!raw || typeof raw !== 'string') return undefined;
+  const returnUrl = raw.trim();
+  if (!returnUrl) return undefined;
+
+  // Block control characters and backslashes (scheme obfuscation / header injection vectors)
+  // deno-lint-ignore no-control-regex
+  if (/[\x00-\x1f\x7f-\x9f\\]/.test(returnUrl)) return undefined;
+  // Block percent-encoded control chars (%00-%1F, %7F)
+  if (/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(returnUrl)) return undefined;
+
+  // Must be a relative path starting with basePath
+  if (returnUrl !== basePath && !returnUrl.startsWith(basePath + '/')) {
+    return undefined;
+  }
+
+  // Must not contain protocol or authority markers (prevent //evil.com)
+  if (returnUrl.includes('://') || returnUrl.startsWith('//')) return undefined;
+
+  return returnUrl;
+}
+
+// Grid panel helpers moved to ./grid-helpers.ts

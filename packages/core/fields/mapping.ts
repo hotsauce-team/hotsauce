@@ -44,6 +44,9 @@ export interface CMSField {
 
   /** Whether this field is read-only */
   readOnly?: boolean;
+
+  /** Whether this field is the thumbnail for grid views */
+  thumbnail?: boolean;
 }
 
 /**
@@ -147,6 +150,9 @@ export function mapColumnToField(column: IntrospectedColumn): CMSField {
   if (column.cmsOptions?.readOnly) {
     field.readOnly = true;
   }
+  if (column.cmsOptions?.thumbnail) {
+    field.thumbnail = true;
+  }
 
   // Auto-hide columns with role: 'output' (computed by plugins)
   // Check all plugins for role: 'output'
@@ -189,4 +195,12 @@ export function mapColumnsToFields(
   columns: IntrospectedColumn[],
 ): CMSField[] {
   return columns.map(mapColumnToField);
+}
+
+/**
+ * Find the thumbnail field from a list of CMS fields.
+ * Returns the first field with `thumbnail: true`, or undefined.
+ */
+export function getThumbnailField(fields: CMSField[]): CMSField | undefined {
+  return fields.find((f) => f.thumbnail);
 }
