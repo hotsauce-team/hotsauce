@@ -51,6 +51,8 @@ export interface ListViewOptions {
   class?: string;
   /** Empty state message */
   emptyMessage?: string;
+  /** Extra HTML to render in header (e.g., view toggle) */
+  headerExtra?: string;
 }
 
 /**
@@ -256,8 +258,11 @@ export function listView(
     <div class="cms-list-view">
       <header class="cms-list-header">
         <h1>${title}</h1>
-        <a href="${options
-          .baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
+        <div class="cms-list-actions">
+          ${raw(options.headerExtra ?? '')}
+          <a href="${options
+            .baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
+        </div>
       </header>
       ${raw(listTable(columns, records, options, relationData, manyToManyData))}
     </div>

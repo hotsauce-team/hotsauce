@@ -6,7 +6,7 @@ import type { Table } from 'drizzle-orm';
 import type { IntrospectedTable } from '@hotsauce/core';
 
 import { alert, layout, pagination } from '@hotsauce/ui';
-import { listTable, listView } from '@hotsauce/ui';
+import { listView } from '@hotsauce/ui';
 import { gridView, resolveThumbnailUrl, viewToggle } from '@hotsauce/ui';
 import type {
   GridPanelData,
@@ -686,39 +686,19 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       csrfToken,
     };
 
-    // Add view toggle header when thumbnail exists but table view is selected
+    // Add view toggle when thumbnail field exists
     if (thumbnailField) {
-      const toggle = viewToggle('table', url.href);
-      content += `<div class="cms-list-view">
-        <header class="cms-list-header">
-          <h1>${formatTableName(table.name)}</h1>
-          <div class="cms-list-actions">
-            ${toggle}
-            <a href="${
-        cmsUrl(basePath, table.name)
-      }/new" class="cms-btn cms-btn-primary">Create New</a>
-          </div>
-        </header>
-        ${
-        listTable(
-          listColumns,
-          records,
-          listOptions,
-          relationData,
-          m2mDisplayData,
-        )
-      }
-      </div>`;
-    } else {
-      content += listView(
-        formatTableName(table.name),
-        listColumns,
-        records,
-        listOptions,
-        relationData,
-        m2mDisplayData,
-      );
+      listOptions.headerExtra = viewToggle('table', url.href);
     }
+
+    content += listView(
+      formatTableName(table.name),
+      listColumns,
+      records,
+      listOptions,
+      relationData,
+      m2mDisplayData,
+    );
   }
 
   // Add pagination if needed
