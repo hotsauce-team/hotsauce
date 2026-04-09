@@ -670,6 +670,26 @@ Deno.test('resolveThumbnailUrl: allows SVG when previewSvg is true', () => {
   );
 });
 
+Deno.test('resolveThumbnailUrl: skips SVG URL string by default', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/icon.svg', 'text'),
+    null,
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/logo.SVG', 'text'),
+    null,
+  );
+});
+
+Deno.test('resolveThumbnailUrl: allows SVG URL string when previewSvg is true', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/icon.svg', 'text', undefined, {
+      previewSvg: true,
+    }),
+    'https://example.com/icon.svg',
+  );
+});
+
 Deno.test('resolveThumbnailUrl: falls back to value.url when fileUrl is invalid', () => {
   const ref = {
     filename: 'test.jpg',
