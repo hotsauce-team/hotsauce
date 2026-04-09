@@ -10,6 +10,7 @@ import {
 } from '../html.ts';
 import { viewToggle } from '../components/view-toggle.ts';
 import type { CMSField } from '@hotsauce/core';
+import { typeByExtension } from '@std/media-types';
 import { isValidFileReference } from '@hotsauce/core';
 import {
   type FieldUIOverride,
@@ -82,6 +83,23 @@ export interface GridPanelData {
 }
 
 /**
+ * Check if a URL path looks like an image based on extension.
+ * Uses @std/media-types for reliable MIME type inference.
+ */
+function looksLikeImageUrl(url: string): boolean {
+  // Strip query string and fragment
+  const path = url.split('?')[0]?.split('#')[0] ?? '';
+  // Extract extension (e.g., ".jpg" → "jpg")
+  const extMatch = path.match(/\.([a-z0-9]+)$/i);
+  if (!extMatch) return false;
+  const ext = extMatch[1];
+  if (!ext) return false;
+  // Get MIME type from extension
+  const mimeType = typeByExtension(ext);
+  return mimeType?.startsWith('image/') ?? false;
+}
+
+/**
  * Resolve a thumbnail URL from a record value based on field type.
  * For FileReference: uses fileUrl (presigned) → url → data: URI.
  * For plain strings: uses the value directly.
@@ -96,6 +114,8 @@ export function resolveThumbnailUrl(
 ): string | null {
   if (fieldType === 'file') {
     if (!isValidFileReference(value)) return null;
+    // Only show images in thumbnail grid
+    if (!value.contentType.startsWith('image/')) return null;
     // Skip SVG unless explicitly opted-in (matches fileInput behavior)
     const isSvg = value.contentType === 'image/svg+xml';
     if (isSvg && !options?.previewSvg) return null;
@@ -111,8 +131,9 @@ export function resolveThumbnailUrl(
     }
     return null;
   }
-  // Plain URL string
+  // Plain URL string - only accept if it looks like an image URL
   if (typeof value === 'string' && value.length > 0) {
+    if (!looksLikeImageUrl(value)) return null;
     return getSafeUrl(value);
   }
   return null;

@@ -698,6 +698,86 @@ Deno.test('resolveThumbnailUrl: falls back to data URI when fileUrl is invalid',
   );
 });
 
+Deno.test('resolveThumbnailUrl: returns null for non-image file contentType', () => {
+  const pdfRef = {
+    filename: 'doc.pdf',
+    contentType: 'application/pdf',
+    size: 5000,
+    url: 'https://cdn.example.com/doc.pdf',
+  };
+  assertEquals(resolveThumbnailUrl(pdfRef, 'file'), null);
+
+  const textRef = {
+    filename: 'readme.txt',
+    contentType: 'text/plain',
+    size: 100,
+    url: 'https://cdn.example.com/readme.txt',
+  };
+  assertEquals(resolveThumbnailUrl(textRef, 'file'), null);
+
+  const videoRef = {
+    filename: 'video.mp4',
+    contentType: 'video/mp4',
+    size: 100000,
+    url: 'https://cdn.example.com/video.mp4',
+  };
+  assertEquals(resolveThumbnailUrl(videoRef, 'file'), null);
+});
+
+Deno.test('resolveThumbnailUrl: returns null for non-image URL strings', () => {
+  // URL without extension
+  assertEquals(resolveThumbnailUrl('https://example.com/file', 'url'), null);
+  // PDF URL
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/doc.pdf', 'text'),
+    null,
+  );
+  // Video URL
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/video.mp4', 'text'),
+    null,
+  );
+  // HTML URL
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/page.html', 'text'),
+    null,
+  );
+});
+
+Deno.test('resolveThumbnailUrl: accepts various image URL extensions', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.jpg', 'text'),
+    'https://example.com/img.jpg',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.jpeg', 'text'),
+    'https://example.com/img.jpeg',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.png', 'text'),
+    'https://example.com/img.png',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.gif', 'text'),
+    'https://example.com/img.gif',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.webp', 'text'),
+    'https://example.com/img.webp',
+  );
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.avif', 'text'),
+    'https://example.com/img.avif',
+  );
+});
+
+Deno.test('resolveThumbnailUrl: handles query strings in image URLs', () => {
+  assertEquals(
+    resolveThumbnailUrl('https://example.com/img.png?width=100', 'text'),
+    'https://example.com/img.png?width=100',
+  );
+});
+
 Deno.test('viewToggle: renders with grid active', () => {
   const result = viewToggle({
     currentView: 'grid',
