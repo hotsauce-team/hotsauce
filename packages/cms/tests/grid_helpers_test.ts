@@ -1,51 +1,53 @@
-// Unit tests for grid-helpers.ts URL handling
+// Unit tests for grid-helpers.ts
 
 import { assertEquals } from '@std/assert';
+import { appendReturnParam } from '../grid-helpers.ts';
 
-// Since appendReturnParam is not exported, we test via import and re-implementation
-// This ensures the logic is correct for URL construction edge cases
-
-Deno.test('URL return param: handles absolute URL without query or fragment', () => {
-  const url = new URL('https://s3.example.com/upload');
-  url.searchParams.set('return', '/admin/media?selected=1');
+Deno.test('appendReturnParam: handles absolute URL without query or fragment', () => {
+  const result = appendReturnParam(
+    'https://s3.example.com/upload',
+    '/admin/media?selected=1',
+  );
   assertEquals(
-    url.href,
+    result,
     'https://s3.example.com/upload?return=%2Fadmin%2Fmedia%3Fselected%3D1',
   );
 });
 
-Deno.test('URL return param: handles absolute URL with existing query', () => {
-  const url = new URL('https://s3.example.com/upload?bucket=media');
-  url.searchParams.set('return', '/admin/media');
+Deno.test('appendReturnParam: handles absolute URL with existing query', () => {
+  const result = appendReturnParam(
+    'https://s3.example.com/upload?bucket=media',
+    '/admin/media',
+  );
   assertEquals(
-    url.href,
+    result,
     'https://s3.example.com/upload?bucket=media&return=%2Fadmin%2Fmedia',
   );
 });
 
-Deno.test('URL return param: replaces existing return param', () => {
-  const url = new URL('https://s3.example.com/upload?return=old');
-  url.searchParams.set('return', '/admin/media');
+Deno.test('appendReturnParam: replaces existing return param', () => {
+  const result = appendReturnParam(
+    'https://s3.example.com/upload?return=old',
+    '/admin/media',
+  );
   assertEquals(
-    url.href,
+    result,
     'https://s3.example.com/upload?return=%2Fadmin%2Fmedia',
   );
 });
 
-Deno.test('URL return param: preserves fragment and places it after query', () => {
-  const url = new URL('https://s3.example.com/upload#section');
-  url.searchParams.set('return', '/admin/media');
-  // URL API correctly places query before fragment
+Deno.test('appendReturnParam: preserves fragment and places it after query', () => {
+  const result = appendReturnParam(
+    'https://s3.example.com/upload#section',
+    '/admin/media',
+  );
   assertEquals(
-    url.href,
+    result,
     'https://s3.example.com/upload?return=%2Fadmin%2Fmedia#section',
   );
 });
 
-Deno.test('URL return param: handles relative URL with fragment', () => {
-  const url = new URL('/upload#section', 'http://localhost');
-  url.searchParams.set('return', '/admin/media');
-  assertEquals(url.pathname, '/upload');
-  assertEquals(url.search, '?return=%2Fadmin%2Fmedia');
-  assertEquals(url.hash, '#section');
+Deno.test('appendReturnParam: handles relative URL with fragment', () => {
+  const result = appendReturnParam('/upload#section', '/admin/media');
+  assertEquals(result, '/upload?return=%2Fadmin%2Fmedia#section');
 });

@@ -27,8 +27,9 @@ import type { Serializable } from '@hotsauce/workers';
 /**
  * Append a `return` query param to a URL, handling fragments correctly.
  * Uses URL API to avoid breaking URLs with existing query params or fragments.
+ * @internal Exported for testing only — not part of public API.
  */
-function appendReturnParam(href: string, returnUrl: string): string {
+export function appendReturnParam(href: string, returnUrl: string): string {
   try {
     const url = new URL(href);
     url.searchParams.set('return', returnUrl);
