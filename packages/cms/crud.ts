@@ -151,7 +151,7 @@ async function deleteOldFileObjects(
 
     // Old file is being cleared or replaced - delete it
     if (oldValue.key) {
-      // Defence-in-depth: validate key belongs to this table/column/record
+      // Defense-in-depth: validate key belongs to this table/column/record
       // Skip deletion if key is invalid (prevents deleting arbitrary keys if DB tampered)
       if (!isValidFileKey(oldValue.key, tableName, col.name, recordId)) {
         const expectedPrefix = getFileKeyPrefix(tableName, col.name, recordId);
@@ -2255,7 +2255,7 @@ async function renderEditForm(
  * Extract and validate a __cms_return URL from form data.
  * Only allows relative URLs that start with the CMS basePath (prevents open redirect).
  *
- * Defence-in-depth checks aligned with packages/ui/html.ts:getSafeUrl.
+ * Defense-in-depth checks aligned with packages/ui/html.ts:getSafeUrl.
  */
 function getSafeReturnUrl(
   formData: Record<string, string | string[]>,
