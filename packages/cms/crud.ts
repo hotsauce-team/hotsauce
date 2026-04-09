@@ -562,18 +562,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     ? (viewParam === 'table' ? 'table' as const : 'grid' as const)
     : 'table' as const;
 
-  // Build columns for list, filtered by readable columns
-  const listColumns = getListColumns(table).filter(
-    (col) => columnResult.readableColumns.includes(col.name ?? col.key),
-  );
-
-  // Fetch relation data for FK columns
-  const relationData = await fetchAllRelationOptions(options, table);
-
   const pkCol = getPrimaryKeyColumn(table);
-
-  // Generate CSRF token for delete forms
-  const csrfToken = await generateCsrfToken(options.csrfSecret);
 
   // Build content
   let content = '';
@@ -617,6 +606,8 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     let panelData: GridPanelData | undefined;
 
     if (selectedParam) {
+      // Only fetch relation data when panel is shown (deferred for perf)
+      const relationData = await fetchAllRelationOptions(options, table);
       panelData = await buildGridPanelData(
         ctx,
         table,
@@ -647,6 +638,18 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     );
   } else {
     // Table view (default for non-thumbnail tables, or explicit ?view=table)
+
+    // Build columns for list, filtered by readable columns
+    const listColumns = getListColumns(table).filter(
+      (col) => columnResult.readableColumns.includes(col.name ?? col.key),
+    );
+
+    // Fetch relation data for FK columns
+    const relationData = await fetchAllRelationOptions(options, table);
+
+    // Generate CSRF token for delete forms
+    const csrfToken = await generateCsrfToken(options.csrfSecret);
+
     // Fetch M2M display data only for table view (grid panel fetches its own)
     const recordIds = records.map((r) =>
       r[pkCol.propertyName] as string | number
