@@ -599,7 +599,7 @@ export function createS3StoragePlugin(
           let returnUrl: string | undefined;
           try {
             const reqUrl = new URL(ctx.requestUrl);
-            const returnParam = reqUrl.searchParams.get('return');
+            const returnParam = reqUrl.searchParams.get('return')?.trim();
             // Validate: must start with basePath, no protocol markers, no dangerous chars
             if (
               returnParam &&

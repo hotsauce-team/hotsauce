@@ -2262,33 +2262,26 @@ function getSafeReturnUrl(
   basePath: string,
 ): string | undefined {
   const returnVal = formData['__cms_return'];
-  const returnUrl = Array.isArray(returnVal) ? returnVal[0] : returnVal;
-  if (!returnUrl || typeof returnUrl !== 'string') return undefined;
-
-  const normalizedReturnUrl = returnUrl.trim();
-  if (!normalizedReturnUrl) return undefined;
+  const raw = Array.isArray(returnVal) ? returnVal[0] : returnVal;
+  if (!raw || typeof raw !== 'string') return undefined;
+  const returnUrl = raw.trim();
+  if (!returnUrl) return undefined;
 
   // Block control characters and backslashes (scheme obfuscation / header injection vectors)
   // deno-lint-ignore no-control-regex
-  if (/[\x00-\x1f\x7f-\x9f\\]/.test(normalizedReturnUrl)) return undefined;
+  if (/[\x00-\x1f\x7f-\x9f\\]/.test(returnUrl)) return undefined;
   // Block percent-encoded control chars (%00-%1F, %7F)
-  if (/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(normalizedReturnUrl)) return undefined;
+  if (/%(?:0[0-9a-f]|1[0-9a-f]|7f)/i.test(returnUrl)) return undefined;
 
   // Must be a relative path starting with basePath
-  if (
-    normalizedReturnUrl !== basePath &&
-    !normalizedReturnUrl.startsWith(basePath + '/')
-  ) {
+  if (returnUrl !== basePath && !returnUrl.startsWith(basePath + '/')) {
     return undefined;
   }
 
   // Must not contain protocol or authority markers (prevent //evil.com)
-  if (
-    normalizedReturnUrl.includes('://') ||
-    normalizedReturnUrl.startsWith('//')
-  ) return undefined;
+  if (returnUrl.includes('://') || returnUrl.startsWith('//')) return undefined;
 
-  return normalizedReturnUrl;
+  return returnUrl;
 }
 
 // Grid panel helpers moved to ./grid-helpers.ts
