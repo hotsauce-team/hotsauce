@@ -10,8 +10,8 @@ import {
   gridItems,
   gridView,
   resolveThumbnailUrl,
-  viewToggle,
 } from '../views/grid.ts';
+import { viewToggle } from '../components/view-toggle.ts';
 import type {
   GridPanelData,
   GridThumbnail,
@@ -699,19 +699,28 @@ Deno.test('resolveThumbnailUrl: falls back to data URI when fileUrl is invalid',
 });
 
 Deno.test('viewToggle: renders with grid active', () => {
-  const result = viewToggle('grid', '/admin/media');
+  const result = viewToggle({
+    currentView: 'grid',
+    currentUrl: '/admin/media',
+  });
   assertStringIncludes(result, 'cms-view-toggle-active');
   assertStringIncludes(result, '?view=grid');
   assertStringIncludes(result, '?view=table');
 });
 
 Deno.test('viewToggle: renders with table active', () => {
-  const result = viewToggle('table', '/admin/media');
+  const result = viewToggle({
+    currentView: 'table',
+    currentUrl: '/admin/media',
+  });
   assertStringIncludes(result, 'cms-view-toggle-active');
 });
 
 Deno.test('viewToggle: preserves existing query params', () => {
-  const result = viewToggle('grid', '/admin/media?page=2');
+  const result = viewToggle({
+    currentView: 'grid',
+    currentUrl: '/admin/media?page=2',
+  });
   assertStringIncludes(result, 'page=2');
   assertStringIncludes(result, 'view=grid');
 });

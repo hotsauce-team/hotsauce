@@ -8,6 +8,7 @@ import {
   html,
   raw,
 } from '../html.ts';
+import { viewToggle } from '../components/view-toggle.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import {
@@ -136,41 +137,6 @@ export function getGridItemLabel(
   // Fall back to record ID
   const id = record[primaryKey];
   return id != null ? String(id) : '';
-}
-
-/**
- * Render the view toggle buttons (grid/table)
- */
-export function viewToggle(
-  currentView: 'grid' | 'table',
-  currentUrl: string,
-): string {
-  // Build toggle URLs by replacing/adding the view param
-  const url = new URL(currentUrl, 'http://localhost');
-  url.searchParams.set('view', 'grid');
-  const gridUrl = `${url.pathname}${url.search}`;
-  url.searchParams.set('view', 'table');
-  const tableUrl = `${url.pathname}${url.search}`;
-
-  const gridActive = currentView === 'grid' ? ' cms-view-toggle-active' : '';
-  const tableActive = currentView === 'table' ? ' cms-view-toggle-active' : '';
-
-  return html`
-    <div class="cms-view-toggle">
-      <a ${attrs({
-        href: gridUrl,
-        class: `cms-view-toggle-btn${gridActive}`,
-        title: 'Grid view',
-        'aria-label': 'Grid view',
-      })}>▦</a>
-      <a ${attrs({
-        href: tableUrl,
-        class: `cms-view-toggle-btn${tableActive}`,
-        title: 'Table view',
-        'aria-label': 'Table view',
-      })}>☰</a>
-    </div>
-  `;
 }
 
 /**
@@ -343,7 +309,10 @@ export function gridView(
   options: GridViewOptions,
   panel?: GridPanelData,
 ): string {
-  const toggle = viewToggle(options.currentView, options.currentUrl);
+  const toggle = viewToggle({
+    currentView: options.currentView,
+    currentUrl: options.currentUrl,
+  });
   const gridContent = gridItems(records, thumbnails, options);
   const panelHtml = panel ? gridDetailPanel(panel, options) : '';
   const layoutClass = panel ? ' cms-grid-panel-layout' : '';

@@ -7,7 +7,7 @@ import type { IntrospectedTable } from '@hotsauce/core';
 
 import { alert, layout, pagination } from '@hotsauce/ui';
 import { listView } from '@hotsauce/ui';
-import { gridView, resolveThumbnailUrl, viewToggle } from '@hotsauce/ui';
+import { gridView, resolveThumbnailUrl } from '@hotsauce/ui';
 import type {
   GridPanelData,
   GridThumbnail,
@@ -151,7 +151,7 @@ async function deleteOldFileObjects(
 
     // Old file is being cleared or replaced - delete it
     if (oldValue.key) {
-      // Defense-in-depth: validate key belongs to this table/column/record
+      // Defence-in-depth: validate key belongs to this table/column/record
       // Skip deletion if key is invalid (prevents deleting arbitrary keys if DB tampered)
       if (!isValidFileKey(oldValue.key, tableName, col.name, recordId)) {
         const expectedPrefix = getFileKeyPrefix(tableName, col.name, recordId);
@@ -689,7 +689,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
     // Add view toggle when thumbnail field exists
     if (thumbnailField) {
-      listOptions.headerExtra = viewToggle('table', url.href);
+      listOptions.viewToggle = { currentView: 'table', currentUrl: url.href };
     }
 
     content += listView(
@@ -2255,7 +2255,7 @@ async function renderEditForm(
  * Extract and validate a __cms_return URL from form data.
  * Only allows relative URLs that start with the CMS basePath (prevents open redirect).
  *
- * Defense-in-depth checks aligned with packages/ui/html.ts:getSafeUrl.
+ * Defence-in-depth checks aligned with packages/ui/html.ts:getSafeUrl.
  */
 function getSafeReturnUrl(
   formData: Record<string, string | string[]>,

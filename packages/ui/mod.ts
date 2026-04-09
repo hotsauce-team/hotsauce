@@ -79,7 +79,6 @@ export {
   gridItems,
   gridView,
   resolveThumbnailUrl,
-  viewToggle,
 } from './views/grid.ts';
 
 export type { DetailViewOptions } from './views/detail.ts';
@@ -99,6 +98,9 @@ export { alert, alertStyles } from './components/alert.ts';
 
 export type { PaginationOptions } from './components/pagination.ts';
 export { pagination, paginationStyles } from './components/pagination.ts';
+
+export type { ViewToggleOptions } from './components/view-toggle.ts';
+export { viewToggle } from './components/view-toggle.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Styles - CSS stylesheet for the CMS UI
