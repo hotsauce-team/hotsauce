@@ -217,7 +217,7 @@ The picker stores a reference to the image record, not the image data itself:
 
 ```ts
 type SelectedImage = {
-  id: number; // Primary key of the record
+  id: string | number; // Primary key of the record
   table: string; // Table name (e.g., 'media', 'photos')
   column: string; // File column name (e.g., 'file', 'image')
   alt?: string; // Alt text from the record (if available)

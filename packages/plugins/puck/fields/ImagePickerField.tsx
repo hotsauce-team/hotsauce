@@ -25,7 +25,7 @@ import { React } from '../client/globals.ts';
  */
 export type SelectedImage = {
   /** Primary key from the table */
-  id: number;
+  id: string | number;
   /** Table name (e.g. 'media', 'photos', 'avatars') */
   table: string;
   /** File column name (e.g. 'file', 'image') */
