@@ -288,7 +288,7 @@ interface TableParsers {
 - [x] File uploads (base64 in DB, validation, serving route)
 - [x] Publish alpha release to jsr (Deno support)
 - [x] File uploads (S3/R2 cloud storage adapter)
-- [x] Media library UI (browse, search, reuse previously uploaded files)
+- [x] Media library UI (browse, reuse previously uploaded files)
 - [ ] Regression tests on demo app, e.g. catch CSP violations.
 - [ ] Shared policy API (reuse CMS row/column policies in your app routes)
 - [ ] Security disclosure policy
