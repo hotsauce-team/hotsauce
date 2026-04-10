@@ -452,7 +452,7 @@ export const pickerScript = `
       id: id,
       url: url,
       record: record
-    }, '*');
+    }, window.location.origin);
   });
 })();
 `;

@@ -254,6 +254,8 @@ The grid view supports a **picker mode** for embedding in iframes (e.g., media s
 - Clicking posts a message to the parent window via `postMessage()`
 - Minimal layout with no sidebar or navigation
 
+> **Note:** Picker mode requires the CMS and parent page to be on the **same origin**. The `postMessage` uses `window.location.origin` as the target for security.
+
 **postMessage shape:**
 
 ```ts

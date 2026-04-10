@@ -97,10 +97,14 @@ export function ImagePickerField({
 }: ImagePickerFieldProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
+  const iframeRef = React.useRef<HTMLIFrameElement>(null);
 
   // Handle postMessage from picker iframe
   React.useEffect(() => {
     function handleMessage(event: MessageEvent) {
+      // Validate message source is our iframe (prevents spoofing from other scripts/tabs)
+      if (event.source !== iframeRef.current?.contentWindow) return;
+
       if (event.data?.type === 'cms:media-selected') {
         const record = event.data.record;
         const file = record?.[column];
@@ -123,7 +127,7 @@ export function ImagePickerField({
       globalThis.addEventListener('message', handleMessage);
       return () => globalThis.removeEventListener('message', handleMessage);
     }
-  }, [isOpen, onChange]);
+  }, [isOpen, onChange, column, table, altField]);
 
   const openPicker = () => {
     setIsOpen(true);
@@ -260,6 +264,7 @@ export function ImagePickerField({
           </div>
           {isOpen && (
             <iframe
+              ref={iframeRef}
               src={`${basePath}/${table}?picker=true`}
               style={{
                 flex: 1,

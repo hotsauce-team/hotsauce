@@ -247,7 +247,9 @@ URLs are constructed at render time using file proxy routes. When `filename` is 
 2. Modal contains an iframe pointing to `{basePath}/{table}?picker=true`
 3. CMS renders a minimal grid view (no sidebar, picker mode)
 4. User clicks an image → CMS posts `cms:media-selected` to parent window
-5. Component captures the message and calls `onChange` with the selection
+5. Component validates `event.source` matches the iframe, then calls `onChange`
+
+**Security:** Messages are validated via `event.source` to prevent spoofing from other scripts/tabs. The CMS posts only to `window.location.origin` (same-origin required).
 
 This uses the CMS [picker mode](../cms/README.md) feature, which works with any table that has a `thumbnail: true` column.
 
