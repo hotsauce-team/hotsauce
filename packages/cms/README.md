@@ -427,7 +427,9 @@ const handler = createCmsHandler({
 
 The handler exposes a read-only route that serves file fields:
 
-- `GET {basePath}/files/{table}/{column}/{id}`
+- `GET {basePath}/files/{table}/{column}/{id}[/{filename}]`
+
+The optional `{filename}` segment is ignored for lookup (uses `id`), but allows SEO-friendly URLs like `/admin/files/media/file/136/sunset.jpg`.
 
 Access is still filtered through auth + row/column policies.
 

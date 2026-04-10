@@ -1414,13 +1414,14 @@ export function createCmsHandler(options: CmsOptions): Handler {
     // Regular CMS routes
     // ─────────────────────────────────────────────────────────────
 
-    // Handle file serving at {basePath}/files/{table}/{column}/{id}
+    // Handle file serving at {basePath}/files/{table}/{column}/{id}[/{filename}]
+    // Optional filename at end is ignored (for SEO-friendly URLs)
     const filesPrefix = `${opts.basePath}/files/`;
     if (pathname.startsWith(filesPrefix) && request.method === 'GET') {
       const filePath = pathname.slice(filesPrefix.length);
       const parts = filePath.split('/');
 
-      if (parts.length === 3) {
+      if (parts.length >= 3 && parts.length <= 4) {
         const [tableName, columnName, recordId] = parts as [
           string,
           string,

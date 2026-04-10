@@ -288,13 +288,14 @@ interface TableParsers {
 - [x] File uploads (base64 in DB, validation, serving route)
 - [x] Publish alpha release to jsr (Deno support)
 - [x] File uploads (S3/R2 cloud storage adapter)
+- [x] Media library UI (browse, search, reuse previously uploaded files)
 - [ ] Regression tests on demo app, e.g. catch CSP violations.
 - [ ] Shared policy API (reuse CMS row/column policies in your app routes)
 - [ ] Security disclosure policy
 - [ ] Add tests for NodeJS runtime
 - [ ] S3 orphan garbage collection (cleanup objects not referenced by any record)
 - [ ] Expose plugin utilities for frontend use (e.g., S3 signed download URLs)
-- [ ] Media library UI (browse, search, reuse previously uploaded files)
+- [ ] Search for list and grid views (full-text search, filters, pagination)
 - [ ] Native CDN support (public + private files, cache invalidation)
 - [ ] Plugin config - timeout, worker response validation, load testing
 - [ ] Plugin permission approval (env var hash or DB table gate for CSP/capability changes)

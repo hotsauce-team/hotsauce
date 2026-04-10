@@ -7,6 +7,7 @@
     "./audit-log/worker": "./audit-log/worker.ts",
     "./puck": "./puck/mod.ts",
     "./puck/types": "./puck/types.ts",
+    "./puck/fields": "./puck/fields/mod.ts",
     "./puck/client/globals": "./puck/client/globals.ts",
     "./s3-storage": "./s3-storage/mod.ts",
     "./s3-storage/signing": "./s3-storage/signing.ts",

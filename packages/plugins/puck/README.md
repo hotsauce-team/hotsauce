@@ -174,6 +174,83 @@ export async function renderPuckContent(
 
 The `/rsc` export is lighter and doesn't pull in browser-only dependencies like `happy-dom`.
 
+## Image Picker Field
+
+The plugin provides an `ImagePickerField` component for selecting images from CMS tables in Puck's sidebar. This is useful for Image components or any field that references uploaded images.
+
+### Usage
+
+```tsx
+import {
+  ImagePickerField,
+  type SelectedImage,
+} from '@hotsauce/plugins/puck/fields';
+
+const Image: ComponentConfig = {
+  label: 'Image',
+  fields: {
+    media: {
+      type: 'custom',
+      label: 'Image',
+      render: ({ value, onChange }) => (
+        <ImagePickerField
+          value={value as SelectedImage | null}
+          onChange={onChange}
+          table='media' // Table to pick from (default: 'media')
+          column='file' // File column name (default: 'file')
+        />
+      ),
+    },
+    alt: { type: 'text', label: 'Alt Text' },
+  },
+  render: ({ media, alt }) => {
+    const m = media as SelectedImage | null;
+    if (!m?.id) return <div>No image selected</div>;
+    return <img src={`/files/${m.table}/${m.id}`} alt={alt as string} />;
+  },
+};
+```
+
+### SelectedImage Type
+
+The picker stores a reference to the image record, not the image data itself:
+
+```ts
+type SelectedImage = {
+  id: number; // Primary key of the record
+  table: string; // Table name (e.g., 'media', 'photos')
+  column: string; // File column name (e.g., 'file', 'image')
+  alt?: string; // Alt text from the record (if available)
+  filename?: string; // Original filename (for display and SEO-friendly URLs)
+};
+```
+
+URLs are constructed at render time using file proxy routes. When `filename` is available, it's appended for SEO-friendly URLs:
+
+- Editor: `/admin/files/{table}/{column}/{id}[/{filename}]`
+- Frontend: `/files/{table}/{id}[/{filename}]` (you provide this route)
+
+### Props
+
+| Prop       | Type                                     | Default    | Description                   |
+| ---------- | ---------------------------------------- | ---------- | ----------------------------- |
+| `value`    | `SelectedImage \| null`                  | —          | Current selection             |
+| `onChange` | `(value: SelectedImage \| null) => void` | —          | Called when selection changes |
+| `basePath` | `string`                                 | `'/admin'` | CMS base path                 |
+| `table`    | `string`                                 | `'media'`  | Table to pick from            |
+| `column`   | `string`                                 | `'file'`   | File column on the table      |
+| `altField` | `string`                                 | `'alt'`    | Column to use for alt text    |
+
+### How It Works
+
+1. User clicks "Pick Image" → Opens a `<dialog>` modal
+2. Modal contains an iframe pointing to `{basePath}/{table}?picker=true`
+3. CMS renders a minimal grid view (no sidebar, picker mode)
+4. User clicks an image → CMS posts `cms:media-selected` to parent window
+5. Component captures the message and calls `onChange` with the selection
+
+This uses the CMS [picker mode](../cms/README.md) feature, which works with any table that has a `thumbnail: true` column.
+
 ## Example Project
 
 See `apps/demo/` for a complete working example with Puck integration.
