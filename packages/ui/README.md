@@ -254,7 +254,7 @@ The grid view supports a **picker mode** for embedding in iframes (e.g., media s
 - Clicking posts a message to the parent window via `postMessage()`
 - Minimal layout with no sidebar or navigation
 
-> **Note:** Picker mode requires the CMS and parent page to be on the **same origin**. The `postMessage` uses `window.location.origin` as the target for security.
+> **Note:** Picker mode requires the CMS and parent page to be on the **same origin**. The `postMessage` uses `window.location.origin` as the target for security. Additionally, the CMS requires a valid `_source` token in the picker URL to prevent unauthorized access.
 
 **postMessage shape:**
 
@@ -262,11 +262,17 @@ The grid view supports a **picker mode** for embedding in iframes (e.g., media s
 {
   type: 'cms:media-selected',
   table: 'media',           // Table name
-  id: '123',                // Primary key
+  id: '123',                // Primary key (always included)
   url: 'https://...',       // Resolved thumbnail URL (handles S3 presigned URLs)
-  record: { ... }           // Full record data
+  record: {                 // Filtered record data (secure by default)
+    id: 123,                // Primary key (always included)
+    file: { ... },          // Source column (requires role: 'source')
+    alt: '...',             // Source column (requires role: 'source')
+  }
 }
 ```
+
+> **Source columns:** By default, `record` only contains the primary key. All other columns (including the file column) require explicit opt-in via `$cms({ plugins: { puck: { role: 'source' } } })`. The `thumbnail: true` option controls grid rendering; `role: 'source'` controls data exposure. The plugin name (e.g., `puck`) is extracted from the signed `_source` token, so each plugin only receives columns opted-in to it.
 
 **Example:**
 

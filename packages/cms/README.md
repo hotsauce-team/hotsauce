@@ -197,7 +197,9 @@ Internal handlers for each CRUD operation. These are called by the main handler.
 
 > **Grid view:** Tables with a `thumbnail: true` column automatically use a thumbnail grid instead of a table. Users can toggle between grid and table via `?view=grid` / `?view=table`. Clicking a grid item opens an RHS detail panel (`?selected=<id>`) for inline editing without leaving the list.
 
-> **Picker mode:** Add `?picker=true` to the list URL to get a minimal iframe-embeddable grid (no sidebar, navigation, or create button). Clicking a grid item posts a `cms:media-selected` message to `window.parent`. This enables media selection in visual editors like Puck. See the `@hotsauce/ui` README for postMessage shape details.
+> **Picker mode:** Add `?picker=true&_source=<token>` to the list URL to get a minimal iframe-embeddable grid for media selection in visual editors like Puck. The `_source` token is a signed plugin identifier (e.g., `plugin:puck`) that controls which columns are included in the postMessage data. Without a valid token, picker mode returns 403 Forbidden.
+>
+> **Security:** By default, picker mode only sends the primary key. All other columns (including the file column) require explicit opt-in via `$cms({ plugins: { puck: { role: 'source' } } })`. The `thumbnail: true` option controls grid rendering; `role: 'source'` controls data exposure. See the `@hotsauce/ui` README for postMessage shape details.
 
 ### `http.ts` - HTTP Response Helpers
 

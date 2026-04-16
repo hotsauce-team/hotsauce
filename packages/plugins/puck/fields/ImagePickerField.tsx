@@ -4,14 +4,18 @@
 /**
  * ImagePickerField - Custom Puck field for selecting images from CMS
  *
- * Opens the CMS grid view in an iframe with `?picker=true` mode.
+ * Opens the CMS grid view in an iframe with `?picker=true&_source=...` mode.
  * When the user clicks an image, the picker posts a `cms:media-selected`
  * message containing the record data and resolved URL.
+ *
+ * Requires CmsContext (basePath and sourceToken) to be set by the Puck editor.
+ * The source token authenticates picker requests so column policies can filter
+ * records based on `ctx.source === 'plugin:puck'`.
  *
  * @module
  */
 
-import { React } from '../client/globals.ts';
+import { CmsContext, React } from '../client/globals.ts';
 
 // ============================================================================
 // Types
@@ -44,7 +48,7 @@ export type ImagePickerFieldProps = {
   value: SelectedImage | null;
   /** Callback when selection changes */
   onChange: (value: SelectedImage | null) => void;
-  /** Base path where the CMS is mounted (default: '/admin') */
+  /** Base path where the CMS is mounted (defaults to CmsContext.basePath or '/admin') */
   basePath?: string;
   /** Table name to pick from (default: 'media') */
   table?: string;
@@ -90,11 +94,25 @@ export type ImagePickerFieldProps = {
 export function ImagePickerField({
   value,
   onChange,
-  basePath = '/admin',
+  basePath,
   table = 'media',
   column = 'file',
   altField = 'alt',
 }: ImagePickerFieldProps) {
+  // Use CmsContext for basePath and sourceToken (set by Puck editor)
+  const resolvedBasePath = basePath ?? CmsContext?.basePath ?? '/admin';
+  const sourceToken = CmsContext?.sourceToken;
+
+  // Warn if sourceToken is missing (picker mode requires it)
+  if (!sourceToken && typeof window !== 'undefined') {
+    // deno-lint-ignore no-console
+    console.warn(
+      '[ImagePickerField] CmsContext.sourceToken not found. ' +
+        'Picker mode requires a valid source token. ' +
+        'Ensure this component is used within the Puck editor.',
+    );
+  }
+
   const [isOpen, setIsOpen] = React.useState(false);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
@@ -144,7 +162,7 @@ export function ImagePickerField({
         ? (
           <div style={{ position: 'relative' }}>
             <img
-              src={`${basePath}/files/${value.table}/${value.column}/${value.id}${
+              src={`${resolvedBasePath}/files/${value.table}/${value.column}/${value.id}${
                 value.filename ? `/${encodeURIComponent(value.filename)}` : ''
               }`}
               alt={value.alt || ''}
@@ -265,7 +283,9 @@ export function ImagePickerField({
           {isOpen && (
             <iframe
               ref={iframeRef}
-              src={`${basePath}/${table}?picker=true`}
+              src={`${resolvedBasePath}/${table}?picker=true${
+                sourceToken ? `&_source=${encodeURIComponent(sourceToken)}` : ''
+              }`}
               style={{
                 flex: 1,
                 width: '100%',

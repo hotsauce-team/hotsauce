@@ -54,6 +54,7 @@ import {
 } from './csrf.ts';
 import {
   generateSourceToken,
+  getPluginName,
   getSourceTokenFromFormData,
   SOURCE,
   validateSourceToken,
@@ -460,6 +461,28 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   const basePath = options.basePath;
   const drizzleTable = table.table;
 
+  // Check picker mode and validate source token
+  // Picker mode requires a valid source token to prevent unauthorized access
+  const pickerMode = url.searchParams.get('picker') === 'true';
+  let source: string | undefined;
+
+  if (pickerMode) {
+    const sourceToken = url.searchParams.get('_source');
+    const validatedSource = await validateSourceToken(
+      sourceToken,
+      options.csrfSecret,
+    );
+    if (!validatedSource) {
+      // Invalid or missing source token - reject picker mode request
+      return htmlResponse(
+        '<h1>403 Forbidden</h1><p>Picker mode requires a valid source token.</p>',
+        403,
+        ctx.options.securityHeaders,
+      );
+    }
+    source = validatedSource;
+  }
+
   // Apply row policy for list action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
@@ -467,7 +490,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   }
   const tablePolicy = options.policies?.[table.name];
   const rowPolicy = extractRowPolicy(tablePolicy);
-  const policyCtx = createPolicyContext(request, authUser);
+  const policyCtx = createPolicyContext(request, authUser, source);
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
 
   if (!policyResult.allowed) {
@@ -570,9 +593,10 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   const pkCol = getPrimaryKeyColumn(table);
 
   // Picker mode: minimal grid UI for iframe embedding (e.g., Puck media picker)
-  const pickerMode = url.searchParams.get('picker') === 'true';
+  // Note: pickerMode and source token already validated at start of handleList
   if (pickerMode && thumbnailField) {
-    // Build thumbnails with full record data for postMessage
+    // Build thumbnails with minimal record data for postMessage
+    // Only include PK and file column — no extra data leaks to client
     const thumbnails: GridThumbnail[] = records.map((record) => {
       const id = record[pkCol.propertyName] as string | number;
       const value = record[thumbnailField.column.propertyName];
@@ -589,7 +613,35 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
       const label = isValidFileReference(value) ? value.filename : String(id);
 
-      return { id, thumbnailUrl, label, record };
+      // Filter record to only PK + source columns (secure by default)
+      // Source columns are those with `plugins.[pluginName].role === 'source'`
+      // Note: Even the file column must explicitly opt in — thumbnail: true is for grid rendering only
+      const pickerRecord: Record<string, unknown> = {
+        [pkCol.propertyName]: id,
+      };
+
+      // Include columns that opted into this plugin as source data
+      // source is 'plugin:puck', pluginName is 'puck'
+      const pluginName = getPluginName(source);
+      if (pluginName) {
+        for (const col of table.columns) {
+          // Skip PK (already included)
+          if (col.propertyName === pkCol.propertyName) {
+            continue;
+          }
+          const pluginConfig = col.cmsOptions?.plugins?.[pluginName];
+          // Check for role: 'source' (explicit opt-in)
+          if (
+            pluginConfig &&
+            typeof pluginConfig === 'object' &&
+            (pluginConfig as { role?: string }).role === 'source'
+          ) {
+            pickerRecord[col.propertyName] = record[col.propertyName];
+          }
+        }
+      }
+
+      return { id, thumbnailUrl, label, record: pickerRecord };
     });
 
     const gridOptions: GridViewOptions = {

@@ -22,6 +22,14 @@ type _PuckProps = ComponentProps<typeof Puck>;
 // deno-lint-ignore no-explicit-any
 (globalThis as any).PuckDropZone = DropZone;
 
+// CMS context for custom fields (basePath, sourceToken, etc.)
+// Set during initPuckEditor - accessed via globals.ts
+// deno-lint-ignore no-explicit-any
+(globalThis as any).CmsContext = {} as {
+  basePath: string;
+  sourceToken: string;
+};
+
 // Types for editor initialization
 export interface PuckEditorOptions {
   /** URL to user's components bundle (ES module) */
@@ -65,6 +73,13 @@ export async function initPuckEditor(
     console.error('[Puck] Root element #puck-root not found');
     return;
   }
+
+  // Populate CMS context for custom fields before loading user components
+  // deno-lint-ignore no-explicit-any
+  (globalThis as any).CmsContext = {
+    basePath: options.basePath,
+    sourceToken: options.sourceToken,
+  };
 
   // Dynamic import user's components
   let userModule: UserComponentsModule;

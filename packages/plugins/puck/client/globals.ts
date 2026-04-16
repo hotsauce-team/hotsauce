@@ -5,7 +5,7 @@
  * Import these in your components file instead of accessing globalThis directly:
  *
  * ```ts
- * import { React, DropZone } from '@hotsauce/plugins/puck/client/globals';
+ * import { React, DropZone, CmsContext } from '@hotsauce/plugins/puck/client/globals';
  * ```
  *
  * These are only available at runtime after puck-editor.js has loaded.
@@ -20,3 +20,14 @@ export const React = (globalThis as any).React as typeof ReactType;
 export const DropZone = (globalThis as any).PuckDropZone as ReactType.FC<{
   zone: string;
 }>;
+
+/**
+ * CMS context for custom fields.
+ * Contains basePath and sourceToken for making authenticated requests.
+ */
+export const CmsContext = (globalThis as any).CmsContext as {
+  /** Base path where CMS is mounted (e.g., '/admin') */
+  basePath: string;
+  /** Signed source token for authenticated requests */
+  sourceToken: string;
+};

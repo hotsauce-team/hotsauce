@@ -430,6 +430,7 @@ export function pickerGridView(
 export const pickerScript = `
 (function() {
   'use strict';
+  
   document.addEventListener('click', function(e) {
     var item = e.target.closest('.cms-grid-picker-item');
     if (!item) return;
@@ -444,6 +445,7 @@ export const pickerScript = `
     } catch (err) {
       record = {};
     }
+    
     // Post message to parent (Puck editor iframe parent)
     // Include resolved URL separately for S3/presigned URLs
     window.parent.postMessage({

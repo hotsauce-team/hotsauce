@@ -244,12 +244,45 @@ URLs are constructed at render time using file proxy routes. When `filename` is 
 ### How It Works
 
 1. User clicks "Pick Image" → Opens a `<dialog>` modal
-2. Modal contains an iframe pointing to `{basePath}/{table}?picker=true`
+2. Modal contains an iframe pointing to `{basePath}/{table}?picker=true&_source=<token>`
 3. CMS renders a minimal grid view (no sidebar, picker mode)
 4. User clicks an image → CMS posts `cms:media-selected` to parent window
 5. Component validates `event.source` matches the iframe, then calls `onChange`
 
-**Security:** Messages are validated via `event.source` to prevent spoofing from other scripts/tabs. The CMS posts only to `window.location.origin` (same-origin required).
+**Security:** Messages are validated via `event.source` to prevent spoofing from other scripts/tabs. The CMS posts only to `window.location.origin` (same-origin required). The `_source` token is automatically provided by the CMS context.
+
+### Source Columns (Alt Text)
+
+By default, the picker only sends the primary key. All other columns — including the file column — require explicit opt-in via `plugins: { puck: { role: 'source' } }`. This ensures no data is accidentally exposed to plugins.
+
+```ts
+export const media = pgTable('media', {
+  id: serial('id').primaryKey(), // Always sent (not configurable)
+  // File column: thumbnail: true for grid display, role: 'source' for picker data
+  file: jsonb('file').$type<FileReference>().$cms({
+    file: { accept: 'image/*' },
+    thumbnail: true, // Grid rendering
+    plugins: { puck: { role: 'source' } }, // Data exposure
+  }),
+  // Alt text as source data — included in picker postMessage
+  alt: text('alt').$cms({
+    plugins: { puck: { role: 'source' } },
+  }),
+  // Caption is NOT marked — excluded from picker data
+  caption: text('caption'),
+});
+```
+
+With this configuration:
+
+- `id` is always included (primary key)
+- `file` is included because it's marked as a Puck source column
+- `alt` is included because it's marked as a Puck source column
+- `caption` is excluded (no plugin config)
+
+> **Note:** `thumbnail: true` controls grid view rendering. `plugins: { puck: { role: 'source' } }` controls what data flows to Puck. These are separate concerns — you need both for a fully functional picker.
+
+The `ImagePickerField` component automatically reads `alt` from the picker's `record` data when available.
 
 This uses the CMS [picker mode](../cms/README.md) feature, which works with any table that has a `thumbnail: true` column.
 
