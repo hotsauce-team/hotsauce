@@ -291,6 +291,7 @@ export function ImagePickerField({
                 width: '100%',
                 border: 'none',
               }}
+              title='Image Picker'
             />
           )}
         </div>
