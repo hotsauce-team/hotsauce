@@ -104,14 +104,16 @@ export function ImagePickerField({
   const sourceToken = CmsContext?.sourceToken;
 
   // Warn if sourceToken is missing (picker mode requires it)
-  if (!sourceToken && typeof window !== 'undefined') {
-    // deno-lint-ignore no-console
-    console.warn(
-      '[ImagePickerField] CmsContext.sourceToken not found. ' +
-        'Picker mode requires a valid source token. ' +
-        'Ensure this component is used within the Puck editor.',
-    );
-  }
+  React.useEffect(() => {
+    if (!sourceToken && typeof window !== 'undefined') {
+      // deno-lint-ignore no-console
+      console.warn(
+        '[ImagePickerField] CmsContext.sourceToken not found. ' +
+          'Picker mode requires a valid source token. ' +
+          'Ensure this component is used within the Puck editor.',
+      );
+    }
+  }, [sourceToken]);
 
   const [isOpen, setIsOpen] = React.useState(false);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
