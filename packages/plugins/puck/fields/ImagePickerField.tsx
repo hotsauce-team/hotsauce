@@ -116,12 +116,30 @@ export function ImagePickerField({
   const [isOpen, setIsOpen] = React.useState(false);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const pickerSrc = `${resolvedBasePath}/${table}?picker=true${
+    sourceToken ? `&_source=${encodeURIComponent(sourceToken)}` : ''
+  }`;
 
   // Handle postMessage from picker iframe
   React.useEffect(() => {
+    let expectedOrigin: string | null = null;
+
+    try {
+      // Derive the trusted origin from the same URL used to load the picker iframe.
+      const locationHref = globalThis.location?.href;
+      expectedOrigin = locationHref
+        ? new URL(pickerSrc, locationHref).origin
+        : null;
+    } catch {
+      // Fail closed: ignore all messages if we cannot determine a trusted origin.
+      expectedOrigin = null;
+    }
+
     function handleMessage(event: MessageEvent) {
       // Validate message source is our iframe (prevents spoofing from other scripts/tabs)
       if (event.source !== iframeRef.current?.contentWindow) return;
+      // Validate sender origin in case the iframe window navigates unexpectedly.
+      if (!expectedOrigin || event.origin !== expectedOrigin) return;
 
       if (event.data?.type === 'cms:media-selected') {
         const record = event.data.record;
@@ -145,7 +163,7 @@ export function ImagePickerField({
       globalThis.addEventListener('message', handleMessage);
       return () => globalThis.removeEventListener('message', handleMessage);
     }
-  }, [isOpen, onChange, column, table, altField]);
+  }, [isOpen, onChange, column, table, altField, pickerSrc]);
 
   const openPicker = () => {
     setIsOpen(true);
@@ -283,9 +301,7 @@ export function ImagePickerField({
           {isOpen && (
             <iframe
               ref={iframeRef}
-              src={`${resolvedBasePath}/${table}?picker=true${
-                sourceToken ? `&_source=${encodeURIComponent(sourceToken)}` : ''
-              }`}
+              src={pickerSrc}
               style={{
                 flex: 1,
                 width: '100%',
