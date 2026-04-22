@@ -432,7 +432,9 @@ export const pickerScript = `
   'use strict';
   
   document.addEventListener('click', function(e) {
-    var item = e.target.closest('.cms-grid-picker-item');
+    var target = e.target;
+    if (!(target instanceof Element)) return;
+    var item = target.closest('.cms-grid-picker-item');
     if (!item) return;
     e.preventDefault();
     var id = item.dataset.pickerId;
