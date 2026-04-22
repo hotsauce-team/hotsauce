@@ -595,8 +595,10 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Picker mode: minimal grid UI for iframe embedding (e.g., Puck media picker)
   // Note: pickerMode and source token already validated at start of handleList
   if (pickerMode && thumbnailField) {
-    // Build thumbnails with minimal record data for postMessage
-    // Only include PK and file column — no extra data leaks to client
+    // Build thumbnails with minimal record data for postMessage.
+    // Expose the PK plus only non-PK columns explicitly opted into the current
+    // plugin via `plugins[pluginName].role === 'source'`; the thumbnail/file
+    // column is not included unless it also opts in as a source column.
     const thumbnails: GridThumbnail[] = records.map((record) => {
       const id = record[pkCol.propertyName] as string | number;
       const value = record[thumbnailField.column.propertyName];
