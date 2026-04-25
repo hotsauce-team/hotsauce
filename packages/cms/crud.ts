@@ -56,6 +56,7 @@ import {
   generateSourceToken,
   getPluginName,
   getSourceTokenFromFormData,
+  isPluginSource,
   SOURCE,
   validateSourceToken,
 } from './tokens/mod.ts';
@@ -480,6 +481,17 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
         ctx.options.securityHeaders,
       );
     }
+
+    // Picker mode is currently reserved for plugin iframes.
+    // A core-CMS picker (SOURCE.CMS) should use a dedicated mode/route so its
+    // data-exposure rules are explicit and testable.
+    if (!isPluginSource(validatedSource)) {
+      return htmlResponse(
+        '<h1>403 Forbidden</h1><p>Picker mode requires a plugin source token.</p>',
+        403,
+        ctx.options.securityHeaders,
+      );
+    }
     source = validatedSource;
   }
 
@@ -595,6 +607,11 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Picker mode: minimal grid UI for iframe embedding (e.g., Puck media picker)
   // Note: pickerMode and source token already validated at start of handleList
   if (pickerMode && thumbnailField) {
+    const pluginName = getPluginName(source);
+    if (!pluginName) {
+      return htmlResponse('Forbidden', 403, ctx.options.securityHeaders);
+    }
+
     // Build thumbnails with minimal record data for postMessage.
     // Expose the PK plus only non-PK columns explicitly opted into the current
     // plugin via `plugins[pluginName].role === 'source'`; the thumbnail/file
@@ -625,22 +642,19 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
       // Include columns that opted into this plugin as source data
       // source is 'plugin:puck', pluginName is 'puck'
-      const pluginName = getPluginName(source);
-      if (pluginName) {
-        for (const col of table.columns) {
-          // Skip PK (already included)
-          if (col.propertyName === pkCol.propertyName) {
-            continue;
-          }
-          const pluginConfig = col.cmsOptions?.plugins?.[pluginName];
-          // Check for role: 'source' (explicit opt-in)
-          if (
-            pluginConfig &&
-            typeof pluginConfig === 'object' &&
-            (pluginConfig as { role?: string }).role === 'source'
-          ) {
-            pickerRecord[col.propertyName] = record[col.propertyName];
-          }
+      for (const col of table.columns) {
+        // Skip PK (already included)
+        if (col.propertyName === pkCol.propertyName) {
+          continue;
+        }
+        const pluginConfig = col.cmsOptions?.plugins?.[pluginName];
+        // Check for role: 'source' (explicit opt-in)
+        if (
+          pluginConfig &&
+          typeof pluginConfig === 'object' &&
+          (pluginConfig as { role?: string }).role === 'source'
+        ) {
+          pickerRecord[col.propertyName] = record[col.propertyName];
         }
       }
 
@@ -685,6 +699,28 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     }
 
     return htmlResponse(pageHtml, 200, headers);
+  }
+
+  // Picker mode on a table with no thumbnail field: reject cleanly rather than
+  // leaking the full admin layout into the iframe.
+  if (pickerMode) {
+    const pickerContent = pickerLayout(
+      '<div class="cms-picker-view"><p class="cms-empty">This table does not support the image picker.</p></div>',
+      {
+        title: formatTableName(table.name),
+        stylesheetUrl: cmsUrl(basePath, 'styles.css'),
+      },
+    );
+    const headers: Record<string, string> = {
+      ...ctx.options.securityHeaders,
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Referrer-Policy': 'no-referrer',
+    };
+    if (headers['Content-Security-Policy']) {
+      headers['Content-Security-Policy'] = headers['Content-Security-Policy']
+        .replace(/frame-ancestors[^;]*(;|$)/g, "frame-ancestors 'self'$1");
+    }
+    return htmlResponse(pickerContent, 400, headers);
   }
 
   // Build content

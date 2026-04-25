@@ -1783,7 +1783,10 @@ async function handleFileServing(
         headers: {
           'Location': signedUrl,
           ...options.securityHeaders,
-          'Cache-Control': 'private, no-store', // Signed URLs are short-lived
+          // Cache the redirect (not the signed URL itself) for 60 s.
+          // The browser caches the 302, avoiding a DB + signing round-trip on
+          // every grid/picker render. The Location URL carries its own expiry.
+          'Cache-Control': 'private, max-age=60, must-revalidate',
         },
       });
     } catch (error) {

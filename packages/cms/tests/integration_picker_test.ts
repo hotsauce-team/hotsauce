@@ -16,6 +16,7 @@ import { sql } from 'drizzle-orm';
 import {
   generateSourceToken,
   pluginSource,
+  SOURCE,
   TEST_CSRF_SECRET,
 } from './integration_helpers.ts';
 import { createCmsHandler } from '../mod.ts';
@@ -184,6 +185,58 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
     },
   );
+
+  await t.step('picker mode rejects CMS source tokens', async () => {
+    const client = new PGlite();
+    const db = drizzle(client, { schema: schemaWithMedia });
+
+    // Create table
+    await db.execute(sql`
+      CREATE TABLE media (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(200) NOT NULL,
+        file JSON,
+        secret_notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    await db.insert(media).values([
+      {
+        title: 'Photo One',
+        file: {
+          filename: 'photo1.jpg',
+          contentType: 'image/jpeg',
+          size: 1024,
+        },
+      },
+    ]);
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithMedia,
+      basePath: '/admin',
+    });
+
+    const cmsSourceToken = await generateSourceToken(
+      SOURCE.CMS,
+      TEST_CSRF_SECRET,
+    );
+
+    const request = new Request(
+      `http://localhost/admin/media?picker=true&_source=${
+        encodeURIComponent(cmsSourceToken)
+      }`,
+    );
+    const response = await handler(request);
+
+    assertEquals(response.status, 403);
+    const body = await response.text();
+    assertStringIncludes(body, 'plugin source token');
+  });
 
   await t.step(
     'picker mode returns only PK + source columns (custom column names)',
