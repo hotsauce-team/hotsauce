@@ -382,7 +382,7 @@ Use this when iterating on the branch. Tick items as they land.
 - [ ] **S9** Pass `source` into `onAction('list', …)` (or skip the hook for picker queries).
 - [x] **S10** Add explicit `sandbox="allow-scripts allow-same-origin allow-forms"` to the iframe.
 - [x] **S11** `encodeURIComponent` all path segments in `pickerSrc` and `<img src>`.
-- [ ] **S12** Validate `record.id` shape (number or non-empty string) in postMessage handler.
+- [x] **S12** Validate `record.id` shape (number or non-empty string) in postMessage handler.
 - [ ] **S13** Validate (or 404) the optional `filename` segment in `/admin/files/...`.
 
 ### Correctness / UX
@@ -393,7 +393,7 @@ Use this when iterating on the branch. Tick items as they land.
 - [ ] **F4** Add pagination (or search) to picker view.
 - [x] **F5** Reject (or render empty layout for) picker requests on tables without a `thumbnailField`.
 - [x] **F6** Guard `dialog.showModal()` against re-open.
-- [ ] **F7** Stash `onChange` in a ref to stop listener churn.
+- [x] **F7** Stash `onChange` in a ref to stop listener churn.
 - [ ] **F8** Add `aria-labelledby`, autofocus, and focus-return to the dialog.
 - [ ] **F9** Document `CmsContext` load-order rule; consider freezing after init.
 - [ ] **F10** Unify editor-vs-public file URL via a single `assetUrl(media)` helper in the demo.

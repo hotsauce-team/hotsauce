@@ -124,6 +124,13 @@ export function ImagePickerField({
     sourceToken ? `&_source=${encodeURIComponent(sourceToken)}` : ''
   }`;
 
+  // Stash onChange in a ref so the message-listener effect doesn't re-register
+  // every time Puck passes a new (non-memoized) callback.
+  const onChangeRef = React.useRef(onChange);
+  React.useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
   // Handle postMessage from picker iframe
   React.useEffect(() => {
     let expectedOrigin: string | null = null;
@@ -149,9 +156,16 @@ export function ImagePickerField({
         const record = event.data.record;
         const file = record?.[column];
 
-        if (record?.id != null) {
-          onChange({
-            id: record.id,
+        // Validate id shape defensively (number or non-empty string).
+        // Picker server should only emit numeric/string PKs, but ignore anything
+        // else rather than persisting a garbage SelectedImage value.
+        const id = record?.id;
+        const isValidId = typeof id === 'number' ||
+          (typeof id === 'string' && id.length > 0);
+
+        if (isValidId) {
+          onChangeRef.current({
+            id,
             table: event.data.table || table,
             column,
             alt: (altField && record[altField]) || '',
@@ -167,7 +181,7 @@ export function ImagePickerField({
       globalThis.addEventListener('message', handleMessage);
       return () => globalThis.removeEventListener('message', handleMessage);
     }
-  }, [isOpen, onChange, column, table, altField, pickerSrc]);
+  }, [isOpen, column, table, altField, pickerSrc]);
 
   const openPicker = () => {
     setIsOpen(true);
