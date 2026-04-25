@@ -373,26 +373,26 @@ Use this when iterating on the branch. Tick items as they land.
 
 - [ ] **S1** Propagate validated `_source` into `handleFileServing`'s `policyCtx` (or move thumbnails to short-lived per-record signed URLs).
 - [ ] **S2** Reject non-plugin sources in picker mode (`getPluginName(source) === undefined` → 403).
-- [ ] **S3** Add `Referrer-Policy: no-referrer` to picker response and `referrerpolicy="no-referrer"` to the iframe; shorten source-token TTL.
+- [x] **S3** Add `Referrer-Policy: no-referrer` to picker response and `referrerpolicy="no-referrer"` to the iframe; shorten source-token TTL. _(headers + iframe attribute landed; TTL shortening still pending)_
 - [ ] **S4** Bind source token to user (and ideally table); rotate at editor open.
 - [ ] **S5** Document `CmsContext.sourceToken` trust boundary; consider opaque server-issued handle.
 - [ ] **S6** Add explicit `readableColumns` check in the picker loop + test.
 - [ ] **S7** Always set `frame-ancestors 'self'` on picker response; emit strict `<meta>` CSP from `pickerLayout`.
 - [ ] **S8** Use per-route `routeSecurityHeaders` for picker responses too.
 - [ ] **S9** Pass `source` into `onAction('list', …)` (or skip the hook for picker queries).
-- [ ] **S10** Add explicit `sandbox="allow-scripts allow-same-origin allow-forms"` to the iframe.
-- [ ] **S11** `encodeURIComponent` all path segments in `pickerSrc` and `<img src>`.
+- [x] **S10** Add explicit `sandbox="allow-scripts allow-same-origin allow-forms"` to the iframe.
+- [x] **S11** `encodeURIComponent` all path segments in `pickerSrc` and `<img src>`.
 - [ ] **S12** Validate `record.id` shape (number or non-empty string) in postMessage handler.
 - [ ] **S13** Validate (or 404) the optional `filename` segment in `/admin/files/...`.
 
 ### Correctness / UX
 
 - [ ] **F1** Add `Cache-Control: private, max-age=60, must-revalidate` to `/admin/files/...` redirects (or restore inline signing for grid).
-- [ ] **F2** Fix `value?.id` truthiness — use `value?.id != null`.
+- [x] **F2** Fix `value?.id` truthiness — use `value?.id != null`.
 - [ ] **F3** Have the picker postMessage include `column` from the server's `thumbnailField`; field should prefer that.
 - [ ] **F4** Add pagination (or search) to picker view.
 - [ ] **F5** Reject (or render empty layout for) picker requests on tables without a `thumbnailField`.
-- [ ] **F6** Guard `dialog.showModal()` against re-open.
+- [x] **F6** Guard `dialog.showModal()` against re-open.
 - [ ] **F7** Stash `onChange` in a ref to stop listener churn.
 - [ ] **F8** Add `aria-labelledby`, autofocus, and focus-return to the dialog.
 - [ ] **F9** Document `CmsContext` load-order rule; consider freezing after init.
@@ -423,7 +423,7 @@ Use this when iterating on the branch. Tick items as they land.
 ### House-keeping
 
 - [ ] Decide what to do with untracked `COMPARE.md` and unstaged `apps/demo/site/static/styles.css` before merge.
-- [ ] Fix the misleading "browser-cacheable" comment at [crud.ts L601-L603](packages/cms/crud.ts#L601-L603).
+- [x] Fix the misleading "browser-cacheable" comment at [crud.ts L601-L603](packages/cms/crud.ts#L601-L603).
 
 ---
 

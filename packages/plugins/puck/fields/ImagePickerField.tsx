@@ -118,7 +118,9 @@ export function ImagePickerField({
   const [isOpen, setIsOpen] = React.useState(false);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
-  const pickerSrc = `${resolvedBasePath}/${table}?picker=true${
+  const pickerSrc = `${resolvedBasePath}/${
+    encodeURIComponent(table)
+  }?picker=true${
     sourceToken ? `&_source=${encodeURIComponent(sourceToken)}` : ''
   }`;
 
@@ -169,7 +171,10 @@ export function ImagePickerField({
 
   const openPicker = () => {
     setIsOpen(true);
-    dialogRef.current?.showModal();
+    // Guard against re-opening an already-open dialog (showModal throws InvalidStateError)
+    if (dialogRef.current && !dialogRef.current.open) {
+      dialogRef.current.showModal();
+    }
   };
 
   const clearSelection = () => {
@@ -178,11 +183,15 @@ export function ImagePickerField({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      {value?.id
+      {value?.id != null
         ? (
           <div style={{ position: 'relative' }}>
             <img
-              src={`${resolvedBasePath}/files/${value.table}/${value.column}/${value.id}${
+              src={`${resolvedBasePath}/files/${
+                encodeURIComponent(value.table)
+              }/${encodeURIComponent(value.column)}/${
+                encodeURIComponent(String(value.id))
+              }${
                 value.filename ? `/${encodeURIComponent(value.filename)}` : ''
               }`}
               alt={value.alt || ''}
@@ -310,6 +319,8 @@ export function ImagePickerField({
                 border: 'none',
               }}
               title='Image Picker'
+              sandbox='allow-scripts allow-same-origin allow-forms'
+              referrerPolicy='no-referrer'
             />
           )}
         </div>

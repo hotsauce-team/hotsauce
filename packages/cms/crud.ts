@@ -603,7 +603,8 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       const id = record[pkCol.propertyName] as string | number;
       const value = record[thumbnailField.column.propertyName];
       // Proxy URL — the /files/ route serves both DB-stored and S3 files.
-      // Avoids inline base64 (smaller HTML, browser-cacheable).
+      // Avoids inline base64/large signed URLs in HTML; the proxy handler
+      // controls cache headers per-request.
       const fileUrl =
         `${basePath}/files/${table.name}/${thumbnailField.column.name}/${id}`;
 
@@ -673,6 +674,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     const headers: Record<string, string> = {
       ...ctx.options.securityHeaders,
       'X-Frame-Options': 'SAMEORIGIN',
+      // Prevent the signed _source token in the picker URL from leaking
+      // to access logs via Referer on same-origin subresource requests.
+      'Referrer-Policy': 'no-referrer',
     };
     // Update CSP to allow framing from same origin
     if (headers['Content-Security-Policy']) {
