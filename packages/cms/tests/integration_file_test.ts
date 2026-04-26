@@ -9,6 +9,7 @@ import {
   AUTH_SECRET,
   createProfilesTable,
   generateSourceToken,
+  pluginSource,
   profiles,
   schemaWithFiles,
   SOURCE,
@@ -826,6 +827,171 @@ Deno.test('integration: policy-gated file serving', async (t) => {
     assertEquals(response.status, 200);
     assertEquals(response.headers.get('Content-Type'), 'image/png');
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // _source token plumbing on /admin/files/...
+  //
+  // /admin/files/... must propagate ?_source=<token> into the policy
+  // context so that source-aware row policies behave consistently with
+  // the picker list page (handleList). Without this, a policy that allows
+  // reads inside the picker iframe would still 404 every thumbnail and
+  // every editor-canvas image, even though the user just selected the row.
+  // ──────────────────────────────────────────────────────────────────────
+
+  function makeSourceGatedHandler() {
+    return createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: noopAuthProvider,
+      },
+      policies: {
+        // Only allow reads when ctx.source identifies the puck plugin.
+        profiles: (ctx) =>
+          ctx.source === pluginSource('puck') ? undefined : false,
+      },
+    });
+  }
+
+  await t.step(
+    'source-gated row policy: file 404s when _source missing',
+    async () => {
+      await seedProfile();
+
+      const handler = makeSourceGatedHandler();
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      // Policy returns false because ctx.source is undefined → 404
+      assertEquals(response.status, 404);
+    },
+  );
+
+  await t.step(
+    'source-gated row policy: file serves when valid _source matches',
+    async () => {
+      await seedProfile();
+
+      const handler = makeSourceGatedHandler();
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+      const sourceToken = await generateSourceToken(
+        pluginSource('puck'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/files/profiles/avatar/1?_source=${
+          encodeURIComponent(sourceToken)
+        }`,
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      assertEquals(response.headers.get('Content-Type'), 'image/png');
+    },
+  );
+
+  await t.step(
+    'source-gated row policy: file 404s when _source is for a different plugin',
+    async () => {
+      await seedProfile();
+
+      const handler = makeSourceGatedHandler();
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+      const wrongSourceToken = await generateSourceToken(
+        pluginSource('other-plugin'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/files/profiles/avatar/1?_source=${
+          encodeURIComponent(wrongSourceToken)
+        }`,
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      // Token validates, but ctx.source !== 'plugin:puck' → policy denies → 404
+      assertEquals(response.status, 404);
+    },
+  );
+
+  await t.step(
+    'invalid _source token is treated as missing (no 4xx escalation, policy decides)',
+    async () => {
+      await seedProfile();
+
+      // Permissive policy that doesn't care about source
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        auth: {
+          secret: AUTH_SECRET,
+          provider: noopAuthProvider,
+        },
+        policies: 'dangerously-open',
+      });
+
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1?_source=garbage.not.a.token',
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      // Bad token silently falls back to ctx.source = undefined.
+      // Permissive policy still allows the read.
+      assertEquals(response.status, 200);
+      assertEquals(response.headers.get('Content-Type'), 'image/png');
+    },
+  );
+
+  await t.step(
+    'expired _source token is treated as missing',
+    async () => {
+      await seedProfile();
+
+      const handler = makeSourceGatedHandler();
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+
+      // Hand-craft a token whose timestamp is well past the 4h TTL.
+      // Token format: source.timestamp(base36).signature
+      // Signature won't match for an arbitrary timestamp, so this exercises
+      // the "invalid signature → null source" branch. Either way the
+      // observable behavior is the same as a missing token: policy denies.
+      const expiredToken = `${pluginSource('puck')}.${
+        (Date.now() - 5 * 60 * 60 * 1000).toString(36)
+      }.deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef`;
+
+      const request = new Request(
+        `http://localhost/admin/files/profiles/avatar/1?_source=${
+          encodeURIComponent(expiredToken)
+        }`,
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      // Source token rejected → ctx.source = undefined → policy denies → 404
+      assertEquals(response.status, 404);
+    },
+  );
 
   await client.close();
 });

@@ -612,6 +612,14 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       return htmlResponse('Forbidden', 403, ctx.options.securityHeaders);
     }
 
+    // Reuse the (already-validated) raw token from the picker URL so thumbnail
+    // requests carry the same source identity. Avoids re-minting per image and
+    // lets handleFileServing apply source-aware row policies consistently.
+    const rawSourceToken = url.searchParams.get('_source');
+    const sourceQuery = rawSourceToken
+      ? `?_source=${encodeURIComponent(rawSourceToken)}`
+      : '';
+
     // Build thumbnails with minimal record data for postMessage.
     // Expose the PK plus only non-PK columns explicitly opted into the current
     // plugin via `plugins[pluginName].role === 'source'`; the thumbnail/file
@@ -623,7 +631,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       // Avoids inline base64/large signed URLs in HTML; the proxy handler
       // controls cache headers per-request.
       const fileUrl =
-        `${basePath}/files/${table.name}/${thumbnailField.column.name}/${id}`;
+        `${basePath}/files/${table.name}/${thumbnailField.column.name}/${id}${sourceQuery}`;
 
       const thumbnailUrl = resolveThumbnailUrl(
         value,

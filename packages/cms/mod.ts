@@ -180,7 +180,11 @@ export {
 } from './tokens/mod.ts';
 
 // Import locally for use in handlePluginRoute
-import { generateSourceToken, pluginSource } from './tokens/mod.ts';
+import {
+  generateSourceToken,
+  pluginSource,
+  validateSourceToken,
+} from './tokens/mod.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Router - URL parsing and route generation
@@ -1644,7 +1648,20 @@ async function handleFileServing(
   const authUser = jwtPayload
     ? { id: jwtPayload.sub, role: jwtPayload.role }
     : undefined;
-  const policyCtx = createPolicyContext(request, authUser);
+
+  // Optional source token: when present and valid, surfaces ctx.source to
+  // policies so the same row policy can be evaluated consistently across the
+  // picker list page and its thumbnail file fetches. An invalid token is
+  // treated as no token (we don't 403 here — the row policy will deny if it
+  // requires a specific source).
+  const url = new URL(request.url);
+  const rawSourceToken = url.searchParams.get('_source');
+  const source = rawSourceToken
+    ? (await validateSourceToken(rawSourceToken, options.csrfSecret)) ??
+      undefined
+    : undefined;
+
+  const policyCtx = createPolicyContext(request, authUser, source);
 
   // Check row read policy
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'read');
