@@ -376,7 +376,7 @@ Use this when iterating on the branch. Tick items as they land.
 - [x] **S3** Add `Referrer-Policy: no-referrer` to picker response and `referrerpolicy="no-referrer"` to the iframe; shorten source-token TTL. _(headers + iframe attribute landed; TTL shortening still pending)_
 - [ ] **S4** Bind source token to user (and ideally table); rotate at editor open.
 - [ ] **S5** Document `CmsContext.sourceToken` trust boundary; consider opaque server-issued handle.
-- [ ] **S6** Add explicit `readableColumns` check in the picker loop + test.
+- [x] **S6** Add explicit `readableColumns` check in the picker loop + test.
 - [ ] **S7** Always set `frame-ancestors 'self'` on picker response; emit strict `<meta>` CSP from `pickerLayout`.
 - [ ] **S8** Use per-route `routeSecurityHeaders` for picker responses too.
 - [ ] **S9** Pass `source` into `onAction('list', …)` (or skip the hook for picker queries).
@@ -390,7 +390,7 @@ Use this when iterating on the branch. Tick items as they land.
 - [x] **F1** Add `Cache-Control: private, max-age=60, must-revalidate` to `/admin/files/...` redirects (or restore inline signing for grid).
 - [x] **F2** Fix `value?.id` truthiness — use `value?.id != null`.
 - [x] **F3** Have the picker postMessage include `column` from the server's `thumbnailField`; field should prefer that.
-- [ ] **F4** Add pagination (or search) to picker view.
+- [-] **F4** Add pagination (or search) to picker view.
 - [x] **F5** Reject (or render empty layout for) picker requests on tables without a `thumbnailField`.
 - [x] **F6** Guard `dialog.showModal()` against re-open.
 - [x] **F7** Stash `onChange` in a ref to stop listener churn.
@@ -406,7 +406,7 @@ Use this when iterating on the branch. Tick items as they land.
 - [ ] Test `ctx.source === 'plugin:puck'` reaches row policies in picker mode.
 - [x] Test S2 (CMS-source token → 403 in picker mode).
 - [ ] Test expired source token → 403.
-- [ ] Test column hidden by policy → key absent from `data-picker-record` (S6 contract).
+- [x] Test column hidden by policy → key absent from `data-picker-record` (S6 contract).
 - [ ] Test S1 fix: picker thumbnails 200 when row policy uses `ctx.source`.
 - [ ] Test postMessage spoof rejection (different `event.source` is ignored).
 - [ ] Test picker response includes `Referrer-Policy: no-referrer`, full CSP, and `frame-ancestors 'self'`.

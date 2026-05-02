@@ -655,6 +655,13 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
         if (col.propertyName === pkCol.propertyName) {
           continue;
         }
+        // Column read policy takes precedence over plugin opt-in.
+        // filterRecordsColumns() already stripped hidden keys from `record`,
+        // but this explicit guard keeps the contract self-contained if that
+        // pre-filter ever changes (e.g. null placeholders instead of deletion).
+        if (!columnResult.readableColumns.includes(col.name)) {
+          continue;
+        }
         const pluginConfig = col.cmsOptions?.plugins?.[pluginName];
         // Check for role: 'source' (explicit opt-in)
         if (

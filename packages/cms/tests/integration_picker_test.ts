@@ -582,6 +582,84 @@ Deno.test('integration: picker mode tests', async (t) => {
     },
   );
 
+  await t.step(
+    'column hidden by column policy is absent from picker data',
+    async () => {
+      // 'alt' opts into puck as a source column, but a column policy hides it.
+      // Column read policy takes precedence over plugin opt-in — policy wins.
+      const client = new PGlite();
+      const db = drizzle(client, { schema: schemaWithAssets });
+
+      await db.execute(sql`
+        CREATE TABLE assets (
+          id SERIAL PRIMARY KEY,
+          file JSON,
+          alt TEXT,
+          caption TEXT,
+          internal_notes TEXT,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await db.insert(assets).values([
+        {
+          file: { filename: 'hero.jpg', contentType: 'image/jpeg', size: 4096 },
+          alt: 'Hidden alt text that should never appear',
+          caption: 'Public caption',
+          internalNotes: 'CONFIDENTIAL',
+        },
+      ]);
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: {
+          assets: {
+            columns: {
+              // 'alt' is a puck source column but hidden by column read policy
+              alt: { read: () => false },
+            },
+          },
+        },
+        db,
+        schema: schemaWithAssets,
+        basePath: '/admin',
+      });
+
+      const sourceToken = await generateSourceToken(
+        pluginSource('puck'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/assets?picker=true&_source=${
+          encodeURIComponent(sourceToken)
+        }`,
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+
+      assertStringIncludes(html, 'cms-grid-picker-item');
+      // PK always present
+      assertStringIncludes(html, '&quot;id&quot;:1');
+      // 'file' is a puck source column and not hidden — must appear
+      assertStringIncludes(html, '&quot;filename&quot;:&quot;hero.jpg&quot;');
+      // 'alt' is a puck source column but hidden by column policy — must be absent
+      assertEquals(
+        html.includes('Hidden alt text'),
+        false,
+        'alt value must not appear in picker data when hidden by column policy',
+      );
+      assertEquals(
+        html.includes('&quot;alt&quot;'),
+        false,
+        'alt key must not appear in picker data when hidden by column policy',
+      );
+    },
+  );
+
   await t.step('picker mode requires valid source token', async () => {
     const client = new PGlite();
     const db = drizzle(client, { schema: schemaWithMedia });
