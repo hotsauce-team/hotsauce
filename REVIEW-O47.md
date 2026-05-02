@@ -387,7 +387,7 @@ w = won't fix
 - [x] **S6** Add explicit `readableColumns` check in the picker loop + test.
 - [ ] **S7** Always set `frame-ancestors 'self'` on picker response; emit strict `<meta>` CSP from `pickerLayout`.
 - [ ] **S8** Use per-route `routeSecurityHeaders` for picker responses too.
-- [ ] **S9** Pass `source` into `onAction('list', …)` (or skip the hook for picker queries).
+- [-] **S9** Add `source` to `ActionContext` so audit-log plugins can distinguish picker queries from user-initiated list views.
 - [x] **S10** Add explicit `sandbox="allow-scripts allow-same-origin allow-forms"` to the iframe.
 - [x] **S11** `encodeURIComponent` all path segments in `pickerSrc` and `<img src>`.
 - [x] **S12** Validate `record.id` shape (number or non-empty string) in postMessage handler.
