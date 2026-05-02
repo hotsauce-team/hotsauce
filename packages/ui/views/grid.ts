@@ -184,7 +184,7 @@ export function gridItems(
     return html`
       <div class="cms-empty">
         <p>${emptyMessage}</p>
-        ${!options.pickerMode && raw(
+        ${options.pickerMode ? '' : raw(
           `<a href="${
             escapeHtml(options.baseUrl)
           }/new" class="cms-btn cms-btn-primary">Create New</a>`,

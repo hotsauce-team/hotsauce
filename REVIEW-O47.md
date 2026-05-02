@@ -371,7 +371,7 @@ Use this when iterating on the branch. Tick items as they land.
 
 ### Security
 
-- [ ] **S1** Propagate validated `_source` into `handleFileServing`'s `policyCtx` (or move thumbnails to short-lived per-record signed URLs).
+- [x] **S1** Propagate validated `_source` into `handleFileServing`'s `policyCtx` (or move thumbnails to short-lived per-record signed URLs).
 - [x] **S2** Reject non-plugin sources in picker mode (`getPluginName(source) === undefined` → 403).
 - [x] **S3** Add `Referrer-Policy: no-referrer` to picker response and `referrerpolicy="no-referrer"` to the iframe; shorten source-token TTL. _(headers + iframe attribute landed; TTL shortening still pending)_
 - [ ] **S4** Bind source token to user (and ideally table); rotate at editor open.
@@ -394,7 +394,7 @@ Use this when iterating on the branch. Tick items as they land.
 - [x] **F5** Reject (or render empty layout for) picker requests on tables without a `thumbnailField`.
 - [x] **F6** Guard `dialog.showModal()` against re-open.
 - [x] **F7** Stash `onChange` in a ref to stop listener churn.
-- [ ] **F8** Add `aria-labelledby`, autofocus, and focus-return to the dialog.
+- [x] **F8** Add `aria-labelledby`, autofocus, and focus-return to the dialog.
 - [ ] **F9** Document `CmsContext` load-order rule; consider freezing after init.
 - [ ] **F10** Unify editor-vs-public file URL via a single `assetUrl(media)` helper in the demo.
 - [x] **F12** Remove duplicated `gridItems` empty-state branch.

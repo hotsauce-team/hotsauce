@@ -115,6 +115,7 @@ export function ImagePickerField({
   const [isOpen, setIsOpen] = React.useState(false);
   const dialogRef = React.useRef<HTMLDialogElement>(null);
   const iframeRef = React.useRef<HTMLIFrameElement>(null);
+  const triggerRef = React.useRef<HTMLButtonElement>(null);
   const pickerSrc = `${resolvedBasePath}/${
     encodeURIComponent(table)
   }?picker=true${
@@ -192,6 +193,12 @@ export function ImagePickerField({
     }
   };
 
+  const closePicker = () => {
+    setIsOpen(false);
+    dialogRef.current?.close();
+    triggerRef.current?.focus();
+  };
+
   const clearSelection = () => {
     onChange(null);
   };
@@ -242,6 +249,7 @@ export function ImagePickerField({
 
       <div style={{ display: 'flex', gap: '8px' }}>
         <button
+          ref={triggerRef}
           type='button'
           onClick={openPicker}
           style={{
@@ -278,6 +286,7 @@ export function ImagePickerField({
 
       <dialog
         ref={dialogRef}
+        aria-labelledby='picker-title'
         style={{
           width: '90vw',
           maxWidth: '900px',
@@ -287,7 +296,7 @@ export function ImagePickerField({
           borderRadius: '8px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
         }}
-        onClose={() => setIsOpen(false)}
+        onClose={closePicker}
       >
         <div
           style={{
@@ -306,13 +315,11 @@ export function ImagePickerField({
               backgroundColor: '#f9f9f9',
             }}
           >
-            <strong>Select Image</strong>
+            <strong id='picker-title'>Select Image</strong>
             <button
               type='button'
-              onClick={() => {
-                setIsOpen(false);
-                dialogRef.current?.close();
-              }}
+              autoFocus
+              onClick={closePicker}
               style={{
                 padding: '4px 12px',
                 border: '1px solid #ccc',
