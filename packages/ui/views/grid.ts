@@ -181,18 +181,14 @@ export function gridItems(
   const emptyMessage = 'No records found.';
 
   if (records.length === 0) {
-    if (options.pickerMode) {
-      return html`
-        <div class="cms-empty">
-          <p>${emptyMessage}</p>
-        </div>
-      `;
-    }
     return html`
       <div class="cms-empty">
         <p>${emptyMessage}</p>
-        <a href="${options
-          .baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
+        ${!options.pickerMode && raw(
+          `<a href="${
+            escapeHtml(options.baseUrl)
+          }/new" class="cms-btn cms-btn-primary">Create New</a>`,
+        )}
       </div>
     `;
   }

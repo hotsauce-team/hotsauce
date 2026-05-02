@@ -397,8 +397,8 @@ Use this when iterating on the branch. Tick items as they land.
 - [ ] **F8** Add `aria-labelledby`, autofocus, and focus-return to the dialog.
 - [ ] **F9** Document `CmsContext` load-order rule; consider freezing after init.
 - [ ] **F10** Unify editor-vs-public file URL via a single `assetUrl(media)` helper in the demo.
-- [ ] **F12** Remove duplicated `gridItems` empty-state branch.
-- [ ] **F13** Use a dedicated `cms-picker-grid` wrapper (drop `cms-grid-content`/`cms-grid-main`).
+- [x] **F12** Remove duplicated `gridItems` empty-state branch.
+- [w] **F13** Use a dedicated `cms-picker-grid` wrapper (drop `cms-grid-content`/`cms-grid-main`).
 - [ ] **F15** Document and test the picker fallback when the file column isn't a `source` column.
 
 ### Tests
