@@ -286,6 +286,24 @@ The `ImagePickerField` component automatically reads `alt` from the picker's `re
 
 This uses the CMS [picker mode](../cms/README.md) feature, which works with any table that has a `thumbnail: true` column.
 
+## Security Considerations
+
+### Components bundle trust boundary
+
+The `componentsJs` bundle runs in the browser with full access to the admin session. Any code you import into it — including transitive npm dependencies — can make authenticated requests to the CMS, read records, and overwrite content. There is no sandbox between the bundle and the session.
+
+**Practical guidance:**
+
+- Audit `components.tsx` dependencies the same way you would any server-side dependency
+- Pin npm packages to specific audited versions
+- Prefer zero-dependency packages where possible
+
+This is an inherent consequence of the "bring your own bundle" architecture. The CMS cannot protect against a compromised dependency in your bundle, any more than a Node.js app can protect against a compromised `node_modules` package.
+
+### `CmsContext.sourceToken`
+
+`globalThis.CmsContext.sourceToken` is readable by any module in the bundle for the same reason above. It is not a secret — treat it as accessible to all your bundle code. Its purpose is to identify the originating plugin to the CMS (enabling `ctx.source`-based row policies), not to authenticate the user.
+
 ## Example Project
 
 See `apps/demo/` for a complete working example with Puck integration.

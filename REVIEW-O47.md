@@ -382,8 +382,8 @@ w = won't fix
 - [x] **S1** Propagate validated `_source` into `handleFileServing`'s `policyCtx` (or move thumbnails to short-lived per-record signed URLs).
 - [x] **S2** Reject non-plugin sources in picker mode (`getPluginName(source) === undefined` → 403).
 - [x] **S3** Add `Referrer-Policy: no-referrer` to picker response and `referrerpolicy="no-referrer"` to the iframe; shorten source-token TTL. _(headers + iframe attribute landed; TTL shortening still pending)_
-- [ ] **S4** Bind source token to user (and ideally table); rotate at editor open.
-- [ ] **S5** Document `CmsContext.sourceToken` trust boundary; consider opaque server-issued handle.
+- [w] **S4** Bind source token to user (and ideally table); rotate at editor open. _The source token's purpose is to identify the originating plugin so row/column policies can branch on `ctx.source`. User/table binding would constrain cross-table reuse, but that only matters when a policy explicitly grants broader access in picker mode — an operator opt-in. Session auth is the user-binding mechanism. Won't fix._
+- [x] **S5** Document `CmsContext.sourceToken` trust boundary. _The opaque server-issued handle suggestion is dropped: a compromised npm dependency in the user bundle already has admin session access (can POST arbitrary content, vandalize records, etc.) regardless of how the source token is stored. The token is no more exposed than the CSRF token in the `#puck-config` DOM element. Documentation is the right fix._
 - [x] **S6** Add explicit `readableColumns` check in the picker loop + test.
 - [x] **S7** Always set `frame-ancestors 'self'` on picker response. (`<meta>` CSP dropped — `frame-ancestors` is header-only per spec; the meta tag would duplicate the header with no added enforcement.)
 - [ ] **S8** Use per-route `routeSecurityHeaders` for picker responses too.
@@ -424,8 +424,8 @@ w = won't fix
 
 ### Docs
 
-- [ ] Add a `role: 'source' | 'output' | 'data'` reference table to [packages/cms/README.md](packages/cms/README.md).
-- [ ] Document `CmsContext.sourceToken` trust boundary in [packages/plugins/puck/README.md](packages/plugins/puck/README.md).
+- [x] Add a `role: 'source' | 'output' | 'data'` reference table to [packages/cms/README.md](packages/cms/README.md).
+- [x] Document `CmsContext.sourceToken` trust boundary in [packages/plugins/puck/README.md](packages/plugins/puck/README.md).
 - [ ] Add a picker-mode operator security checklist (Referrer-Policy, log retention, secret rotation).
 
 ### House-keeping

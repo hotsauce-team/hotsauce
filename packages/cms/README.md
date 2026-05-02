@@ -201,6 +201,18 @@ Internal handlers for each CRUD operation. These are called by the main handler.
 >
 > **Security:** By default, picker mode only sends the primary key. All other columns (including the file column) require explicit opt-in via `$cms({ plugins: { puck: { role: 'source' } } })`. The `thumbnail: true` option controls grid rendering; `role: 'source'` controls data exposure. See the `@hotsauce/ui` README for postMessage shape details.
 
+#### Plugin column roles
+
+The `role` property inside `$cms({ plugins: { <name>: { role } } })` controls how a column behaves in plugin contexts. `thumbnail` is a separate top-level `$cms()` option for grid rendering.
+
+| Role                     | Form display | Picker / plugin data               | Notes                                           |
+| ------------------------ | ------------ | ---------------------------------- | ----------------------------------------------- |
+| `role: 'data'` (default) | Shown        | Not included                       | Plugin owns the editing experience for this col |
+| `role: 'source'`         | Shown        | **Included** in postMessage record | Explicit opt-in for data exposure to plugin     |
+| `role: 'output'`         | **Hidden**   | Not included                       | Computed/derived; never shown in forms          |
+
+`thumbnail: true` and `role: 'source'` are independent — you need both to display a thumbnail in the picker grid _and_ include the file reference in the postMessage payload.
+
 ### `http.ts` - HTTP Response Helpers
 
 | Export                            | Purpose                       |
