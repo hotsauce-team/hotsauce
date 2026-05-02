@@ -300,7 +300,7 @@ interface TableParsers {
 - [ ] Plugins: Permission/compatibilities approval (env var hash or DB table gate for CSP/capability changes)
 - [ ] Plugins: Data obfuscation (PII/credential redaction)
 - [ ] Plugins: Audit logging
-- [ ] UI: Search for list and grid views (full-text search, filters, pagination)
+- [ ] UI: Search for list, grid and picker views (full-text search, filters, pagination)
 - [ ] UI: Customizable UI components
 - [ ] Auth: 2FA backup codes (recovery codes for lost authenticator)
 - [ ] Tests: Add tests for NodeJS runtime
