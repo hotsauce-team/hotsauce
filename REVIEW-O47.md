@@ -403,8 +403,8 @@ w = won't fix
 - [x] **F6** Guard `dialog.showModal()` against re-open.
 - [x] **F7** Stash `onChange` in a ref to stop listener churn.
 - [x] **F8** Add `aria-labelledby`, autofocus, and focus-return to the dialog.
-- [ ] **F9** Document `CmsContext` load-order rule; consider freezing after init.
-- [ ] **F10** Unify editor-vs-public file URL via a single `assetUrl(media)` helper in the demo.
+- [w] **F9** Document `CmsContext` load-order rule; consider freezing after init. _Not a real race: user components are loaded via `await import()` inside `initPuckEditor`, so `CmsContext` is always populated before any user module code runs. Invariant documented in a code comment._
+- [-] **F10** Unify editor-vs-public file URL via a single `assetUrl(media)` helper in the demo.
 - [x] **F12** Remove duplicated `gridItems` empty-state branch.
 - [w] **F13** Use a dedicated `cms-picker-grid` wrapper (drop `cms-grid-content`/`cms-grid-main`).
 - [w] **F15** Document and test the picker fallback when the file column isn't a `source` column. _When the file column isn't opted in, `filename` in `SelectedImage` will be `''` — intentional; storing a fallback like the record ID as a filename would be misleading._

@@ -22,8 +22,11 @@ type _PuckProps = ComponentProps<typeof Puck>;
 // deno-lint-ignore no-explicit-any
 (globalThis as any).PuckDropZone = DropZone;
 
-// CMS context for custom fields (basePath, sourceToken, etc.)
-// Set during initPuckEditor - accessed via globals.ts
+// CMS context for custom fields (basePath, sourceToken, etc.).
+// Populated by initPuckEditor() before user components are loaded — user
+// modules are loaded via dynamic import() inside initPuckEditor, so CmsContext
+// is always set before any user module code executes. Do not read CmsContext
+// at the top level of a module; always read it inside a function or component.
 // deno-lint-ignore no-explicit-any
 (globalThis as any).CmsContext = {} as {
   basePath: string;
