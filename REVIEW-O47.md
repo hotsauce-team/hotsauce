@@ -385,7 +385,7 @@ w = won't fix
 - [ ] **S4** Bind source token to user (and ideally table); rotate at editor open.
 - [ ] **S5** Document `CmsContext.sourceToken` trust boundary; consider opaque server-issued handle.
 - [x] **S6** Add explicit `readableColumns` check in the picker loop + test.
-- [ ] **S7** Always set `frame-ancestors 'self'` on picker response; emit strict `<meta>` CSP from `pickerLayout`.
+- [x] **S7** Always set `frame-ancestors 'self'` on picker response. (`<meta>` CSP dropped — `frame-ancestors` is header-only per spec; the meta tag would duplicate the header with no added enforcement.)
 - [ ] **S8** Use per-route `routeSecurityHeaders` for picker responses too.
 - [-] **S9** Add `source` to `ActionContext` so audit-log plugins can distinguish picker queries from user-initiated list views.
 - [x] **S10** Add explicit `sandbox="allow-scripts allow-same-origin allow-forms"` to the iframe.

@@ -68,6 +68,45 @@ function joinCspValues(sources?: string[]): string {
 export const SECURITY_HEADERS: Record<string, string> = buildSecurityHeaders();
 
 /**
+ * Ensure `frame-ancestors 'self'` is present in the response headers.
+ *
+ * Extracts any existing `frame-ancestors` directive and extends its source
+ * list with `'self'`. If no directive exists, one is appended. If the CSP
+ * header is absent entirely, a minimal header with `frame-ancestors 'self'`
+ * is added. This is unconditional — operator-supplied CSP that omits the
+ * directive still gets framing protection.
+ *
+ * Special case: `'none'` means "block all" and is invalid combined with other
+ * sources, so it is replaced entirely rather than extended.
+ */
+export function addFrameAncestorSelf(headers: Record<string, string>): void {
+  const csp = headers['Content-Security-Policy'];
+  if (!csp) {
+    headers['Content-Security-Policy'] = "frame-ancestors 'self'";
+    return;
+  }
+  const m = csp.match(/frame-ancestors([^;]*)(;|$)/);
+  if (m) {
+    const existing = (m[1] ?? '').trim();
+    // 'none' means "block all" — combining it with 'self' is invalid per spec,
+    // so replace it entirely rather than producing "frame-ancestors 'none' 'self'".
+    // For any other source list, extend it with 'self' if not already present.
+    const newValue = existing === "'none'" || existing.includes("'self'")
+      ? "'self'"
+      : `${existing} 'self'`;
+    headers['Content-Security-Policy'] = csp.replace(
+      /frame-ancestors[^;]*(;|$)/,
+      `frame-ancestors ${newValue}$1`,
+    );
+  } else {
+    // No frame-ancestors directive — append one.
+    headers['Content-Security-Policy'] = `${
+      csp.replace(/;?\s*$/, '')
+    }; frame-ancestors 'self'`;
+  }
+}
+
+/**
  * Create an HTML response with security headers.
  *
  * CRUD pages pass the resolved `securityHeaders` (which include user-configured

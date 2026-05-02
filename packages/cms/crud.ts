@@ -23,6 +23,7 @@ import { createView, editView } from '@hotsauce/ui';
 import { html, raw } from '@hotsauce/ui';
 import type { RouteContext, StorageRegistry } from './types.ts';
 import {
+  addFrameAncestorSelf,
   coerceFormValues,
   getPagination,
   getSort,
@@ -707,11 +708,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       // to access logs via Referer on same-origin subresource requests.
       'Referrer-Policy': 'no-referrer',
     };
-    // Update CSP to allow framing from same origin
-    if (headers['Content-Security-Policy']) {
-      headers['Content-Security-Policy'] = headers['Content-Security-Policy']
-        .replace(/frame-ancestors[^;]*(;|$)/g, "frame-ancestors 'self'$1");
-    }
+    // Ensure same-origin framing is permitted. Extract any existing
+    // frame-ancestors directive and extend it with 'self'; add one if absent.
+    addFrameAncestorSelf(headers);
 
     return htmlResponse(pageHtml, 200, headers);
   }
@@ -731,10 +730,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       'X-Frame-Options': 'SAMEORIGIN',
       'Referrer-Policy': 'no-referrer',
     };
-    if (headers['Content-Security-Policy']) {
-      headers['Content-Security-Policy'] = headers['Content-Security-Policy']
-        .replace(/frame-ancestors[^;]*(;|$)/g, "frame-ancestors 'self'$1");
-    }
+    addFrameAncestorSelf(headers);
     return htmlResponse(pickerContent, 400, headers);
   }
 
