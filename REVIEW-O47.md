@@ -372,10 +372,12 @@ Use this when iterating on the branch. Tick items as they land.
 ### Security
 
 Key:
-x = fixed in branch
 
+```
+x = fixed in branch
 - = acknowledged but deferred
-  w = won't fix
+w = won't fix
+```
 
 - [x] **S1** Propagate validated `_source` into `handleFileServing`'s `policyCtx` (or move thumbnails to short-lived per-record signed URLs).
 - [x] **S2** Reject non-plugin sources in picker mode (`getPluginName(source) === undefined` → 403).
