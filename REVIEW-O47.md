@@ -371,6 +371,12 @@ Use this when iterating on the branch. Tick items as they land.
 
 ### Security
 
+Key:
+x = fixed in branch
+
+- = acknowledged but deferred
+  w = won't fix
+
 - [x] **S1** Propagate validated `_source` into `handleFileServing`'s `policyCtx` (or move thumbnails to short-lived per-record signed URLs).
 - [x] **S2** Reject non-plugin sources in picker mode (`getPluginName(source) === undefined` → 403).
 - [x] **S3** Add `Referrer-Policy: no-referrer` to picker response and `referrerpolicy="no-referrer"` to the iframe; shorten source-token TTL. _(headers + iframe attribute landed; TTL shortening still pending)_
@@ -383,7 +389,7 @@ Use this when iterating on the branch. Tick items as they land.
 - [x] **S10** Add explicit `sandbox="allow-scripts allow-same-origin allow-forms"` to the iframe.
 - [x] **S11** `encodeURIComponent` all path segments in `pickerSrc` and `<img src>`.
 - [x] **S12** Validate `record.id` shape (number or non-empty string) in postMessage handler.
-- [ ] **S13** Validate (or 404) the optional `filename` segment in `/admin/files/...`.
+- [w] **S13** Validate (or 404) the optional `filename` segment in `/admin/files/...`. Behaviour is intentional (SEO-friendly URLs); documented with 3 integration test steps in `integration_file_test.ts`.
 
 ### Correctness / UX
 

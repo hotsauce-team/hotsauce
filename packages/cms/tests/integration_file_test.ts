@@ -699,6 +699,110 @@ Deno.test('integration: file upload tests', async (t) => {
     },
   );
 
+  // ──────────────────────────────────────────────────────────────────────
+  // 4-segment /admin/files/<table>/<col>/<id>/<filename> path
+  //
+  // The trailing filename segment is accepted and intentionally ignored —
+  // it exists solely for SEO-friendly URLs. The file is always resolved
+  // by table+column+id; the name on the segment has no effect.
+  // ──────────────────────────────────────────────────────────────────────
+
+  await t.step(
+    '4-segment URL with correct filename serves the same file as 3-segment URL',
+    async () => {
+      await resetDb();
+
+      const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+      await db.insert(profiles).values({
+        name: 'Profile for SEO URL',
+        avatar: {
+          filename: 'portrait.png',
+          contentType: 'image/png',
+          size: TEST_PNG_1X1_RED.length,
+          data: base64Data,
+        },
+      });
+
+      const handler = createHandler();
+
+      const res3 = await handler(
+        new Request('http://localhost/admin/files/profiles/avatar/1'),
+      );
+      const res4 = await handler(
+        new Request(
+          'http://localhost/admin/files/profiles/avatar/1/portrait.png',
+        ),
+      );
+
+      assertEquals(res3.status, 200);
+      assertEquals(res4.status, 200);
+      assertEquals(
+        res4.headers.get('Content-Type'),
+        res3.headers.get('Content-Type'),
+      );
+      const body3 = new Uint8Array(await res3.arrayBuffer());
+      const body4 = new Uint8Array(await res4.arrayBuffer());
+      assertEquals(body4, body3);
+    },
+  );
+
+  await t.step(
+    '4-segment URL with wrong filename still serves the file (filename is ignored)',
+    async () => {
+      await resetDb();
+
+      const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+      await db.insert(profiles).values({
+        name: 'Profile for SEO URL',
+        avatar: {
+          filename: 'portrait.png',
+          contentType: 'image/png',
+          size: TEST_PNG_1X1_RED.length,
+          data: base64Data,
+        },
+      });
+
+      const handler = createHandler();
+      const response = await handler(
+        new Request(
+          'http://localhost/admin/files/profiles/avatar/1/completely-wrong-name.jpg',
+        ),
+      );
+
+      // The segment is ignored; the file is served regardless.
+      assertEquals(response.status, 200);
+      assertEquals(response.headers.get('Content-Type'), 'image/png');
+    },
+  );
+
+  await t.step(
+    '5-segment URL is rejected (too many path segments → falls through to 404)',
+    async () => {
+      await resetDb();
+
+      const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+      await db.insert(profiles).values({
+        name: 'Profile',
+        avatar: {
+          filename: 'portrait.png',
+          contentType: 'image/png',
+          size: TEST_PNG_1X1_RED.length,
+          data: base64Data,
+        },
+      });
+
+      const handler = createHandler();
+      const response = await handler(
+        new Request(
+          'http://localhost/admin/files/profiles/avatar/1/portrait.png/extra',
+        ),
+      );
+
+      // parts.length === 5 fails the <= 4 guard → falls through to 404
+      assertEquals(response.status, 404);
+    },
+  );
+
   await client.close();
 });
 
