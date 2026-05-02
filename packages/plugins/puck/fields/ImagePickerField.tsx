@@ -170,12 +170,7 @@ export function ImagePickerField({
             table: event.data.table || table,
             column: serverColumn,
             alt: (altField && record[altField]) || '',
-            // Prefer the FileReference filename if the file column opted in as
-            // role:'source' and its data is present in the record; otherwise
-            // fall back to the server-computed label (already the filename when
-            // available, or the record ID as a last resort).
             filename: (file as { filename?: string } | undefined)?.filename ||
-              event.data.label ||
               '',
           });
         }

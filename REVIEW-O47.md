@@ -407,7 +407,7 @@ w = won't fix
 - [ ] **F10** Unify editor-vs-public file URL via a single `assetUrl(media)` helper in the demo.
 - [x] **F12** Remove duplicated `gridItems` empty-state branch.
 - [w] **F13** Use a dedicated `cms-picker-grid` wrapper (drop `cms-grid-content`/`cms-grid-main`).
-- [x] **F15** Document and test the picker fallback when the file column isn't a `source` column.
+- [w] **F15** Document and test the picker fallback when the file column isn't a `source` column. _When the file column isn't opted in, `filename` in `SelectedImage` will be `''` — intentional; storing a fallback like the record ID as a filename would be misleading._
 
 ### Tests
 

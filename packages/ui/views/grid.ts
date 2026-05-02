@@ -215,7 +215,6 @@ export function gridItems(
           data-picker-id="${thumb.id}"
           data-picker-table="${options.tableName ?? ''}"
           data-picker-column="${options.thumbnailField.column.name}"
-          data-picker-label="${thumb.label}"
           data-picker-record="${raw(recordJson)}"
           data-picker-url="${raw(thumbUrl)}"
         >
@@ -438,7 +437,6 @@ export const pickerScript = `
     var id = item.dataset.pickerId;
     var table = item.dataset.pickerTable;
     var column = item.dataset.pickerColumn;
-    var label = item.dataset.pickerLabel || '';
     var url = item.dataset.pickerUrl || '';
     var recordJson = item.dataset.pickerRecord || '{}';
     var record;
@@ -451,16 +449,12 @@ export const pickerScript = `
     // Post message to parent (Puck editor iframe parent)
     // Include resolved URL and column separately; column is the server-authoritative
     // file column name so callers don't have to duplicate schema knowledge.
-    // label is the server-computed filename (or ID fallback) — always present
-    // even if the file column is not a role:'source' column, so the field can
-    // persist a meaningful filename without requiring full file data exposure.
     window.parent.postMessage({
       type: 'cms:media-selected',
       table: table,
       column: column,
       id: id,
       url: url,
-      label: label,
       record: record
     }, window.location.origin);
   });
