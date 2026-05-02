@@ -579,6 +579,16 @@ Deno.test('integration: picker mode tests', async (t) => {
         false,
         'description should not appear in picker data',
       );
+
+      // F15: even though the file column is not a source column, the server
+      // must still include the filename in data-picker-label so the React field
+      // can persist a meaningful SelectedImage.filename without requiring the
+      // whole FileReference to be exposed in the picker payload.
+      assertStringIncludes(
+        html,
+        'data-picker-label="beach.jpg"',
+        'data-picker-label should carry the filename even when file is not a source column',
+      );
     },
   );
 

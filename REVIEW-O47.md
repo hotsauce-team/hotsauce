@@ -407,7 +407,7 @@ w = won't fix
 - [ ] **F10** Unify editor-vs-public file URL via a single `assetUrl(media)` helper in the demo.
 - [x] **F12** Remove duplicated `gridItems` empty-state branch.
 - [w] **F13** Use a dedicated `cms-picker-grid` wrapper (drop `cms-grid-content`/`cms-grid-main`).
-- [ ] **F15** Document and test the picker fallback when the file column isn't a `source` column.
+- [x] **F15** Document and test the picker fallback when the file column isn't a `source` column.
 
 ### Tests
 
