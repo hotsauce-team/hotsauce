@@ -386,7 +386,7 @@ w = won't fix
 - [x] **S5** Document `CmsContext.sourceToken` trust boundary. _The opaque server-issued handle suggestion is dropped: a compromised npm dependency in the user bundle already has admin session access (can POST arbitrary content, vandalize records, etc.) regardless of how the source token is stored. The token is no more exposed than the CSRF token in the `#puck-config` DOM element. Documentation is the right fix._
 - [x] **S6** Add explicit `readableColumns` check in the picker loop + test.
 - [x] **S7** Always set `frame-ancestors 'self'` on picker response. (`<meta>` CSP dropped — `frame-ancestors` is header-only per spec; the meta tag would duplicate the header with no added enforcement.)
-- [ ] **S8** Use per-route `routeSecurityHeaders` for picker responses too.
+- [w] **S8** Use per-route `routeSecurityHeaders` for picker responses too. _`routeSecurityHeaders` is populated exclusively by plugin route declarations — no core route (including the list route) ever has an entry. The picker already applies its own security-relevant overrides (`frame-ancestors 'self'`, `Referrer-Policy: no-referrer`) on top of whatever global headers the operator configured. Won't fix._
 - [-] **S9** Add `source` to `ActionContext` so audit-log plugins can distinguish picker queries from user-initiated list views.
 - [x] **S10** Add explicit `sandbox="allow-scripts allow-same-origin allow-forms"` to the iframe.
 - [x] **S11** `encodeURIComponent` all path segments in `pickerSrc` and `<img src>`.
@@ -430,7 +430,7 @@ w = won't fix
 
 ### House-keeping
 
-- [ ] Decide what to do with untracked `COMPARE.md` and unstaged `apps/demo/site/static/styles.css` before merge.
+- [-] Decide what to do with untracked `COMPARE.md` and unstaged `apps/demo/site/static/styles.css` before merge.
 - [x] Fix the misleading "browser-cacheable" comment at [crud.ts L601-L603](packages/cms/crud.ts#L601-L603).
 
 ---
