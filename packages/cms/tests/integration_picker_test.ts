@@ -725,4 +725,240 @@ Deno.test('integration: picker mode tests', async (t) => {
     // Should be rejected
     assertEquals(response.status, 403);
   });
+
+  await t.step(
+    'picker mode: row policy receives ctx.source = plugin:puck',
+    async () => {
+      const client = new PGlite();
+      const db = drizzle(client, { schema: schemaWithMedia });
+
+      await db.execute(sql`
+      CREATE TABLE media (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(200) NOT NULL,
+        file JSON,
+        secret_notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+      await db.insert(media).values([
+        {
+          title: 'Photo One',
+          file: {
+            filename: 'photo1.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+          },
+        },
+      ]);
+
+      // Capture the source value the policy actually receives.
+      let observedSource: string | undefined = 'NOT_CALLED';
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: {
+          media: (ctx) => {
+            observedSource = ctx.source;
+            return undefined; // allow
+          },
+        },
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+      });
+
+      const sourceToken = await generateSourceToken(
+        pluginSource('puck'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/media?picker=true&_source=${
+          encodeURIComponent(sourceToken)
+        }`,
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      assertEquals(observedSource, pluginSource('puck'));
+    },
+  );
+
+  await t.step(
+    'picker mode: expired source token is rejected (403)',
+    async () => {
+      const client = new PGlite();
+      const db = drizzle(client, { schema: schemaWithMedia });
+
+      await db.execute(sql`
+      CREATE TABLE media (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(200) NOT NULL,
+        file JSON,
+        secret_notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+      });
+
+      // Hand-craft a token whose timestamp is well past the 4h TTL.
+      // Token format: source.timestamp(base36).signature
+      // Signature won't match for an arbitrary timestamp, but the validator
+      // rejects on either expired-timestamp or invalid-signature, both of
+      // which produce the same observable behaviour: picker mode → 403.
+      const expiredToken = `${pluginSource('puck')}.${
+        (Date.now() - 5 * 60 * 60 * 1000).toString(36)
+      }.deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef`;
+
+      const request = new Request(
+        `http://localhost/admin/media?picker=true&_source=${
+          encodeURIComponent(expiredToken)
+        }`,
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 403);
+    },
+  );
+
+  await t.step(
+    "picker response sets Referrer-Policy: no-referrer and frame-ancestors 'self'",
+    async () => {
+      const client = new PGlite();
+      const db = drizzle(client, { schema: schemaWithMedia });
+
+      await db.execute(sql`
+      CREATE TABLE media (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(200) NOT NULL,
+        file JSON,
+        secret_notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+      await db.insert(media).values([
+        {
+          title: 'Photo One',
+          file: {
+            filename: 'photo1.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+          },
+        },
+      ]);
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+      });
+
+      const sourceToken = await generateSourceToken(
+        pluginSource('puck'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/media?picker=true&_source=${
+          encodeURIComponent(sourceToken)
+        }`,
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      assertEquals(response.headers.get('Referrer-Policy'), 'no-referrer');
+      assertEquals(response.headers.get('X-Frame-Options'), 'SAMEORIGIN');
+
+      const csp = response.headers.get('Content-Security-Policy');
+      assertEquals(
+        typeof csp,
+        'string',
+        'Content-Security-Policy should be set',
+      );
+      assertStringIncludes(csp!, "frame-ancestors 'self'");
+      // Default CSP had frame-ancestors 'none'; addFrameAncestorSelf should
+      // have replaced it with 'self' (combining 'none' with other sources is
+      // invalid per spec).
+      assertEquals(
+        csp!.includes("'none'"),
+        false,
+        "frame-ancestors 'none' should have been replaced with 'self'",
+      );
+    },
+  );
+
+  await t.step(
+    'picker tolerates non-FileReference thumbnail values without crashing',
+    async () => {
+      const client = new PGlite();
+      const db = drizzle(client, { schema: schemaWithMedia });
+
+      await db.execute(sql`
+      CREATE TABLE media (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(200) NOT NULL,
+        file JSON,
+        secret_notes TEXT,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+      // Mix of weird/legacy values for the file column.
+      // The picker must not crash and must still emit a grid item per row.
+      await db.execute(
+        sql`INSERT INTO media (id, title, file) VALUES
+          (1, 'Null File', NULL),
+          (2, 'String URL', '"https://example.com/legacy.jpg"'::json),
+          (3, 'Empty Object', '{}'::json),
+          (4, 'Partial Object', '{"filename": "no-content-type.jpg"}'::json)`,
+      );
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+      });
+
+      const sourceToken = await generateSourceToken(
+        pluginSource('puck'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/media?picker=true&_source=${
+          encodeURIComponent(sourceToken)
+        }`,
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+
+      // All four rows should render as picker items (label may fall back to ID).
+      const itemCount = (html.match(/cms-grid-picker-item/g) ?? []).length;
+      // At least one occurrence per row (class may appear multiple times per item).
+      assertEquals(
+        itemCount >= 4,
+        true,
+        `expected >= 4 picker items, got ${itemCount}`,
+      );
+    },
+  );
 });

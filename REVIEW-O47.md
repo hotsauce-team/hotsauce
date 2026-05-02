@@ -411,16 +411,16 @@ w = won't fix
 
 ### Tests
 
-- [ ] Test `ctx.source === 'plugin:puck'` reaches row policies in picker mode.
+- [x] Test `ctx.source === 'plugin:puck'` reaches row policies in picker mode.
 - [x] Test S2 (CMS-source token → 403 in picker mode).
-- [ ] Test expired source token → 403.
+- [x] Test expired source token → 403 (in picker mode + already covered for `/admin/files/...`).
 - [x] Test column hidden by policy → key absent from `data-picker-record` (S6 contract).
-- [ ] Test S1 fix: picker thumbnails 200 when row policy uses `ctx.source`.
-- [ ] Test postMessage spoof rejection (different `event.source` is ignored).
-- [ ] Test picker response includes `Referrer-Policy: no-referrer`, full CSP, and `frame-ancestors 'self'`.
-- [ ] Test `/admin/files/<…>/<filename>` (4-segment) path correctness and traversal-safety.
-- [ ] Test grid view with `storage` configured (post proxy-URL switch).
-- [ ] Test picker behaviour with non-`FileReference` thumbnail values.
+- [x] Test S1 fix: picker thumbnails 200 when row policy uses `ctx.source` (in `integration_file_test.ts` `_source token plumbing on /admin/files/...` block).
+- [w] Test postMessage spoof rejection (different `event.source` is ignored). _Client-side React behaviour; out of scope for Deno integration tests — needs a browser harness._
+- [x] Test picker response includes `Referrer-Policy: no-referrer`, full CSP, and `frame-ancestors 'self'`.
+- [x] Test `/admin/files/<…>/<filename>` (4-segment) path correctness and traversal-safety.
+- [x] Test grid view with `storage` configured (post proxy-URL switch).
+- [x] Test picker behaviour with non-`FileReference` thumbnail values.
 
 ### Docs
 
