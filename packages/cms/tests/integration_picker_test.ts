@@ -296,6 +296,10 @@ Deno.test('integration: picker mode tests', async (t) => {
       // Should be in picker mode
       assertStringIncludes(html, 'cms-grid-picker-item');
 
+      // Server-authoritative column name must be present so the field can
+      // persist the correct column without the caller knowing the schema.
+      assertStringIncludes(html, 'data-picker-column="image"');
+
       // Should include photoId and image in data-picker-record (HTML-escaped quotes)
       assertStringIncludes(html, '&quot;photoId&quot;:1');
       assertStringIncludes(html, '&quot;filename&quot;:&quot;sunset.jpg&quot;');

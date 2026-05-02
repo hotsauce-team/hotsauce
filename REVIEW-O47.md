@@ -389,7 +389,7 @@ Use this when iterating on the branch. Tick items as they land.
 
 - [x] **F1** Add `Cache-Control: private, max-age=60, must-revalidate` to `/admin/files/...` redirects (or restore inline signing for grid).
 - [x] **F2** Fix `value?.id` truthiness — use `value?.id != null`.
-- [ ] **F3** Have the picker postMessage include `column` from the server's `thumbnailField`; field should prefer that.
+- [x] **F3** Have the picker postMessage include `column` from the server's `thumbnailField`; field should prefer that.
 - [ ] **F4** Add pagination (or search) to picker view.
 - [x] **F5** Reject (or render empty layout for) picker requests on tables without a `thumbnailField`.
 - [x] **F6** Guard `dialog.showModal()` against re-open.

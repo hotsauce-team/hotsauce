@@ -52,8 +52,6 @@ export type ImagePickerFieldProps = {
   basePath?: string;
   /** Table name to pick from (default: 'media') */
   table?: string;
-  /** File column name on the table (default: 'file') */
-  column?: string;
   /** Column name for alt text on the record (default: 'alt') */
   altField?: string;
 };
@@ -96,7 +94,6 @@ export function ImagePickerField({
   onChange,
   basePath,
   table = 'media',
-  column = 'file',
   altField = 'alt',
 }: ImagePickerFieldProps) {
   // Use CmsContext for basePath and sourceToken (set by Puck editor)
@@ -154,7 +151,10 @@ export function ImagePickerField({
 
       if (event.data?.type === 'cms:media-selected') {
         const record = event.data.record;
-        const file = record?.[column];
+        // column comes from the server (data-picker-column), not the prop,
+        // so it reflects the real file column regardless of what the caller passes.
+        const serverColumn = event.data.column;
+        const file = serverColumn ? record?.[serverColumn] : undefined;
 
         // Validate id shape defensively (number or non-empty string).
         // Picker server should only emit numeric/string PKs, but ignore anything
@@ -163,13 +163,14 @@ export function ImagePickerField({
         const isValidId = typeof id === 'number' ||
           (typeof id === 'string' && id.length > 0);
 
-        if (isValidId) {
+        if (isValidId && serverColumn) {
           onChangeRef.current({
             id,
             table: event.data.table || table,
-            column,
+            column: serverColumn,
             alt: (altField && record[altField]) || '',
-            filename: file?.filename || '',
+            filename: (file as { filename?: string } | undefined)?.filename ||
+              '',
           });
         }
         setIsOpen(false);
@@ -181,7 +182,7 @@ export function ImagePickerField({
       globalThis.addEventListener('message', handleMessage);
       return () => globalThis.removeEventListener('message', handleMessage);
     }
-  }, [isOpen, column, table, altField, pickerSrc]);
+  }, [isOpen, table, altField, pickerSrc]);
 
   const openPicker = () => {
     setIsOpen(true);
