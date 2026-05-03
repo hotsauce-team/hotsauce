@@ -2751,7 +2751,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       // Should redirect to signed URL
       assertEquals(response.status, 302);
       assertEquals(signedKey, 'profiles/avatar/1/valid-uuid.png');
-      // T2: cache the redirect (not the signed URL itself) so browsers avoid
+      // Cache the redirect (not the signed URL itself) so browsers avoid
       // a DB + signing round-trip on every grid/picker render.
       assertEquals(
         response.headers.get('Cache-Control'),
