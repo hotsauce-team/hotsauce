@@ -28,5 +28,17 @@
   },
   "imports": {
     "@std/media-types": "jsr:@std/media-types@^1.1.0"
+  },
+  // Explicit lib set required because this package contains browser-targeting code
+  // (ImagePickerField React component uses HTMLDialogElement, MessageEvent, etc.).
+  //
+  // - dom / dom.iterable: browser DOM types for ImagePickerField and puck client
+  // - esnext: modern JS built-ins
+  // - deno.ns / deno.window: Deno globals needed by test files (Deno.test, etc.)
+  //
+  // We use compilerOptions here instead of /// <reference lib="dom" /> in source
+  // because JSR bans triple-slash directives that modify the global type environment.
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "esnext", "deno.ns", "deno.window"]
   }
 }
