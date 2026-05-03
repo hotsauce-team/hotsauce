@@ -1,6 +1,6 @@
 # Peer Review — `puck-image-picker` branch
 
-Compared against `main`: 12 commits, +1586 / −174 across 24 files.
+Compared against `main`: 33 commits, +2853 / −179 across 27 files (as of rounds 2–5 re-read; originally 12 commits when this review was written).
 
 This branch introduces an **iframe-embedded image picker** for the Puck plugin:
 
@@ -100,6 +100,7 @@ The signed payload is `${source}.${timestamp}` — that's it. Implications:
 - **No user binding.** A token minted for user A is valid for user B's session. With cookie-based auth this is OK _today_, but it widens the post-compromise blast radius.
 - **No table/column binding.** A puck-source token grants list access to _every_ table that has any column with `plugins.puck.role: 'source'`.
 - **Long TTL.** See S3.
+- **Cross-table PK enumeration.** A valid `plugin:puck` token lists _any_ table in picker mode, not just tables with `role: 'source'` columns. Tables without source columns return `{ id }`-only payloads — no column data leaks, but every record's PK is enumerable (UUID existence leaks, numeric PKs reveal count). See T3 in the checklist for the tighten-vs-document decision.
 
 Suggested binding: `${source}.${userId ?? ''}.${table ?? ''}.${ts}.${sig}` and rotate at the `/admin/puck/<table>/<id>/<col>` boundary.
 
@@ -171,6 +172,10 @@ Persisted `value` came from a previous postMessage (server-controlled), so it's 
 ### S13 — Filename segment in `/admin/files/<…>/<filename>` is ignored, not validated (very low)
 
 [mod.ts L1424-L1431](packages/cms/mod.ts#L1424-L1431) accepts `parts.length >= 3 && parts.length <= 4`. The trailing segment is discarded. `split('/')` already prevents path-traversal, but if you intend the filename to be canonical, assert it equals `fileData.filename` (or 404). At minimum, lock with a test.
+
+### S14 — No `Permissions-Policy` header (low)
+
+`buildSecurityHeaders` ([http.ts L24-L46](packages/cms/http.ts#L24-L46)) emits CSP, `X-Content-Type-Options`, `X-Frame-Options`, and `Referrer-Policy` — but no `Permissions-Policy`. The picker iframe, being same-origin, inherits all parent permissions by default. An explicit deny-list prevents a compromised picker page from accessing browser APIs the operator never intended: `camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), xr-spatial-tracking=()`. Adding this to `buildSecurityHeaders` covers the whole admin surface in one move; the picker iframe benefits without any picker-specific change.
 
 ---
 
@@ -298,6 +303,32 @@ const isEditing = (puck as { isEditing?: boolean })?.isEditing;
 
 This is the documented shape, but the cast hides the assumption. Worth a comment or a typed import.
 
+### F18 — Picker mode silently honours `?page`, `?sort`, `?direction` with no UI (medium)
+
+[crud.ts L522-L524](packages/cms/crud.ts#L522-L524) runs `getPagination(url)` and `getSort(url, columnNames)` before the picker branch — and never clamps them. `pickerGridView` renders no pagination or sort controls, so users can only reach page 1 through normal interaction. An operator or attacker with a valid puck token can:
+
+- Step through all records across pages by constructing `?picker=true&page=2&…`.
+- Reorder thumbnails by any column that passes `getSort`'s allow-list — a side-channel revealing the relative ordering of a column the user can't _read_ (e.g., sort by `createdAt`, infer timestamp ordering from thumbnail sequence).
+
+Fix: clamp `page=1` and ignore sort/direction in picker mode, or render pagination/sort controls inside `pickerGridView`.
+
+### F19 — `Content-Disposition` filename uses `encodeURIComponent`, not RFC 6266 (low)
+
+[mod.ts L1854-L1856](packages/cms/mod.ts#L1854-L1856) builds `filename="${encodeURIComponent(fileData.filename)}"`. `encodeURIComponent` is not the right encoder for an HTTP `quoted-string` — browsers save the literal percent-encoded string as the filename (`naïve.png` → `na%C3%AFve.png`). Header injection is not exploitable (`encodeURIComponent` encodes CR/LF/`"`), so this is a UX issue only.
+
+RFC 6266 fix: `filename="${safeFallback}"; filename*=UTF-8''${encodeURIComponent(filename)}` where `safeFallback` strips `\` and `"` from the name. Pre-existing pattern — the picker makes it more visible as every picker-driven file download hits this code path.
+
+### F20 — `getThumbnailField` runs pre-policy; hidden file column causes broken thumbnails (low)
+
+[crud.ts L606-L611](packages/cms/crud.ts#L606-L611) calls `tableToCmsFields(table)` then `getThumbnailField` before the column-policy gate. If a column policy hides the file column for the current user, the picker still:
+
+1. Selects that column as `thumbnailField`.
+2. Emits `<img src="/admin/files/<table>/<col>/<id>">` URLs.
+3. Each thumbnail 404s (correctly — `handleFileServing` enforces the same policy).
+4. User sees broken thumbnails with no explanation.
+
+Fix: after evaluating column policies, check whether `thumbnailField.column.name` is in `columnResult.readableColumns`; if not, short-circuit to the "no thumbnail field" 400 page (same resolution as F5).
+
 ---
 
 ## 5. Test coverage
@@ -323,6 +354,9 @@ Suggested additions:
 - **Filename redirect path correctness.** `parts.length === 4` branch in [mod.ts L1429](packages/cms/mod.ts#L1429) — confirm no path-traversal / surprises.
 - **Grid mode with `storage` configured** still works after the proxy-URL switch (existing test only changes the assertion, not coverage of S3 redirect behaviour).
 - **Unhappy thumbnail value paths.** Records where `value` is a string URL, base64, or null — confirm `resolveThumbnailUrl` fallback works in the picker branch specifically.
+- **`Cache-Control` on file-proxy redirect.** Assert `private, max-age=60, must-revalidate` on the 302 from `/admin/files/...` — the header is set in code but no assertion locks it against regression (T2).
+- **Picker pagination params.** `?picker=true&page=2` returns page-2 records; currently untested — a regression in `getPagination` for picker mode would go undetected (R9a / F18).
+- **Picker when `thumbnailField` column is policy-hidden.** Assert picker returns 400 (not a page of broken thumbnails) when the file column is excluded by column policy (R9b / F20).
 
 ---
 
@@ -330,7 +364,10 @@ Suggested additions:
 
 - The **threat model** for `CmsContext.sourceToken` (it's reachable by any code in the user's components bundle) deserves a callout in [packages/plugins/puck/README.md](packages/plugins/puck/README.md).
 - The `role: 'source'` opt-in is excellent but the only place it's explained is the schema diff in `apps/demo/schema.ts`. Add a short table in [packages/cms/README.md](packages/cms/README.md) covering: `thumbnail` (rendering only) vs `role: 'source'` (data exposure to plugin) vs `role: 'output'` (hidden from forms) vs `role: 'data'` (default).
-- The picker `_source` token URL exposure should be documented in an **operator's** security checklist (Referrer-Policy guidance, log retention, rotating `csrfSecret`).
+- The picker `_source` token URL exposure should be documented in an **operator's** security checklist (Referrer-Policy guidance, log retention, rotating `csrfSecret`). The checklist should also note: (a) the `onError` callback receives the full `Request` object, so any implementation that logs request URLs will capture `_source` tokens from picker sub-resource requests (N9); (b) SVG files served via the storage-redirect path bypass the strict file CSP — configure storage to send `Content-Disposition: attachment` for SVG, or block SVG uploads (Q4).
+- [SECURITY.md](SECURITY.md) covers JWT, CSRF, passwords, and secrets — but not source tokens, picker TTL, or the `CmsContext.sourceToken` trust boundary. Add a short "Picker mode" section pointing at the puck README (R11).
+- [AGENTS.md](AGENTS.md) describes the plugin/Worker model in detail but never mentions the picker, source tokens, or `role: 'source'`. A paragraph here ensures future AI-assisted changes to the token or plugin modules have context to avoid breaking the picker (R11).
+- The CMS README policies section should include a `ctx.source` usage example: write `ctx.source === 'plugin:puck' || <regular-condition>`, not `ctx.source === 'plugin:puck' ? wide : narrow`. Regular grid thumbnail requests arrive with `source = undefined` and would silently fall into the narrow branch (Q7).
 
 ---
 
@@ -340,6 +377,15 @@ Suggested additions:
 - Consider also persisting `storage` (the storage provider id) in `SelectedImage` so renamed/multi-storage setups can resolve files later.
 - `packages/cms/mod.ts` `/files` route: prefer `parts.length === 3 || parts.length === 4` for readability over the range comparison.
 - `data-picker-record="${raw(recordJson)}"` in [grid.ts](packages/ui/views/grid.ts) — `recordJson` is already HTML-escaped via `escapeHtml`, so wrapping with `raw()` is correct, but a comment explaining "escapeHtml runs first; raw() prevents the template tag from escaping again" would prevent future "let's clean this up" regressions.
+- `pickerLayout` body interpolates `content` in a plain backtick template, bypassing the `html` tagged-template auto-escaping. This is intentional (`content` is pre-rendered HTML), but a one-line comment prevents a future "clean-up" regression (N1).
+- `addFrameAncestorSelf`: trim the existing directive before comparing to `'none'` — an operator CSP with stray whitespace (`frame-ancestors  'none';`) silently produces the invalid directive `frame-ancestors 'none' 'self'`. Use `existing.trim() === "'none'"` (N3/R10).
+- `ImagePickerField` `handleMessage` calls `dialog.close()` directly on selection without explicitly calling `triggerRef.current?.focus()`. The `onClose` event fires for programmatic `close()` per spec, so `closePicker` should restore focus — but worth a comment confirming this code path is exercised (N5).
+- Remove `allow-forms` from the iframe `sandbox` attribute ([ImagePickerField.tsx L334](packages/plugins/puck/fields/ImagePickerField.tsx#L334)). The picker page renders only buttons — no `<form>` exists. One-line defence-in-depth removal (Q2).
+- Remove the dead `data-picker-url` attribute from picker buttons ([grid.ts L219](packages/ui/views/grid.ts#L219)) and its corresponding `dataset.pickerUrl` read in `pickerScript`. `ImagePickerField` never reads `event.data.url` — it reconstructs the URL from `id`/`table`/`column` at render time. Simplifies the postMessage protocol (Q5).
+- `pickerLayout`: add `<meta name="robots" content="noindex">` to `<head>`. Auth-gated in production, but table names in `<title>` could be indexed via a misconfigured dev tunnel (Q6).
+- `pickerScript`: add a one-line comment that `item.dataset.pickerId` is always a string; consumers needing the typed PK should read `record.id` instead (Q8).
+- Add a one-line comment in the picker loop that `plugins.puck === true` (boolean) marks JSON-editor columns; only `{ role: 'source' }` object-shaped configs are picker sources. Prevents a future contributor from "fixing" the boolean short-circuit (R13).
+- `picker.js` and `admin.js` are served with `Cache-Control: public` before the auth gate. Neither contains per-user content, but `private` is safer for admin assets. Pre-existing pattern — follow-up (T1).
 - `COMPARE.md` (untracked) and `apps/demo/site/static/styles.css` (unstaged) are present in the working tree but not part of the branch. Either commit intentionally or revert before merging.
 
 ---
@@ -362,6 +408,8 @@ Suggested additions:
 ## 9. Net assessment
 
 A solid, security-aware feature. The crypto and postMessage primitives are sound. The remaining work is primarily about how those primitives are plumbed across the two handlers (`handleList` vs `handleFileServing`), one performance regression, a couple of real React bugs (`id=0`, `column` mis-coordination), and the usual hardening polish (CSP, Referer, sandbox, token bindings). None of the issues are blockers for the design — they're refinements before the feature ships.
+
+_Rounds 2–5 re-read_ (33 commits, +2853/−179): All actionable security (S1–3, S6–7, S10–12) and correctness (F1–3, F5–8, F12) items verified fixed in code. New findings from rounds 2–5 (N/R/Q/T-prefixed items) are integrated into the sections above and the checklist below. **Recommendation: merge after resolving open checklist items** — most can ship as follow-up issues.
 
 ---
 
@@ -392,6 +440,8 @@ w = won't fix
 - [x] **S11** `encodeURIComponent` all path segments in `pickerSrc` and `<img src>`.
 - [x] **S12** Validate `record.id` shape (number or non-empty string) in postMessage handler.
 - [w] **S13** Validate (or 404) the optional `filename` segment in `/admin/files/...`. Behaviour is intentional (SEO-friendly URLs); documented with 3 integration test steps in `integration_file_test.ts`.
+- [ ] **S14** Add `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()` to `buildSecurityHeaders` in `http.ts`.
+- [-] **T3** Decide: refuse picker requests for tables with no `role: 'source'` columns (prevents PK enumeration via valid puck token), or document as accepted behaviour within the S4 trust model.
 
 ### Correctness / UX
 
@@ -408,6 +458,9 @@ w = won't fix
 - [x] **F12** Remove duplicated `gridItems` empty-state branch.
 - [w] **F13** Use a dedicated `cms-picker-grid` wrapper (drop `cms-grid-content`/`cms-grid-main`).
 - [w] **F15** Document and test the picker fallback when the file column isn't a `source` column. _When the file column isn't opted in, `filename` in `SelectedImage` will be `''` — intentional; storing a fallback like the record ID as a filename would be misleading._
+- [ ] **F18** Clamp `page=1` and ignore sort/direction in picker mode (or render controls) — server currently honours pagination/sort params with no picker UI.
+- [ ] **F20** Short-circuit picker to the "no thumbnail" 400 page when `thumbnailField` column is hidden by column policy.
+- [ ] **Q5** Remove dead `data-picker-url` attribute from picker buttons ([grid.ts L219](packages/ui/views/grid.ts#L219)) and corresponding `dataset.pickerUrl` read in `pickerScript`.
 
 ### Tests
 
@@ -421,12 +474,17 @@ w = won't fix
 - [x] Test `/admin/files/<…>/<filename>` (4-segment) path correctness and traversal-safety.
 - [x] Test grid view with `storage` configured (post proxy-URL switch).
 - [x] Test picker behaviour with non-`FileReference` thumbnail values.
+- [ ] **T2** Assert `Cache-Control: private, max-age=60, must-revalidate` on the `/admin/files/...` 302 response in `integration_file_test.ts`.
+- [ ] **R9a** Test picker with `?page=2` returns the correct page of records.
+- [ ] **R9b** Test picker when `thumbnailField` column is hidden by column policy → 400 response (not broken thumbnails).
 
 ### Docs
 
 - [x] Add a `role: 'source' | 'output' | 'data'` reference table to [packages/cms/README.md](packages/cms/README.md).
 - [x] Document `CmsContext.sourceToken` trust boundary in [packages/plugins/puck/README.md](packages/plugins/puck/README.md).
-- [ ] Add a picker-mode operator security checklist (Referrer-Policy, log retention, secret rotation).
+- [ ] Add a picker-mode operator security checklist (Referrer-Policy, log retention, `onError` payload URL caveat, secret rotation, SVG storage guidance).
+- [ ] **R11** Add a "Picker mode" section to [SECURITY.md](SECURITY.md); add a picker/source-token paragraph to [AGENTS.md](AGENTS.md).
+- [ ] **Q7** Add `ctx.source === 'plugin:puck' || <regular-condition>` policy example to the CMS README policies section.
 
 ### House-keeping
 
