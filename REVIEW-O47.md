@@ -459,6 +459,7 @@ w = won't fix
 - [w] **F13** Use a dedicated `cms-picker-grid` wrapper (drop `cms-grid-content`/`cms-grid-main`).
 - [w] **F15** Document and test the picker fallback when the file column isn't a `source` column. _When the file column isn't opted in, `filename` in `SelectedImage` will be `''` — intentional; storing a fallback like the record ID as a filename would be misleading._
 - [ ] **F18** Clamp `page=1` and ignore sort/direction in picker mode (or render controls) — server currently honours pagination/sort params with no picker UI.
+- [x] **F19** Use RFC 6266 `filename*=UTF-8''…` encoding for non-ASCII filenames in `Content-Disposition`. Fixed via `contentDispositionHeader()` helper in `mod.ts`; test added for `naïve.png` → `filename="na_ve.png"; filename*=UTF-8''na%C3%AFve.png`.
 - [ ] **F20** Short-circuit picker to the "no thumbnail" 400 page when `thumbnailField` column is hidden by column policy.
 - [ ] **Q5** Remove dead `data-picker-url` attribute from picker buttons ([grid.ts L219](packages/ui/views/grid.ts#L219)) and corresponding `dataset.pickerUrl` read in `pickerScript`.
 

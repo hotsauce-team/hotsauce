@@ -1609,6 +1609,28 @@ export function createCmsHandler(options: CmsOptions): Handler {
 }
 
 /**
+ * Build a RFC 6266-compliant Content-Disposition header value.
+ * Uses `filename*` (RFC 5987 encoding) for non-ASCII names, with a safe ASCII
+ * fallback in the legacy `filename` parameter for older clients.
+ */
+function contentDispositionHeader(
+  disposition: 'inline' | 'attachment',
+  filename: string,
+): string {
+  // Legacy fallback: strip non-ASCII and quoted-string-unsafe characters
+  const fallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(
+    /["\\]/g,
+    '_',
+  );
+  const encoded = encodeURIComponent(filename);
+  // If the filename is pure ASCII and safe, the single parameter is sufficient
+  if (fallback === filename && !filename.includes('%')) {
+    return `${disposition}; filename="${fallback}"`;
+  }
+  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
+}
+
+/**
  * Serve a file stored in a JSON column
  *
  * Route: GET {basePath}/files/{table}/{column}/{id}
@@ -1851,9 +1873,10 @@ async function handleFileServing(
       headers: {
         'Content-Type': contentType,
         'Content-Length': String(safeBytes.length),
-        'Content-Disposition': `${disposition}; filename="${
-          encodeURIComponent(fileData.filename)
-        }"`,
+        'Content-Disposition': contentDispositionHeader(
+          disposition,
+          fileData.filename,
+        ),
         ...fileSecurityHeaders,
         'Cache-Control': 'private, max-age=3600',
       },

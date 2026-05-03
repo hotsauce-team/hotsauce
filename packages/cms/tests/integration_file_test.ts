@@ -150,6 +150,36 @@ Deno.test('integration: file upload tests', async (t) => {
     assertEquals(body.byteLength, TEST_PNG_1X1_RED.length);
   });
 
+  await t.step(
+    'Content-Disposition uses RFC 6266 encoding for non-ASCII filenames',
+    async () => {
+      await resetDb();
+
+      const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+      await db.insert(profiles).values({
+        name: 'Profile with Unicode Filename',
+        avatar: {
+          filename: 'naïve.png',
+          contentType: 'image/png',
+          size: TEST_PNG_1X1_RED.length,
+          data: base64Data,
+        },
+      });
+
+      const handler = createHandler();
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      assertEquals(
+        response.headers.get('Content-Disposition'),
+        'inline; filename="na_ve.png"; filename*=UTF-8\'\'na%C3%AFve.png',
+      );
+    },
+  );
+
   await t.step('detail view shows image preview for image files', async () => {
     await resetDb();
 
