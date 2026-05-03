@@ -31,3 +31,29 @@ jobs:
 
       - name: Run tests
         run: deno task test
+
+      # Check each package for JSR slow-types and banned directives.
+      # Mirrors the publish order so failures are caught at PR time, not on tag push.
+      - name: JSR dry-run @hotsauce/core
+        run: deno publish --dry-run --allow-dirty
+        working-directory: packages/core
+
+      - name: JSR dry-run @hotsauce/workers
+        run: deno publish --dry-run --allow-dirty
+        working-directory: packages/workers
+
+      - name: JSR dry-run @hotsauce/ui
+        run: deno publish --dry-run --allow-dirty
+        working-directory: packages/ui
+
+      - name: JSR dry-run @hotsauce/auth
+        run: deno publish --dry-run --allow-dirty
+        working-directory: packages/auth
+
+      - name: JSR dry-run @hotsauce/cms
+        run: deno publish --dry-run --allow-dirty
+        working-directory: packages/cms
+
+      - name: JSR dry-run @hotsauce/plugins
+        run: deno publish --dry-run --allow-dirty
+        working-directory: packages/plugins
