@@ -183,6 +183,15 @@ Deno.test('integration: picker mode tests', async (t) => {
         false,
         'createdAt should not appear in picker data',
       );
+
+      // data-picker-url must be absent — URL is reconstructed at render time
+      // from id/table/column; including it in the postMessage would make the
+      // protocol ambiguous and leak presigned URLs unnecessarily.
+      assertEquals(
+        html.includes('data-picker-url'),
+        false,
+        'data-picker-url attribute must not appear in picker buttons',
+      );
     },
   );
 

@@ -206,8 +206,6 @@ export function gridItems(
       const recordJson = thumb.record
         ? escapeHtml(JSON.stringify(thumb.record))
         : '{}';
-      // Include resolved thumbnail URL separately (for S3 presigned URLs)
-      const thumbUrl = thumb.thumbnailUrl ? escapeHtml(thumb.thumbnailUrl) : '';
       return html`
         <button
           type="button"
@@ -216,7 +214,6 @@ export function gridItems(
           data-picker-table="${options.tableName ?? ''}"
           data-picker-column="${options.thumbnailField.column.name}"
           data-picker-record="${raw(recordJson)}"
-          data-picker-url="${raw(thumbUrl)}"
         >
           ${raw(thumbnailHtml)}
           <span class="cms-grid-label">${thumb.label}</span>
@@ -437,7 +434,6 @@ export const pickerScript = `
     var id = item.dataset.pickerId;
     var table = item.dataset.pickerTable;
     var column = item.dataset.pickerColumn;
-    var url = item.dataset.pickerUrl || '';
     var recordJson = item.dataset.pickerRecord || '{}';
     var record;
     try {
@@ -454,7 +450,6 @@ export const pickerScript = `
       table: table,
       column: column,
       id: id,
-      url: url,
       record: record
     }, window.location.origin);
   });
