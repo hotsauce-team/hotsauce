@@ -202,7 +202,10 @@ export function gridItems(
 
     // Picker mode: render button with data attributes for postMessage
     if (options.pickerMode) {
-      // Encode record data as JSON in data attribute
+      // Encode record data as JSON in data attribute.
+      // escapeHtml runs first (converts " to &quot; etc.), then raw() tells
+      // the html template tag not to escape again — double-escaping would
+      // corrupt the JSON that pickerScript reads via dataset.pickerRecord.
       const recordJson = thumb.record
         ? escapeHtml(JSON.stringify(thumb.record))
         : '{}';
@@ -431,6 +434,7 @@ export const pickerScript = `
     var item = target.closest('.cms-grid-picker-item');
     if (!item) return;
     e.preventDefault();
+    // dataset values are always strings; read record.id for the typed PK.
     var id = item.dataset.pickerId;
     var table = item.dataset.pickerTable;
     var column = item.dataset.pickerColumn;
@@ -457,7 +461,12 @@ export const pickerScript = `
 `;
 
 /**
- * Render a minimal picker page layout (no sidebar, external script)
+ * Render a minimal picker page layout (no sidebar, external script).
+ *
+ * Uses a plain template literal (not the html`` tag) because `content` is
+ * already rendered HTML from pickerGridView — interpolating it through html``
+ * would double-escape it. Dynamic values (title, URLs) are escaped manually
+ * via escapeHtml().
  */
 export function pickerLayout(
   content: string,

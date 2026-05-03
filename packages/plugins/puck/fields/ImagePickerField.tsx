@@ -341,7 +341,7 @@ export function ImagePickerField({
                 border: 'none',
               }}
               title='Image Picker'
-              sandbox='allow-scripts allow-same-origin allow-forms'
+              sandbox='allow-scripts allow-same-origin'
               referrerPolicy='no-referrer'
             />
           )}

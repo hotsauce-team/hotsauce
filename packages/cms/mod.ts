@@ -1427,7 +1427,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
       const filePath = pathname.slice(filesPrefix.length);
       const parts = filePath.split('/');
 
-      if (parts.length >= 3 && parts.length <= 4) {
+      if (parts.length === 3 || parts.length === 4) {
         const [tableName, columnName, recordId] = parts as [
           string,
           string,
