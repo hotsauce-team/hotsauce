@@ -34,6 +34,7 @@ import type {
 import {
   base64ToUint8Array,
   buildSecurityHeaders,
+  contentDispositionHeader,
   forbidden,
   methodNotAllowed,
   notFound,
@@ -219,6 +220,7 @@ export {
   buildUrl,
   coerceFormValues,
   coerceValue,
+  contentDispositionHeader,
   forbidden,
   getPagination,
   getSort,
@@ -1606,28 +1608,6 @@ export function createCmsHandler(options: CmsOptions): Handler {
       });
     }
   };
-}
-
-/**
- * Build a RFC 6266-compliant Content-Disposition header value.
- * Uses `filename*` (RFC 5987 encoding) for non-ASCII names, with a safe ASCII
- * fallback in the legacy `filename` parameter for older clients.
- */
-function contentDispositionHeader(
-  disposition: 'inline' | 'attachment',
-  filename: string,
-): string {
-  // Legacy fallback: strip non-ASCII and quoted-string-unsafe characters
-  const fallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(
-    /["\\]/g,
-    '_',
-  );
-  const encoded = encodeURIComponent(filename);
-  // If the filename is pure ASCII and safe, the single parameter is sufficient
-  if (fallback === filename && !filename.includes('%')) {
-    return `${disposition}; filename="${fallback}"`;
-  }
-  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
 
 /**

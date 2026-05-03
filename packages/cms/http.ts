@@ -18,6 +18,7 @@ import type { CspOptions } from './types.ts';
  * - X-Content-Type-Options: Prevents MIME sniffing
  * - X-Frame-Options: Prevents clickjacking
  * - Referrer-Policy: Limits referrer information leakage
+ * - Permissions-Policy: Denies browser feature access (camera, mic, geolocation, etc.)
  */
 
 /**
@@ -42,6 +43,8 @@ export function buildSecurityHeaders(
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy':
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), xr-spatial-tracking=()',
   };
 }
 
@@ -791,4 +794,36 @@ export function getSort(
   if (!columns.includes(column)) return null;
 
   return { column, direction };
+}
+
+/**
+ * Build a RFC 6266-compliant Content-Disposition header value.
+ *
+ * Uses the dual-parameter form (`filename` + `filename*`) for non-ASCII or
+ * percent-containing filenames so modern browsers get the real name while
+ * legacy clients receive a safe ASCII fallback. Pure-ASCII filenames that
+ * contain no `%` use the single-parameter form unchanged.
+ *
+ * @example
+ * contentDispositionHeader('inline', 'photo.png')
+ * // → 'inline; filename="photo.png"'
+ *
+ * contentDispositionHeader('attachment', 'naïve.png')
+ * // → 'attachment; filename="na_ve.png"; filename*=UTF-8\'\'na%C3%AFve.png'
+ */
+export function contentDispositionHeader(
+  disposition: 'inline' | 'attachment',
+  filename: string,
+): string {
+  // Legacy fallback: strip non-ASCII and quoted-string-unsafe characters
+  const fallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(
+    /["\\]/g,
+    '_',
+  );
+  const encoded = encodeURIComponent(filename);
+  // If the filename is pure ASCII and safe, the single parameter is sufficient
+  if (fallback === filename && !filename.includes('%')) {
+    return `${disposition}; filename="${fallback}"`;
+  }
+  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }
