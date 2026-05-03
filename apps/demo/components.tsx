@@ -10,6 +10,10 @@
  */
 
 import { DropZone, React } from '@hotsauce/plugins/puck/client/globals';
+import {
+  ImagePickerField,
+  type SelectedImage,
+} from '@hotsauce/plugins/puck/fields';
 import type { ComponentConfig, PuckProps } from '@hotsauce/plugins/puck/types';
 
 // ============================================================================
@@ -136,45 +140,74 @@ const Button: ComponentConfig = {
 };
 
 // ============================================================================
-// Image
+// Image - Uses ImagePickerField to select images from CMS media table
 // ============================================================================
 
 const Image: ComponentConfig = {
   label: 'Image',
   fields: {
-    url: { type: 'text', label: 'Image URL' },
-    alt: { type: 'text', label: 'Alt text' },
-    aspectRatio: {
-      type: 'select',
-      label: 'Aspect Ratio',
-      options: [
-        { label: 'Auto', value: 'auto' },
-        { label: '16:9', value: '16:9' },
-        { label: '4:3', value: '4:3' },
-        { label: '1:1', value: '1:1' },
-      ],
+    media: {
+      type: 'custom',
+      label: 'Image',
+      render: ({ value, onChange }) => (
+        <ImagePickerField
+          value={value as SelectedImage | null}
+          onChange={onChange}
+        />
+      ),
+    },
+    alt: {
+      type: 'text',
+      label: 'Alt Text',
     },
   },
   defaultProps: {
-    url: 'https://placehold.co/600x400',
-    alt: 'Placeholder image',
-    aspectRatio: 'auto',
+    media: null,
+    alt: '',
   },
-  render: ({ url, alt, aspectRatio }) => {
-    const ratioMod = aspectRatio === '16:9'
-      ? 'image--ratio-16-9'
-      : aspectRatio === '4:3'
-      ? 'image--ratio-4-3'
-      : aspectRatio === '1:1'
-      ? 'image--ratio-1-1'
-      : 'image--ratio-auto';
-    return (
-      <img
-        src={url as string}
-        alt={alt as string}
-        className={`image ${ratioMod}`}
-      />
-    );
+  resolveFields: (data, { fields }) => {
+    const m = data.props.media as SelectedImage | null;
+    return {
+      ...fields,
+      alt: {
+        type: 'text' as const,
+        label: 'Alt Text',
+        placeholder: m?.alt || 'Describe this image…',
+      },
+    };
+  },
+  render: ({ media, alt, puck }) => {
+    const m = media as SelectedImage | null;
+    // Puck alt field takes precedence; fall back to alt seeded from media record
+    const altText = (alt as string) || m?.alt || '';
+
+    if (!m?.id) {
+      return (
+        <div
+          className='image image--placeholder'
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#f0f0f0',
+            color: '#666',
+            minHeight: '150px',
+          }}
+        >
+          No image selected
+        </div>
+      );
+    }
+
+    // In the editor, use the private CMS URL; on the public site, use /files/:table/:id/:filename
+    const isEditing = (puck as { isEditing?: boolean })?.isEditing;
+    const src = isEditing
+      ? `/admin/files/${m.table}/${m.column}/${m.id}`
+      : `/files/${m.table}/${m.id}${
+        m.filename ? `/${encodeURIComponent(m.filename)}` : ''
+      }`;
+
+    return <img src={src} alt={altText} className='image' />;
   },
 };
 

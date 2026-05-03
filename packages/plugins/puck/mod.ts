@@ -209,7 +209,7 @@ export function createPuckPlugin(
       ui: {
         renderField: (ctx) => {
           // ctx.field.plugin is set if column has .$cms({ plugins: { puck: ... } })
-          if (ctx.field.plugin && ctx.recordId) {
+          if (ctx.field.plugin === true && ctx.recordId) {
             const href =
               `${opts.basePath}/puck/${ctx.table}/${ctx.recordId}/${ctx.field.name}`;
 

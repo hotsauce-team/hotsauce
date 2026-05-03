@@ -197,6 +197,22 @@ Internal handlers for each CRUD operation. These are called by the main handler.
 
 > **Grid view:** Tables with a `thumbnail: true` column automatically use a thumbnail grid instead of a table. Users can toggle between grid and table via `?view=grid` / `?view=table`. Clicking a grid item opens an RHS detail panel (`?selected=<id>`) for inline editing without leaving the list.
 
+> **Picker mode:** Add `?picker=true&_source=<token>` to the list URL to get a minimal iframe-embeddable grid for media selection in visual editors like Puck. The `_source` token is a signed plugin identifier (e.g., `plugin:puck`) that controls which columns are included in the postMessage data. Without a valid token, picker mode returns 403 Forbidden.
+>
+> **Security:** By default, picker mode only sends the primary key. All other columns (including the file column) require explicit opt-in via `$cms({ plugins: { puck: { role: 'source' } } })`. The `thumbnail: true` option controls grid rendering; `role: 'source'` controls data exposure. See the `@hotsauce/ui` README for postMessage shape details.
+
+#### Plugin column roles
+
+The `role` property inside `$cms({ plugins: { <name>: { role } } })` controls how a column behaves in plugin contexts. `thumbnail` is a separate top-level `$cms()` option for grid rendering.
+
+| Role                     | Form display | Picker / plugin data               | Notes                                           |
+| ------------------------ | ------------ | ---------------------------------- | ----------------------------------------------- |
+| `role: 'data'` (default) | Shown        | Not included                       | Plugin owns the editing experience for this col |
+| `role: 'source'`         | Shown        | **Included** in postMessage record | Explicit opt-in for data exposure to plugin     |
+| `role: 'output'`         | **Hidden**   | Not included                       | Computed/derived; never shown in forms          |
+
+`thumbnail: true` and `role: 'source'` are independent — you need both to display a thumbnail in the picker grid _and_ include the file reference in the postMessage payload.
+
 ### `http.ts` - HTTP Response Helpers
 
 | Export                            | Purpose                       |
@@ -425,7 +441,9 @@ const handler = createCmsHandler({
 
 The handler exposes a read-only route that serves file fields:
 
-- `GET {basePath}/files/{table}/{column}/{id}`
+- `GET {basePath}/files/{table}/{column}/{id}[/{filename}]`
+
+The optional `{filename}` segment is ignored for lookup (uses `id`), but allows SEO-friendly URLs like `/admin/files/media/file/136/sunset.jpg`.
 
 Access is still filtered through auth + row/column policies.
 
@@ -489,6 +507,20 @@ CSS served as an external file for strict CSP compliance.
 | `cssResponse(css)`   | Create a CSS response with caching headers |
 
 The stylesheet is automatically served at `{basePath}/styles.css`. This enables strict Content Security Policy (`style-src 'self'`) without requiring nonces.
+
+### `scripts.ts` - JavaScript Assets
+
+JavaScript for interactive features, served as external files for CSP compliance.
+
+| Export                 | Purpose                                   |
+| ---------------------- | ----------------------------------------- |
+| `handleScript()`       | Main admin.js (sidebar toggle, etc.)      |
+| `handlePickerScript()` | Picker JS (postMessage for iframe picker) |
+
+Routes:
+
+- `{basePath}/admin.js` — Main admin JavaScript
+- `{basePath}/picker.js` — postMessage handler for picker mode
 
 ## Security
 
@@ -1368,8 +1400,24 @@ interface PolicyContext {
     role?: string; // User role from JWT
   };
   request: Request; // Original request (for advanced use)
+  source?: string; // 'cms' | 'plugin:{name}' | undefined
 }
 ```
+
+`ctx.source` identifies who submitted the request:
+
+- `'cms'` — a regular CMS form (list, create, edit, delete)
+- `'plugin:puck'` — the Puck editor (or any other named plugin)
+- `undefined` — no source token (no auth configured, or legacy request)
+
+When writing a row policy that should allow both normal CMS access _and_ plugin access, use `||`:
+
+```ts
+// Correct: both regular CMS users and the Puck plugin can access
+row: (ctx) => ctx.source === 'plugin:puck' || eq(posts.authorId, ctx.user!.sub),
+```
+
+Avoid a ternary that branches on `source` for row access — `ctx.source` is `undefined` for regular grid/thumbnail requests, so the else-branch would apply to all normal traffic too.
 
 ### 404 vs 403 Handling
 

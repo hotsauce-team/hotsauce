@@ -166,7 +166,8 @@ Deno.test('integration: grid view tests', async (t) => {
 
       assertEquals(response.status, 200);
       const html = await response.text();
-      assertStringIncludes(html, 'https://cdn.example.com/pic.jpg');
+      // Grid thumbnails use proxy URL, not the direct/presigned URL
+      assertStringIncludes(html, '/admin/files/media/file/1');
     },
   );
 
@@ -270,6 +271,66 @@ Deno.test('integration: grid view tests', async (t) => {
       assertEquals(response.status, 200);
       const html = await response.text();
       assertStringIncludes(html, 'cms-panel-close');
+    },
+  );
+
+  await t.step(
+    'view toggle hidden when thumbnail column is hidden by column policy',
+    async () => {
+      // When the file column is read-hidden for the current user, thumbnailField
+      // is undefined so the list falls back to table view with no toggle button.
+      await resetDb();
+      await db.insert(media).values([
+        {
+          title: 'Hidden thumbnail',
+          file: {
+            filename: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+          },
+        },
+      ]);
+
+      // With no policy, toggle should appear (baseline)
+      const openHandler = createHandler();
+      const openRequest = new Request(
+        'http://localhost/admin/media?view=table',
+      );
+      const openResponse = await openHandler(openRequest);
+      assertEquals(openResponse.status, 200);
+      const openHtml = await openResponse.text();
+      assertStringIncludes(
+        openHtml,
+        'cms-view-toggle',
+        'toggle should appear when column is visible',
+      );
+
+      // With file column hidden, toggle must not appear
+      const hiddenHandler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: {
+          media: {
+            columns: {
+              file: { read: () => false },
+            },
+          },
+        },
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+      });
+      const hiddenRequest = new Request(
+        'http://localhost/admin/media?view=table',
+      );
+      const hiddenResponse = await hiddenHandler(hiddenRequest);
+      assertEquals(hiddenResponse.status, 200);
+      const hiddenHtml = await hiddenResponse.text();
+      assertEquals(
+        hiddenHtml.includes('cms-view-toggle'),
+        false,
+        'toggle must not appear when thumbnail column is policy-hidden',
+      );
     },
   );
 });
@@ -630,7 +691,7 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
   );
 
   await t.step(
-    'grid signs valid file key with correct prefix',
+    'grid uses proxy URL instead of signing for S3 files',
     async () => {
       await resetDb();
 
@@ -649,7 +710,6 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
       ]);
 
       let signCalled = false;
-      let signedKey: string | null = null;
       const handler = createCmsHandler({
         csrfSecret: TEST_CSRF_SECRET,
         auth: 'dangerously-open',
@@ -668,9 +728,8 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
                   key: '',
                   upload: { method: 'PUT' as const, url: '' },
                 }),
-              signDownloadUrl: (ctx) => {
+              signDownloadUrl: (_ctx) => {
                 signCalled = true;
-                signedKey = ctx.key;
                 return Promise.resolve('https://s3.example.com/signed');
               },
             },
@@ -683,9 +742,10 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
       const response = await handler(request);
 
       assertEquals(response.status, 200);
-      // Should have called signDownloadUrl for the valid key
-      assertEquals(signCalled, true, 'Should sign valid file key');
-      assertEquals(signedKey, 'media/file/1/valid-uuid.jpg');
+      const html = await response.text();
+      // Grid thumbnails use proxy URL — no signing at render time
+      assertEquals(signCalled, false, 'Should not sign at grid render time');
+      assertStringIncludes(html, '/admin/files/media/file/1');
     },
   );
 });

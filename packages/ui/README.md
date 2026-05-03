@@ -191,6 +191,9 @@ Complete page views for CRUD operations.
 | `viewToggle(opts)`                                | Grid ↔ table toggle buttons      |
 | `resolveThumbnailUrl(value, fieldType, fileUrl?)` | Extract image URL from value     |
 | `getGridItemLabel(record, field, primaryKey)`     | Label for a grid thumbnail       |
+| `pickerGridView(title, records, thumbs, opts)`    | Minimal grid for picker iframe   |
+| `pickerLayout(content, opts)`                     | Minimal HTML for picker iframe   |
+| `pickerScript`                                    | postMessage click handler JS     |
 
 **Types:**
 
@@ -240,6 +243,56 @@ const html = editView({
   fields: postFields,
   record: post,
   action: '/admin/posts/1',
+});
+```
+
+#### Picker Mode (Iframe Embedding)
+
+The grid view supports a **picker mode** for embedding in iframes (e.g., media selection in Puck visual editor). When `pickerMode: true`:
+
+- Grid items render as `<button>` instead of `<a>` links
+- Clicking posts a message to the parent window via `postMessage()`
+- Minimal layout with no sidebar or navigation
+
+> **Note:** Picker mode requires the CMS and parent page to be on the **same origin**. The `postMessage` uses `window.location.origin` as the target for security. Additionally, the CMS requires a valid `_source` token in the picker URL to prevent unauthorized access.
+
+**postMessage shape:**
+
+```ts
+{
+  type: 'cms:media-selected',
+  table: 'media',           // Table name
+  id: '123',                // Primary key (always included)
+  record: {                 // Filtered record data (secure by default)
+    id: 123,                // Primary key (always included)
+    file: { ... },          // Source column (requires role: 'source')
+    alt: '...',             // Source column (requires role: 'source')
+  }
+}
+```
+
+> **Source columns:** By default, `record` only contains the primary key. All other columns (including the file column) require explicit opt-in via `$cms({ plugins: { puck: { role: 'source' } } })`. The `thumbnail: true` option controls grid rendering; `role: 'source'` controls data exposure. The plugin name (e.g., `puck`) is extracted from the signed `_source` token, so each plugin only receives columns opted-in to it.
+
+**Example:**
+
+```ts
+import { pickerGridView, pickerLayout, pickerScript } from '@hotsauce/ui';
+
+// Render minimal picker grid
+const content = pickerGridView('Media', records, thumbnails, {
+  baseUrl: '/admin/media',
+  thumbnailField,
+  currentView: 'grid',
+  currentUrl: url.href,
+  pickerMode: true,
+  tableName: 'media',
+});
+
+// Wrap in minimal layout with external script
+const html = pickerLayout(content, {
+  title: 'Media',
+  stylesheetUrl: '/admin/styles.css',
+  scriptUrl: '/admin/picker.js', // Serves pickerScript
 });
 ```
 

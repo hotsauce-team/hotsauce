@@ -295,8 +295,11 @@ export function createSiteRoutes(db: Database): Hono {
 
   /**
    * Public file serving for published media
+   *
+   * Accepts optional filename at end for SEO/downloads: /files/media/136/sunset.jpg
+   * The filename is ignored for lookup — we use the id.
    */
-  app.get('/files/media/:id', async (c) => {
+  app.get('/files/media/:id/:filename?', async (c) => {
     const id = Number(c.req.param('id'));
     if (!Number.isInteger(id)) return c.notFound();
 

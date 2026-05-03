@@ -9,6 +9,7 @@ import {
   AUTH_SECRET,
   createProfilesTable,
   generateSourceToken,
+  pluginSource,
   profiles,
   schemaWithFiles,
   SOURCE,
@@ -148,6 +149,36 @@ Deno.test('integration: file upload tests', async (t) => {
     const body = await response.arrayBuffer();
     assertEquals(body.byteLength, TEST_PNG_1X1_RED.length);
   });
+
+  await t.step(
+    'Content-Disposition uses RFC 6266 encoding for non-ASCII filenames',
+    async () => {
+      await resetDb();
+
+      const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+      await db.insert(profiles).values({
+        name: 'Profile with Unicode Filename',
+        avatar: {
+          filename: 'naïve.png',
+          contentType: 'image/png',
+          size: TEST_PNG_1X1_RED.length,
+          data: base64Data,
+        },
+      });
+
+      const handler = createHandler();
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      assertEquals(
+        response.headers.get('Content-Disposition'),
+        'inline; filename="na_ve.png"; filename*=UTF-8\'\'na%C3%AFve.png',
+      );
+    },
+  );
 
   await t.step('detail view shows image preview for image files', async () => {
     await resetDb();
@@ -698,6 +729,110 @@ Deno.test('integration: file upload tests', async (t) => {
     },
   );
 
+  // ──────────────────────────────────────────────────────────────────────
+  // 4-segment /admin/files/<table>/<col>/<id>/<filename> path
+  //
+  // The trailing filename segment is accepted and intentionally ignored —
+  // it exists solely for SEO-friendly URLs. The file is always resolved
+  // by table+column+id; the name on the segment has no effect.
+  // ──────────────────────────────────────────────────────────────────────
+
+  await t.step(
+    '4-segment URL with correct filename serves the same file as 3-segment URL',
+    async () => {
+      await resetDb();
+
+      const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+      await db.insert(profiles).values({
+        name: 'Profile for SEO URL',
+        avatar: {
+          filename: 'portrait.png',
+          contentType: 'image/png',
+          size: TEST_PNG_1X1_RED.length,
+          data: base64Data,
+        },
+      });
+
+      const handler = createHandler();
+
+      const res3 = await handler(
+        new Request('http://localhost/admin/files/profiles/avatar/1'),
+      );
+      const res4 = await handler(
+        new Request(
+          'http://localhost/admin/files/profiles/avatar/1/portrait.png',
+        ),
+      );
+
+      assertEquals(res3.status, 200);
+      assertEquals(res4.status, 200);
+      assertEquals(
+        res4.headers.get('Content-Type'),
+        res3.headers.get('Content-Type'),
+      );
+      const body3 = new Uint8Array(await res3.arrayBuffer());
+      const body4 = new Uint8Array(await res4.arrayBuffer());
+      assertEquals(body4, body3);
+    },
+  );
+
+  await t.step(
+    '4-segment URL with wrong filename still serves the file (filename is ignored)',
+    async () => {
+      await resetDb();
+
+      const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+      await db.insert(profiles).values({
+        name: 'Profile for SEO URL',
+        avatar: {
+          filename: 'portrait.png',
+          contentType: 'image/png',
+          size: TEST_PNG_1X1_RED.length,
+          data: base64Data,
+        },
+      });
+
+      const handler = createHandler();
+      const response = await handler(
+        new Request(
+          'http://localhost/admin/files/profiles/avatar/1/completely-wrong-name.jpg',
+        ),
+      );
+
+      // The segment is ignored; the file is served regardless.
+      assertEquals(response.status, 200);
+      assertEquals(response.headers.get('Content-Type'), 'image/png');
+    },
+  );
+
+  await t.step(
+    '5-segment URL is rejected (too many path segments → falls through to 404)',
+    async () => {
+      await resetDb();
+
+      const base64Data = btoa(String.fromCharCode(...TEST_PNG_1X1_RED));
+      await db.insert(profiles).values({
+        name: 'Profile',
+        avatar: {
+          filename: 'portrait.png',
+          contentType: 'image/png',
+          size: TEST_PNG_1X1_RED.length,
+          data: base64Data,
+        },
+      });
+
+      const handler = createHandler();
+      const response = await handler(
+        new Request(
+          'http://localhost/admin/files/profiles/avatar/1/portrait.png/extra',
+        ),
+      );
+
+      // parts.length === 5 fails the <= 4 guard → falls through to 404
+      assertEquals(response.status, 404);
+    },
+  );
+
   await client.close();
 });
 
@@ -826,6 +961,171 @@ Deno.test('integration: policy-gated file serving', async (t) => {
     assertEquals(response.status, 200);
     assertEquals(response.headers.get('Content-Type'), 'image/png');
   });
+
+  // ──────────────────────────────────────────────────────────────────────
+  // _source token plumbing on /admin/files/...
+  //
+  // /admin/files/... must propagate ?_source=<token> into the policy
+  // context so that source-aware row policies behave consistently with
+  // the picker list page (handleList). Without this, a policy that allows
+  // reads inside the picker iframe would still 404 every thumbnail and
+  // every editor-canvas image, even though the user just selected the row.
+  // ──────────────────────────────────────────────────────────────────────
+
+  function makeSourceGatedHandler() {
+    return createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      db,
+      schema: schemaWithFiles,
+      basePath: '/admin',
+      auth: {
+        secret: AUTH_SECRET,
+        provider: noopAuthProvider,
+      },
+      policies: {
+        // Only allow reads when ctx.source identifies the puck plugin.
+        profiles: (ctx) =>
+          ctx.source === pluginSource('puck') ? undefined : false,
+      },
+    });
+  }
+
+  await t.step(
+    'source-gated row policy: file 404s when _source missing',
+    async () => {
+      await seedProfile();
+
+      const handler = makeSourceGatedHandler();
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1',
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      // Policy returns false because ctx.source is undefined → 404
+      assertEquals(response.status, 404);
+    },
+  );
+
+  await t.step(
+    'source-gated row policy: file serves when valid _source matches',
+    async () => {
+      await seedProfile();
+
+      const handler = makeSourceGatedHandler();
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+      const sourceToken = await generateSourceToken(
+        pluginSource('puck'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/files/profiles/avatar/1?_source=${
+          encodeURIComponent(sourceToken)
+        }`,
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      assertEquals(response.headers.get('Content-Type'), 'image/png');
+    },
+  );
+
+  await t.step(
+    'source-gated row policy: file 404s when _source is for a different plugin',
+    async () => {
+      await seedProfile();
+
+      const handler = makeSourceGatedHandler();
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+      const wrongSourceToken = await generateSourceToken(
+        pluginSource('other-plugin'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/files/profiles/avatar/1?_source=${
+          encodeURIComponent(wrongSourceToken)
+        }`,
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      // Token validates, but ctx.source !== 'plugin:puck' → policy denies → 404
+      assertEquals(response.status, 404);
+    },
+  );
+
+  await t.step(
+    'invalid _source token is treated as missing (no 4xx escalation, policy decides)',
+    async () => {
+      await seedProfile();
+
+      // Permissive policy that doesn't care about source
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        db,
+        schema: schemaWithFiles,
+        basePath: '/admin',
+        auth: {
+          secret: AUTH_SECRET,
+          provider: noopAuthProvider,
+        },
+        policies: 'dangerously-open',
+      });
+
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+
+      const request = new Request(
+        'http://localhost/admin/files/profiles/avatar/1?_source=garbage.not.a.token',
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      // Bad token silently falls back to ctx.source = undefined.
+      // Permissive policy still allows the read.
+      assertEquals(response.status, 200);
+      assertEquals(response.headers.get('Content-Type'), 'image/png');
+    },
+  );
+
+  await t.step(
+    'expired _source token is treated as missing',
+    async () => {
+      await seedProfile();
+
+      const handler = makeSourceGatedHandler();
+      const payload = createJwtPayload('1');
+      const token = await signJwt(payload, AUTH_SECRET);
+
+      // Hand-craft a token whose timestamp is well past the 4h TTL.
+      // Token format: source.timestamp(base36).signature
+      // Signature won't match for an arbitrary timestamp, so this exercises
+      // the "invalid signature → null source" branch. Either way the
+      // observable behavior is the same as a missing token: policy denies.
+      const expiredToken = `${pluginSource('puck')}.${
+        (Date.now() - 5 * 60 * 60 * 1000).toString(36)
+      }.deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef`;
+
+      const request = new Request(
+        `http://localhost/admin/files/profiles/avatar/1?_source=${
+          encodeURIComponent(expiredToken)
+        }`,
+        { headers: { Cookie: `cms_token=${token}` } },
+      );
+      const response = await handler(request);
+
+      // Source token rejected → ctx.source = undefined → policy denies → 404
+      assertEquals(response.status, 404);
+    },
+  );
 
   await client.close();
 });
@@ -2451,6 +2751,13 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       // Should redirect to signed URL
       assertEquals(response.status, 302);
       assertEquals(signedKey, 'profiles/avatar/1/valid-uuid.png');
+      // Cache the redirect (not the signed URL itself) so browsers avoid
+      // a DB + signing round-trip on every grid/picker render.
+      assertEquals(
+        response.headers.get('Cache-Control'),
+        'private, max-age=60, must-revalidate',
+        'storage 302 redirect must carry Cache-Control to allow browser caching',
+      );
     },
   );
 

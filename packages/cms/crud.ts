@@ -7,7 +7,12 @@ import type { IntrospectedTable } from '@hotsauce/core';
 
 import { alert, layout, pagination } from '@hotsauce/ui';
 import { listView } from '@hotsauce/ui';
-import { gridView, resolveThumbnailUrl } from '@hotsauce/ui';
+import {
+  gridView,
+  pickerGridView,
+  pickerLayout,
+  resolveThumbnailUrl,
+} from '@hotsauce/ui';
 import type {
   GridPanelData,
   GridThumbnail,
@@ -18,6 +23,7 @@ import { createView, editView } from '@hotsauce/ui';
 import { html, raw } from '@hotsauce/ui';
 import type { RouteContext, StorageRegistry } from './types.ts';
 import {
+  addFrameAncestorSelf,
   coerceFormValues,
   getPagination,
   getSort,
@@ -49,7 +55,9 @@ import {
 } from './csrf.ts';
 import {
   generateSourceToken,
+  getPluginName,
   getSourceTokenFromFormData,
+  isPluginSource,
   SOURCE,
   validateSourceToken,
 } from './tokens/mod.ts';
@@ -94,7 +102,7 @@ import {
   isValidFileKey,
   isValidFileReference,
 } from '@hotsauce/core';
-import { buildGridPanelData, signThumbnailUrl } from './grid-helpers.ts';
+import { buildGridPanelData } from './grid-helpers.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Storage deletion helpers
@@ -455,6 +463,39 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   const basePath = options.basePath;
   const drizzleTable = table.table;
 
+  // Check picker mode and validate source token
+  // Picker mode requires a valid source token to prevent unauthorized access
+  const pickerMode = url.searchParams.get('picker') === 'true';
+  let source: string | undefined;
+
+  if (pickerMode) {
+    const sourceToken = url.searchParams.get('_source');
+    const validatedSource = await validateSourceToken(
+      sourceToken,
+      options.csrfSecret,
+    );
+    if (!validatedSource) {
+      // Invalid or missing source token - reject picker mode request
+      return htmlResponse(
+        '<h1>403 Forbidden</h1><p>Picker mode requires a valid source token.</p>',
+        403,
+        ctx.options.securityHeaders,
+      );
+    }
+
+    // Picker mode is currently reserved for plugin iframes.
+    // A core-CMS picker (SOURCE.CMS) should use a dedicated mode/route so its
+    // data-exposure rules are explicit and testable.
+    if (!isPluginSource(validatedSource)) {
+      return htmlResponse(
+        '<h1>403 Forbidden</h1><p>Picker mode requires a plugin source token.</p>',
+        403,
+        ctx.options.securityHeaders,
+      );
+    }
+    source = validatedSource;
+  }
+
   // Apply row policy for list action
   // If auth is enabled but policies are undefined, deny access (secure by default)
   if (options.auth && !options.policies) {
@@ -462,7 +503,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   }
   const tablePolicy = options.policies?.[table.name];
   const rowPolicy = extractRowPolicy(tablePolicy);
-  const policyCtx = createPolicyContext(request, authUser);
+  const policyCtx = createPolicyContext(request, authUser, source);
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
 
   if (!policyResult.allowed) {
@@ -554,7 +595,16 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
   // Detect thumbnail field for grid view
   const cmsFields = tableToCmsFields(table);
-  const thumbnailField = getThumbnailField(cmsFields);
+  // If the thumbnail column is hidden by column policy for this user, treat it
+  // as absent — picker and grid fall through to the "no thumbnail" paths rather
+  // than emitting broken <img> URLs that the file-serving handler will 404.
+  const thumbnailField = (() => {
+    const field = getThumbnailField(cmsFields);
+    return field &&
+        columnResult.readableColumns.includes(field.column.name)
+      ? field
+      : undefined;
+  })();
 
   // Determine view mode: default to grid if thumbnail exists, otherwise table
   const viewParam = url.searchParams.get('view');
@@ -563,6 +613,135 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     : 'table' as const;
 
   const pkCol = getPrimaryKeyColumn(table);
+
+  // Picker mode: minimal grid UI for iframe embedding (e.g., Puck media picker)
+  // Note: pickerMode and source token already validated at start of handleList
+  if (pickerMode && thumbnailField) {
+    const pluginName = getPluginName(source);
+    if (!pluginName) {
+      return htmlResponse('Forbidden', 403, ctx.options.securityHeaders);
+    }
+
+    // Reuse the (already-validated) raw token from the picker URL so thumbnail
+    // requests carry the same source identity. Avoids re-minting per image and
+    // lets handleFileServing apply source-aware row policies consistently.
+    const rawSourceToken = url.searchParams.get('_source');
+    const sourceQuery = rawSourceToken
+      ? `?_source=${encodeURIComponent(rawSourceToken)}`
+      : '';
+
+    // Build thumbnails with minimal record data for postMessage.
+    // Expose the PK plus only non-PK columns explicitly opted into the current
+    // plugin via `plugins[pluginName].role === 'source'`; the thumbnail/file
+    // column is not included unless it also opts in as a source column.
+    const thumbnails: GridThumbnail[] = records.map((record) => {
+      const id = record[pkCol.propertyName] as string | number;
+      const value = record[thumbnailField.column.propertyName];
+      // Proxy URL — the /files/ route serves both DB-stored and S3 files.
+      // Avoids inline base64/large signed URLs in HTML; the proxy handler
+      // controls cache headers per-request.
+      const fileUrl =
+        `${basePath}/files/${table.name}/${thumbnailField.column.name}/${id}${sourceQuery}`;
+
+      const thumbnailUrl = resolveThumbnailUrl(
+        value,
+        thumbnailField.fieldType,
+        fileUrl,
+      );
+
+      const label = isValidFileReference(value) ? value.filename : String(id);
+
+      // Filter record to only PK + source columns (secure by default)
+      // Source columns are those with `plugins.[pluginName].role === 'source'`
+      // Note: Even the file column must explicitly opt in — thumbnail: true is for grid rendering only
+      const pickerRecord: Record<string, unknown> = {
+        [pkCol.propertyName]: id,
+      };
+
+      // Include columns that opted into this plugin as source data
+      // source is 'plugin:puck', pluginName is 'puck'
+      for (const col of table.columns) {
+        // Skip PK (already included)
+        if (col.propertyName === pkCol.propertyName) {
+          continue;
+        }
+        // Column read policy takes precedence over plugin opt-in.
+        // filterRecordsColumns() already stripped hidden keys from `record`,
+        // but this explicit guard keeps the contract self-contained if that
+        // pre-filter ever changes (e.g. null placeholders instead of deletion).
+        if (!columnResult.readableColumns.includes(col.name)) {
+          continue;
+        }
+        const pluginConfig = col.cmsOptions?.plugins?.[pluginName];
+        // Check for role: 'source' (explicit opt-in)
+        if (
+          pluginConfig &&
+          typeof pluginConfig === 'object' &&
+          (pluginConfig as { role?: string }).role === 'source'
+        ) {
+          pickerRecord[col.propertyName] = record[col.propertyName];
+        }
+      }
+
+      return { id, thumbnailUrl, label, record: pickerRecord };
+    });
+
+    const gridOptions: GridViewOptions = {
+      baseUrl: cmsUrl(basePath, table.name),
+      primaryKey: pkCol.propertyName,
+      thumbnailField,
+      currentView: 'grid',
+      currentUrl: url.href,
+      pickerMode: true,
+      tableName: table.name,
+    };
+
+    const pickerContent = pickerGridView(
+      formatTableName(table.name),
+      records,
+      thumbnails,
+      gridOptions,
+    );
+
+    const pageHtml = pickerLayout(pickerContent, {
+      title: formatTableName(table.name),
+      stylesheetUrl: cmsUrl(basePath, 'styles.css'),
+      scriptUrl: cmsUrl(basePath, 'picker.js'),
+    });
+
+    // Allow iframe embedding with frame-ancestors
+    const headers: Record<string, string> = {
+      ...ctx.options.securityHeaders,
+      'X-Frame-Options': 'SAMEORIGIN',
+      // Prevent the signed _source token in the picker URL from leaking
+      // to access logs via Referer on same-origin subresource requests.
+      'Referrer-Policy': 'no-referrer',
+    };
+    // Ensure same-origin framing is permitted. Extract any existing
+    // frame-ancestors directive and extend it with 'self'; add one if absent.
+    addFrameAncestorSelf(headers);
+
+    return htmlResponse(pageHtml, 200, headers);
+  }
+
+  // Picker mode on a table with no thumbnail field: reject cleanly rather than
+  // leaking the full admin layout into the iframe.
+  if (pickerMode) {
+    const pickerContent = pickerLayout(
+      '<div class="cms-picker-view"><p class="cms-empty">This table does not support the image picker.</p></div>',
+      {
+        title: formatTableName(table.name),
+        stylesheetUrl: cmsUrl(basePath, 'styles.css'),
+      },
+    );
+    const headers: Record<string, string> = {
+      ...ctx.options.securityHeaders,
+      'X-Frame-Options': 'SAMEORIGIN',
+      'Referrer-Policy': 'no-referrer',
+    };
+    addFrameAncestorSelf(headers);
+    return htmlResponse(pickerContent, 400, headers);
+  }
 
   // Build content
   let content = '';
@@ -575,31 +754,22 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
   if (viewMode === 'grid' && thumbnailField) {
     // Resolve thumbnail URLs for each record
-    const thumbnails: GridThumbnail[] = await Promise.all(
-      records.map(async (record) => {
-        const id = record[pkCol.propertyName] as string | number;
-        const value = record[thumbnailField.column.propertyName];
-        const fileUrl = await signThumbnailUrl(
-          thumbnailField,
-          value,
-          options,
-          request,
-          authUser,
-          table.name,
-          id,
-        );
+    const thumbnails: GridThumbnail[] = records.map((record) => {
+      const id = record[pkCol.propertyName] as string | number;
+      const value = record[thumbnailField.column.propertyName];
+      const fileUrl =
+        `${basePath}/files/${table.name}/${thumbnailField.column.name}/${id}`;
 
-        const thumbnailUrl = resolveThumbnailUrl(
-          value,
-          thumbnailField.fieldType,
-          fileUrl,
-        );
+      const thumbnailUrl = resolveThumbnailUrl(
+        value,
+        thumbnailField.fieldType,
+        fileUrl,
+      );
 
-        const label = isValidFileReference(value) ? value.filename : String(id);
+      const label = isValidFileReference(value) ? value.filename : String(id);
 
-        return { id, thumbnailUrl, label };
-      }),
-    );
+      return { id, thumbnailUrl, label };
+    });
 
     // Check for selected record (RHS detail panel)
     const selectedParam = url.searchParams.get('selected');

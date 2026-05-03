@@ -35,6 +35,10 @@ export interface GridViewOptions {
   currentUrl: string;
   /** Currently selected record ID (for RHS panel) */
   selectedId?: string | number;
+  /** Picker mode: minimal UI, click posts message to parent instead of navigating */
+  pickerMode?: boolean;
+  /** Table name (required for picker mode postMessage) */
+  tableName?: string;
 }
 
 /**
@@ -48,6 +52,8 @@ export interface GridThumbnail {
   thumbnailUrl: string | null;
   /** Display label (filename, alt text, or record identifier) */
   label: string;
+  /** Full record data (for picker mode postMessage) */
+  record?: Record<string, unknown>;
 }
 
 /**
@@ -178,8 +184,11 @@ export function gridItems(
     return html`
       <div class="cms-empty">
         <p>${emptyMessage}</p>
-        <a href="${options
-          .baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
+        ${options.pickerMode ? '' : raw(
+          `<a href="${
+            escapeHtml(options.baseUrl)
+          }/new" class="cms-btn cms-btn-primary">Create New</a>`,
+        )}
       </div>
     `;
   }
@@ -191,7 +200,24 @@ export function gridItems(
       }" class="cms-grid-thumb" loading="lazy" />`
       : '<div class="cms-grid-placeholder">No image</div>';
 
-    // Link to ?selected=<id> for panel, preserving existing params
+    // Picker mode: render button with data attributes for postMessage
+    if (options.pickerMode) {
+      return html`
+        <button
+          type="button"
+          class="cms-grid-item cms-grid-picker-item"
+          data-picker-id="${thumb.id}"
+          data-picker-table="${options.tableName ?? ''}"
+          data-picker-column="${options.thumbnailField.column.name}"
+          data-picker-record="${JSON.stringify(thumb.record ?? {})}"
+        >
+          ${raw(thumbnailHtml)}
+          <span class="cms-grid-label">${thumb.label}</span>
+        </button>
+      `;
+    }
+
+    // Normal mode: link to ?selected=<id> for panel
     const selectUrl = new URL(options.currentUrl, 'http://localhost');
     selectUrl.searchParams.set('selected', String(thumb.id));
     const href = `${selectUrl.pathname}${selectUrl.search}`;
@@ -360,4 +386,104 @@ export function gridView(
       </div>
     </div>
   `;
+}
+
+/**
+ * Render a minimal picker grid view (no header, toggle, or create button)
+ */
+export function pickerGridView(
+  title: string,
+  records: Record<string, unknown>[],
+  thumbnails: GridThumbnail[],
+  options: GridViewOptions,
+): string {
+  const gridContent = gridItems(records, thumbnails, options);
+
+  return html`
+    <div class="cms-picker-view">
+      <header class="cms-picker-header">
+        <h2>${title}</h2>
+      </header>
+      <div class="cms-grid-content">
+        <div class="cms-grid-main">
+          ${raw(gridContent)}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/**
+ * Script for picker mode postMessage handling.
+ * Clicks on picker items post message to parent window.
+ */
+export const pickerScript = `
+(function() {
+  'use strict';
+  
+  document.addEventListener('click', function(e) {
+    var target = e.target;
+    if (!(target instanceof Element)) return;
+    var item = target.closest('.cms-grid-picker-item');
+    if (!item) return;
+    e.preventDefault();
+    // dataset values are always strings; read record.id for the typed PK.
+    var id = item.dataset.pickerId;
+    var table = item.dataset.pickerTable;
+    var column = item.dataset.pickerColumn;
+    var recordJson = item.dataset.pickerRecord || '{}';
+    var record;
+    try {
+      record = JSON.parse(recordJson);
+    } catch (err) {
+      record = {};
+    }
+    
+    // Post message to parent (Puck editor iframe parent)
+    // Include resolved URL and column separately; column is the server-authoritative
+    // file column name so callers don't have to duplicate schema knowledge.
+    window.parent.postMessage({
+      type: 'cms:media-selected',
+      table: table,
+      column: column,
+      id: id,
+      record: record
+    }, window.location.origin);
+  });
+})();
+`;
+
+/**
+ * Render a minimal picker page layout (no sidebar, external script).
+ *
+ * Uses a plain template literal (not the html`` tag) because `renderedHtml` is
+ * pre-rendered — interpolating it through html`` would double-escape it.
+ * Dynamic values (title, URLs) are escaped manually via escapeHtml().
+ */
+export function pickerLayout(
+  renderedHtml: string,
+  options: {
+    title: string;
+    stylesheetUrl?: string;
+    scriptUrl?: string;
+  },
+): string {
+  const stylesheetUrl = options.stylesheetUrl ?? 'styles.css';
+  const scriptTag = options.scriptUrl
+    ? `<script src="${escapeHtml(options.scriptUrl)}"></script>`
+    : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(options.title)} - Picker</title>
+  <link rel="stylesheet" href="${escapeHtml(stylesheetUrl)}">
+</head>
+<body class="cms-picker-body">
+  ${renderedHtml}
+  ${scriptTag}
+</body>
+</html>`;
 }

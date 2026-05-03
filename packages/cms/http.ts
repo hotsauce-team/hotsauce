@@ -18,6 +18,7 @@ import type { CspOptions } from './types.ts';
  * - X-Content-Type-Options: Prevents MIME sniffing
  * - X-Frame-Options: Prevents clickjacking
  * - Referrer-Policy: Limits referrer information leakage
+ * - Permissions-Policy: Denies browser feature access (camera, mic, geolocation, etc.)
  */
 
 /**
@@ -42,6 +43,8 @@ export function buildSecurityHeaders(
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'DENY',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
+    'Permissions-Policy':
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), xr-spatial-tracking=()',
   };
 }
 
@@ -66,6 +69,45 @@ function joinCspValues(sources?: string[]): string {
 
 /** Default security headers (no CSP extensions) */
 export const SECURITY_HEADERS: Record<string, string> = buildSecurityHeaders();
+
+/**
+ * Ensure `frame-ancestors 'self'` is present in the response headers.
+ *
+ * Extracts any existing `frame-ancestors` directive and extends its source
+ * list with `'self'`. If no directive exists, one is appended. If the CSP
+ * header is absent entirely, a minimal header with `frame-ancestors 'self'`
+ * is added. This is unconditional — operator-supplied CSP that omits the
+ * directive still gets framing protection.
+ *
+ * Special case: `'none'` means "block all" and is invalid combined with other
+ * sources, so it is replaced entirely rather than extended.
+ */
+export function addFrameAncestorSelf(headers: Record<string, string>): void {
+  const csp = headers['Content-Security-Policy'];
+  if (!csp) {
+    headers['Content-Security-Policy'] = "frame-ancestors 'self'";
+    return;
+  }
+  const m = csp.match(/frame-ancestors([^;]*)(;|$)/);
+  if (m) {
+    const existing = (m[1] ?? '').trim();
+    // 'none' means "block all" — combining it with 'self' is invalid per spec,
+    // so replace it entirely rather than producing "frame-ancestors 'none' 'self'".
+    // For any other source list, extend it with 'self' if not already present.
+    const newValue = existing === "'none'" || existing.includes("'self'")
+      ? "'self'"
+      : `${existing} 'self'`;
+    headers['Content-Security-Policy'] = csp.replace(
+      /frame-ancestors[^;]*(;|$)/,
+      `frame-ancestors ${newValue}$1`,
+    );
+  } else {
+    // No frame-ancestors directive — append one.
+    headers['Content-Security-Policy'] = `${
+      csp.replace(/;?\s*$/, '')
+    }; frame-ancestors 'self'`;
+  }
+}
 
 /**
  * Create an HTML response with security headers.
@@ -752,4 +794,36 @@ export function getSort(
   if (!columns.includes(column)) return null;
 
   return { column, direction };
+}
+
+/**
+ * Build a RFC 6266-compliant Content-Disposition header value.
+ *
+ * Uses the dual-parameter form (`filename` + `filename*`) for non-ASCII or
+ * percent-containing filenames so modern browsers get the real name while
+ * legacy clients receive a safe ASCII fallback. Pure-ASCII filenames that
+ * contain no `%` use the single-parameter form unchanged.
+ *
+ * @example
+ * contentDispositionHeader('inline', 'photo.png')
+ * // → 'inline; filename="photo.png"'
+ *
+ * contentDispositionHeader('attachment', 'naïve.png')
+ * // → 'attachment; filename="na_ve.png"; filename*=UTF-8\'\'na%C3%AFve.png'
+ */
+export function contentDispositionHeader(
+  disposition: 'inline' | 'attachment',
+  filename: string,
+): string {
+  // Legacy fallback: strip non-ASCII and quoted-string-unsafe characters
+  const fallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(
+    /["\\]/g,
+    '_',
+  );
+  const encoded = encodeURIComponent(filename);
+  // If the filename is pure ASCII and safe, the single parameter is sufficient
+  if (fallback === filename && !filename.includes('%')) {
+    return `${disposition}; filename="${fallback}"`;
+  }
+  return `${disposition}; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 }

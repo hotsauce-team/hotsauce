@@ -52,15 +52,22 @@ export const authors = pgTable('authors', {
 
 /**
  * Media table - uploaded files (images, documents, etc.)
+ *
+ * Picker mode sends: PK (always) + columns with `plugins.puck.role: 'source'`
+ * - `thumbnail: true` = grid rendering (image preview)
+ * - `role: 'source'` = data exposure (postMessage to plugin)
  */
 export const media = pgTable('media', {
   id: serial('id').primaryKey(),
   file: jsonb('file').$type<FileReference>().$cms({
     file: { accept: 'image/*' },
-    thumbnail: true,
+    thumbnail: true, // Grid rendering
+    plugins: { puck: { role: 'source' } }, // Data exposure
   }),
-  alt: text('alt'),
-  caption: text('caption'),
+  alt: text('alt').$cms({
+    plugins: { puck: { role: 'source' } }, // Data exposure
+  }),
+  caption: text('caption'), // NOT exposed to plugins
   published: boolean('published').default(false).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }).$cms({ autoDraft: true });

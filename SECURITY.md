@@ -140,7 +140,28 @@ const policies = {
 - Return SQL condition to filter records
 - Test policies thoroughly for each action type
 
-### 7. Column-Level Permissions
+### 7. Picker Mode (Puck plugin)
+
+When the Puck editor is used, it opens the CMS grid in an iframe so users can pick images or other media. This uses a **source token** to identify the request origin.
+
+**How it works:**
+
+- The server generates a `plugin:puck` source token (HMAC-SHA256, signed with `CMS_CSRF_SECRET`, 4-hour TTL) and injects it into `globalThis.CmsContext.sourceToken` before the Puck editor loads
+- `ImagePickerField` opens the grid as a `<dialog>` iframe, appending `?_source=<token>` to the URL
+- `handleList` validates the source token before serving picker responses — an invalid or expired token is treated as no token, and row policies that require a specific source will deny the request
+- Picker requests also require a valid admin session (JWT cookie) — the source token alone is not sufficient
+- The plugin name is read from the **signed** token, not the URL, so tampering with `?_source` cannot switch which plugin's columns are exposed
+- Only columns explicitly marked `$cms({ plugins: { puck: { role: 'source' } } })` appear in picker payloads — all other columns, including `thumbnail: true` columns, are excluded
+
+**`CmsContext.sourceToken` is a bearer credential.** It is accessible to all modules in the user's Puck components bundle (via `globalThis`). Treat it accordingly:
+
+- Do not log it or include it in error reports sent to external services
+- Access logs will contain it in query strings if `?_source=...` URLs are logged — consider scrubbing query parameters from access logs, or keeping log retention short
+- The 4-hour TTL limits the window if a token is captured from logs
+
+**Rotating `CMS_CSRF_SECRET`** invalidates all in-flight source tokens. Users with an open Puck editor tab will get a 403 on their next picker request and need to reload the page. This is expected behaviour given the short TTL.
+
+### 8. Column-Level Permissions
 
 Hide sensitive columns from specific users. Hidden columns:
 
@@ -297,7 +318,8 @@ Before deploying to production:
 - [ ] Regular security updates are scheduled
 - [ ] Logging and monitoring are configured
 - [ ] Error messages don't leak sensitive information
-- [ ] File upload validation (if using file upload plugin)
+- [ ] File upload validation (if using file uploads)
+- [ ] SVG / scriptable file handling configured at bucket level (if using S3-compatible storage — see [s3-storage SVG guidance](packages/plugins/s3-storage/README.md#svg-and-scriptable-files))
 
 ## Vulnerability Reporting
 

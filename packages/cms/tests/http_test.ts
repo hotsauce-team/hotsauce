@@ -14,7 +14,7 @@ import {
   parseFormData,
   redirect,
 } from '../http.ts';
-import { buildSecurityHeaders } from '../http.ts';
+import { buildSecurityHeaders, contentDispositionHeader } from '../http.ts';
 import type { IntrospectedColumn } from '@hotsauce/core';
 
 // =============================================================================
@@ -584,4 +584,53 @@ Deno.test('buildSecurityHeaders: combines styleSrc with other directives', () =>
 
   assertEquals(csp.includes("style-src 'self' 'unsafe-inline'"), true);
   assertEquals(csp.includes('https://cdn.example.com'), true);
+});
+
+// =============================================================================
+// contentDispositionHeader tests
+// =============================================================================
+
+Deno.test('contentDispositionHeader: pure ASCII filename — single parameter', () => {
+  assertEquals(
+    contentDispositionHeader('inline', 'photo.png'),
+    'inline; filename="photo.png"',
+  );
+  assertEquals(
+    contentDispositionHeader('attachment', 'report.pdf'),
+    'attachment; filename="report.pdf"',
+  );
+});
+
+Deno.test('contentDispositionHeader: non-ASCII filename — dual parameters', () => {
+  assertEquals(
+    contentDispositionHeader('inline', 'naïve.png'),
+    'inline; filename="na_ve.png"; filename*=UTF-8\'\'na%C3%AFve.png',
+  );
+  assertEquals(
+    contentDispositionHeader('attachment', '写真.jpg'),
+    'attachment; filename="__.jpg"; filename*=UTF-8\'\'%E5%86%99%E7%9C%9F.jpg',
+  );
+});
+
+Deno.test('contentDispositionHeader: ASCII filename containing % — dual parameters', () => {
+  // A stored filename that already contains a percent sign must not be
+  // misread as a percent-encoded sequence by the browser.
+  assertEquals(
+    contentDispositionHeader('attachment', 'file%20name.png'),
+    'attachment; filename="file%20name.png"; filename*=UTF-8\'\'file%2520name.png',
+  );
+});
+
+Deno.test('contentDispositionHeader: filename with double-quote — fallback strips it', () => {
+  assertEquals(
+    contentDispositionHeader('attachment', 'say"hi".txt'),
+    'attachment; filename="say_hi_.txt"; filename*=UTF-8\'\'say%22hi%22.txt',
+  );
+});
+
+Deno.test('contentDispositionHeader: filename with backslash — fallback strips it', () => {
+  assertEquals(
+    contentDispositionHeader('attachment', 'path\\file.txt'),
+    'attachment; filename="path_file.txt"; filename*=UTF-8\'\'path%5Cfile.txt',
+  );
 });

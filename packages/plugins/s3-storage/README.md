@@ -223,6 +223,36 @@ Signing `Content-Length` and `Content-Type` increases coupling to client/browser
 
 If you encounter issues, check that the client sends these headers exactly as returned from the presign endpoint.
 
+### SVG and Scriptable Files
+
+When the CMS serves a file from its own database (`/admin/files/...` with inline data), it forces `Content-Disposition: attachment` and a strict CSP for SVGs, preventing them from executing scripts in the browser.
+
+**S3-stored files are served directly by S3**, not through the CMS. The 302 redirect sends the browser straight to S3, so S3's response headers determine how the browser treats the file. By default, most S3-compatible providers serve files with the content type they were uploaded with. A browser that opens an `image/svg+xml` presigned URL directly will render it as a document, and any `<script>` in the SVG will execute.
+
+**Recommended mitigation — bucket-level response headers:**
+
+Configure your bucket to override the content type for SVG responses:
+
+```json
+// AWS S3 — set via Object Metadata or S3 Object Lambda
+// R2 / MinIO — configure bucket response header overrides
+{
+  "Content-Disposition": "attachment",
+  "Content-Type": "application/octet-stream"
+}
+```
+
+Or restrict what content types your upload validation accepts:
+
+```ts
+// Reject SVG at upload time if your use case doesn't require it
+avatar: jsonb('avatar').$cms({
+  file: { accept: 'image/png,image/jpeg,image/webp,image/gif' },
+}),
+```
+
+The `accept` restriction is enforced server-side before the presigned URL is generated, so SVGs are rejected before they reach S3.
+
 ### Policy Integration
 
 Downloads respect CMS row/column policies:

@@ -34,6 +34,7 @@ import type {
 import {
   base64ToUint8Array,
   buildSecurityHeaders,
+  contentDispositionHeader,
   forbidden,
   methodNotAllowed,
   notFound,
@@ -65,7 +66,7 @@ import {
   handleUpdate,
 } from './crud.ts';
 import { handleStylesheet } from './styles.ts';
-import { handleScript } from './scripts.ts';
+import { handlePickerScript, handleScript } from './scripts.ts';
 
 // Auth imports from @hotsauce/auth
 import {
@@ -180,7 +181,11 @@ export {
 } from './tokens/mod.ts';
 
 // Import locally for use in handlePluginRoute
-import { generateSourceToken, pluginSource } from './tokens/mod.ts';
+import {
+  generateSourceToken,
+  pluginSource,
+  validateSourceToken,
+} from './tokens/mod.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Router - URL parsing and route generation
@@ -215,6 +220,7 @@ export {
   buildUrl,
   coerceFormValues,
   coerceValue,
+  contentDispositionHeader,
   forbidden,
   getPagination,
   getSort,
@@ -246,7 +252,13 @@ export { cmsStylesheet, cssResponse, handleStylesheet } from './styles.ts';
 // ─────────────────────────────────────────────────────────────
 // Scripts - JavaScript served as external file
 // ─────────────────────────────────────────────────────────────
-export { cmsScript, handleScript, jsResponse } from './scripts.ts';
+export {
+  cmsScript,
+  handlePickerScript,
+  handleScript,
+  jsResponse,
+  pickerScript,
+} from './scripts.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Policies - Row-level security for fine-grained authorization
@@ -1000,6 +1012,13 @@ export function createCmsHandler(options: CmsOptions): Handler {
       return handleScript();
     }
 
+    // Serve picker script at {basePath}/picker.js
+    if (
+      pathname === `${opts.basePath}/picker.js` && request.method === 'GET'
+    ) {
+      return handlePickerScript();
+    }
+
     // ─────────────────────────────────────────────────────────────
     // Auth routes (when auth is configured)
     // ─────────────────────────────────────────────────────────────
@@ -1401,13 +1420,14 @@ export function createCmsHandler(options: CmsOptions): Handler {
     // Regular CMS routes
     // ─────────────────────────────────────────────────────────────
 
-    // Handle file serving at {basePath}/files/{table}/{column}/{id}
+    // Handle file serving at {basePath}/files/{table}/{column}/{id}[/{filename}]
+    // Optional filename at end is ignored (for SEO-friendly URLs)
     const filesPrefix = `${opts.basePath}/files/`;
     if (pathname.startsWith(filesPrefix) && request.method === 'GET') {
       const filePath = pathname.slice(filesPrefix.length);
       const parts = filePath.split('/');
 
-      if (parts.length === 3) {
+      if (parts.length === 3 || parts.length === 4) {
         const [tableName, columnName, recordId] = parts as [
           string,
           string,
@@ -1630,7 +1650,20 @@ async function handleFileServing(
   const authUser = jwtPayload
     ? { id: jwtPayload.sub, role: jwtPayload.role }
     : undefined;
-  const policyCtx = createPolicyContext(request, authUser);
+
+  // Optional source token: when present and valid, surfaces ctx.source to
+  // policies so the same row policy can be evaluated consistently across the
+  // picker list page and its thumbnail file fetches. An invalid token is
+  // treated as no token (we don't 403 here — the row policy will deny if it
+  // requires a specific source).
+  const url = new URL(request.url);
+  const rawSourceToken = url.searchParams.get('_source');
+  const source = rawSourceToken
+    ? (await validateSourceToken(rawSourceToken, options.csrfSecret)) ??
+      undefined
+    : undefined;
+
+  const policyCtx = createPolicyContext(request, authUser, source);
 
   // Check row read policy
   const policyResult = await applyPolicy(rowPolicy, policyCtx, 'read');
@@ -1769,7 +1802,10 @@ async function handleFileServing(
         headers: {
           'Location': signedUrl,
           ...options.securityHeaders,
-          'Cache-Control': 'private, no-store', // Signed URLs are short-lived
+          // Cache the redirect (not the signed URL itself) for 60 s.
+          // The browser caches the 302, avoiding a DB + signing round-trip on
+          // every grid/picker render. The Location URL carries its own expiry.
+          'Cache-Control': 'private, max-age=60, must-revalidate',
         },
       });
     } catch (error) {
@@ -1817,9 +1853,10 @@ async function handleFileServing(
       headers: {
         'Content-Type': contentType,
         'Content-Length': String(safeBytes.length),
-        'Content-Disposition': `${disposition}; filename="${
-          encodeURIComponent(fileData.filename)
-        }"`,
+        'Content-Disposition': contentDispositionHeader(
+          disposition,
+          fileData.filename,
+        ),
         ...fileSecurityHeaders,
         'Cache-Control': 'private, max-age=3600',
       },

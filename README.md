@@ -288,21 +288,23 @@ interface TableParsers {
 - [x] File uploads (base64 in DB, validation, serving route)
 - [x] Publish alpha release to jsr (Deno support)
 - [x] File uploads (S3/R2 cloud storage adapter)
-- [ ] Regression tests on demo app, e.g. catch CSP violations.
-- [ ] Shared policy API (reuse CMS row/column policies in your app routes)
-- [ ] Security disclosure policy
-- [ ] Add tests for NodeJS runtime
-- [ ] S3 orphan garbage collection (cleanup objects not referenced by any record)
-- [ ] Expose plugin utilities for frontend use (e.g., S3 signed download URLs)
-- [ ] Media library UI (browse, search, reuse previously uploaded files)
-- [ ] Native CDN support (public + private files, cache invalidation)
-- [ ] Plugin config - timeout, worker response validation, load testing
-- [ ] Plugin permission approval (env var hash or DB table gate for CSP/capability changes)
-- [ ] Plugin data obfuscation (PII/credential redaction)
-- [ ] Audit logging
-- [ ] 2FA backup codes (recovery codes for lost authenticator)
-- [ ] Customizable UI components
-- [ ] Seamless plugin UI (in-page S3 uploads and block editing without navigation)
+- [x] Media library UI (browse, reuse previously uploaded files)
+- [ ] Project: Project website
+- [ ] Project: Security disclosure policy
+- [ ] API: Shared policy API (reuse CMS row/column policies in your app routes)
+- [ ] API: Expose plugin utilities for frontend use (e.g., S3 signed download URLs)
+- [ ] S3: orphan garbage collection (cleanup objects not referenced by any record)
+- [ ] CDN: add native support (public + private files, cache invalidation)
+- [ ] Plugins: Seamless UI (in-page S3 uploads and block editing without navigation)
+- [ ] Plugins: Additional worker config - timeout, worker response validation, load testing
+- [ ] Plugins: Permission/compatibilities approval (env var hash or DB table gate for CSP/capability changes)
+- [ ] Plugins: Data obfuscation (PII/credential redaction)
+- [ ] Plugins: Audit logging
+- [ ] UI: Search for list, grid and picker views (full-text search, filters, pagination)
+- [ ] UI: Customizable UI components
+- [ ] Auth: 2FA backup codes (recovery codes for lost authenticator)
+- [ ] Tests: Add tests for NodeJS runtime
+- [ ] Tests: Regression tests on demo app, e.g. catch CSP violations.
 
 Schema hints example:
 
