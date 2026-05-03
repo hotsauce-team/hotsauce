@@ -417,7 +417,7 @@ export function pickerGridView(
  * Script for picker mode postMessage handling.
  * Clicks on picker items post message to parent window.
  */
-export const pickerScript = `
+export const pickerScript: string = `
 (function() {
   'use strict';
   

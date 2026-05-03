@@ -88,7 +88,7 @@ export type CmsColumnOptions = {
 };
 
 /** Default accept filter for file inputs */
-export const FILE_DEFAULT_ACCEPT = 'image/*';
+export const FILE_DEFAULT_ACCEPT: string = 'image/*';
 
 /** Default max file size in bytes (200KB) */
 export const FILE_DEFAULT_MAX_SIZE = 200_000;
