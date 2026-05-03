@@ -454,6 +454,20 @@ packages/core/tests/
 
 ## Internal Design Notes (Reference)
 
+### Source Tokens and Picker Mode
+
+Source tokens identify the origin of a CMS request. They are HMAC-SHA256 signed with `CMS_CSRF_SECRET`, have a 4-hour TTL, and carry the value `'cms'` for core forms or `'plugin:{name}'` for plugin requests (e.g., `'plugin:puck'`).
+
+**Picker mode** is a separate rendering path in `handleList` that serves a stripped-down grid for the Puck `ImagePickerField`. It is gated by two independent checks: a valid admin session (JWT cookie) and a valid source token in `?_source=`. The source token prevents other CMS pages from loading the picker grid directly and ensures `ctx.source` is populated in row policies.
+
+Key invariants — do not break these:
+
+- **Plugin name comes from the signed token**, not the URL. Changing how the plugin name is extracted (see `getPluginName` in `packages/cms/tokens/source.ts`) affects which columns are exposed to the picker.
+- **`role: 'source'` is the picker opt-in.** Only columns marked `$cms({ plugins: { puck: { role: 'source' } } })` appear in picker payloads. Adding data to picker responses without this opt-in would be a data-exposure regression.
+- **`CmsContext.sourceToken`** is injected into `globalThis` before user component bundles load (see `packages/plugins/puck/client/main.tsx`). It is accessible to all code in the user's bundle. Do not expand what this token can access without considering that it is visible to third-party component code.
+
+When modifying `packages/cms/tokens/source.ts`, `packages/cms/crud.ts` (picker branch of `handleList`), or `packages/plugins/puck/`, run `deno task test packages/cms/tests/integration_picker_test.ts` to verify picker behaviour.
+
 ### Plugin Architecture
 
 Plugins extend the CMS with custom hooks that run during CRUD operations. Key design decisions:

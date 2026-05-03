@@ -484,7 +484,7 @@ w = won't fix
 - [x] Add a `role: 'source' | 'output' | 'data'` reference table to [packages/cms/README.md](packages/cms/README.md).
 - [x] Document `CmsContext.sourceToken` trust boundary in [packages/plugins/puck/README.md](packages/plugins/puck/README.md).
 - [ ] Add a picker-mode operator security checklist (Referrer-Policy, log retention, `onError` payload URL caveat, secret rotation, SVG storage guidance).
-- [ ] **R11** Add a "Picker mode" section to [SECURITY.md](SECURITY.md); add a picker/source-token paragraph to [AGENTS.md](AGENTS.md).
+- [x] **R11** Add a "Picker mode" section to [SECURITY.md](SECURITY.md); add a picker/source-token paragraph to [AGENTS.md](AGENTS.md).
 - [x] **Q7** Add `ctx.source === 'plugin:puck' || <regular-condition>` policy example to the CMS README policies section.
 
 ### House-keeping
