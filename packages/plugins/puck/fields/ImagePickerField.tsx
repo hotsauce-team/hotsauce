@@ -1,4 +1,3 @@
-/// <reference lib="dom" />
 /** @jsxRuntime classic */
 /** @jsx React.createElement */
 /**
@@ -95,7 +94,7 @@ export function ImagePickerField({
   basePath,
   table = 'media',
   altField = 'alt',
-}: ImagePickerFieldProps) {
+}: ImagePickerFieldProps): React.JSX.Element {
   // Use CmsContext for basePath and sourceToken (set by Puck editor)
   const resolvedBasePath = basePath ?? CmsContext?.basePath ?? '/admin';
   const sourceToken = CmsContext?.sourceToken;
