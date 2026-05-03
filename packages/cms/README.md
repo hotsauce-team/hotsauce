@@ -1400,8 +1400,24 @@ interface PolicyContext {
     role?: string; // User role from JWT
   };
   request: Request; // Original request (for advanced use)
+  source?: string; // 'cms' | 'plugin:{name}' | undefined
 }
 ```
+
+`ctx.source` identifies who submitted the request:
+
+- `'cms'` — a regular CMS form (list, create, edit, delete)
+- `'plugin:puck'` — the Puck editor (or any other named plugin)
+- `undefined` — no source token (no auth configured, or legacy request)
+
+When writing a row policy that should allow both normal CMS access _and_ plugin access, use `||`:
+
+```ts
+// Correct: both regular CMS users and the Puck plugin can access
+row: (ctx) => ctx.source === 'plugin:puck' || eq(posts.authorId, ctx.user!.sub),
+```
+
+Avoid a ternary that branches on `source` for row access — `ctx.source` is `undefined` for regular grid/thumbnail requests, so the else-branch would apply to all normal traffic too.
 
 ### 404 vs 403 Handling
 
