@@ -475,7 +475,7 @@ w = won't fix
 - [x] Test `/admin/files/<…>/<filename>` (4-segment) path correctness and traversal-safety.
 - [x] Test grid view with `storage` configured (post proxy-URL switch).
 - [x] Test picker behaviour with non-`FileReference` thumbnail values.
-- [ ] **T2** Assert `Cache-Control: private, max-age=60, must-revalidate` on the `/admin/files/...` 302 response in `integration_file_test.ts`.
+- [x] **T2** Assert `Cache-Control: private, max-age=60, must-revalidate` on the `/admin/files/...` 302 response in `integration_file_test.ts`. Assertion added to the "file serving accepts valid key" storage test.
 - [-] **R9a** Test picker with `?page=2` returns the correct page of records. _Deferred with F18._
 - [x] **R9b** Test picker when `thumbnailField` column is hidden by column policy → 400 response (not broken thumbnails). Added to `integration_picker_test.ts`; bonus view-toggle test added to `integration_grid_test.ts`.
 
