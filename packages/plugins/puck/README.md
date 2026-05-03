@@ -197,7 +197,6 @@ const Image: ComponentConfig = {
           value={value as SelectedImage | null}
           onChange={onChange}
           table='media' // Table to pick from (default: 'media')
-          column='file' // File column name (default: 'file')
         />
       ),
     },
