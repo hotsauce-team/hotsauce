@@ -460,7 +460,7 @@ w = won't fix
 - [w] **F15** Document and test the picker fallback when the file column isn't a `source` column. _When the file column isn't opted in, `filename` in `SelectedImage` will be `''` — intentional; storing a fallback like the record ID as a filename would be misleading._
 - [ ] **F18** Clamp `page=1` and ignore sort/direction in picker mode (or render controls) — server currently honours pagination/sort params with no picker UI.
 - [x] **F19** Use RFC 6266 `filename*=UTF-8''…` encoding for non-ASCII filenames in `Content-Disposition`. Fixed via `contentDispositionHeader()` helper in `mod.ts`; test added for `naïve.png` → `filename="na_ve.png"; filename*=UTF-8''na%C3%AFve.png`.
-- [ ] **F20** Short-circuit picker to the "no thumbnail" 400 page when `thumbnailField` column is hidden by column policy.
+- [x] **F20** Short-circuit picker to the "no thumbnail" 400 page when `thumbnailField` column is hidden by column policy. Fixed via IIFE that filters `getThumbnailField()` result against `columnResult.readableColumns`; bonus: view-toggle is also suppressed in table view when the column is hidden.
 - [ ] **Q5** Remove dead `data-picker-url` attribute from picker buttons ([grid.ts L219](packages/ui/views/grid.ts#L219)) and corresponding `dataset.pickerUrl` read in `pickerScript`.
 
 ### Tests
@@ -477,7 +477,7 @@ w = won't fix
 - [x] Test picker behaviour with non-`FileReference` thumbnail values.
 - [ ] **T2** Assert `Cache-Control: private, max-age=60, must-revalidate` on the `/admin/files/...` 302 response in `integration_file_test.ts`.
 - [ ] **R9a** Test picker with `?page=2` returns the correct page of records.
-- [ ] **R9b** Test picker when `thumbnailField` column is hidden by column policy → 400 response (not broken thumbnails).
+- [x] **R9b** Test picker when `thumbnailField` column is hidden by column policy → 400 response (not broken thumbnails). Added to `integration_picker_test.ts`; bonus view-toggle test added to `integration_grid_test.ts`.
 
 ### Docs
 

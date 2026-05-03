@@ -961,4 +961,69 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
     },
   );
+
+  await t.step(
+    'picker returns 400 when thumbnail column is hidden by column policy',
+    async () => {
+      // If the file column that drives thumbnails is read-hidden for the
+      // current user, effectiveThumbnailField is undefined and the picker
+      // falls through to the "does not support the image picker" 400 path.
+      const client = new PGlite();
+      const db = drizzle(client, { schema: schemaWithMedia });
+
+      await db.execute(sql`
+        CREATE TABLE media (
+          id SERIAL PRIMARY KEY,
+          title VARCHAR(200) NOT NULL,
+          file JSON,
+          secret_notes TEXT,
+          created_at TIMESTAMP NOT NULL DEFAULT NOW()
+        )
+      `);
+
+      await db.insert(media).values([
+        {
+          title: 'Hidden file',
+          file: {
+            filename: 'hidden.jpg',
+            contentType: 'image/jpeg',
+            size: 512,
+          },
+        },
+      ]);
+
+      // Hide the 'file' column via column policy
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: {
+          media: {
+            columns: {
+              file: { read: () => false },
+            },
+          },
+        },
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+      });
+
+      const sourceToken = await generateSourceToken(
+        pluginSource('puck'),
+        TEST_CSRF_SECRET,
+      );
+
+      const request = new Request(
+        `http://localhost/admin/media?picker=true&_source=${
+          encodeURIComponent(sourceToken)
+        }`,
+      );
+      const response = await handler(request);
+
+      // File column hidden → no thumbnail field → picker not supported
+      assertEquals(response.status, 400);
+      const html = await response.text();
+      assertStringIncludes(html, 'does not support the image picker');
+    },
+  );
 });

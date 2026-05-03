@@ -595,7 +595,16 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
   // Detect thumbnail field for grid view
   const cmsFields = tableToCmsFields(table);
-  const thumbnailField = getThumbnailField(cmsFields);
+  // If the thumbnail column is hidden by column policy for this user, treat it
+  // as absent — picker and grid fall through to the "no thumbnail" paths rather
+  // than emitting broken <img> URLs that the file-serving handler will 404.
+  const thumbnailField = (() => {
+    const field = getThumbnailField(cmsFields);
+    return field &&
+        columnResult.readableColumns.includes(field.column.name)
+      ? field
+      : undefined;
+  })();
 
   // Determine view mode: default to grid if thumbnail exists, otherwise table
   const viewParam = url.searchParams.get('view');

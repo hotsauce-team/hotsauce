@@ -273,6 +273,66 @@ Deno.test('integration: grid view tests', async (t) => {
       assertStringIncludes(html, 'cms-panel-close');
     },
   );
+
+  await t.step(
+    'view toggle hidden when thumbnail column is hidden by column policy',
+    async () => {
+      // When the file column is read-hidden for the current user, thumbnailField
+      // is undefined so the list falls back to table view with no toggle button.
+      await resetDb();
+      await db.insert(media).values([
+        {
+          title: 'Hidden thumbnail',
+          file: {
+            filename: 'photo.jpg',
+            contentType: 'image/jpeg',
+            size: 1024,
+          },
+        },
+      ]);
+
+      // With no policy, toggle should appear (baseline)
+      const openHandler = createHandler();
+      const openRequest = new Request(
+        'http://localhost/admin/media?view=table',
+      );
+      const openResponse = await openHandler(openRequest);
+      assertEquals(openResponse.status, 200);
+      const openHtml = await openResponse.text();
+      assertStringIncludes(
+        openHtml,
+        'cms-view-toggle',
+        'toggle should appear when column is visible',
+      );
+
+      // With file column hidden, toggle must not appear
+      const hiddenHandler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: {
+          media: {
+            columns: {
+              file: { read: () => false },
+            },
+          },
+        },
+        db,
+        schema: schemaWithMedia,
+        basePath: '/admin',
+      });
+      const hiddenRequest = new Request(
+        'http://localhost/admin/media?view=table',
+      );
+      const hiddenResponse = await hiddenHandler(hiddenRequest);
+      assertEquals(hiddenResponse.status, 200);
+      const hiddenHtml = await hiddenResponse.text();
+      assertEquals(
+        hiddenHtml.includes('cms-view-toggle'),
+        false,
+        'toggle must not appear when thumbnail column is policy-hidden',
+      );
+    },
+  );
 });
 
 // ─── Update/Delete __cms_return redirect tests ──────────────────────
