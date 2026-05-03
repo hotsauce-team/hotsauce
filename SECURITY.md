@@ -318,7 +318,8 @@ Before deploying to production:
 - [ ] Regular security updates are scheduled
 - [ ] Logging and monitoring are configured
 - [ ] Error messages don't leak sensitive information
-- [ ] File upload validation (if using file upload plugin)
+- [ ] File upload validation (if using file uploads)
+- [ ] SVG / scriptable file handling configured at bucket level (if using S3-compatible storage — see [s3-storage SVG guidance](packages/plugins/s3-storage/README.md#svg-and-scriptable-files))
 
 ## Vulnerability Reporting
 
