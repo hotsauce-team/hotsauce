@@ -237,7 +237,6 @@ URLs are constructed at render time using file proxy routes. When `filename` is 
 | `onChange` | `(value: SelectedImage \| null) => void` | —          | Called when selection changes |
 | `basePath` | `string`                                 | `'/admin'` | CMS base path                 |
 | `table`    | `string`                                 | `'media'`  | Table to pick from            |
-| `column`   | `string`                                 | `'file'`   | File column on the table      |
 | `altField` | `string`                                 | `'alt'`    | Column to use for alt text    |
 
 ### How It Works
