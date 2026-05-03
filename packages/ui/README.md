@@ -263,7 +263,6 @@ The grid view supports a **picker mode** for embedding in iframes (e.g., media s
   type: 'cms:media-selected',
   table: 'media',           // Table name
   id: '123',                // Primary key (always included)
-  url: 'https://...',       // Resolved thumbnail URL (handles S3 presigned URLs)
   record: {                 // Filtered record data (secure by default)
     id: 123,                // Primary key (always included)
     file: { ... },          // Source column (requires role: 'source')
