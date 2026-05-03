@@ -29,7 +29,7 @@ async function updatePackageVersion(
   packageName: string,
   newVersion: string,
 ): Promise<{ name: string; oldVersion: string; newVersion: string }> {
-  const denoJsonPath = `${PACKAGES_DIR}/${packageName}/deno.json`;
+  const denoJsonPath = `${PACKAGES_DIR}/${packageName}/deno.jsonc`;
 
   const content = await Deno.readTextFile(denoJsonPath);
   const json: DenoJson = JSON.parse(content);

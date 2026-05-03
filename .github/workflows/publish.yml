@@ -48,14 +48,14 @@ jobs:
           # Check each package has the correct version
           PACKAGES=(core ui workers auth plugins cms)
           for pkg in "${PACKAGES[@]}"; do
-            PKG_VERSION=$(grep -o '"version": "[^"]*"' "packages/$pkg/deno.json" | cut -d'"' -f4)
+            PKG_VERSION=$(grep -o '"version": "[^"]*"' "packages/$pkg/deno.jsonc" | cut -d'"' -f4)
             if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
-              echo "❌ Version mismatch in packages/$pkg/deno.json"
+              echo "❌ Version mismatch in packages/$pkg/deno.jsonc"
               echo "   Expected: $TAG_VERSION"
               echo "   Found: $PKG_VERSION"
               exit 1
             fi
-            echo "✓ packages/$pkg/deno.json: $PKG_VERSION"
+            echo "✓ packages/$pkg/deno.jsonc: $PKG_VERSION"
           done
           echo "✅ All package versions match tag $TAG_VERSION"
 
