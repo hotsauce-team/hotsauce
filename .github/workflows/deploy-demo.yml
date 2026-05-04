@@ -92,7 +92,7 @@ jobs:
             -H "X-Webhook-Secret: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}" \
             -d '{
               "tag": "${{ steps.tag.outputs.tag }}",
-              "asset_url": "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/demo.tar.gz",
+              "asset_url": "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/hotsauce-demo.tar.gz",
               "commit": "${{ github.sha }}",
               "ref": "${{ github.ref }}"
             }'
