@@ -50,7 +50,7 @@ jobs:
       - name: Create release bundle
         working-directory: ${{ github.workspace }}
         run: |
-          tar -czf demo.tar.gz \
+          tar -czf hotsauce-demo.tar.gz \
             apps/demo/server.ts \
             apps/demo/deno.jsonc \
             apps/demo/schema.ts \
@@ -70,7 +70,7 @@ jobs:
         id: tag
         working-directory: ${{ github.workspace }}
         run: |
-          TAG="demo-$(date +%Y%m%d-%H%M%S)"
+          TAG="hotsauce-demo-$(date +%Y%m%d-%H%M%S)"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
@@ -79,7 +79,7 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
           name: Build ${{ steps.tag.outputs.tag }}
-          files: demo.tar.gz
+          files: hotsauce-demo.tar.gz
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
