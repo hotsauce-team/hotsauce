@@ -97,6 +97,7 @@ export type HookType =
   | 'transform:beforeSave'
   | 'transform:afterRead'
   | 'ui:renderField'
+  | 'ui:resolveFlashes'
   | 'action'
   | 'route';
 

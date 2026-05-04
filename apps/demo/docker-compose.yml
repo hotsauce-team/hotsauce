@@ -10,7 +10,7 @@ services:
       # Persist database between restarts
       - demo-data:/app/apps/demo/data
     environment:
-      - NODE_ENV=local
+      # - NODE_ENV=local
       - HOST=0.0.0.0
       - CMS_CSRF_SECRET=demo-csrf-secret-at-least-32-characters-long
       - CMS_JWT_SECRET=demo-jwt-secret-at-least-32-characters-long

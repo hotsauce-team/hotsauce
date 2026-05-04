@@ -187,15 +187,25 @@ const FLASH_TYPES: ReadonlySet<string> = new Set<AlertType>([
   'warning',
 ]);
 
+/** Maximum number of flash messages a plugin may return per request. */
+const MAX_FLASHES = 10;
+/** Maximum length of a single flash message's text. */
+const MAX_FLASH_MESSAGE_LENGTH = 500;
+
 /**
  * Validate that a value is a valid FlashMessage[] returned from a plugin.
  * Returns the validated array on success, or an Error message string on failure.
  *
  * Unknown properties on individual flashes are ignored (forward-compat).
+ * Caps array length and per-message length to prevent a misbehaving plugin
+ * from blowing up the rendered page.
  */
 function validateFlashes(value: unknown): FlashMessage[] | string {
   if (!Array.isArray(value)) {
     return `Expected an array of FlashMessage, got ${typeof value}`;
+  }
+  if (value.length > MAX_FLASHES) {
+    return `Too many flashes: ${value.length} (max ${MAX_FLASHES})`;
   }
   const out: FlashMessage[] = [];
   for (let i = 0; i < value.length; i++) {
@@ -209,6 +219,9 @@ function validateFlashes(value: unknown): FlashMessage[] | string {
     }
     if (typeof obj.message !== 'string') {
       return `flashes[${i}].message must be a string`;
+    }
+    if (obj.message.length > MAX_FLASH_MESSAGE_LENGTH) {
+      return `flashes[${i}].message exceeds max length of ${MAX_FLASH_MESSAGE_LENGTH} characters (got ${obj.message.length})`;
     }
     out.push({
       type: obj.type as AlertType,

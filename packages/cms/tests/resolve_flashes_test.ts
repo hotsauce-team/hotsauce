@@ -263,6 +263,51 @@ Deno.test('resolveFlashes: no plugin = URL flash still renders via layout', asyn
   assertStringIncludes(body, 'cms-alert-success');
 });
 
+Deno.test('resolveFlashes: filter receives hookType ui:resolveFlashes', async () => {
+  const observedHookTypes: string[] = [];
+  createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    plugins: [
+      {
+        name: 'hook-spy',
+        hooks: { ui: { resolveFlashes: (ctx) => ctx.flashes } },
+        filter: (ctx) => {
+          observedHookTypes.push(ctx.hookType);
+          return true;
+        },
+      },
+    ],
+  });
+  // Filter is evaluated lazily at hook time, not at startup — no assertion
+  // needed here. The important thing is that the handler builds without error
+  // and that hookType is 'ui:resolveFlashes', not 'ui:renderField'.
+  // The runtime assertion is done via a full request:
+  const handler2 = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    plugins: [
+      {
+        name: 'hook-spy2',
+        hooks: { ui: { resolveFlashes: (ctx) => ctx.flashes } },
+        filter: (ctx) => {
+          observedHookTypes.push(ctx.hookType);
+          return true;
+        },
+      },
+    ],
+  });
+  await handler2(new Request('http://localhost/admin'));
+  assertEquals(observedHookTypes.includes('ui:resolveFlashes'), true);
+  assertEquals(observedHookTypes.includes('ui:renderField'), false);
+});
+
 Deno.test('resolveFlashes: plugin-supplied HTML in message is escaped', async () => {
   const payload = `<script>alert("xss")</script><img src=x onerror="alert(1)">`;
   const handler = buildHandler(() => [
@@ -284,4 +329,82 @@ Deno.test('resolveFlashes: plugin-supplied HTML in message is escaped', async ()
     '&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;',
   );
   assertStringIncludes(body, '&lt;img src=x onerror=&quot;alert(1)&quot;&gt;');
+});
+
+Deno.test('resolveFlashes: too many flashes are rejected and previous flashes preserved', async () => {
+  const errors: Error[] = [];
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    onError: (err) => errors.push(err),
+    plugins: [
+      {
+        name: 'flash-flood',
+        hooks: {
+          ui: {
+            resolveFlashes: () =>
+              Array.from({ length: 50 }, (_, i) => ({
+                type: 'info' as const,
+                message: `flood-${i}`,
+              })),
+          },
+        },
+        filter: 'dangerously-open',
+      },
+    ],
+  });
+
+  const res = await handler(
+    new Request('http://localhost/admin/posts?_flash=create_success'),
+  );
+  const body = await res.text();
+
+  // Plugin output rejected — none of the flood messages render.
+  assertEquals(body.includes('flood-0'), false);
+  assertEquals(body.includes('flood-49'), false);
+  // Previous (URL-derived) flash is preserved.
+  assertStringIncludes(body, 'cms-alert-success');
+  // Error reported.
+  assertEquals(errors.length, 1);
+  assertStringIncludes(errors[0]!.message, 'Too many flashes');
+});
+
+Deno.test('resolveFlashes: oversized message is rejected and previous flashes preserved', async () => {
+  const errors: Error[] = [];
+  const huge = 'x'.repeat(501);
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    schema: mockSchema,
+    db: mockDb,
+    onError: (err) => errors.push(err),
+    plugins: [
+      {
+        name: 'flash-bloat',
+        hooks: {
+          ui: {
+            resolveFlashes: () => [{ type: 'info' as const, message: huge }],
+          },
+        },
+        filter: 'dangerously-open',
+      },
+    ],
+  });
+
+  const res = await handler(
+    new Request('http://localhost/admin/posts?_flash=create_success'),
+  );
+  const body = await res.text();
+
+  // The oversized payload doesn't appear in the rendered HTML.
+  assertEquals(body.includes(huge), false);
+  // Previous (URL-derived) flash is preserved.
+  assertStringIncludes(body, 'cms-alert-success');
+  // Error reported.
+  assertEquals(errors.length, 1);
+  assertStringIncludes(errors[0]!.message, 'exceeds max length');
 });

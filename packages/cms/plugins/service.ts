@@ -531,7 +531,7 @@ export class PluginService {
       : ctx.action;
     const plugins = this.applyFilter(
       allPlugins,
-      'ui:renderField',
+      'ui:resolveFlashes',
       tableForFilter,
       actionForFilter,
       ctx.user,
