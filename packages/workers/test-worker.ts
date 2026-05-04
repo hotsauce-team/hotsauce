@@ -77,6 +77,26 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     return;
   }
 
+  // For ui:resolveFlashes, append a marker flash so tests can verify
+  // round-trip semantics.
+  if (type === 'ui:resolveFlashes') {
+    const ctx = payload as unknown as {
+      flashes: Array<{ type: string; message: string }>;
+      action: string;
+      table?: string;
+    };
+    const marker = ctx.table
+      ? `worker-flash:${ctx.action}:${ctx.table}`
+      : `worker-flash:${ctx.action}`;
+    const result = [
+      ...ctx.flashes,
+      { type: 'info', message: marker },
+    ];
+    const response: WorkerResponse = { id, success: true, result };
+    self.postMessage(response);
+    return;
+  }
+
   // For route renders, return HTML based on context
   if (type === 'route:render') {
     const renderType = payload.renderType as string;

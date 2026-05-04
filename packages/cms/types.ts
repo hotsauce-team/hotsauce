@@ -666,7 +666,13 @@ export interface RouteContext {
   options: ResolvedCmsOptions;
   route: ParsedRoute;
   url: URL;
-  flash?: FlashMessage;
+  /**
+   * Flash messages to render at the top of the page.
+   *
+   * Populated by the dispatcher from `?_flash=...` URL params and
+   * extended/replaced by the `resolveFlashes` UI plugin hook.
+   */
+  flashes?: FlashMessage[];
   /** Authenticated user info (when auth is enabled) */
   authUser?: { id: string; identity?: string; role?: string };
   /** Plugin service for executing hooks (when plugins configured) */

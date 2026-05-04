@@ -7,8 +7,10 @@ import type {
   ActionContext,
   FieldUIOverride,
   FilterContext,
+  FlashMessage,
   HookType,
   PluginContext,
+  ResolveFlashesContext,
   Serializable,
   UIRenderFieldContext,
 } from './types.ts';
@@ -502,6 +504,48 @@ export class PluginService {
     await this.ensureInitialized();
 
     return await this.executor.executeRenderField(plugins, ctx);
+  }
+
+  /**
+   * Execute the resolveFlashes UI hook for all plugins.
+   * Each plugin receives the current flashes list and returns a new array
+   * (may add, remove, replace, or pass through).
+   *
+   * Plugins are run in registration order; the output of one plugin is
+   * the input to the next.  Both in-process and Worker plugins are
+   * supported — Worker plugins incur a postMessage round-trip per request,
+   * so prefer in-process for cheap banner logic.
+   *
+   * @returns Final array of flash messages to render
+   */
+  async resolveFlashes(
+    ctx: ResolveFlashesContext,
+  ): Promise<FlashMessage[]> {
+    const allPlugins = this.registry.getPluginsWithUI('resolveFlashes');
+    if (allPlugins.length === 0) return ctx.flashes;
+
+    // Apply plugin filters
+    const tableForFilter = ctx.table ?? '__cms_dashboard__';
+    const actionForFilter: CrudAction = ctx.action === 'dashboard'
+      ? 'list'
+      : ctx.action;
+    const plugins = this.applyFilter(
+      allPlugins,
+      'ui:renderField',
+      tableForFilter,
+      actionForFilter,
+      ctx.user,
+    );
+    if (plugins.length === 0) return ctx.flashes;
+
+    // Lazily initialize Workers only when at least one Worker plugin is in
+    // the active set.  Page renders without Worker flash plugins should not
+    // pay the init cost.
+    if (plugins.some((p) => p.isWorker)) {
+      await this.ensureInitialized();
+    }
+
+    return await this.executor.executeResolveFlashes(plugins, ctx);
   }
 
   /**

@@ -227,7 +227,59 @@ export type UIRenderFieldFn = (
 ) => Promise<FieldUIOverride> | FieldUIOverride;
 
 /**
- * UI hooks customize how fields are rendered.
+ * Severity of an alert/flash banner.  Re-declared here (vs imported from
+ * `ui`) because `workers` cannot depend on `ui` (wrong layering).  The
+ * `ui` package exports a structurally identical `AlertType`.
+ */
+export type AlertType = 'success' | 'error' | 'info' | 'warning';
+
+/**
+ * Flash message shown above page content (banners, success/error notices).
+ *
+ * Re-declared here (vs imported from cms) to keep workers package free of
+ * cms dependencies.  The CMS package re-exports its own FlashMessage type
+ * which is structurally identical.
+ */
+export interface FlashMessage {
+  type: AlertType;
+  message: string;
+}
+
+/**
+ * Context for the resolveFlashes UI hook.
+ * Plugins can inspect the current flashes and the request context, then
+ * return a new array (add, remove, replace, or pass through).
+ */
+export interface ResolveFlashesContext {
+  /** Flashes resolved so far (URL-derived plus any prior plugin output) */
+  flashes: FlashMessage[];
+  /** CRUD action being rendered (`'dashboard'` for the home page) */
+  action: CrudAction | 'dashboard';
+  /** Table name (undefined on dashboard) */
+  table?: string;
+  /** Authenticated user info (if available) */
+  user?: {
+    sub: string;
+    role?: string;
+  };
+}
+
+/**
+ * Resolve-flashes function signature.
+ * Receives current flashes and request context, returns the final array
+ * to render (may add, remove, replace, or pass through unchanged).
+ *
+ * Runs in either Worker or in-process plugins.  Note that Worker plugins
+ * incur a postMessage round-trip on every page render — prefer in-process
+ * for cheap header/banner logic; reserve Workers for hooks that need
+ * isolation (e.g. calling out to a third-party API).
+ */
+export type UIResolveFlashesFn = (
+  ctx: ResolveFlashesContext,
+) => Promise<FlashMessage[]> | FlashMessage[];
+
+/**
+ * UI hooks customize how the admin UI is rendered.
  * These always block because they return rendering instructions.
  */
 export interface UIHooks {
@@ -236,6 +288,11 @@ export interface UIHooks {
    * Return null for default input, or an override object.
    */
   renderField?: UIRenderFieldFn;
+  /**
+   * Customize the flash message banner shown at the top of every page.
+   * Supported by both Worker and in-process plugins.
+   */
+  resolveFlashes?: UIResolveFlashesFn;
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -27,13 +27,16 @@ export type {
   ActionHook,
   ActionHookConfig,
   ActionHooks,
+  AlertType,
   CrudAction,
   FieldUIOverride,
+  FlashMessage,
   PluginContext,
   PluginHooks,
   PluginRoute,
   PluginRouteContext,
   PluginRouteHandler,
+  ResolveFlashesContext,
   Serializable,
   SerializableObject,
   SerializableValue,
@@ -43,6 +46,7 @@ export type {
   UIHooks,
   UIRenderFieldContext,
   UIRenderFieldFn,
+  UIResolveFlashesFn,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────

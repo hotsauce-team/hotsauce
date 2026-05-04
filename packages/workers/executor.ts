@@ -7,14 +7,19 @@ import type {
   ActionContext,
   ActionHook,
   ActionHookConfig,
+  AlertType,
   CrudAction,
   FieldUIOverride,
+  FlashMessage,
   PluginContext,
   PluginHooks,
   PluginRouteContext,
+  ResolveFlashesContext,
   Serializable,
+  UIHooks,
   UIRenderFieldContext,
   UIRenderFieldFn,
+  UIResolveFlashesFn,
 } from './types.ts';
 import { validateSerializable } from './validate.ts';
 
@@ -175,6 +180,44 @@ function validateFieldUIOverride(value: unknown): string | null {
   return null;
 }
 
+const FLASH_TYPES: ReadonlySet<string> = new Set<AlertType>([
+  'success',
+  'error',
+  'info',
+  'warning',
+]);
+
+/**
+ * Validate that a value is a valid FlashMessage[] returned from a plugin.
+ * Returns the validated array on success, or an Error message string on failure.
+ *
+ * Unknown properties on individual flashes are ignored (forward-compat).
+ */
+function validateFlashes(value: unknown): FlashMessage[] | string {
+  if (!Array.isArray(value)) {
+    return `Expected an array of FlashMessage, got ${typeof value}`;
+  }
+  const out: FlashMessage[] = [];
+  for (let i = 0; i < value.length; i++) {
+    const entry = value[i];
+    if (!entry || typeof entry !== 'object') {
+      return `flashes[${i}] is not an object`;
+    }
+    const obj = entry as Record<string, unknown>;
+    if (typeof obj.type !== 'string' || !FLASH_TYPES.has(obj.type)) {
+      return `flashes[${i}].type must be one of 'success' | 'error' | 'info' | 'warning'`;
+    }
+    if (typeof obj.message !== 'string') {
+      return `flashes[${i}].message must be a string`;
+    }
+    out.push({
+      type: obj.type as AlertType,
+      message: obj.message,
+    });
+  }
+  return out;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Worker message protocol
 // ─────────────────────────────────────────────────────────────
@@ -187,6 +230,7 @@ type WorkerMessageType =
   | 'transform:beforeSave'
   | 'transform:afterRead'
   | 'ui:renderField'
+  | 'ui:resolveFlashes'
   | 'action'
   | 'route:render';
 
@@ -251,7 +295,7 @@ export interface PluginConfig {
  */
 export interface WorkerHookDeclaration {
   transform?: ('beforeSave' | 'afterRead')[];
-  ui?: ('renderField')[];
+  ui?: (keyof UIHooks)[];
   on?: ('create' | 'read' | 'update' | 'delete' | 'list')[];
 }
 
@@ -283,6 +327,7 @@ export interface PluginErrorContext {
     | 'transform:beforeSave'
     | 'transform:afterRead'
     | 'ui:renderField'
+    | 'ui:resolveFlashes'
     | 'action'
     | 'route:render';
   /** CRUD action (for action hooks) */
@@ -598,15 +643,85 @@ export class WorkerExecutor {
   /**
    * Get a UI hook from in-process plugin hooks (function form)
    */
-  private getInProcessUIHook(
+  private getInProcessUIHook<H extends 'renderField' | 'resolveFlashes'>(
     hooks: PluginConfig['hooks'],
-    hookName: 'renderField',
-  ): UIRenderFieldFn | undefined {
+    hookName: H,
+  ):
+    | (H extends 'renderField' ? UIRenderFieldFn : UIResolveFlashesFn)
+    | undefined {
     if (!hooks) return undefined;
     // Check if it's in-process hooks (object with functions, not array)
     const uiHooks = hooks.ui;
     if (!uiHooks || Array.isArray(uiHooks)) return undefined;
-    return (uiHooks as Record<string, UIRenderFieldFn>)[hookName];
+    return (uiHooks as Record<string, unknown>)[hookName] as
+      | (H extends 'renderField' ? UIRenderFieldFn : UIResolveFlashesFn)
+      | undefined;
+  }
+
+  /**
+   * Execute UI resolveFlashes hook for all plugins.
+   *
+   * Plugins run in registration order; each plugin's output becomes the
+   * next plugin's input.  Both Worker and in-process plugins are
+   * supported \u2014 Worker plugins incur a postMessage round-trip per page.
+   *
+   * On invalid output or thrown errors, the prior `flashes` are carried
+   * forward and the failure is reported via `onError`.  A misbehaving
+   * plugin must not be able to break the page.
+   */
+  async executeResolveFlashes(
+    plugins: RegisteredPlugin[],
+    ctx: ResolveFlashesContext,
+  ): Promise<FlashMessage[]> {
+    let flashes = ctx.flashes;
+    for (const registered of plugins) {
+      const { plugin, isWorker } = registered;
+      const pluginCtx: ResolveFlashesContext = { ...ctx, flashes };
+
+      try {
+        let response: unknown;
+        if (isWorker) {
+          response = await this.sendToWorker(
+            plugin.name,
+            'ui:resolveFlashes',
+            pluginCtx as unknown as Serializable,
+            undefined,
+            pluginCtx as unknown as Serializable,
+          );
+        } else {
+          const hook = this.getInProcessUIHook(plugin.hooks, 'resolveFlashes');
+          if (!hook) continue;
+          response = await hook(pluginCtx);
+        }
+
+        const result = validateFlashes(response);
+        if (typeof result === 'string') {
+          this.onError?.(
+            new Error(
+              `Plugin '${plugin.name}' returned invalid resolveFlashes response: ${result}`,
+            ),
+            {
+              source: 'plugin',
+              plugin: plugin.name,
+              operation: 'ui:resolveFlashes',
+              hookContext: pluginCtx as unknown as Serializable,
+            },
+          );
+          continue;
+        }
+        flashes = result;
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        this.onError?.(error, {
+          source: 'plugin',
+          plugin: plugin.name,
+          operation: 'ui:resolveFlashes',
+          hookContext: pluginCtx as unknown as Serializable,
+        });
+        // Continue with previous flashes; one bad plugin shouldn't break the page.
+      }
+    }
+    return flashes;
   }
 
   /**

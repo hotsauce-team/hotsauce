@@ -11,6 +11,7 @@ import { parsers, schema, users } from '../schema.ts';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
 import { createMarkdownPlugin } from '../lib/markdown-plugin.ts';
+import { createDemoNoticePlugin } from '../lib/demo-notice-plugin.ts';
 import { getDemoS3Config } from '../lib/s3-config.ts';
 
 /**
@@ -41,6 +42,7 @@ export function createAdminHandler(db: Database) {
     },
     parsers,
     plugins: [
+      createDemoNoticePlugin(),
       createMarkdownPlugin({
         parse: parseMarkdown,
         sanitize: sanitizeHtml,
