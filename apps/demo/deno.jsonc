@@ -6,9 +6,9 @@
     // Seed the database with demo content.
     "seed": "deno run --permission-set=demo seed.ts",
     // Start the server.
-    "dev": "deno run --unstable-worker-options --env-file=.env.example --permission-set=demo server.ts",
-    "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno run --unstable-worker-options --env-file=.env.example --permission-set=demo server.ts",
-    "dev:watch": "deno run --unstable-worker-options --env-file=.env.example --watch --permission-set=demo server.ts",
+    "dev": "deno serve --unstable-worker-options --env-file=.env.example --port=3000 --host=0.0.0.0 --permission-set=demo server.ts",
+    "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno serve --unstable-worker-options --env-file=.env.example --port=3000 --host=0.0.0.0 --permission-set=demo server.ts",
+    "dev:watch": "deno serve --unstable-worker-options --env-file=.env.example --watch --port=3000 --host=0.0.0.0 --permission-set=demo server.ts",
     // Bundle components for the block editor (Puck).
     "bundle": "deno bundle --platform browser --minify components.tsx -o admin/components.js",
     "bundle:watch": "deno bundle --platform browser --minify --watch components.tsx -o admin/components.js",
@@ -40,7 +40,6 @@
         "localhost:9000" // S3 storage (local development)
       ],
       "env": [
-        "HOST",
         "NODE_ENV",
         "CMS_CSRF_SECRET",
         "CMS_JWT_SECRET",
