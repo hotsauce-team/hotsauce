@@ -13,7 +13,9 @@
     "bundle": "deno bundle --platform browser --minify components.tsx -o admin/components.js",
     "bundle:watch": "deno bundle --platform browser --minify --watch components.tsx -o admin/components.js",
     // Start the server, bundle components, and watch for changes to both.
-    "all:watch": "deno task bundle:watch & deno task dev:watch"
+    "all:watch": "deno task bundle:watch & deno task dev:watch",
+    // Start the production server.
+    "prod": "DENO_DIR=.deno-cache deno serve --parallel --env-file=.env --ignore-env --port=3000 --host=127.0.0.1 --permission-set=demo server.ts"
   },
 
   "exports": "./server.ts",

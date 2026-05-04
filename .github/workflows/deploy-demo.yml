@@ -1,0 +1,96 @@
+name: Build and Deploy Demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/demo/**'
+      - 'packages/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DENO_DIR: ${{ github.workspace }}/.deno-cache
+    defaults:
+      run:
+        working-directory: apps/demo
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .deno-cache
+            apps/demo/node_modules
+          key: ${{ runner.os }}-deno-${{ hashFiles('deno.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-
+
+      - name: Install dependencies
+        run: deno install
+
+      - name: Cache imports
+        run: deno cache server.ts seed.ts
+
+      - name: Bundle Puck components
+        run: deno task bundle
+
+      - name: Create release bundle
+        working-directory: ${{ github.workspace }}
+        run: |
+          tar -czf demo.tar.gz \
+            -C apps/demo \
+            server.ts \
+            deno.jsonc \
+            schema.ts \
+            db.ts \
+            security.ts \
+            seed.ts \
+            lib/ \
+            admin/ \
+            site/ \
+            node_modules/ \
+            .deno-cache/ \
+            -C ${{ github.workspace }} \
+            deno.lock
+
+      - name: Create release tag
+        id: tag
+        working-directory: ${{ github.workspace }}
+        run: |
+          TAG="release-$(date +%Y%m%d-%H%M%S)"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Build ${{ steps.tag.outputs.tag }}
+          files: demo.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify deploy server
+        working-directory: ${{ github.workspace }}
+        run: |
+          curl -X POST "${{ secrets.DEPLOY_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}" \
+            -d '{
+              "tag": "${{ steps.tag.outputs.tag }}",
+              "asset_url": "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/demo.tar.gz",
+              "commit": "${{ github.sha }}",
+              "ref": "${{ github.ref }}"
+            }'
