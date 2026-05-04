@@ -17,10 +17,7 @@
     "./packages/plugins",
 
     // Apps (full applications)
-    "./apps/demo",
-
-    // Examples (minimal references)
-    "./examples/deno-server"
+    "./apps/demo"
   ],
 
   // Shared import map for all packages
