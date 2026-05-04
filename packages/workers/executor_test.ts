@@ -1384,3 +1384,109 @@ Deno.test({
     assertEquals(hook.table, 'comments');
   },
 });
+
+// ─────────────────────────────────────────────────────────────
+// resolveFlashes (Worker dispatch)
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('WorkerExecutor: executeResolveFlashes round-trips flashes through Worker', async () => {
+  const executor = new WorkerExecutor();
+  const worker = createTestWorker();
+  const plugin: RegisteredPlugin = {
+    plugin: { name: 'flash-worker', worker, hooks: { ui: ['resolveFlashes'] } },
+    initialized: false,
+    isWorker: true,
+  };
+
+  try {
+    await executor.initPlugin(plugin);
+
+    const result = await executor.executeResolveFlashes([plugin], {
+      flashes: [{ type: 'success', message: 'from-url' }],
+      action: 'list',
+      table: 'posts',
+    });
+
+    assertEquals(result.length, 2);
+    assertEquals(result[0]?.message, 'from-url');
+    assertEquals(result[1]?.type, 'info');
+    assertEquals(result[1]?.message, 'worker-flash:list:posts');
+  } finally {
+    executor.terminate();
+  }
+});
+
+Deno.test('WorkerExecutor: executeResolveFlashes returns input on invalid Worker output', async () => {
+  // Spin up a Worker that returns a non-array for resolveFlashes.
+  const badWorkerSrc = `
+    self.onmessage = (e) => {
+      const { id, type } = e.data;
+      if (type === 'init') return self.postMessage({ id, success: true });
+      // Intentionally invalid response (string instead of FlashMessage[])
+      self.postMessage({ id, success: true, result: 'not-an-array' });
+    };
+  `;
+  const blobUrl = URL.createObjectURL(
+    new Blob([badWorkerSrc], { type: 'application/javascript' }),
+  );
+
+  const errors: { error: Error; ctx: PluginErrorContext }[] = [];
+  const executor = new WorkerExecutor((error, ctx) => {
+    errors.push({ error, ctx });
+  });
+  const worker = new Worker(blobUrl, { type: 'module' });
+  const plugin: RegisteredPlugin = {
+    plugin: { name: 'bad-flash', worker, hooks: { ui: ['resolveFlashes'] } },
+    initialized: false,
+    isWorker: true,
+  };
+
+  try {
+    await executor.initPlugin(plugin);
+
+    const input = [{ type: 'success' as const, message: 'original' }];
+    const result = await executor.executeResolveFlashes([plugin], {
+      flashes: input,
+      action: 'list',
+      table: 'posts',
+    });
+
+    // Returns input unchanged on invalid response.
+    assertEquals(result, input);
+    assertEquals(errors.length, 1);
+    assertEquals(errors[0]?.ctx.operation, 'ui:resolveFlashes');
+    assertEquals(errors[0]?.ctx.plugin, 'bad-flash');
+    assert(errors[0]?.error.message.includes('invalid resolveFlashes'));
+  } finally {
+    executor.terminate();
+    URL.revokeObjectURL(blobUrl);
+  }
+});
+
+Deno.test('WorkerExecutor: executeResolveFlashes runs in-process plugins', async () => {
+  const executor = new WorkerExecutor();
+  const inProcess: RegisteredPlugin = {
+    plugin: {
+      name: 'inproc',
+      hooks: {
+        ui: {
+          resolveFlashes: (ctx) => [
+            ...ctx.flashes,
+            { type: 'info', message: `inproc:${ctx.action}` },
+          ],
+        },
+      },
+    },
+    initialized: true,
+    isWorker: false,
+  };
+
+  const result = await executor.executeResolveFlashes([inProcess], {
+    flashes: [{ type: 'success', message: 'first' }],
+    action: 'dashboard',
+  });
+
+  assertEquals(result.length, 2);
+  assertEquals(result[0]?.message, 'first');
+  assertEquals(result[1]?.message, 'inproc:dashboard');
+});

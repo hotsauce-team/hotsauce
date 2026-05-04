@@ -8,6 +8,7 @@ import type {
   CmsOptions,
   CrudAction,
   CspOptions,
+  FlashMessage,
   Handler,
   ResolvedAuthOptions,
   ResolvedCmsOptions,
@@ -38,6 +39,7 @@ import {
   forbidden,
   methodNotAllowed,
   notFound,
+  parseFlashFromUrl,
 } from './http.ts';
 import {
   generateCsrfToken,
@@ -1568,6 +1570,37 @@ export function createCmsHandler(options: CmsOptions): Handler {
       // Plugin service for executing hooks
       pluginService: pluginService ?? undefined,
     };
+
+    // Resolve flashes once per request: URL-derived first, then run through
+    // the resolveFlashes plugin hook so plugins can add/remove/replace.
+    {
+      const fromUrl = parseFlashFromUrl(url);
+      let flashes: FlashMessage[] = fromUrl ? [fromUrl] : [];
+      if (pluginService) {
+        try {
+          flashes = await pluginService.resolveFlashes({
+            flashes,
+            action,
+            table: route.table?.name,
+            user: ctx.authUser
+              ? { sub: ctx.authUser.id, role: ctx.authUser.role }
+              : undefined,
+          });
+        } catch (err) {
+          // resolveFlashes already catches per-plugin errors; this is defensive.
+          const error = err instanceof Error ? err : new Error(String(err));
+          opts.onError?.(error, {
+            source: 'handler',
+            request,
+            url,
+            route,
+            table: route.table ?? undefined,
+            action,
+          });
+        }
+      }
+      ctx.flashes = flashes;
+    }
 
     // Dispatch to handler
     try {

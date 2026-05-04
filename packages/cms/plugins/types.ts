@@ -10,11 +10,13 @@ export type {
   ActionHooks,
   CrudAction,
   FieldUIOverride,
+  FlashMessage,
   PluginContext,
   PluginHooks,
   PluginRoute,
   PluginRouteContext,
   PluginRouteHandler,
+  ResolveFlashesContext,
   Serializable,
   SerializableObject,
   SerializableValue,
@@ -24,6 +26,7 @@ export type {
   UIHooks,
   UIRenderFieldContext,
   UIRenderFieldFn,
+  UIResolveFlashesFn,
 } from '@hotsauce/workers';
 
 // Import for use in local type definitions
@@ -94,6 +97,7 @@ export type HookType =
   | 'transform:beforeSave'
   | 'transform:afterRead'
   | 'ui:renderField'
+  | 'ui:resolveFlashes'
   | 'action'
   | 'route';
 
@@ -147,7 +151,8 @@ export interface WorkerHookDeclaration {
 
   /**
    * UI hooks the Worker handles.
-   * @example ['renderField']
+   *
+   * @example ['renderField', 'resolveFlashes']
    */
   ui?: (keyof UIHooks)[];
 

@@ -141,9 +141,9 @@ export const settings = pgTable('settings', {
 });
 
 /**
- * Admin users - CMS authentication
+ * CMS users - authentication for the admin panel
  */
-export const adminUsers = pgTable('admin_users', {
+export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull().$cms({
@@ -186,13 +186,13 @@ export const postsRelations = relations(posts, ({ one }) => ({
 // ─────────────────────────────────────────────────────────────
 
 export const schema = {
-  authors,
-  media,
-  categories,
   posts,
   pages,
+  media,
+  authors,
+  categories,
+  users,
   settings,
-  adminUsers,
   // Relations
   authorsRelations,
   categoriesRelations,
@@ -208,14 +208,14 @@ const mediaInsertSchema = createInsertSchema(media);
 const categoriesInsertSchema = createInsertSchema(categories);
 const postsInsertSchema = createInsertSchema(posts);
 const settingsInsertSchema = createInsertSchema(settings);
-const adminUsersInsertSchema = createInsertSchema(adminUsers);
+const usersInsertSchema = createInsertSchema(users);
 
 const authorsUpdateSchema = createUpdateSchema(authors);
 const mediaUpdateSchema = createUpdateSchema(media);
 const categoriesUpdateSchema = createUpdateSchema(categories);
 const postsUpdateSchema = createUpdateSchema(posts);
 const settingsUpdateSchema = createUpdateSchema(settings);
-const adminUsersUpdateSchema = createUpdateSchema(adminUsers);
+const usersUpdateSchema = createUpdateSchema(users);
 
 // Pages: require title and slug when publishing
 function requireTitleSlugWhenPublished(
@@ -274,8 +274,8 @@ export const parsers: Parsers = {
     insert: (data: unknown) => settingsInsertSchema.parse(data),
     update: (data: unknown) => settingsUpdateSchema.parse(data),
   },
-  adminUsers: {
-    insert: (data: unknown) => adminUsersInsertSchema.parse(data),
-    update: (data: unknown) => adminUsersUpdateSchema.parse(data),
+  users: {
+    insert: (data: unknown) => usersInsertSchema.parse(data),
+    update: (data: unknown) => usersUpdateSchema.parse(data),
   },
 };

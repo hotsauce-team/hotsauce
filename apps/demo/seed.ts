@@ -11,7 +11,6 @@ import { parseMarkdown } from './lib/markdown.ts';
 import { sanitizeHtml } from './lib/sanitize.ts';
 
 import {
-  adminUsers,
   authors,
   categories,
   media,
@@ -19,6 +18,7 @@ import {
   posts,
   schema,
   settings,
+  users,
 } from './schema.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@ console.log('🧹 Clearing existing data...');
 await db.execute(sql`DROP TABLE IF EXISTS posts CASCADE`);
 await db.execute(sql`DROP TABLE IF EXISTS pages CASCADE`);
 await db.execute(sql`DROP TABLE IF EXISTS settings CASCADE`);
-await db.execute(sql`DROP TABLE IF EXISTS admin_users CASCADE`);
+await db.execute(sql`DROP TABLE IF EXISTS users CASCADE`);
 await db.execute(sql`DROP TABLE IF EXISTS categories CASCADE`);
 await db.execute(sql`DROP TABLE IF EXISTS media CASCADE`);
 await db.execute(sql`DROP TABLE IF EXISTS authors CASCADE`);
@@ -122,7 +122,7 @@ await db.execute(sql`
 `);
 
 await db.execute(sql`
-  CREATE TABLE IF NOT EXISTS admin_users (
+  CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
@@ -160,7 +160,7 @@ await db.insert(settings).values([
 
 // Admin user
 const passwordHash = await hashPassword('admin123');
-await db.insert(adminUsers).values({
+await db.insert(users).values({
   email: 'admin@example.com',
   passwordHash,
   name: 'Admin User',

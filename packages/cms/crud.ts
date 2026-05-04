@@ -32,7 +32,6 @@ import {
   jsonSuccess,
   jsonValidationError,
   notFound,
-  parseFlashFromUrl,
   parseFormData,
   parseMultipartFormData,
   redirect,
@@ -308,6 +307,7 @@ function buildLayoutOptions(
         accountUrl: `${basePath}/account`,
       }
       : undefined,
+    flashes: ctx.flashes,
   };
 }
 
@@ -746,12 +746,6 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   // Build content
   let content = '';
 
-  // Add flash message if present (from URL params or context)
-  const flash = ctx.flash ?? parseFlashFromUrl(url);
-  if (flash) {
-    content += alert(flash.message, flash.type);
-  }
-
   if (viewMode === 'grid' && thumbnailField) {
     // Resolve thumbnail URLs for each record
     const thumbnails: GridThumbnail[] = records.map((record) => {
@@ -875,7 +869,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
  * Render the detail view for a single record
  */
 export async function handleRead(ctx: RouteContext): Promise<Response> {
-  const { request, options, route, url, authUser } = ctx;
+  const { request, options, route, authUser } = ctx;
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
@@ -1047,12 +1041,6 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
 
   // Build content with optional flash message
   let content = '';
-
-  // Add flash message if present (from URL params or context)
-  const flash = ctx.flash ?? parseFlashFromUrl(url);
-  if (flash) {
-    content += alert(flash.message, flash.type);
-  }
 
   content += detailView(
     formatTableName(table.name),

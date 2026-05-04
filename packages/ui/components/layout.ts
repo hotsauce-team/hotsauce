@@ -1,6 +1,7 @@
 // Page layout component
 
 import { escapeHtml, html, raw } from '../html.ts';
+import { alert, type AlertType } from './alert.ts';
 
 /**
  * Navigation item
@@ -34,6 +35,11 @@ export interface LayoutOptions {
   scriptUrl?: string;
   /** Additional head content (CSS, meta tags) */
   head?: string;
+  /**
+   * Flash messages rendered at the top of the page content area.
+   * Each entry becomes a separate alert banner above the page content.
+   */
+  flashes?: Array<{ type: AlertType; message: string }>;
 }
 
 /**
@@ -129,6 +135,7 @@ export function layout(content: string, options: LayoutOptions): string {
   }
       </header>
       <div class="cms-content">
+        ${(options.flashes ?? []).map((f) => alert(f.message, f.type)).join('')}
         ${content}
       </div>
     </main>
