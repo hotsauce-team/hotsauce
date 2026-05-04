@@ -186,13 +186,13 @@ export const postsRelations = relations(posts, ({ one }) => ({
 // ─────────────────────────────────────────────────────────────
 
 export const schema = {
-  authors,
-  media,
-  categories,
   posts,
   pages,
-  settings,
+  media,
+  authors,
+  categories,
   users,
+  settings,
   // Relations
   authorsRelations,
   categoriesRelations,

@@ -2,6 +2,7 @@
 // Combines public site routes + CMS admin into one Hono server
 // deno-lint-ignore-file no-console
 
+import process from 'node:process';
 import { Hono } from 'hono';
 import { serveStatic } from 'hono/deno';
 import { db } from './db.ts';
@@ -46,6 +47,28 @@ app.use('*', (c, next) => {
   }
   return securityHeaders(c, next);
 });
+
+// Demo mode: block all writes except login/logout.
+// Writes are only allowed when running locally (NODE_ENV=local).
+if (process.env.NODE_ENV !== 'local') {
+  app.use('/admin/*', (c, next) => {
+    if (c.req.method !== 'POST') return next();
+    const pathname = new URL(c.req.url).pathname;
+    if (pathname.endsWith('/login') || pathname.endsWith('/logout')) {
+      return next();
+    }
+    // Redirect back to the page that submitted the form (the edit/create page).
+    // Use only the pathname from Referer to prevent open redirect attacks.
+    const raw = c.req.header('referer') ?? c.req.url;
+    let redirectTo: string;
+    try {
+      redirectTo = new URL(raw).pathname;
+    } catch {
+      redirectTo = '/admin';
+    }
+    return Promise.resolve(c.redirect(redirectTo, 303));
+  });
+}
 
 // CMS admin routes (/admin/*) - lazy loaded for serverless efficiency
 // Only imports @hotsauce/cms when admin routes are accessed

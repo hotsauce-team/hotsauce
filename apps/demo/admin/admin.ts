@@ -38,7 +38,6 @@ export function createAdminHandler(db: Database) {
     policies: {
       // Settings are read-only for everyone, including admins (just for demo purposes)
       settings: readOnly(),
-      posts: readOnly(),
     },
     parsers,
     plugins: [
