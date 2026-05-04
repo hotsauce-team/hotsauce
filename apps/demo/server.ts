@@ -16,6 +16,9 @@ import { getDemoS3Config } from './lib/s3-config.ts';
 
 const app = new Hono();
 
+// Health check
+app.get('/health', (c) => c.json({ status: 'ok' }));
+
 // Static files (CSS, images, etc.)
 app.use('/static/*', serveStatic({ root: './site' }));
 
