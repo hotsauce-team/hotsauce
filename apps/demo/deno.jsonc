@@ -4,24 +4,25 @@
 
   "tasks": {
     // Seed the database with demo content.
-    "seed": "deno run --permission-set=demo seed.ts",
+    "seed": "deno run --permission-set=local seed.ts",
+    "seed:prod": "deno run --permission-set=prod seed.ts",
     // Start the server.
-    "dev": "deno serve --unstable-worker-options --env-file=.env.example --port=3000 --host=0.0.0.0 --permission-set=demo server.ts",
-    "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno serve --unstable-worker-options --env-file=.env.example --port=3000 --host=0.0.0.0 --permission-set=demo server.ts",
-    "dev:watch": "deno serve --unstable-worker-options --env-file=.env.example --watch --port=3000 --host=0.0.0.0 --permission-set=demo server.ts",
+    "dev": "deno serve --unstable-worker-options --env-file=.env.example --port=3000 --host=0.0.0.0 --permission-set=local server.ts",
+    "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno serve --unstable-worker-options --env-file=.env.example --port=3000 --host=0.0.0.0 --permission-set=local server.ts",
+    "dev:watch": "deno serve --unstable-worker-options --env-file=.env.example --watch --port=3000 --host=0.0.0.0 --permission-set=local server.ts",
     // Bundle components for the block editor (Puck).
     "bundle": "deno bundle --platform browser --minify components.tsx -o admin/components.js",
     "bundle:watch": "deno bundle --platform browser --minify --watch components.tsx -o admin/components.js",
     // Start the server, bundle components, and watch for changes to both.
     "all:watch": "deno task bundle:watch & deno task dev:watch",
     // Start the production server.
-    "prod": "DENO_DIR=../../.deno-cache deno serve --parallel --env-file=.env --ignore-env --port=3000 --host=127.0.0.1 --permission-set=demo server.ts"
+    "prod": "deno serve --parallel --env-file=.env --ignore-env --port=$PORT --host=127.0.0.1 --permission-set=prod server.ts"
   },
 
   "exports": "./server.ts",
 
   "permissions": {
-    "demo": {
+    "local": {
       "read": [
         "./admin",
         "./data",
@@ -51,6 +52,31 @@
         "S3_SECRET_KEY",
         "S3_REGION",
         "S3_URL_STYLE"
+      ]
+    },
+    "prod": {
+      "read": [
+        "./admin",
+        "./lib",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "../../node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.wasm",
+        "./site/static",
+        // Server database
+        "/opt/apps/hotsauce-demo-data"
+      ],
+      "write": [
+        // Server database
+        "/opt/apps/hotsauce-demo-data"
+      ],
+      "net": [
+        "127.0.0.1" // Any port on the local interface - allows for dynamic port
+      ],
+      "env": [
+        "NODE_ENV",
+        "PORT",
+        "CMS_CSRF_SECRET",
+        "CMS_JWT_SECRET",
+        "PGLITE_DATA_DIR"
       ]
     }
   },
