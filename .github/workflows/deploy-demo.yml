@@ -11,6 +11,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     env:
       DENO_DIR: ${{ github.workspace }}/.deno-cache
     defaults:
@@ -68,7 +70,7 @@ jobs:
         id: tag
         working-directory: ${{ github.workspace }}
         run: |
-          TAG="release-$(date +%Y%m%d-%H%M%S)"
+          TAG="demo-$(date +%Y%m%d-%H%M%S)"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
