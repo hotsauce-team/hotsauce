@@ -231,15 +231,15 @@ This approach:
 
 The example includes these tables:
 
-| Table         | Purpose                                                              |
-| ------------- | -------------------------------------------------------------------- |
-| `posts`       | Blog posts with title, content, contentHtml, excerpt, publish status |
-| `pages`       | Visual pages edited with Puck (JSON content)                         |
-| `authors`     | Content creators with bio                                            |
-| `categories`  | Post organization                                                    |
-| `media`       | File uploads (images stored as base64 in JSONB)                      |
-| `settings`    | Key-value site configuration                                         |
-| `admin_users` | CMS authentication                                                   |
+| Table        | Purpose                                                              |
+| ------------ | -------------------------------------------------------------------- |
+| `posts`      | Blog posts with title, content, contentHtml, excerpt, publish status |
+| `pages`      | Visual pages edited with Puck (JSON content)                         |
+| `authors`    | Content creators with bio                                            |
+| `categories` | Post organization                                                    |
+| `media`      | File uploads (images stored as base64 in JSONB)                      |
+| `settings`   | Key-value site configuration                                         |
+| `users`      | CMS authentication                                                   |
 
 ## Templates
 

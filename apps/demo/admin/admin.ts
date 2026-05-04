@@ -7,7 +7,7 @@ import { createPuckPlugin } from '@hotsauce/plugins/puck';
 import { createS3StoragePlugin } from '@hotsauce/plugins/s3-storage';
 
 import type { Database } from '../db.ts';
-import { adminUsers, parsers, schema } from '../schema.ts';
+import { parsers, schema, users } from '../schema.ts';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
 import { createMarkdownPlugin } from '../lib/markdown-plugin.ts';
@@ -33,11 +33,12 @@ export function createAdminHandler(db: Database) {
     // In local development, use open auth for convenience (no login required).
     // In production, use password auth with credentials from the database.
     auth: process.env.NODE_ENV === 'local' ? 'dangerously-open' : {
-      provider: new PasswordProvider({ db, usersTable: adminUsers }),
+      provider: new PasswordProvider({ db, usersTable: users }),
     },
     policies: {
-      // Settings are read-only for non-admins
+      // Settings are read-only for everyone, including admins (just for demo purposes)
       settings: readOnly(),
+      posts: readOnly(),
     },
     parsers,
     plugins: [
