@@ -15,7 +15,7 @@
     // Start the server, bundle components, and watch for changes to both.
     "all:watch": "deno task bundle:watch & deno task dev:watch",
     // Start the production server.
-    "prod": "DENO_DIR=.deno-cache deno serve --parallel --env-file=.env --ignore-env --port=3000 --host=127.0.0.1 --permission-set=demo server.ts"
+    "prod": "DENO_DIR=../../.deno-cache deno serve --parallel --env-file=.env --ignore-env --port=3000 --host=127.0.0.1 --permission-set=demo server.ts"
   },
 
   "exports": "./server.ts",

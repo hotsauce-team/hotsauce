@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DENO_DIR: ${{ github.workspace }}/apps/demo/.deno-cache
+      DENO_DIR: ${{ github.workspace }}/.deno-cache
     defaults:
       run:
         working-directory: apps/demo
@@ -31,7 +31,7 @@ jobs:
         with:
           path: |
             .deno-cache
-            apps/demo/node_modules
+            node_modules
           key: ${{ runner.os }}-deno-${{ hashFiles('deno.lock') }}
           restore-keys: |
             ${{ runner.os }}-deno-
@@ -49,19 +49,19 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: |
           tar -czf demo.tar.gz \
-            -C apps/demo \
-            server.ts \
-            deno.jsonc \
-            schema.ts \
-            db.ts \
-            security.ts \
-            seed.ts \
-            lib/ \
-            admin/ \
-            site/ \
-            node_modules/ \
+            apps/demo/server.ts \
+            apps/demo/deno.jsonc \
+            apps/demo/schema.ts \
+            apps/demo/db.ts \
+            apps/demo/security.ts \
+            apps/demo/seed.ts \
+            apps/demo/lib/ \
+            apps/demo/admin/ \
+            apps/demo/site/ \
+            packages/ \
             .deno-cache/ \
-            -C ${{ github.workspace }} \
+            node_modules/ \
+            deno.jsonc \
             deno.lock
 
       - name: Create release tag
