@@ -5,7 +5,8 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { schema } from './schema.ts';
 
 // Create database connection
-const client = new PGlite('./data');
+const dataDir = Deno.env.get('PGLITE_DATA_DIR') ?? './data';
+const client = new PGlite(dataDir);
 export const db = drizzle(client, { schema });
 
 // Export the database type for use in other modules

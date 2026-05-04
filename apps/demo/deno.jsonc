@@ -44,6 +44,7 @@
         "NODE_ENV",
         "CMS_CSRF_SECRET",
         "CMS_JWT_SECRET",
+        "PGLITE_DATA_DIR",
         "S3_ENDPOINT",
         "S3_PUBLIC_ENDPOINT",
         "S3_BUCKET",
