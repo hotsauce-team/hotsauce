@@ -292,7 +292,7 @@ export class PluginRegistry {
           );
         }
         // Validate each entry is a valid UI hook name
-        const validUIHooks = ['renderField'];
+        const validUIHooks = ['renderField', 'resolveFlashes'];
         for (const hook of plugin.hooks.ui) {
           if (!validUIHooks.includes(hook)) {
             throw new PluginValidationError(
