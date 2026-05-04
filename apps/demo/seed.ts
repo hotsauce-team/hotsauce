@@ -27,7 +27,8 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 console.log('🗄️  Connecting to database...');
-const client = new PGlite('./data');
+const dataDir = Deno.env.get('PGLITE_DATA_DIR') ?? './data';
+const client = new PGlite(dataDir);
 const db = drizzle(client, { schema });
 
 // ─────────────────────────────────────────────────────────────
