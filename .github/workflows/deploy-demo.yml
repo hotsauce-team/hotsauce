@@ -12,7 +12,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DENO_DIR: ${{ github.workspace }}/.deno-cache
+      DENO_DIR: ${{ github.workspace }}/apps/demo/.deno-cache
     defaults:
       run:
         working-directory: apps/demo
