@@ -63,6 +63,13 @@ export function createSecurityHeaders(
       'Permissions-Policy',
       'camera=(), microphone=(), geolocation=(), interest-cohort=()',
     );
+
+    // Demo site: prevent search engines from indexing or following links.
+    // Belt-and-braces alongside <meta name="robots"> tags and /robots.txt.
+    c.header(
+      'X-Robots-Tag',
+      'noindex, nofollow, noarchive, nosnippet, noimageindex',
+    );
   };
 }
 

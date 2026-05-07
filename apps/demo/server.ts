@@ -19,6 +19,13 @@ const app = new Hono();
 // Health check
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
+// Demo site: disallow all search engine crawling.
+app.get('/robots.txt', (c) =>
+  c.body('User-agent: *\nDisallow: /\n', 200, {
+    'Content-Type': 'text/plain; charset=utf-8',
+    'X-Robots-Tag': 'noindex, nofollow',
+  }));
+
 // Static files (CSS, images, etc.)
 app.use('/static/*', serveStatic({ root: './site' }));
 
