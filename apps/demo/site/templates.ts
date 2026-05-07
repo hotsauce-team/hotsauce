@@ -3,6 +3,7 @@
 import { html, raw } from '@hotsauce/ui';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
+import { ROBOTS_DIRECTIVE } from '../security.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -83,6 +84,8 @@ export function layout(
       <head>
         <meta charset="UTF-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="robots" content="${ROBOTS_DIRECTIVE}" />
+        <meta name="googlebot" content="${ROBOTS_DIRECTIVE}" />
         <title>${title} | ${settings.siteName}</title>
         <link rel="stylesheet" href="/static/styles.css" />
         <link rel="stylesheet" href="/static/components.css" />

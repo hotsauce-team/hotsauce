@@ -3,6 +3,17 @@
 import type { MiddlewareHandler } from 'hono';
 
 /**
+ * Robots directive for the demo site.
+ *
+ * Used in three places (keep them in sync):
+ *  - `<meta name="robots">` / `<meta name="googlebot">` in the HTML layout
+ *  - `X-Robots-Tag` response header (set below)
+ *  - `X-Robots-Tag` on the `/robots.txt` response in `server.ts`
+ */
+export const ROBOTS_DIRECTIVE =
+  'noindex, nofollow, noarchive, nosnippet, noimageindex';
+
+/**
  * Strict Content Security Policy for the public site
  *
  * - No inline scripts or styles (except for trusted sources)
@@ -63,6 +74,9 @@ export function createSecurityHeaders(
       'Permissions-Policy',
       'camera=(), microphone=(), geolocation=(), interest-cohort=()',
     );
+
+    // Note: `X-Robots-Tag` is applied globally in server.ts (including admin
+    // routes) so it is intentionally not set here.
   };
 }
 
