@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { serveStatic } from 'hono/deno';
 import { db } from './db.ts';
 import { createSiteRoutes } from './site/routes.ts';
-import { createSecurityHeaders } from './security.ts';
+import { createSecurityHeaders, ROBOTS_DIRECTIVE } from './security.ts';
 import { getDemoS3Config } from './lib/s3-config.ts';
 
 // ─────────────────────────────────────────────────────────────
@@ -20,10 +20,10 @@ const app = new Hono();
 app.get('/health', (c) => c.json({ status: 'ok' }));
 
 // Demo site: disallow all search engine crawling.
+// (X-Robots-Tag is added by the global middleware below.)
 app.get('/robots.txt', (c) =>
   c.body('User-agent: *\nDisallow: /\n', 200, {
     'Content-Type': 'text/plain; charset=utf-8',
-    'X-Robots-Tag': 'noindex, nofollow',
   }));
 
 // Static files (CSS, images, etc.)
@@ -50,6 +50,16 @@ const s3Config = getDemoS3Config();
 const securityHeaders = createSecurityHeaders(
   s3Config ? [s3Config.publicEndpoint] : [],
 );
+
+// Demo site: apply X-Robots-Tag to *every* response (including /admin, /health,
+// static files). Crawlers that ignore robots.txt still won't index anything.
+// Kept separate from createSecurityHeaders() so it also covers admin routes,
+// which bypass the CSP middleware below.
+app.use('*', async (c, next) => {
+  await next();
+  c.header('X-Robots-Tag', ROBOTS_DIRECTIVE);
+});
+
 app.use('*', (c, next) => {
   // Skip CSP for admin routes (CMS has inline styles)
   if (c.req.path.startsWith('/admin')) {
