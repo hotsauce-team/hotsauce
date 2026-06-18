@@ -230,6 +230,118 @@ Deno.test('detailField: formats JSON values', () => {
   assertStringIncludes(result, '&quot;key&quot;');
 });
 
+// FieldUIOverride tests for detail view
+Deno.test('detailField: renders valueSummary instead of raw JSON when override provided', () => {
+  const field = createMockField({ fieldType: 'json', label: 'Content' });
+  const result = detailField(
+    field,
+    { content: [{}, {}, {}] },
+    undefined,
+    undefined,
+    { valueSummary: '3 blocks' },
+  );
+
+  assertStringIncludes(result, 'cms-value-summary');
+  assertStringIncludes(result, '3 blocks');
+  // Raw JSON dump should NOT be present
+  assertEquals(result.includes('<pre'), false);
+  assertEquals(result.includes('&quot;content&quot;'), false);
+});
+
+Deno.test('detailField: renders link from override with target=_blank', () => {
+  const field = createMockField({ fieldType: 'json', label: 'Content' });
+  const result = detailField(
+    field,
+    { content: [] },
+    undefined,
+    undefined,
+    {
+      valueSummary: '0 blocks',
+      link: {
+        label: 'Edit with Puck',
+        href: '/admin/puck/pages/1/content',
+        target: '_blank',
+      },
+    },
+  );
+
+  assertStringIncludes(result, 'cms-field-override');
+  assertStringIncludes(result, 'href="/admin/puck/pages/1/content"');
+  assertStringIncludes(result, 'target="_blank"');
+  assertStringIncludes(result, 'rel="noopener"');
+  assertStringIncludes(result, 'Edit with Puck');
+  // External-link glyph
+  assertStringIncludes(result, '↗');
+});
+
+Deno.test('detailField: renders link-only override (no valueSummary) falls back to formatted value', () => {
+  const field = createMockField({ fieldType: 'text', label: 'Name' });
+  const result = detailField(
+    field,
+    'Alice',
+    undefined,
+    undefined,
+    { link: { label: 'Open', href: '/foo' } },
+  );
+
+  // Raw value should still appear
+  assertStringIncludes(result, 'Alice');
+  // Link should be rendered
+  assertStringIncludes(result, 'cms-field-override');
+  assertStringIncludes(result, 'href="/foo"');
+  // No target=_blank means no external glyph and no rel=noopener
+  assertEquals(result.includes('target="_blank"'), false);
+  assertEquals(result.includes('rel="noopener"'), false);
+});
+
+Deno.test('detailField: rejects unsafe javascript: URL in override link', () => {
+  const field = createMockField({ fieldType: 'text', label: 'Name' });
+  const result = detailField(
+    field,
+    'Alice',
+    undefined,
+    undefined,
+    {
+      valueSummary: 'summary',
+      link: { label: 'Bad', href: 'javascript:alert(1)' },
+    },
+  );
+
+  // Unsafe href should be dropped; no link rendered
+  assertEquals(result.includes('javascript:'), false);
+  assertEquals(result.includes('cms-field-override'), false);
+  // Summary still renders
+  assertStringIncludes(result, 'summary');
+});
+
+Deno.test('detailField: escapes valueSummary content (no HTML injection)', () => {
+  const field = createMockField({ fieldType: 'json', label: 'Content' });
+  const result = detailField(
+    field,
+    {},
+    undefined,
+    undefined,
+    { valueSummary: '<script>alert(1)</script>' },
+  );
+
+  // The script tag must be escaped, not rendered as HTML
+  assertEquals(result.includes('<script>alert(1)</script>'), false);
+  assertStringIncludes(result, '&lt;script&gt;');
+});
+
+Deno.test('detailField: returns empty for hidden field even with override', () => {
+  const field = createMockField({ hidden: true });
+  const result = detailField(
+    field,
+    'value',
+    undefined,
+    undefined,
+    { valueSummary: 'summary' },
+  );
+
+  assertEquals(result, '');
+});
+
 // File field rendering tests
 Deno.test('detailField: renders image file with preview and download link', () => {
   const field = createMockField({

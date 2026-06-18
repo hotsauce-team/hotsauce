@@ -138,6 +138,7 @@ export function detailField(
   value: unknown,
   relationOptions?: RelationOption[],
   fileUrl?: string,
+  override?: FieldUIOverride,
 ): string {
   if (field.hidden) {
     return '';
@@ -146,12 +147,36 @@ export function detailField(
   // Sanitize plugin-provided URL at the public API boundary
   const safeFileUrl = fileUrl ? getSafeUrl(fileUrl) ?? undefined : undefined;
 
+  // Plugin-provided override: prefer human-readable summary over raw value
+  // (e.g., "7 blocks" instead of a JSON dump), and surface an optional link
+  // (e.g., "Edit with Puck \u2197\"") so users can jump into the plugin editor.
+  const summaryHtml = override?.valueSummary
+    ? `<p class="cms-value-summary">${escapeHtml(override.valueSummary)}</p>`
+    : formatValue(value, field, relationOptions, safeFileUrl);
+
+  const linkHref = override?.link?.href
+    ? getSafeUrl(override.link.href) ?? undefined
+    : undefined;
+
+  const linkHtml = override?.link && linkHref
+    ? html`
+      <div class="cms-field-override">
+        <a ${attrs({
+          href: linkHref,
+          target: override.link.target ?? '_self',
+          class: 'cms-btn cms-btn-secondary',
+          rel: override.link.target === '_blank' ? 'noopener' : undefined,
+        })}>${override.link.label}${raw(
+          override.link.target === '_blank' ? ' \u2197' : '',
+        )}</a>
+      </div>
+    `
+    : '';
+
   return html`
     <div class="cms-detail-field">
       <dt class="cms-detail-label">${field.label}</dt>
-      <dd class="cms-detail-value">${raw(
-        formatValue(value, field, relationOptions, safeFileUrl),
-      )}</dd>
+      <dd class="cms-detail-value">${raw(summaryHtml)}${raw(linkHtml)}</dd>
     </div>
   `;
 }
@@ -179,6 +204,7 @@ export function detailView(
         record[f.column.propertyName],
         relationData[f.column.propertyName],
         fileUrl,
+        override,
       );
     })
     .join('\n  ');
