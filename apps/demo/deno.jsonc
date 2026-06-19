@@ -4,8 +4,8 @@
 
   "tasks": {
     // Seed the database with demo content.
-    "seed": "deno run --permission-set=local seed.ts",
-    "seed:prod": "deno run --permission-set=prod seed.ts",
+    "seed": "deno run --permission-set=local seed/seed.ts",
+    "seed:prod": "deno run --permission-set=prod seed/seed.ts",
     // Start the server.
     "dev": "deno serve --unstable-worker-options --env-file=.env.example --port=3000 --host=0.0.0.0 --permission-set=local server.ts",
     "dev:debug": "DENO_TRACE_PERMISSIONS=1 RUST_BACKTRACE=1 deno serve --unstable-worker-options --env-file=.env.example --port=3000 --host=0.0.0.0 --permission-set=local server.ts",
