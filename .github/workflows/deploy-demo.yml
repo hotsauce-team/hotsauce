@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
     paths:
+      - '.github/workflows/deploy-demo.yml'
       - 'apps/demo/**'
   workflow_dispatch:
 
