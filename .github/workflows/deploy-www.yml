@@ -86,7 +86,7 @@ jobs:
             -H "Content-Type: application/json" \
             -H "X-Webhook-Secret: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}" \
             -d '{
-              "repo": "hotsauce-www",
+              "repo": "hotsauce",
               "owner": "hotsauce-team",
               "tag": "${{ steps.tag.outputs.tag }}",
               "asset_url": "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/hotsauce-www.tar.gz",
