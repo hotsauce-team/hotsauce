@@ -1,0 +1,95 @@
+name: Build and Deploy WWW
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/deploy-www.yml'
+      - 'apps/www/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+    env:
+      DENO_DIR: ${{ github.workspace }}/.deno-cache
+    defaults:
+      run:
+        working-directory: apps/www
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            .deno-cache
+            node_modules
+          key: ${{ runner.os }}-deno-${{ hashFiles('deno.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-
+
+      - name: Install dependencies
+        run: deno install
+
+      - name: Cache imports
+        run: deno cache server.ts seed/seed.ts
+
+      - name: Create release bundle
+        working-directory: ${{ github.workspace }}
+        run: |
+          tar -czf hotsauce-www.tar.gz \
+            apps/www/server.ts \
+            apps/www/deno.jsonc \
+            apps/www/schema.ts \
+            apps/www/db.ts \
+            apps/www/seed/ \
+            apps/www/lib/ \
+            apps/www/admin/ \
+            packages/ \
+            .deno-cache/ \
+            node_modules/ \
+            deno.jsonc \
+            deno.lock
+
+      - name: Create release tag
+        id: tag
+        working-directory: ${{ github.workspace }}
+        run: |
+          TAG="hotsauce-www-$(date +%Y%m%d-%H%M%S)"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        id: release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: WWW Build ${{ steps.tag.outputs.tag }}
+          files: hotsauce-www.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify deploy server
+        working-directory: ${{ github.workspace }}
+        run: |
+          curl -X POST "${{ secrets.DEPLOY_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -H "X-Webhook-Secret: ${{ secrets.DEPLOY_WEBHOOK_SECRET }}" \
+            -d '{
+              "repo": "hotsauce-www",
+              "owner": "hotsauce-team",
+              "tag": "${{ steps.tag.outputs.tag }}",
+              "asset_url": "https://github.com/${{ github.repository }}/releases/download/${{ steps.tag.outputs.tag }}/hotsauce-www.tar.gz",
+              "commit": "${{ github.sha }}",
+              "ref": "${{ github.ref }}"
+            }'

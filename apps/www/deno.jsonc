@@ -1,0 +1,39 @@
+{
+  "name": "www",
+  "version": "0.0.1",
+
+  "tasks": {
+    "seed": "deno run --permission-set=local seed/seed.ts",
+    "dev": "deno serve --env-file=.env.example --port=3010 --host=127.0.0.1 --permission-set=local server.ts",
+    "dev:watch": "deno serve --env-file=.env.example --watch --port=3010 --host=127.0.0.1 --permission-set=local server.ts",
+    "prod": "deno serve --parallel --port=$PORT --host=127.0.0.1 --permission-set=prod server.ts"
+  },
+
+  "exports": "./server.ts",
+
+  "permissions": {
+    "local": {
+      "read": ["./data", "./static"],
+      "write": ["./data"],
+      "net": ["127.0.0.1:3010"],
+      "env": ["NODE_ENV", "DATABASE_URL", "CMS_CSRF_SECRET", "CMS_JWT_SECRET"]
+    },
+    "prod": {
+      "read": ["./static", "/opt/apps/hotsauce-www-data"],
+      "write": ["/opt/apps/hotsauce-www-data"],
+      "net": ["127.0.0.1"],
+      "env": [
+        "NODE_ENV",
+        "PORT",
+        "DATABASE_URL",
+        "CMS_CSRF_SECRET",
+        "CMS_JWT_SECRET"
+      ]
+    }
+  },
+
+  "imports": {
+    "@hotsauce/drizzle-runtime-sqlite": "jsr:@hotsauce/drizzle-runtime-sqlite@0.1.2",
+    "micromark": "npm:micromark@4.0.2"
+  }
+}

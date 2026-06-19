@@ -17,7 +17,8 @@
     "./packages/plugins",
 
     // Apps (full applications)
-    "./apps/demo"
+    "./apps/demo",
+    "./apps/www"
   ],
 
   // Shared import map for all packages
@@ -77,6 +78,9 @@
     "demo:dev:watch": "deno task -f demo-app dev:watch",
     "demo:dev:debug": "deno task -f demo-app dev:debug",
     "demo:build:components": "deno task -f demo-app build:components",
+    "www:seed": "deno task -f www seed",
+    "www:dev": "deno task -f www dev",
+    "www:dev:watch": "deno task -f www dev:watch",
     "puck:build": "deno task -f @hotsauce/plugins build:puck"
   },
 
