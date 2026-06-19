@@ -55,6 +55,7 @@ jobs:
             apps/demo/schema.ts \
             apps/demo/db.ts \
             apps/demo/security.ts \
+            apps/demo/components.tsx \
             apps/demo/seed/ \
             apps/demo/lib/ \
             apps/demo/admin/ \
