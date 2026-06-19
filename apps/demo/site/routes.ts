@@ -1,7 +1,6 @@
-// Public site routes (Hono)
-// These routes serve the public-facing blog pages
+// Public site routes — Spice Rack hot sauce catalogue
 import { Hono } from 'hono';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import {
   buildObjectUrl,
   presignUrl,
@@ -9,29 +8,19 @@ import {
 import { getDemoS3Config } from '../lib/s3-config.ts';
 
 import type { Database } from '../db.ts';
-import {
-  authors,
-  categories,
-  media,
-  pages,
-  posts,
-  settings,
-} from '../schema.ts';
+import { makers, media, pages, sauces, settings } from '../schema.ts';
 import { renderPuckContent } from './puck-render.tsx';
 
 import {
-  type AuthorDetail,
-  authorPage,
-  categoriesPage,
-  categoryPage,
-  type CategoryWithCount,
   homePage,
   layout,
+  type MakerDetail,
+  makerPage,
   type NavItem,
   notFoundPage,
-  type PostDetail,
-  postPage,
-  type PostSummary,
+  type SauceDetail,
+  saucePage,
+  type SauceSummary,
   type SiteSettings,
   visualPage,
 } from './templates.ts';
@@ -42,32 +31,21 @@ import {
 
 async function getSiteSettings(db: Database): Promise<SiteSettings> {
   const rows = await db.select().from(settings);
-  const settingsMap = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-
+  const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   return {
-    siteName: settingsMap['site_name'] ?? 'My Blog',
-    tagline: settingsMap['tagline'] ?? 'A blog powered by hotsauce-cms',
-    footerText: settingsMap['footer_text'] ?? '© 2026 My Blog',
+    siteName: map['site_name'] ?? 'The Spice Rack',
+    tagline: map['tagline'] ?? '',
+    footerText: map['footer_text'] ?? '',
+    demoBanner: map['demo_banner'] ?? '',
   };
 }
 
-async function getNavPages(db: Database): Promise<NavItem[]> {
-  const rows = await db
+function getNavPages(db: Database): Promise<NavItem[]> {
+  return db
     .select({ title: pages.title, slug: pages.slug })
     .from(pages)
     .where(eq(pages.published, true))
     .orderBy(pages.sortOrder);
-
-  return rows;
-}
-
-async function getNavCategories(db: Database): Promise<NavItem[]> {
-  const rows = await db
-    .select({ title: categories.name, slug: categories.slug })
-    .from(categories)
-    .orderBy(categories.sortOrder);
-
-  return rows;
 }
 
 async function renderPage(
@@ -75,18 +53,11 @@ async function renderPage(
   content: string,
   title: string,
 ): Promise<string> {
-  const [siteSettings, navPages, navCategories] = await Promise.all([
+  const [siteSettings, navPages] = await Promise.all([
     getSiteSettings(db),
     getNavPages(db),
-    getNavCategories(db),
   ]);
-
-  return layout(content, {
-    title,
-    settings: siteSettings,
-    navPages,
-    categories: navCategories,
-  });
+  return layout(content, { title, settings: siteSettings, navPages });
 }
 
 function htmlResponse(body: string, status = 200): Response {
@@ -104,199 +75,110 @@ export function createSiteRoutes(db: Database): Hono {
   const app = new Hono();
   const s3 = getDemoS3Config();
 
-  /**
-   * Homepage - list recent published posts
-   */
+  /** Homepage — sauce grid */
   app.get('/', async (_c) => {
-    const postList = await db.query.posts.findMany({
-      where: eq(posts.published, true),
-      orderBy: desc(posts.createdAt),
-      limit: 10,
-      with: {
-        author: true,
-        category: true,
-      },
+    const rows = await db.query.sauces.findMany({
+      where: eq(sauces.published, true),
+      orderBy: asc(sauces.name),
+      with: { maker: true },
     });
 
-    const postSummaries: PostSummary[] = postList.map((p) => ({
-      id: p.id,
-      title: p.title,
-      slug: p.slug,
-      excerpt: p.excerpt,
-      published: p.published,
-      createdAt: p.createdAt,
-      author: p.author ? { name: p.author.name, slug: p.author.slug } : null,
-      category: p.category
-        ? { name: p.category.name, slug: p.category.slug }
-        : null,
+    const summaries: SauceSummary[] = rows.map((s) => ({
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+      heat: s.heat,
+      scoville: s.scoville,
+      bottle: s.bottle,
+      makerName: s.maker.name,
+      makerSlug: s.maker.slug,
     }));
 
-    const content = homePage(postSummaries);
-    const html = await renderPage(db, content, 'Home');
-    return htmlResponse(html);
+    const content = homePage(summaries);
+    const page = await renderPage(db, content, 'Home');
+    return htmlResponse(page);
   });
 
-  /**
-   * Single post page
-   */
-  app.get('/post/:slug', async (c) => {
+  /** Single sauce page */
+  app.get('/sauce/:slug', async (c) => {
     const slug = c.req.param('slug');
-
-    const post = await db.query.posts.findFirst({
-      where: and(eq(posts.slug, slug), eq(posts.published, true)),
-      with: {
-        author: true,
-        category: true,
-      },
+    const row = await db.query.sauces.findFirst({
+      where: and(eq(sauces.slug, slug), eq(sauces.published, true)),
+      with: { maker: true },
     });
 
-    if (!post) {
+    if (!row) {
       const content = notFoundPage();
-      const html = await renderPage(db, content, 'Not Found');
-      return htmlResponse(html, 404);
+      const page = await renderPage(db, content, 'Not Found');
+      return htmlResponse(page, 404);
     }
 
-    const postDetail: PostDetail = {
-      id: post.id,
-      title: post.title,
-      slug: post.slug,
-      excerpt: post.excerpt,
-      content: post.content,
-      contentHtml: post.contentHtml,
-      published: post.published,
-      createdAt: post.createdAt,
-      author: post.author
-        ? { name: post.author.name, slug: post.author.slug }
-        : null,
-      category: post.category
-        ? { name: post.category.name, slug: post.category.slug }
-        : null,
+    const detail: SauceDetail = {
+      id: row.id,
+      name: row.name,
+      slug: row.slug,
+      heat: row.heat,
+      scoville: row.scoville,
+      bottle: row.bottle,
+      makerName: row.maker.name,
+      makerSlug: row.maker.slug,
+      tastingNotes: row.tastingNotes,
+      tastingNotesHtml: row.tastingNotesHtml,
+      published: row.published,
     };
 
-    const content = postPage(postDetail);
-    const html = await renderPage(db, content, post.title);
-    return htmlResponse(html);
+    const content = saucePage(detail);
+    const page = await renderPage(db, content, row.name);
+    return htmlResponse(page);
   });
 
-  /**
-   * Visual page (Puck editor content)
-   * Pages are now edited with Puck visual editor and stored as JSON
-   */
-  app.get('/:slug', async (c) => {
+  /** Maker profile — bio + sauce list */
+  app.get('/maker/:slug', async (c) => {
     const slug = c.req.param('slug');
-
-    const page = await db.query.pages.findFirst({
-      where: and(eq(pages.slug, slug), eq(pages.published, true)),
-    });
-
-    if (!page) {
-      const content = notFoundPage();
-      const html = await renderPage(db, content, 'Not Found');
-      return htmlResponse(html, 404);
-    }
-
-    // Render Puck JSON content to HTML server-side
-    const renderedHtml = await renderPuckContent(
-      page.content as Record<string, unknown> | null,
-    );
-
-    const content = visualPage({
-      id: page.id,
-      title: page.title,
-      slug: page.slug,
-      renderedHtml,
-    });
-    const html = await renderPage(db, content, page.title);
-    return htmlResponse(html);
-  });
-
-  /**
-   * Category page - posts in a category
-   */
-  app.get('/category/:slug', async (c) => {
-    const slug = c.req.param('slug');
-
-    const category = await db.query.categories.findFirst({
-      where: eq(categories.slug, slug),
-    });
-
-    if (!category) {
-      const content = notFoundPage();
-      const html = await renderPage(db, content, 'Not Found');
-      return htmlResponse(html, 404);
-    }
-
-    const postList = await db.query.posts.findMany({
-      where: and(eq(posts.categoryId, category.id), eq(posts.published, true)),
-      orderBy: desc(posts.createdAt),
+    const maker = await db.query.makers.findFirst({
+      where: eq(makers.slug, slug),
       with: {
-        author: true,
-        category: true,
+        sauces: {
+          where: eq(sauces.published, true),
+          orderBy: asc(sauces.name),
+        },
       },
     });
 
-    const postSummaries: PostSummary[] = postList.map((p) => ({
-      id: p.id,
-      title: p.title,
-      slug: p.slug,
-      excerpt: p.excerpt,
-      published: p.published,
-      createdAt: p.createdAt,
-      author: p.author ? { name: p.author.name, slug: p.author.slug } : null,
-      category: p.category
-        ? { name: p.category.name, slug: p.category.slug }
-        : null,
-    }));
+    if (!maker) {
+      const content = notFoundPage();
+      const page = await renderPage(db, content, 'Not Found');
+      return htmlResponse(page, 404);
+    }
 
-    const content = categoryPage(
-      {
-        name: category.name,
-        slug: category.slug,
-        description: category.description,
-      },
-      postSummaries,
-    );
-    const html = await renderPage(db, content, `Category: ${category.name}`);
-    return htmlResponse(html);
-  });
+    const detail: MakerDetail = {
+      id: maker.id,
+      name: maker.name,
+      slug: maker.slug,
+      bio: maker.bio,
+      bioHtml: maker.bioHtml,
+      logo: maker.logo,
+      website: maker.website,
+      sauces: maker.sauces.map((s) => ({
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        heat: s.heat,
+        scoville: s.scoville,
+        bottle: s.bottle,
+        makerName: maker.name,
+        makerSlug: maker.slug,
+      })),
+    };
 
-  /**
-   * Categories index page
-   */
-  app.get('/categories', async (_c) => {
-    const categoryList = await db
-      .select({
-        id: categories.id,
-        name: categories.name,
-        slug: categories.slug,
-        description: categories.description,
-        postCount: sql<number>`count(${posts.id})::int`,
-      })
-      .from(categories)
-      .leftJoin(
-        posts,
-        and(eq(posts.categoryId, categories.id), eq(posts.published, true)),
-      )
-      .groupBy(categories.id)
-      .orderBy(categories.sortOrder);
-
-    const categoriesWithCount: CategoryWithCount[] = categoryList.map((c) => ({
-      id: c.id,
-      name: c.name,
-      slug: c.slug,
-      description: c.description,
-      postCount: c.postCount ?? 0,
-    }));
-
-    const content = categoriesPage(categoriesWithCount);
-    const html = await renderPage(db, content, 'Categories');
-    return htmlResponse(html);
+    const content = makerPage(detail);
+    const page = await renderPage(db, content, maker.name);
+    return htmlResponse(page);
   });
 
   /**
    * Public file serving for published media
-   *
-   * Accepts optional filename at end for SEO/downloads: /files/media/136/sunset.jpg
+   * Accepts optional filename at end: /files/media/136/sunset.jpg
    * The filename is ignored for lookup — we use the id.
    */
   app.get('/files/media/:id/:filename?', async (c) => {
@@ -309,10 +191,6 @@ export function createSiteRoutes(db: Database): Hono {
     if (!item?.published || !item.file) return c.notFound();
 
     const file = item.file;
-
-    // Check file.url here if you are using a CDN.
-    // For this demo, we assume direct S3 access without a CDN, so we generate
-    // presigned URLs on the fly instead of storing them in the database.
 
     // Object storage — presign and redirect
     if (file.key && s3) {
@@ -369,59 +247,38 @@ export function createSiteRoutes(db: Database): Hono {
   });
 
   /**
-   * Author page
+   * Visual page (Puck editor content)
+   * Must be registered last — catches /:slug after more-specific routes.
    */
-  app.get('/author/:slug', async (c) => {
+  app.get('/:slug', async (c) => {
     const slug = c.req.param('slug');
 
-    const author = await db.query.authors.findFirst({
-      where: eq(authors.slug, slug),
+    const page = await db.query.pages.findFirst({
+      where: and(eq(pages.slug, slug), eq(pages.published, true)),
     });
 
-    if (!author) {
+    if (!page) {
       const content = notFoundPage();
       const html = await renderPage(db, content, 'Not Found');
       return htmlResponse(html, 404);
     }
 
-    const postList = await db.query.posts.findMany({
-      where: and(eq(posts.authorId, author.id), eq(posts.published, true)),
-      orderBy: desc(posts.createdAt),
-      with: {
-        author: true,
-        category: true,
-      },
+    const renderedHtml = await renderPuckContent(
+      // deno-lint-ignore no-explicit-any
+      page.content as unknown as any,
+    );
+
+    const content = visualPage({
+      id: page.id,
+      title: page.title,
+      slug: page.slug,
+      renderedHtml,
     });
-
-    const postSummaries: PostSummary[] = postList.map((p) => ({
-      id: p.id,
-      title: p.title,
-      slug: p.slug,
-      excerpt: p.excerpt,
-      published: p.published,
-      createdAt: p.createdAt,
-      author: p.author ? { name: p.author.name, slug: p.author.slug } : null,
-      category: p.category
-        ? { name: p.category.name, slug: p.category.slug }
-        : null,
-    }));
-
-    const authorDetail: AuthorDetail = {
-      id: author.id,
-      name: author.name,
-      slug: author.slug,
-      bio: author.bio,
-      posts: postSummaries,
-    };
-
-    const content = authorPage(authorDetail);
-    const html = await renderPage(db, content, author.name);
+    const html = await renderPage(db, content, page.title ?? 'Page');
     return htmlResponse(html);
   });
 
-  /**
-   * 404 handler for site routes
-   */
+  /** 404 handler */
   app.notFound(async () => {
     const content = notFoundPage();
     const html = await renderPage(db, content, 'Not Found');
