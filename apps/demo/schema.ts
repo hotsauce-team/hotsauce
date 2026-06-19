@@ -1,4 +1,4 @@
-// Blog schema for Hono frontend demo
+// Spice Rack schema — hot sauce catalogue demo for hotsauce-cms
 import {
   boolean,
   integer,
@@ -39,19 +39,32 @@ declare module 'drizzle-orm/pg-core' {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Authors table - content creators
+ * Makers table - the companies and individuals who produce hot sauces.
+ * Exercises: file upload (logo), markdown bio, relation FK target.
  */
-export const authors = pgTable('authors', {
+export const makers = pgTable('makers', {
   id: serial('id').primaryKey(),
   name: varchar('name', { length: 100 }).notNull(),
   slug: varchar('slug', { length: 100 }).notNull().unique(),
-  email: varchar('email', { length: 255 }).notNull().unique(),
-  bio: text('bio'),
+  // Markdown bio - transformed to HTML by the markdown plugin
+  bio: text('bio').$cms({
+    plugins: { markdown: { role: 'source', output: 'bioHtml' } },
+  }),
+  // Rendered HTML - populated automatically, hidden from edit form
+  bioHtml: text('bio_html').$cms({
+    plugins: { markdown: { role: 'output' } },
+  }),
+  // Maker logo - stored in DB (small, ~50KB limit)
+  logo: jsonb('logo').$type<FileReference>().$cms({
+    file: { accept: 'image/*', maxSize: 50 * 1024, previewSvg: true },
+    thumbnail: true, // Show as image in admin list view
+  }),
+  website: varchar('website', { length: 255 }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
 /**
- * Media table - uploaded files (images, documents, etc.)
+ * Media table - uploaded files (bottle shots, logos, hero images).
  *
  * Picker mode sends: PK (always) + columns with `plugins.puck.role: 'source'`
  * - `thumbnail: true` = grid rendering (image preview)
@@ -60,7 +73,7 @@ export const authors = pgTable('authors', {
 export const media = pgTable('media', {
   id: serial('id').primaryKey(),
   file: jsonb('file').$type<FileReference>().$cms({
-    file: { accept: 'image/*' },
+    file: { accept: 'image/*', previewSvg: true },
     thumbnail: true, // Grid rendering
     plugins: { puck: { role: 'source' } }, // Data exposure
   }),
@@ -73,46 +86,46 @@ export const media = pgTable('media', {
 }).$cms({ autoDraft: true });
 
 /**
- * Categories table - post organization
+ * Sauces table - the main content type.
+ * Exercises: FK relation (maker), file upload (bottle photo), markdown
+ * tasting notes, integer heat rating, published flag, frontendUrl.
  */
-export const categories = pgTable('categories', {
+export const sauces = pgTable('sauces', {
   id: serial('id').primaryKey(),
-  name: varchar('name', { length: 100 }).notNull(),
-  slug: varchar('slug', { length: 100 }).notNull().unique(),
-  description: text('description'),
-  sortOrder: integer('sort_order').default(0).notNull(),
-});
-
-/**
- * Posts table - main content
- */
-export const posts = pgTable('posts', {
-  id: serial('id').primaryKey(),
-  title: varchar('title', { length: 255 }).notNull(),
-  slug: varchar('slug', { length: 255 }).notNull().unique(),
-  excerpt: text('excerpt'),
-  // Markdown content - transformed to HTML by markdown plugin
-  content: text('content').notNull().$cms({
-    plugins: { markdown: { role: 'source', output: 'contentHtml' } },
+  name: varchar('name', { length: 120 }).notNull(),
+  slug: varchar('slug', { length: 120 }).notNull().unique(),
+  // FK to makers - renders as a relation picker in the admin form
+  makerId: integer('maker_id')
+    .notNull()
+    .references(() => makers.id),
+  // Heat rating 1–10, rendered as 🌶 repeats on the public site
+  heat: integer('heat').notNull(),
+  // Scoville units - optional, surfaced as secondary detail
+  scoville: integer('scoville'),
+  // Bottle photo - stored in DB or S3 depending on config
+  bottle: jsonb('bottle').$type<FileReference>().$cms({
+    file: { accept: 'image/*', previewSvg: true },
+    thumbnail: true, // Show as image in admin list view
   }),
-  // Rendered HTML - populated automatically by markdown plugin
-  contentHtml: text('content_html').$cms({
+  // Markdown tasting notes - transformed to HTML by markdown plugin
+  tastingNotes: text('tasting_notes').notNull().$cms({
+    plugins: { markdown: { role: 'source', output: 'tastingNotesHtml' } },
+  }),
+  // Rendered HTML - populated automatically, hidden from edit form
+  tastingNotesHtml: text('tasting_notes_html').$cms({
     plugins: { markdown: { role: 'output' } },
   }),
   published: boolean('published').default(false).notNull(),
-  authorId: integer('author_id')
-    .notNull()
-    .references(() => authors.id),
-  categoryId: integer('category_id').references(() => categories.id),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 }).$cms({
-  frontendUrl: (post) => post.published ? `/post/${post.slug}` : null,
+  // "View on site" link shown on the edit page when published
+  frontendUrl: (sauce) => sauce.published ? `/sauce/${sauce.slug}` : null,
 });
 
 /**
- * Pages table - visual pages edited with Puck
- * Uses JSONB content with Puck visual editor (vs posts which use markdown)
+ * Pages table - visual pages edited with Puck.
+ * Uses JSONB content with Puck visual editor (vs sauces which use markdown).
  */
 export const pages = pgTable('pages', {
   id: serial('id').primaryKey(),
@@ -131,7 +144,8 @@ export const pages = pgTable('pages', {
 });
 
 /**
- * Site settings - key/value configuration
+ * Site settings - key/value configuration.
+ * Read-only in the live demo (policy set in admin.ts).
  */
 export const settings = pgTable('settings', {
   id: serial('id').primaryKey(),
@@ -141,19 +155,18 @@ export const settings = pgTable('settings', {
 });
 
 /**
- * CMS users - authentication for the admin panel
+ * CMS users - authentication for the admin panel.
  */
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
   email: varchar('email', { length: 255 }).notNull().unique(),
   passwordHash: varchar('password_hash', { length: 255 }).notNull().$cms({
-    hidden: true,
+    hidden: true, // Never shown in admin forms
   }),
   name: varchar('name', { length: 100 }).notNull(),
   role: varchar('role', { length: 50 }).default('editor').notNull(),
   avatar: jsonb('avatar').$type<FileReference>().$cms({
-    // 20KB - always stored in database
-    file: { maxSize: 20 * 1024 },
+    file: { maxSize: 20 * 1024 }, // 20KB - always stored in database
   }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
@@ -162,22 +175,14 @@ export const users = pgTable('users', {
 // Relations
 // ─────────────────────────────────────────────────────────────
 
-export const authorsRelations = relations(authors, ({ many }) => ({
-  posts: many(posts),
+export const makersRelations = relations(makers, ({ many }) => ({
+  sauces: many(sauces),
 }));
 
-export const categoriesRelations = relations(categories, ({ many }) => ({
-  posts: many(posts),
-}));
-
-export const postsRelations = relations(posts, ({ one }) => ({
-  author: one(authors, {
-    fields: [posts.authorId],
-    references: [authors.id],
-  }),
-  category: one(categories, {
-    fields: [posts.categoryId],
-    references: [categories.id],
+export const saucesRelations = relations(sauces, ({ one }) => ({
+  maker: one(makers, {
+    fields: [sauces.makerId],
+    references: [makers.id],
   }),
 }));
 
@@ -186,36 +191,30 @@ export const postsRelations = relations(posts, ({ one }) => ({
 // ─────────────────────────────────────────────────────────────
 
 export const schema = {
-  posts,
+  sauces,
+  makers,
   pages,
   media,
-  authors,
-  categories,
   users,
   settings,
   // Relations
-  authorsRelations,
-  categoriesRelations,
-  postsRelations,
+  makersRelations,
+  saucesRelations,
 };
 
 // ─────────────────────────────────────────────────────────────
 // Zod schemas for validation (used by CMS)
+// All tables use the CMS's built-in drizzle-zod fallback except where
+// custom cross-field rules or extra refinements are needed.
 // ─────────────────────────────────────────────────────────────
 
-const authorsInsertSchema = createInsertSchema(authors);
-const mediaInsertSchema = createInsertSchema(media);
-const categoriesInsertSchema = createInsertSchema(categories);
-const postsInsertSchema = createInsertSchema(posts);
-const settingsInsertSchema = createInsertSchema(settings);
-const usersInsertSchema = createInsertSchema(users);
-
-const authorsUpdateSchema = createUpdateSchema(authors);
-const mediaUpdateSchema = createUpdateSchema(media);
-const categoriesUpdateSchema = createUpdateSchema(categories);
-const postsUpdateSchema = createUpdateSchema(posts);
-const settingsUpdateSchema = createUpdateSchema(settings);
-const usersUpdateSchema = createUpdateSchema(users);
+// Sauces: clamp heat to the 1–10 display scale
+const saucesInsertSchema = createInsertSchema(sauces, {
+  heat: (s) => s.min(1).max(10),
+});
+const saucesUpdateSchema = createUpdateSchema(sauces, {
+  heat: (s) => s.min(1).max(10).optional(),
+});
 
 // Pages: require title and slug when publishing
 function requireTitleSlugWhenPublished(
@@ -247,35 +246,17 @@ const pagesUpdateSchema = createUpdateSchema(pages).superRefine(
 );
 
 /**
- * Parsers for CMS form validation
+ * Parsers for CMS form validation.
+ * Only tables with custom rules are listed; all others fall back to the
+ * CMS's built-in drizzle-zod validation automatically.
  */
 export const parsers: Parsers = {
-  authors: {
-    insert: (data: unknown) => authorsInsertSchema.parse(data),
-    update: (data: unknown) => authorsUpdateSchema.parse(data),
-  },
-  media: {
-    insert: (data: unknown) => mediaInsertSchema.parse(data),
-    update: (data: unknown) => mediaUpdateSchema.parse(data),
-  },
-  categories: {
-    insert: (data: unknown) => categoriesInsertSchema.parse(data),
-    update: (data: unknown) => categoriesUpdateSchema.parse(data),
-  },
-  posts: {
-    insert: (data: unknown) => postsInsertSchema.parse(data),
-    update: (data: unknown) => postsUpdateSchema.parse(data),
+  sauces: {
+    insert: (data: unknown) => saucesInsertSchema.parse(data),
+    update: (data: unknown) => saucesUpdateSchema.parse(data),
   },
   pages: {
     insert: (data: unknown) => pagesInsertSchema.parse(data),
     update: (data: unknown) => pagesUpdateSchema.parse(data),
-  },
-  settings: {
-    insert: (data: unknown) => settingsInsertSchema.parse(data),
-    update: (data: unknown) => settingsUpdateSchema.parse(data),
-  },
-  users: {
-    insert: (data: unknown) => usersInsertSchema.parse(data),
-    update: (data: unknown) => usersUpdateSchema.parse(data),
   },
 };

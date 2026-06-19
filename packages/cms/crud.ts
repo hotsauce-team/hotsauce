@@ -647,6 +647,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
         value,
         thumbnailField.fieldType,
         fileUrl,
+        typeof thumbnailField.column.cmsOptions?.file === 'object'
+          ? thumbnailField.column.cmsOptions.file
+          : undefined,
       );
 
       const label = isValidFileReference(value) ? value.filename : String(id);
@@ -758,6 +761,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
         value,
         thumbnailField.fieldType,
         fileUrl,
+        typeof thumbnailField.column.cmsOptions?.file === 'object'
+          ? thumbnailField.column.cmsOptions.file
+          : undefined,
       );
 
       const label = isValidFileReference(value) ? value.filename : String(id);

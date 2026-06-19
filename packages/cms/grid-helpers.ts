@@ -135,6 +135,9 @@ export async function buildGridPanelData(
     thumbValue,
     thumbnailField.fieldType,
     fileUrl,
+    typeof thumbnailField.column.cmsOptions?.file === 'object'
+      ? thumbnailField.column.cmsOptions.file
+      : undefined,
   );
 
   // Extract file metadata if it's a file field

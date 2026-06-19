@@ -1,9 +1,9 @@
-// HTML templates for the public site
-// Uses hotsauce-cms/ui's html tagged template for XSS-safe rendering
+// HTML templates for the Spice Rack public site
 import { html, raw } from '@hotsauce/ui';
 import { parseMarkdown } from '../lib/markdown.ts';
 import { sanitizeHtml } from '../lib/sanitize.ts';
 import { ROBOTS_DIRECTIVE } from '../security.ts';
+import type { FileReference } from '@hotsauce/core/extend';
 
 // ─────────────────────────────────────────────────────────────
 // Types
@@ -13,70 +13,63 @@ export interface SiteSettings {
   siteName: string;
   tagline: string;
   footerText: string;
+  demoBanner: string;
 }
 
 export interface NavItem {
-  title: string;
-  slug: string;
+  title: string | null;
+  slug: string | null;
 }
 
-export interface PostSummary {
-  id: number;
-  title: string;
-  slug: string;
-  excerpt: string | null;
-  published: boolean;
-  createdAt: Date;
-  author: { name: string; slug: string } | null;
-  category: { name: string; slug: string } | null;
-}
-
-export interface PostDetail extends PostSummary {
-  content: string;
-  contentHtml: string | null;
-}
-
-export interface PageDetail {
-  id: number;
-  title: string;
-  slug: string;
-  /** Pre-rendered HTML from Puck content */
-  renderedHtml: string;
-}
-
-export interface CategoryWithCount {
+export interface SauceSummary {
   id: number;
   name: string;
   slug: string;
-  description: string | null;
-  postCount: number;
+  heat: number;
+  scoville: number | null;
+  bottle: FileReference | null;
+  makerName: string;
+  makerSlug: string;
 }
 
-export interface AuthorDetail {
+export interface SauceDetail extends SauceSummary {
+  tastingNotes: string;
+  tastingNotesHtml: string | null;
+  published: boolean;
+}
+
+export interface MakerDetail {
   id: number;
   name: string;
   slug: string;
   bio: string | null;
-  posts: PostSummary[];
+  bioHtml: string | null;
+  logo: FileReference | null;
+  website: string | null;
+  sauces: SauceSummary[];
+}
+
+export interface PageDetail {
+  id: number;
+  title: string | null;
+  slug: string | null;
+  /** Pre-rendered HTML from Puck content */
+  renderedHtml: string;
 }
 
 // ─────────────────────────────────────────────────────────────
 // Layout
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Base layout wrapper for all pages
- */
 export function layout(
   content: string,
   options: {
     title: string;
     settings: SiteSettings;
     navPages: NavItem[];
-    categories: NavItem[];
   },
 ): string {
-  const { title, settings, navPages, categories } = options;
+  const { title, settings, navPages } = options;
 
   return html`
     <!DOCTYPE html>
@@ -91,6 +84,14 @@ export function layout(
         <link rel="stylesheet" href="/static/components.css" />
       </head>
       <body>
+        ${settings.demoBanner
+          ? raw(html`
+            <div class="demo-banner">
+              ${settings.demoBanner}
+              <a href="/admin" class="demo-banner-link">→ Admin</a>
+            </div>
+          `)
+          : ''}
         <header class="site-header">
           <div class="container">
             <a href="/" class="site-title">
@@ -98,46 +99,25 @@ export function layout(
               <p class="tagline">${settings.tagline}</p>
             </a>
             <nav class="main-nav">
-              <a href="/">Home</a>
+              <a href="/">Sauces</a>
               ${raw(
-                navPages.map((p) =>
-                  html`
-                    <a href="/${p.slug}">${p.title}</a>
-                  `
-                ).join(''),
+                navPages
+                  .filter((p) => p.slug && p.title)
+                  .map((p) =>
+                    html`
+                      <a href="/${p.slug}">${p.title}</a>
+                    `
+                  )
+                  .join(''),
               )}
-              <a href="/categories">Categories</a>
+              <a href="/admin">Admin →</a>
             </nav>
           </div>
         </header>
 
         <main class="site-main">
           <div class="container">
-            <div class="content-grid">
-              <div class="main-content">${raw(content)}</div>
-              <aside class="sidebar">
-                <div class="widget">
-                  <h3>Categories</h3>
-                  <ul>
-                    ${raw(
-                      categories
-                        .map(
-                          (c) =>
-                            html`
-                              <li><a href="/category/${c.slug}">${c
-                                .title}</a></li>
-                            `,
-                        )
-                        .join(''),
-                    )}
-                  </ul>
-                </div>
-                <div class="widget">
-                  <h3>Admin</h3>
-                  <p><a href="/admin">→ CMS Dashboard</a></p>
-                </div>
-              </aside>
-            </div>
+            ${raw(content)}
           </div>
         </main>
 
@@ -146,7 +126,7 @@ export function layout(
             <p>${settings.footerText}</p>
             <p>
               Powered by <a href="https://github.com/hotsauce-team/hotsauce"
-              >hotsauce-cms</a> + <a href="https://hono.dev">Hono</a>
+              >hotsauce-cms</a>
             </p>
           </div>
         </footer>
@@ -156,103 +136,139 @@ export function layout(
 }
 
 // ─────────────────────────────────────────────────────────────
-// Page Templates
+// Sauce templates
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Homepage - list of recent posts
- */
-export function homePage(posts: PostSummary[]): string {
-  if (posts.length === 0) {
+export function homePage(sauces: SauceSummary[]): string {
+  if (sauces.length === 0) {
     return html`
-      <h2>Welcome</h2>
-      <p>No posts yet. <a href="/admin">Create your first post</a> in the CMS.</p>
+      <h2>The Rack is Empty</h2>
+      <p>No sauces yet. <a href="/admin">Add the first one</a> in the CMS.</p>
     `;
   }
 
   return html`
-    <h2>Latest Posts</h2>
-    <div class="post-list">
-      ${raw(posts.map(postCard).join(''))}
+    <h2>The Collection</h2>
+    <div class="sauce-grid">
+      ${raw(sauces.map(sauceCard).join(''))}
     </div>
   `;
 }
 
-/**
- * Post card for listings
- */
-function postCard(post: PostSummary): string {
-  const date = formatDate(post.createdAt);
-
+function sauceCard(sauce: SauceSummary): string {
   return html`
-    <article class="post-card">
-      <h3><a href="/post/${post.slug}">${post.title}</a></h3>
-      <div class="post-meta">
-        <span class="date">${date}</span>
-        ${post.author
-          ? raw(html`
-            <span class="author">by <a href="/author/${post.author.slug}">${post
-              .author.name}</a></span>
-          `)
-          : ''} ${post.category
-          ? raw(html`
-            <span class="category">in <a href="/category/${post.category
-              .slug}">${post.category.name}</a></span>
-          `)
-          : ''}
+    <a href="/sauce/${sauce.slug}" class="sauce-card">
+      <div class="bottle-wrap">
+        ${raw(bottleImg(sauce.bottle, sauce.name))}
       </div>
-      ${post.excerpt
-        ? raw(html`
-          <p class="excerpt">${post.excerpt}</p>
-        `)
-        : ''}
-      <a href="/post/${post.slug}" class="read-more">Read more →</a>
-    </article>
-  `;
-}
-
-/**
- * Single post page
- */
-export function postPage(post: PostDetail): string {
-  const date = formatDate(post.createdAt);
-
-  return html`
-    <article class="post-full">
-      <header class="post-header">
-        <h1>${post.title}</h1>
-        <div class="post-meta">
-          <span class="date">${date}</span>
-          ${post.author
+      <div class="sauce-card-body">
+        <h3 class="sauce-name">${sauce.name}</h3>
+        <div class="heat-meta">
+          ${raw(heatDots(sauce.heat))} ${sauce.scoville
             ? raw(html`
-              <span class="author">by <a href="/author/${post.author
-                .slug}">${post.author.name}</a></span>
-            `)
-            : ''} ${post.category
-            ? raw(html`
-              <span class="category">in <a href="/category/${post.category
-                .slug}">${post.category.name}</a></span>
+              <span class="scoville">${formatScoville(sauce.scoville)}</span>
             `)
             : ''}
         </div>
-      </header>
-      <div class="post-content">
-        ${raw(safeHtml(post.contentHtml, post.content))}
+        <p class="maker-name">by <strong>${sauce.makerName}</strong></p>
       </div>
-      <footer class="post-footer">
-        <a href="/">← Back to all posts</a>
+    </a>
+  `;
+}
+
+export function saucePage(sauce: SauceDetail): string {
+  return html`
+    <article class="sauce-full">
+      <div class="sauce-full-header">
+        <div class="bottle-wrap bottle-wrap--large">
+          ${raw(bottleImg(sauce.bottle, sauce.name))}
+        </div>
+        <div class="sauce-full-info">
+          <h1>${sauce.name}</h1>
+          <p class="maker-name">
+            by <a href="/maker/${sauce.makerSlug}">${sauce.makerName}</a>
+          </p>
+          <div class="heat-meta heat-meta--large">
+            ${raw(heatDots(sauce.heat))}
+            <span class="heat-label">${sauce.heat}/10</span>
+            ${sauce.scoville
+              ? raw(html`
+                <span class="scoville">${formatScoville(sauce.scoville)}</span>
+              `)
+              : ''}
+          </div>
+        </div>
+      </div>
+      <div class="tasting-notes">
+        <h2>Tasting Notes</h2>
+        <div class="prose">
+          ${raw(safeHtml(sauce.tastingNotesHtml, sauce.tastingNotes))}
+        </div>
+      </div>
+      <footer class="sauce-footer">
+        <a href="/">← All sauces</a>
       </footer>
     </article>
   `;
 }
 
-/**
- * Visual page (Puck editor)
- */
+// ─────────────────────────────────────────────────────────────
+// Maker template
+// ─────────────────────────────────────────────────────────────
+
+export function makerPage(maker: MakerDetail): string {
+  return html`
+    <article class="maker-profile">
+      <header class="maker-header">
+        ${maker.logo
+          ? raw(html`
+            <div class="maker-logo-wrap">
+              ${raw(logoImg(maker.logo, maker.name))}
+            </div>
+          `)
+          : ''}
+        <div class="maker-header-info">
+          <h1>${maker.name}</h1>
+          ${maker.website
+            ? raw(html`
+              <p><a href="${maker.website}" rel="noopener noreferrer">${maker
+                .website}</a></p>
+            `)
+            : ''}
+        </div>
+      </header>
+      ${maker.bioHtml || maker.bio
+        ? raw(html`
+          <div class="maker-bio prose">
+            ${raw(safeHtml(maker.bioHtml, maker.bio ?? ''))}
+          </div>
+        `)
+        : ''}
+      <section class="maker-sauces">
+        <h2>Sauces (${maker.sauces.length})</h2>
+        <div class="sauce-grid">
+          ${raw(maker.sauces.map(sauceCard).join(''))}
+        </div>
+      </section>
+      <footer class="maker-footer">
+        <a href="/">← All sauces</a>
+      </footer>
+    </article>
+  `;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Visual page (Puck)
+// ─────────────────────────────────────────────────────────────
+
 export function visualPage(page: PageDetail): string {
   return html`
     <article class="page">
-      <h1>${page.title}</h1>
+      ${page.title
+        ? raw(html`
+          <h1>${page.title}</h1>
+        `)
+        : ''}
       <div class="page-content puck-content">
         ${raw(page.renderedHtml)}
       </div>
@@ -260,95 +276,14 @@ export function visualPage(page: PageDetail): string {
   `;
 }
 
-/**
- * Category page - posts in a category
- */
-export function categoryPage(
-  category: { name: string; slug: string; description: string | null },
-  posts: PostSummary[],
-): string {
-  return html`
-    <header class="category-header">
-      <h1>Category: ${category.name}</h1>
-      ${category.description
-        ? raw(html`
-          <p class="description">${category.description}</p>
-        `)
-        : ''}
-    </header>
-    ${posts.length > 0
-      ? raw(html`
-        <div class="post-list">${raw(posts.map(postCard).join(''))}</div>
-      `)
-      : raw(html`
-        <p>No posts in this category yet.</p>
-      `)}
-    <p><a href="/categories">← All categories</a></p>
-  `;
-}
+// ─────────────────────────────────────────────────────────────
+// 404
+// ─────────────────────────────────────────────────────────────
 
-/**
- * Categories index page
- */
-export function categoriesPage(categories: CategoryWithCount[]): string {
-  return html`
-    <h1>Categories</h1>
-    <div class="categories-list">
-      ${raw(
-        categories
-          .map(
-            (c) =>
-              html`
-                <div class="category-card">
-                  <h3><a href="/category/${c.slug}">${c.name}</a></h3>
-                  ${c.description
-                    ? raw(html`
-                      <p>${c.description}</p>
-                    `)
-                    : ''}
-                  <span class="post-count">${c
-                    .postCount} post${c.postCount === 1 ? '' : 's'}</span>
-                </div>
-              `,
-          )
-          .join(''),
-      )}
-    </div>
-  `;
-}
-
-/**
- * Author page
- */
-export function authorPage(author: AuthorDetail): string {
-  return html`
-    <header class="author-header">
-      <h1>${author.name}</h1>
-      ${author.bio
-        ? raw(html`
-          <p class="bio">${author.bio}</p>
-        `)
-        : ''}
-    </header>
-    <h2>Posts by ${author.name}</h2>
-    ${author.posts.length > 0
-      ? raw(html`
-        <div class="post-list">${raw(author.posts.map(postCard).join(''))}</div>
-      `)
-      : raw(html`
-        <p>No posts by this author yet.</p>
-      `)}
-    <p><a href="/">← Back to home</a></p>
-  `;
-}
-
-/**
- * 404 page
- */
 export function notFoundPage(): string {
   return html`
     <div class="error-page">
-      <h1>404 - Not Found</h1>
+      <h1>404 — Not Found</h1>
       <p>The page you're looking for doesn't exist.</p>
       <a href="/">← Go home</a>
     </div>
@@ -359,34 +294,62 @@ export function notFoundPage(): string {
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Format a date for display
- */
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
+function heatDots(heat: number): string {
+  const clamped = Math.max(0, Math.min(heat, 10));
+  return html`
+    <span class="heat-dots" title="${heat}/10">${'🌶'.repeat(clamped)}</span>
+  `;
 }
 
-/**
- * Render Markdown to HTML using micromark.
- * See ../lib/markdown.ts.
- */
-function renderMarkdown(text: string): string {
-  return parseMarkdown(text);
+function formatScoville(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M SHU`;
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K SHU`;
+  return `${n} SHU`;
+}
+
+function bottleImg(bottle: FileReference | null, name: string): string {
+  if (!bottle) {
+    return html`
+      <div class="bottle-placeholder"></div>
+    `;
+  }
+  const src = bottle.data
+    ? `data:${bottle.contentType ?? 'image/png'};base64,${bottle.data}`
+    : bottle.url ?? '';
+  if (!src) {
+    return html`
+      <div class="bottle-placeholder"></div>
+    `;
+  }
+  return html`
+    <img src="${src}" alt="${name}" class="bottle-img" loading="lazy" />
+  `;
+}
+
+function logoImg(logo: FileReference | null, name: string): string {
+  if (!logo) return '';
+  const src = logo.data
+    ? `data:${logo.contentType ?? 'image/png'};base64,${logo.data}`
+    : logo.url ?? '';
+  if (!src) return '';
+  return html`
+    <img
+      src="${src}"
+      alt="${name} logo"
+      class="maker-logo"
+      loading="lazy"
+    />
+  `;
 }
 
 /**
  * Safely render HTML content with XSS protection.
- * Defense in depth: sanitizes even pre-sanitized DB content.
  * Falls back to parsing markdown if contentHtml is empty.
  */
 function safeHtml(
   contentHtml: string | null,
   markdownFallback: string,
 ): string {
-  const html = contentHtml || renderMarkdown(markdownFallback);
-  return sanitizeHtml(html);
+  const source = contentHtml || parseMarkdown(markdownFallback);
+  return sanitizeHtml(source);
 }

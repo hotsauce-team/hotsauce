@@ -1,10 +1,10 @@
-# Demo App
+# Demo App — The Spice Rack
 
-A complete blog site with a server-rendered public frontend (Hono) and a headless CMS admin interface (hotsauce-cms) sharing the same database.
+A fictional hot sauce catalogue with a server-rendered public site (Hono) and a headless CMS admin (hotsauce-cms) sharing the same database. All content is imaginary.
 
 ## Features
 
-- **Public Blog** - Server-rendered pages using Hono and template literals
+- **Public Catalogue** - Server-rendered sauce/maker pages using Hono and template literals
 - **CMS Admin** - Full admin interface powered by hotsauce-cms
 - **Shared Database** - Both frontend and admin use the same Drizzle schema
 - **Minimal Dependencies** - Hono via JSR + a small markdown parser for the example plugin
@@ -40,7 +40,7 @@ This bundles Puck components and starts the server with file watching.
 
 3. **Open the site:**
 
-- **Blog:** http://localhost:3000
+- **Site:** http://localhost:3000
 - **CMS Admin:** http://localhost:3000/admin
 
 ## Admin Credentials
@@ -60,10 +60,10 @@ This bundles Puck components and starts the server with file watching.
 │   │    (Hono)       │         │    (hotsauce-cms)       │   │
 │   │                 │         │                         │   │
 │   │  GET /          │         │  /admin/* → cmsHandler  │   │
-│   │  GET /post/:id  │         │  /admin/login           │   │
-│   │  GET /page/:id  │         │  /admin/posts           │   │
-│   │  GET /category  │         │  /admin/pages           │   │
-│   │  GET /author    │         │  ...                    │   │
+│   │  GET /sauce/:s  │         │  /admin/login           │   │
+│   │  GET /maker/:s  │         │  /admin/sauces          │   │
+│   │  GET /:slug     │         │  /admin/makers          │   │
+│   │                 │         │  ...                    │   │
 │   └────────┬────────┘         └────────────┬────────────┘   │
 │            │                               │                │
 │            └───────────┬───────────────────┘                │
@@ -94,7 +94,7 @@ apps/demo/
 ├── security.ts     # CSP and security headers
 ├── db.ts           # Database connection (shared)
 ├── schema.ts       # Drizzle schema (shared)
-├── seed.ts         # Database seeding script
+├── seed/           # Database seeding (seed.ts + data.ts)
 ├── components.tsx  # Puck visual editor components (React)
 ├── deno.jsonc      # Deno configuration
 │
@@ -138,7 +138,7 @@ apps/demo/
 | `site/puck-render.tsx`       | Site only  | Server-side Puck content renderer   |
 | `site/static/styles.css`     | Site only  | Site stylesheet                     |
 | `site/static/components.css` | Site only  | Puck component styles (BEM)         |
-| `seed.ts`                    | Setup      | Initial data population             |
+| `seed/`                      | Setup      | Initial data population             |
 
 ## Security
 
@@ -229,17 +229,16 @@ This approach:
 
 ## Schema
 
-The example includes these tables:
+The demo includes these tables:
 
-| Table        | Purpose                                                              |
-| ------------ | -------------------------------------------------------------------- |
-| `posts`      | Blog posts with title, content, contentHtml, excerpt, publish status |
-| `pages`      | Visual pages edited with Puck (JSON content)                         |
-| `authors`    | Content creators with bio                                            |
-| `categories` | Post organization                                                    |
-| `media`      | File uploads (images stored as base64 in JSONB)                      |
-| `settings`   | Key-value site configuration                                         |
-| `users`      | CMS authentication                                                   |
+| Table      | Purpose                                                    |
+| ---------- | ---------------------------------------------------------- |
+| `sauces`   | Hot sauces with name, heat rating, tasting notes, maker FK |
+| `makers`   | Sauce producers with name, bio, logo                       |
+| `pages`    | Visual pages edited with Puck (JSON content)               |
+| `media`    | File uploads for Puck Image blocks                         |
+| `settings` | Key-value site configuration                               |
+| `users`    | CMS authentication                                         |
 
 ## Templates
 
@@ -249,12 +248,12 @@ Templates use `@hotsauce/ui`'s `html` tagged template for XSS-safe rendering:
 // site/templates.ts
 import { html, raw } from '@hotsauce/ui';
 
-function postCard(post: Post): string {
+function sauceCard(sauce: Sauce): string {
   return html`
     <article>
-      <h2>${post.title}</h2>
+      <h2>${sauce.name}</h2>
       <!-- auto-escaped -->
-      <div>${raw(post.htmlContent)}</div>
+      <div>${raw(sauce.tastingNotesHtml)}</div>
       <!-- trusted HTML -->
     </article>
   `;
@@ -263,28 +262,26 @@ function postCard(post: Post): string {
 
 ## Public Routes
 
-| Route                 | Description                     |
-| --------------------- | ------------------------------- |
-| `GET /`               | Homepage with recent posts      |
-| `GET /post/:slug`     | Single post page                |
-| `GET /page/:slug`     | Static page (about, contact)    |
-| `GET /category/:slug` | Posts in a category             |
-| `GET /categories`     | All categories with post counts |
-| `GET /author/:slug`   | Author profile with their posts |
+| Route              | Description               |
+| ------------------ | ------------------------- |
+| `GET /`            | Homepage with sauce grid  |
+| `GET /sauce/:slug` | Single sauce detail page  |
+| `GET /maker/:slug` | Maker profile with sauces |
+| `GET /:slug`       | Puck pages (about, etc.)  |
 
 ## CMS Routes
 
 All `/admin/*` routes are handled by hotsauce-cms:
 
-| Route                   | Description                           |
-| ----------------------- | ------------------------------------- |
-| `GET /admin`            | Dashboard                             |
-| `GET /admin/login`      | Login page                            |
-| `GET /admin/posts`      | Post management                       |
-| `GET /admin/pages`      | Page management                       |
-| `GET /admin/authors`    | Author management                     |
-| `GET /admin/categories` | Category management                   |
-| `GET /admin/settings`   | Site settings (read-only for editors) |
+| Route                 | Description                           |
+| --------------------- | ------------------------------------- |
+| `GET /admin`          | Dashboard                             |
+| `GET /admin/login`    | Login page                            |
+| `GET /admin/sauces`   | Sauce management                      |
+| `GET /admin/makers`   | Maker management                      |
+| `GET /admin/pages`    | Page management                       |
+| `GET /admin/media`    | Media library                         |
+| `GET /admin/settings` | Site settings (read-only for editors) |
 
 ## Customization
 
@@ -295,9 +292,10 @@ Add routes in `site/routes.ts`:
 ```typescript
 app.get('/search', async (c) => {
   const q = c.req.query('q');
-  const results = await db.query.posts.findMany({
-    where: ilike(posts.title, `%${q}%`),
-  });
+  const results = await db
+    .select()
+    .from(sauces)
+    .where(ilike(sauces.name, `%${q}%`));
   // ... render results
 });
 ```
@@ -305,27 +303,6 @@ app.get('/search', async (c) => {
 ### Styling
 
 Edit `site/static/styles.css` to customize the appearance. The CSS file is served via Hono's static file middleware.
-
-### Adding HTMX
-
-For interactive features without a full SPA, add HTMX:
-
-> Note: This example's default CSP uses `script-src 'none'`, so enabling HTMX (or any client-side JS) requires relaxing the CSP in `security.ts`.
-
-```typescript
-// In site/templates.ts layout()
-<script src="https://unpkg.com/htmx.org@2"></script>
-
-// In a template
-<button hx-post="/api/like/${post.id}" hx-swap="outerHTML">
-  👍 ${post.likes}
-</button>
-
-// In site/routes.ts
-app.post('/api/like/:id', async (c) => {
-  // Update likes, return new button HTML
-});
-```
 
 ## Deploying to Deno Deploy
 
@@ -368,7 +345,7 @@ This demo showcases many hotsauce-cms capabilities:
 | Puck visual editor plugin    | `schema.ts` — `$cms({ plugins: { puck: true } })` |
 | File uploads                 | `schema.ts` — `$cms({ file: true })`              |
 | Frontend URL links           | `schema.ts` — `$cms({ frontendUrl })`             |
-| Relations (FK dropdowns)     | `schema.ts` — `authorId`, `categoryId`            |
+| Relations (FK dropdowns)     | `schema.ts` — `makerId` on sauces                 |
 | Custom Zod parsers           | `schema.ts` — `parsers` object                    |
 | Read-only policy             | `admin.ts` — `settings: readOnly()`               |
 | Lazy CMS loading             | `server.ts` — dynamic `import()`                  |

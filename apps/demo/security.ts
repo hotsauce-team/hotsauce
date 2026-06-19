@@ -79,20 +79,3 @@ export function createSecurityHeaders(
     // routes) so it is intentionally not set here.
   };
 }
-
-/**
- * CSP policy that allows HTMX (if you add it later)
- * Uncomment and use this instead if you add HTMX interactivity
- */
-export const CSP_WITH_HTMX = [
-  "default-src 'self'",
-  "script-src 'self' https://unpkg.com", // Allow HTMX from unpkg
-  "style-src 'self'",
-  "img-src 'self' data:",
-  "font-src 'self'",
-  "connect-src 'self'", // HTMX makes fetch requests
-  "form-action 'self'",
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "object-src 'none'",
-].join('; ');
