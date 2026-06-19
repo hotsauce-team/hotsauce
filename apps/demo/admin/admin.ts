@@ -39,6 +39,8 @@ export function createAdminHandler(db: Database) {
     policies: {
       // Settings are read-only for everyone, including admins (just for demo purposes)
       settings: readOnly(),
+      // makers and sauces are writable by admins, but writes are blocked
+      // at the server layer in production (NODE_ENV !== 'local')
     },
     parsers,
     plugins: [
