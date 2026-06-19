@@ -41,7 +41,7 @@ jobs:
         run: deno install
 
       - name: Cache imports
-        run: deno cache server.ts seed.ts
+        run: deno cache server.ts seed/seed.ts
 
       - name: Bundle Puck components
         run: deno task bundle
@@ -55,7 +55,7 @@ jobs:
             apps/demo/schema.ts \
             apps/demo/db.ts \
             apps/demo/security.ts \
-            apps/demo/seed.ts \
+            apps/demo/seed/ \
             apps/demo/lib/ \
             apps/demo/admin/ \
             apps/demo/site/ \
