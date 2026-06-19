@@ -61,6 +61,7 @@ jobs:
             apps/demo/lib/ \
             apps/demo/admin/ \
             apps/demo/site/ \
+            apps/www/deno.jsonc \
             packages/ \
             .deno-cache/ \
             node_modules/ \
