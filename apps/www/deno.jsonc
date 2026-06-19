@@ -3,6 +3,8 @@
   "version": "0.0.1",
 
   "tasks": {
+    "init": "deno run --permission-set=local seed/init-tables.ts",
+    "init:prod": "deno run --permission-set=prod seed/init-tables.ts",
     "seed": "deno run --permission-set=local seed/seed.ts",
     "dev": "deno serve --env-file=.env.example --port=3010 --host=127.0.0.1 --permission-set=local server.ts",
     "dev:watch": "deno serve --env-file=.env.example --watch --port=3010 --host=127.0.0.1 --permission-set=local server.ts",
