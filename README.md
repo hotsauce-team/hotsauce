@@ -2,6 +2,8 @@
 
 A schema-driven headless CMS derived from your Drizzle ORM definitions. Define your database schema once — get a type-safe admin interface for free.
 
+**[Live Demo →](https://demo.hotsaucecms.com/)**
+
 ## Philosophy
 
 - **Single source of truth**: Your Drizzle schema defines database tables, TypeScript types, validation rules, AND CMS fields
