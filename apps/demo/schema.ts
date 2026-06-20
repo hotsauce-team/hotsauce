@@ -128,16 +128,16 @@ export const sauces = pgTable('sauces', {
  * Uses JSONB content with Puck visual editor (vs sauces which use markdown).
  */
 export const pages = pgTable('pages', {
-  id: serial('id').primaryKey(),
+  id: serial('id').primaryKey().$cms({ hidden: true }),
   title: varchar('title', { length: 255 }),
   slug: varchar('slug', { length: 255 }).unique()
     .$defaultFn(() => `draft-${crypto.randomUUID().slice(0, 8)}`),
   // JSON content edited with Puck visual editor
   content: jsonb('content').$cms({ plugins: { puck: true } }),
-  published: boolean('published').default(false).notNull(),
   sortOrder: integer('sort_order').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  published: boolean('published').default(false).notNull(),
 }).$cms({
   autoDraft: true,
   frontendUrl: (page) => page.published ? `/${page.slug}` : null,

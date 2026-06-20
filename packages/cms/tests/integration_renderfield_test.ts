@@ -400,3 +400,137 @@ Deno.test('integration: fieldOverrides fileUrl is passed to detail view', async 
 
   await client.close();
 });
+
+Deno.test('integration: renderField produces cellOverrides in list view', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithPlugins });
+  await createPagesTable(db);
+
+  async function resetDb() {
+    await db.execute(sql`TRUNCATE TABLE pages RESTART IDENTITY CASCADE`);
+  }
+
+  await t.step('list view includes renderField link output', async () => {
+    await resetDb();
+
+    // Insert pages with content
+    await db.insert(pages).values([
+      { title: 'Page One', content: { blocks: [1] } },
+      { title: 'Page Two', content: { blocks: [2] } },
+    ]);
+
+    const plugin = createRenderFieldPlugin('puck');
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithPlugins,
+      basePath: '/admin',
+      plugins: [plugin],
+    });
+
+    // GET list view
+    const response = await handler(
+      new Request('http://localhost/admin/pages'),
+    );
+
+    assertEquals(response.status, 200);
+    const html = await response.text();
+
+    // Plugin's link label should appear in the table cells
+    assertStringIncludes(html, CUSTOM_LINK_LABEL);
+    // The link href should also be present
+    assertStringIncludes(html, CUSTOM_LINK_HREF);
+  });
+
+  await t.step(
+    'renderField receives correct context for list view',
+    async () => {
+      await resetDb();
+
+      await db.insert(pages).values({
+        title: 'List Context Test',
+        content: { listData: 'test' },
+      });
+
+      let receivedCtx: UIRenderFieldContext | null = null;
+
+      const plugin = createRenderFieldPlugin('puck', {
+        onRenderField: (ctx) => {
+          if (ctx.field.name === 'content' && ctx.view === 'list') {
+            receivedCtx = ctx;
+          }
+        },
+      });
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithPlugins,
+        basePath: '/admin',
+        plugins: [plugin],
+      });
+
+      await handler(new Request('http://localhost/admin/pages'));
+
+      // Verify context for list view
+      assertEquals(receivedCtx!.table, 'pages');
+      assertEquals(receivedCtx!.view, 'list');
+      assertEquals(receivedCtx!.recordId, 1); // PGlite returns number, not string
+      assertEquals(receivedCtx!.field.name, 'content');
+      assertEquals(
+        (receivedCtx!.value as Record<string, unknown>)?.listData,
+        'test',
+      );
+      assertEquals(receivedCtx!.field.plugin, true); // puck: true from schema
+    },
+  );
+
+  await t.step(
+    'renderField is called for each record in list view',
+    async () => {
+      await resetDb();
+
+      await db.insert(pages).values([
+        { title: 'Multi 1', content: { id: 'a' } },
+        { title: 'Multi 2', content: { id: 'b' } },
+        { title: 'Multi 3', content: { id: 'c' } },
+      ]);
+
+      const receivedRecordIds: (string | number)[] = [];
+
+      const plugin = createRenderFieldPlugin('puck', {
+        onRenderField: (ctx) => {
+          if (
+            ctx.field.name === 'content' && ctx.view === 'list' && ctx.recordId
+          ) {
+            receivedRecordIds.push(ctx.recordId);
+          }
+        },
+      });
+
+      const handler = createCmsHandler({
+        csrfSecret: TEST_CSRF_SECRET,
+        auth: 'dangerously-open',
+        policies: 'dangerously-open',
+        db,
+        schema: schemaWithPlugins,
+        basePath: '/admin',
+        plugins: [plugin],
+      });
+
+      await handler(new Request('http://localhost/admin/pages'));
+
+      // Should have been called for each of the 3 records
+      assertEquals(receivedRecordIds.length, 3);
+      // IDs should be 1, 2, 3 (order may vary due to parallel execution)
+      assertEquals(new Set(receivedRecordIds), new Set([1, 2, 3]));
+    },
+  );
+
+  await client.close();
+});

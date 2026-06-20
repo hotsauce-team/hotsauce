@@ -3,6 +3,7 @@
 import { attrs, escapeHtml, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
+import type { FieldUIOverride } from '@hotsauce/workers';
 import type { RelationOption } from '../forms/inputs.ts';
 import {
   viewToggle,
@@ -34,6 +35,15 @@ export interface ListColumn {
   /** Format function for cell value */
   format?: (value: unknown) => string;
 }
+
+/**
+ * Cell overrides map: recordId -> columnKey -> FieldUIOverride
+ * Used to render plugin links in list cells.
+ */
+export type CellOverrides = Map<
+  string | number,
+  Record<string, FieldUIOverride>
+>;
 
 /**
  * Options for list view
@@ -107,6 +117,7 @@ export function listTable(
   options: ListViewOptions,
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: Map<string | number, ManyToManyDisplayData[]> = new Map(),
+  cellOverrides: CellOverrides = new Map(),
 ): string {
   const primaryKey = options.primaryKey ?? 'id';
   const showActions = options.showEdit || options.showDelete ||
@@ -149,8 +160,17 @@ export function listTable(
   ).join('\n      ');
 
   const rows = records.map((record) => {
-    const id = record[primaryKey];
+    const id = record[primaryKey] as string | number;
+    const recordOverrides = cellOverrides.get(id) ?? {};
     const cells = columns.map((col) => {
+      // Check for plugin override with link
+      const override = recordOverrides[col.key];
+      if (override?.link) {
+        const { href, label } = override.link;
+        return `<td class="cms-td"><a href="${
+          escapeHtml(href)
+        }" class="cms-action">${escapeHtml(label)}</a></td>`;
+      }
       const value = record[col.key];
       const formatted = col.format
         ? col.format(value)
@@ -257,6 +277,7 @@ export function listView(
   options: ListViewOptions,
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: Map<string | number, ManyToManyDisplayData[]> = new Map(),
+  cellOverrides: CellOverrides = new Map(),
 ): string {
   const viewToggleHtml = options.viewToggle
     ? viewToggle(options.viewToggle)
@@ -272,7 +293,16 @@ export function listView(
             .baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
         </div>
       </header>
-      ${raw(listTable(columns, records, options, relationData, manyToManyData))}
+      ${raw(
+        listTable(
+          columns,
+          records,
+          options,
+          relationData,
+          manyToManyData,
+          cellOverrides,
+        ),
+      )}
     </div>
   `;
 }

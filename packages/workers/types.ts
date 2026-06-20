@@ -186,7 +186,7 @@ export interface UIRenderFieldContext {
   /** Record ID (undefined on create) */
   recordId?: string | number;
   /** View type: where the field is being rendered */
-  view: 'edit' | 'create' | 'detail';
+  view: 'edit' | 'create' | 'detail' | 'list';
   /** Authenticated user info (if available) */
   user?: {
     sub: string;

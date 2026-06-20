@@ -4,6 +4,7 @@ import { asc, desc, sql } from 'drizzle-orm';
 import type { Table } from 'drizzle-orm';
 
 import type { IntrospectedTable } from '@hotsauce/core';
+import { mapColumnToField } from '@hotsauce/core';
 
 import { alert, layout, pagination } from '@hotsauce/ui';
 import { listView } from '@hotsauce/ui';
@@ -38,12 +39,14 @@ import {
   redirectWithFlash,
   wantsJson,
 } from './http.ts';
-import { cmsUrl, formatTableName } from './router.ts';
+import { cmsUrl, formatColumnName, formatTableName } from './router.ts';
 import type {
+  CellOverrides,
   DetailViewOptions,
   EditViewOptions,
   FieldUIOverride,
   LayoutOptions,
+  ListColumn,
   ListViewOptions,
   NavItem,
 } from '@hotsauce/ui';
@@ -810,9 +813,89 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     // Table view (default for non-thumbnail tables, or explicit ?view=table)
 
     // Build columns for list, filtered by readable columns
-    const listColumns = getListColumns(table).filter(
+    const listColumns: ListColumn[] = getListColumns(table).filter(
       (col) => columnResult.readableColumns.includes(col.name ?? col.key),
     );
+
+    // Find columns with plugin config and add any that were filtered out (e.g., json fields)
+    const existingKeys = new Set(listColumns.map((c) => c.key));
+    const pluginColumns: Array<
+      {
+        col: typeof table.columns[number];
+        field: ReturnType<typeof mapColumnToField>;
+      }
+    > = [];
+
+    for (const col of table.columns) {
+      // Skip columns not readable by this user
+      if (!columnResult.readableColumns.includes(col.name)) continue;
+
+      // Check if column has any plugin config
+      const plugins = col.cmsOptions?.plugins;
+      if (!plugins || Object.keys(plugins).length === 0) continue;
+
+      const field = mapColumnToField(col);
+      pluginColumns.push({ col, field });
+
+      // Add column if it was filtered out (e.g., json field)
+      if (!existingKeys.has(col.propertyName)) {
+        listColumns.push({
+          key: col.propertyName,
+          name: col.name,
+          label: formatColumnName(col.name),
+        });
+      }
+    }
+
+    // Build cell overrides by calling renderField hook for each plugin column
+    const cellOverrides: CellOverrides = new Map();
+
+    if (ctx.pluginService && pluginColumns.length > 0) {
+      const user = getPluginUser(ctx);
+      const pluginService = ctx.pluginService;
+
+      // Build all hook calls upfront, then execute in parallel
+      const hookCalls = records.flatMap((record) => {
+        const id = record[pkCol.propertyName] as string | number;
+        return pluginColumns.map(({ col, field }) => {
+          const uiCtx: UIRenderFieldContext = {
+            table: table.name,
+            field: toUIFieldInfo(field),
+            value: (record[col.propertyName] ?? null) as UIRenderFieldContext[
+              'value'
+            ],
+            recordId: id,
+            view: 'list',
+            user,
+          };
+          return {
+            id,
+            colKey: col.propertyName,
+            uiCtx,
+          };
+        });
+      });
+
+      const results = await Promise.all(
+        hookCalls.map(async ({ id, colKey, uiCtx }) => ({
+          id,
+          colKey,
+          override: await pluginService.renderField(uiCtx),
+        })),
+      );
+
+      // Group results by record ID
+      for (const { id, colKey, override } of results) {
+        if (override) {
+          let recordOverrides = cellOverrides.get(id);
+          if (!recordOverrides) {
+            recordOverrides = {};
+            cellOverrides.set(id, recordOverrides);
+          }
+          recordOverrides[colKey] = override;
+        }
+      }
+    }
 
     // Fetch relation data for FK columns
     const relationData = await fetchAllRelationOptions(options, table);
@@ -851,6 +934,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
       listOptions,
       relationData,
       m2mDisplayData,
+      cellOverrides,
     );
   }
 

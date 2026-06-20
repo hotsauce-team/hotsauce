@@ -61,6 +61,7 @@ export { deleteForm, form } from './forms/form.ts';
 // Views - Page templates for CRUD operations
 // ─────────────────────────────────────────────────────────────
 export type {
+  CellOverrides,
   ListColumn,
   ListViewOptions,
   ManyToManyDisplayData,
