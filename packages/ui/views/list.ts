@@ -163,13 +163,34 @@ export function listTable(
     const id = record[primaryKey] as string | number;
     const recordOverrides = cellOverrides.get(id) ?? {};
     const cells = columns.map((col) => {
-      // Check for plugin override with link
+      // Check for plugin override
       const override = recordOverrides[col.key];
-      if (override?.link) {
-        const { href, label } = override.link;
-        return `<td class="cms-td"><a href="${
-          escapeHtml(href)
-        }" class="cms-action">${escapeHtml(label)}</a></td>`;
+      if (override?.link || override?.valueSummary) {
+        // Build summary text (e.g., "8 blocks")
+        const summaryHtml = override.valueSummary
+          ? `<span class="cms-value-summary">${
+            escapeHtml(override.valueSummary)
+          }</span>`
+          : '';
+
+        // Build link button (e.g., "Edit with Puck ↗")
+        let linkHtml = '';
+        if (override.link) {
+          const { href, label, target } = override.link;
+          const targetAttr = target === '_blank'
+            ? ' target="_blank" rel="noopener"'
+            : '';
+          const arrow = target === '_blank' ? ' ↗' : '';
+          linkHtml = `<a href="${
+            escapeHtml(href)
+          }" class="cms-action"${targetAttr}>${escapeHtml(label)}${arrow}</a>`;
+        }
+
+        // Show both summary and link if both exist
+        const content = summaryHtml && linkHtml
+          ? `${summaryHtml} ${linkHtml}`
+          : summaryHtml || linkHtml;
+        return `<td class="cms-td">${content}</td>`;
       }
       const value = record[col.key];
       const formatted = col.format

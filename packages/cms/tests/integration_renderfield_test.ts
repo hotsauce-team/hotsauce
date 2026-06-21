@@ -439,7 +439,8 @@ Deno.test('integration: renderField produces cellOverrides in list view', async 
     assertEquals(response.status, 200);
     const html = await response.text();
 
-    // Plugin's link label should appear in the table cells
+    // Both valueSummary and link label should appear in the table cells
+    assertStringIncludes(html, CUSTOM_VALUE_SUMMARY);
     assertStringIncludes(html, CUSTOM_LINK_LABEL);
     // The link href should also be present
     assertStringIncludes(html, CUSTOM_LINK_HREF);
@@ -785,6 +786,98 @@ Deno.test('integration: renderField filter receives correct action for each view
       'edit view should pass action=read to filter (editing existing record)',
     );
   });
+
+  await client.close();
+});
+
+Deno.test('integration: list view link supports target=_blank with rel=noopener', async () => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithPlugins });
+  await createPagesTable(db);
+
+  await db.insert(pages).values({ title: 'Test', content: { data: 1 } });
+
+  const plugin = createRenderFieldPlugin('puck', {
+    link: {
+      label: 'Open Editor',
+      href: '/editor/1',
+      target: '_blank',
+    },
+  });
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    db,
+    schema: schemaWithPlugins,
+    basePath: '/admin',
+    plugins: [plugin],
+  });
+
+  const response = await handler(new Request('http://localhost/admin/pages'));
+  assertEquals(response.status, 200);
+
+  const html = await response.text();
+
+  // Should include target="_blank" and rel="noopener" for security
+  assertStringIncludes(html, 'target="_blank"');
+  assertStringIncludes(html, 'rel="noopener"');
+  // Should show link label with arrow for external links
+  assertStringIncludes(html, 'Open Editor ↗');
+
+  await client.close();
+});
+
+Deno.test('integration: list view renders valueSummary when no link', async () => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithPlugins });
+  await createPagesTable(db);
+
+  await db.insert(pages).values({ title: 'Test', content: { data: 1 } });
+
+  // Plugin returns only valueSummary, no link
+  // Use 'puck' as plugin name to match the schema declaration
+  const plugin: InProcessPluginConfig = {
+    name: 'puck',
+    filter: 'dangerously-open',
+    hooks: {
+      ui: {
+        renderField: (ctx: UIRenderFieldContext) => {
+          // Only respond for the content column which has puck plugin config
+          if (!ctx.field.plugin) return null;
+          return {
+            valueSummary: 'Custom Summary Text',
+            // No link - testing valueSummary-only display
+          };
+        },
+      },
+    },
+  };
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    db,
+    schema: schemaWithPlugins,
+    basePath: '/admin',
+    plugins: [plugin],
+  });
+
+  const response = await handler(new Request('http://localhost/admin/pages'));
+  assertEquals(response.status, 200);
+
+  const html = await response.text();
+
+  // Should show the valueSummary as cell text
+  assertStringIncludes(html, 'Custom Summary Text');
+  // Should NOT be a link (no <a> tag with our text)
+  assertEquals(
+    html.includes('<a') && html.includes('Custom Summary Text</a>'),
+    false,
+    'valueSummary should not be rendered as a link',
+  );
 
   await client.close();
 });
