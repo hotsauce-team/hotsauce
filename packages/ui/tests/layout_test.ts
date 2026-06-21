@@ -118,8 +118,11 @@ Deno.test('layout: sidebar has popover attribute and id for mobile navigation', 
   });
 
   // Sidebar should have id="cms-nav" and popover attribute
-  assertStringIncludes(result, 'id="cms-nav"');
-  assertStringIncludes(result, 'popover');
+  // Use specific assertion to avoid matching popovertarget="cms-nav"
+  assertStringIncludes(
+    result,
+    '<aside id="cms-nav" class="cms-sidebar" popover>',
+  );
 });
 
 Deno.test('layout: menu toggle has correct accessibility attributes', () => {
@@ -127,15 +130,12 @@ Deno.test('layout: menu toggle has correct accessibility attributes', () => {
     title: 'Test Page',
   });
 
-  // Toggle button should have:
-  // - type="button" (prevent form submission)
-  // - popovertarget="cms-nav" (control the popover)
-  // - aria-controls="cms-nav" (accessibility association)
-  // - aria-label (accessible name)
-  assertStringIncludes(result, 'type="button"');
-  assertStringIncludes(result, 'popovertarget="cms-nav"');
-  assertStringIncludes(result, 'aria-controls="cms-nav"');
-  assertStringIncludes(result, 'aria-label="Menu"');
+  // Toggle button should have all required attributes
+  // Assert the full button tag to ensure we're testing the correct element
+  assertStringIncludes(
+    result,
+    '<button type="button" class="cms-menu-toggle" popovertarget="cms-nav" aria-controls="cms-nav" aria-label="Menu">',
+  );
   // SVG should be aria-hidden
   assertStringIncludes(result, 'aria-hidden="true"');
 });
