@@ -41,6 +41,7 @@ import {
 } from './http.ts';
 import { cmsUrl, formatColumnName, formatTableName } from './router.ts';
 import type {
+  BreadcrumbItem,
   CellOverrides,
   DetailViewOptions,
   EditViewOptions,
@@ -294,6 +295,7 @@ function buildLayoutOptions(
   ctx: RouteContext,
   title: string,
   navItems: NavItem[],
+  breadcrumbs?: BreadcrumbItem[],
 ): LayoutOptions {
   const { options, authUser } = ctx;
   const basePath = options.basePath;
@@ -302,6 +304,7 @@ function buildLayoutOptions(
     title,
     siteName: options.title,
     nav: navItems,
+    breadcrumbs,
     stylesheetUrl: `${basePath}/styles.css`,
     scriptUrl: `${basePath}/admin.js`,
     user: authUser
@@ -971,7 +974,10 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
 
   const pageHtml = layout(
     content,
-    buildLayoutOptions(ctx, formatTableName(table.name), navItems),
+    buildLayoutOptions(ctx, formatTableName(table.name), navItems, [
+      { label: 'Dashboard', href: cmsUrl(basePath) },
+      { label: formatTableName(table.name) },
+    ]),
   );
 
   return htmlResponse(pageHtml, 200, ctx.options.securityHeaders);
@@ -1173,7 +1179,14 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
 
   const page = layout(
     content,
-    buildLayoutOptions(ctx, recordTitle, navItems),
+    buildLayoutOptions(ctx, recordTitle, navItems, [
+      { label: 'Dashboard', href: cmsUrl(basePath) },
+      {
+        label: formatTableName(table.name),
+        href: cmsUrl(basePath, table.name),
+      },
+      { label: recordTitle },
+    ]),
   );
 
   return htmlResponse(page, 200, ctx.options.securityHeaders);
@@ -2358,7 +2371,14 @@ async function renderCreateForm(
 
   const page = layout(
     content,
-    buildLayoutOptions(ctx, `Create ${formatTableName(table.name)}`, navItems),
+    buildLayoutOptions(ctx, `Create ${formatTableName(table.name)}`, navItems, [
+      { label: 'Dashboard', href: cmsUrl(basePath) },
+      {
+        label: formatTableName(table.name),
+        href: cmsUrl(basePath, table.name),
+      },
+      { label: 'Create' },
+    ]),
   );
 
   return htmlResponse(page, 200, ctx.options.securityHeaders);
@@ -2378,6 +2398,13 @@ async function renderEditForm(
   const recordId = route.recordId!;
   const basePath = options.basePath;
   const navItems = buildNavItems(options.introspected, basePath, table.name);
+
+  // Get display column value for breadcrumb
+  const displayColumn = getDisplayColumn(table);
+  const displayValue = displayColumn && values[displayColumn.propertyName]
+    ? String(values[displayColumn.propertyName])
+    : '';
+  const recordTitle = displayValue || formatTableName(table.name);
 
   // Filter CMS fields to only include writable columns
   // Also include plugin-controlled columns as read-only (so plugins can add custom UI like "Edit with Puck")
@@ -2500,7 +2527,15 @@ async function renderEditForm(
 
   const page = layout(
     content,
-    buildLayoutOptions(ctx, `Edit ${formatTableName(table.name)}`, navItems),
+    buildLayoutOptions(ctx, `Edit ${formatTableName(table.name)}`, navItems, [
+      { label: 'Dashboard', href: cmsUrl(basePath) },
+      {
+        label: formatTableName(table.name),
+        href: cmsUrl(basePath, table.name),
+      },
+      { label: recordTitle, href: cmsUrl(basePath, table.name, recordId) },
+      { label: 'Edit' },
+    ]),
   );
 
   return htmlResponse(page, 200, ctx.options.securityHeaders);

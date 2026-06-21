@@ -94,7 +94,11 @@ export { createView, editView } from './views/edit.ts';
 // ─────────────────────────────────────────────────────────────
 // Components - Layout, navigation, and UI elements
 // ─────────────────────────────────────────────────────────────
-export type { LayoutOptions, NavItem } from './components/layout.ts';
+export type {
+  BreadcrumbItem,
+  LayoutOptions,
+  NavItem,
+} from './components/layout.ts';
 export { defaultStyles, layout, nav } from './components/layout.ts';
 
 export type { AlertType } from './components/alert.ts';
