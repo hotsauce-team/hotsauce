@@ -459,7 +459,7 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
             url: ctx.url,
             route: ctx.route ?? null,
             table: undefined,
-            action: 'list',
+            action: 'dashboard',
           },
         );
       }
@@ -488,12 +488,15 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
     <div class="cms-table-grid">
       ${raw(
         visibleTables.map((table) => {
-          const count = countMap.get(table.name) ?? 0;
-          const label = count === 1 ? 'record' : 'records';
+          const count = countMap.get(table.name);
+          // Show placeholder when count unavailable (query failed), not misleading "0"
+          const countText = count === undefined
+            ? '—'
+            : `${count} ${count === 1 ? 'record' : 'records'}`;
           return html`
             <a href="${cmsUrl(basePath, table.name)}" class="cms-table-card">
               <h3>${formatTableName(table.name)}</h3>
-              <p>${count} ${label}</p>
+              <p>${countText}</p>
             </a>
           `;
         }).join(''),
@@ -1185,9 +1188,15 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
   };
 
   // Get display column value for the page title (e.g., "Morning Ember" instead of "Sauces")
+  // Only use scalar values to avoid "[object Object]" titles from JSON columns
   const displayColumn = getDisplayColumn(table);
-  const displayValue = displayColumn
-    ? String(transformedRecord[displayColumn.propertyName] ?? '')
+  const rawDisplayValue = displayColumn
+    ? transformedRecord[displayColumn.propertyName]
+    : undefined;
+  const displayValue = (rawDisplayValue !== null &&
+      rawDisplayValue !== undefined &&
+      typeof rawDisplayValue !== 'object')
+    ? String(rawDisplayValue)
     : '';
   const recordTitle = displayValue || formatTableName(table.name);
 
@@ -2427,9 +2436,15 @@ async function renderEditForm(
   const navItems = buildNavItems(options.introspected, basePath, table.name);
 
   // Get display column value for breadcrumb
+  // Only use scalar values to avoid "[object Object]" titles from JSON columns
   const displayColumn = getDisplayColumn(table);
-  const displayValue = displayColumn && values[displayColumn.propertyName]
-    ? String(values[displayColumn.propertyName])
+  const rawDisplayValue = displayColumn
+    ? values[displayColumn.propertyName]
+    : undefined;
+  const displayValue = (rawDisplayValue !== null &&
+      rawDisplayValue !== undefined &&
+      typeof rawDisplayValue !== 'object')
+    ? String(rawDisplayValue)
     : '';
   const recordTitle = displayValue || formatTableName(table.name);
 
