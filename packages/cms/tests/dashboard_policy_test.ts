@@ -195,12 +195,13 @@ Deno.test({
         const html = await response.text();
 
         // Should show "3 records" for posts (Alice's posts only), not "10 records"
-        assertStringIncludes(html, 'Posts');
-        assertStringIncludes(html, '3 records'); // Alice's posts only
+        // Use full tag content to avoid false positives ("13 records" contains "3 records")
+        assertStringIncludes(html, '<h3>Posts</h3>');
+        assertStringIncludes(html, '<p>3 records</p>'); // Alice's posts only
 
         // Users table should show all 2 users (no policy = full access)
-        assertStringIncludes(html, 'Users');
-        assertStringIncludes(html, '2 records');
+        assertStringIncludes(html, '<h3>Users</h3>');
+        assertStringIncludes(html, '<p>2 records</p>');
       });
 
       await t.step(

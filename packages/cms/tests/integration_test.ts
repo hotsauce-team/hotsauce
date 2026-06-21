@@ -81,10 +81,10 @@ Deno.test('integration: basic CRUD tests', async (t) => {
 
       assertEquals(response.status, 200);
       const html = await response.text();
-      // Singular for 1 record
-      assertStringIncludes(html, '1 record');
+      // Singular for 1 record (use full tag to avoid matching "11 records" etc.)
+      assertStringIncludes(html, '<p>1 record</p>');
       // Plural for 2 records
-      assertStringIncludes(html, '2 records');
+      assertStringIncludes(html, '<p>2 records</p>');
     },
   );
 

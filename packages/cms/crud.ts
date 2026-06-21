@@ -434,8 +434,8 @@ async function getPolicyVisibleTableNames(
     !t.isJunction && !t.cmsOptions?.hidden
   );
 
-  // When no policies configured, all schema-visible tables are allowed
-  if (!options.policies) {
+  // When policies is {}, no table has a policy, so all schema-visible tables are allowed
+  if (Object.keys(options.policies).length === 0) {
     return schemaVisibleTables.map((t) => t.name);
   }
 
@@ -475,10 +475,12 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
     condition: PolicyApplicationResult['condition'];
   };
 
-  const visibleTablesWithPolicy: TableWithPolicy[] = options.policies
+  const hasPolicies = Object.keys(options.policies).length > 0;
+
+  const visibleTablesWithPolicy: TableWithPolicy[] = hasPolicies
     ? (await Promise.all(
       schemaVisibleTables.map(async (table) => {
-        const tablePolicy = options.policies?.[table.name];
+        const tablePolicy = options.policies[table.name];
         const rowPolicy = extractRowPolicy(tablePolicy);
         const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
         return policyResult.allowed
