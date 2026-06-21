@@ -196,7 +196,11 @@ export function listTable(
         const content = summaryHtml && linkHtml
           ? `${summaryHtml} ${linkHtml}`
           : summaryHtml || linkHtml;
-        return `<td class="cms-td">${content}</td>`;
+
+        // Only use override if we have content, otherwise fall back to default
+        if (content) {
+          return `<td class="cms-td">${content}</td>`;
+        }
       }
       const value = record[col.key];
       const formatted = col.format

@@ -479,7 +479,7 @@ export class PluginService {
 
   /**
    * Execute UI renderField hook for all plugins.
-   * Called when rendering edit/create forms.
+   * Called when rendering any view (list, detail, edit, create).
    * Returns first non-null override, or null for default rendering.
    *
    * @returns Field UI override or null
