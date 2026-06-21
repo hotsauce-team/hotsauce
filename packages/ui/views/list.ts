@@ -1,6 +1,6 @@
 // List view - table of records
 
-import { attrs, escapeHtml, html, raw } from '../html.ts';
+import { attrs, escapeHtml, getSafeUrl, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import type { FieldUIOverride } from '@hotsauce/workers';
@@ -174,16 +174,22 @@ export function listTable(
           : '';
 
         // Build link button (e.g., "Edit with Puck ↗")
+        // Validate URL to prevent javascript:/data: scheme injection
         let linkHtml = '';
         if (override.link) {
-          const { href, label, target } = override.link;
-          const targetAttr = target === '_blank'
-            ? ' target="_blank" rel="noopener"'
-            : '';
-          const arrow = target === '_blank' ? ' ↗' : '';
-          linkHtml = `<a href="${
-            escapeHtml(href)
-          }" class="cms-action"${targetAttr}>${escapeHtml(label)}${arrow}</a>`;
+          const safeHref = getSafeUrl(override.link.href);
+          if (safeHref) {
+            const { label, target } = override.link;
+            const targetAttr = target === '_blank'
+              ? ' target="_blank" rel="noopener"'
+              : '';
+            const arrow = target === '_blank' ? ' ↗' : '';
+            linkHtml = `<a href="${
+              escapeHtml(safeHref)
+            }" class="cms-action"${targetAttr}>${
+              escapeHtml(label)
+            }${arrow}</a>`;
+          }
         }
 
         // Show both summary and link if both exist
