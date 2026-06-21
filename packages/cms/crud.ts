@@ -97,7 +97,10 @@ import {
   updateWithPolicy,
   validateHiddenRequiredColumns,
 } from './policies/mod.ts';
-import type { EvaluatedColumnPolicies } from './policies/mod.ts';
+import type {
+  EvaluatedColumnPolicies,
+  PolicyApplicationResult,
+} from './policies/mod.ts';
 import type { UIRenderFieldContext } from './plugins/types.ts';
 import { toUIFieldInfo } from './ui-field-info.ts';
 import {
@@ -417,51 +420,117 @@ function getFrontendUrl(
 }
 
 /**
- * Render the dashboard page
+ * Get table names visible to the current user based on row policies.
+ * Used to filter sidebar navigation consistently with dashboard.
+ * Returns all schema-visible tables when auth is not configured.
  */
-export async function handleDashboard(ctx: RouteContext): Promise<Response> {
-  const { options } = ctx;
-  const basePath = options.basePath;
+async function getPolicyVisibleTableNames(
+  ctx: RouteContext,
+): Promise<string[]> {
+  const { request, options, authUser } = ctx;
 
-  // Filter out junction tables and tables marked as hidden via $cms({ hidden: true })
-  const visibleTables = options.introspected.tables.filter((t) =>
+  // Get schema-visible tables (not junction, not $cms hidden)
+  const schemaVisibleTables = options.introspected.tables.filter((t) =>
     !t.isJunction && !t.cmsOptions?.hidden
   );
 
-  // Fetch all table counts in a single query using UNION ALL
-  // This avoids N concurrent COUNT(*) queries that can saturate the connection pool
-  // Fail-soft: if the query fails, show dashboard without counts rather than 500
-  let countMap = new Map<string, number>();
-  if (visibleTables.length > 0) {
-    try {
-      const unionParts = visibleTables.map((table) =>
-        // Use parameterized table name (not sql.raw) to prevent injection
-        sql`SELECT ${table.name} as table_name, COUNT(*) as count FROM ${table.table}`
-      );
-      // Join with UNION ALL - reduce from first element to avoid empty accumulator
-      const unionQuery = unionParts.reduce((acc, part) =>
-        sql`${acc} UNION ALL ${part}`
-      );
-      const countResults = await options.db.execute(unionQuery);
-      countMap = new Map(
-        (countResults.rows as Array<
-          { table_name: string; count: string | number }
-        >).map((row) => [row.table_name, Number(row.count)]),
-      );
-    } catch (error) {
-      // Log error but continue rendering dashboard without counts
-      if (options.onError) {
-        options.onError(
-          error instanceof Error ? error : new Error(String(error)),
-          {
-            source: 'handler',
-            request: ctx.request,
-            url: ctx.url,
-            route: ctx.route ?? null,
-            table: undefined,
-            action: 'dashboard',
-          },
-        );
+  // When no auth configured, all schema-visible tables are allowed
+  if (!options.auth) {
+    return schemaVisibleTables.map((t) => t.name);
+  }
+
+  // Filter by row policy
+  const policyCtx = createPolicyContext(request, authUser);
+  const results = await Promise.all(
+    schemaVisibleTables.map(async (table) => {
+      const tablePolicy = options.policies?.[table.name];
+      const rowPolicy = extractRowPolicy(tablePolicy);
+      const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
+      return policyResult.allowed ? table.name : null;
+    }),
+  );
+
+  return results.filter((name): name is string => name !== null);
+}
+
+/**
+ * Render the dashboard page
+ */
+export async function handleDashboard(ctx: RouteContext): Promise<Response> {
+  const { request, options, authUser } = ctx;
+  const basePath = options.basePath;
+
+  // Filter out junction tables and tables marked as hidden via $cms({ hidden: true })
+  const schemaVisibleTables = options.introspected.tables.filter((t) =>
+    !t.isJunction && !t.cmsOptions?.hidden
+  );
+
+  // Filter tables by row policy and collect policy conditions for counts
+  // When auth is enabled, only show tables the user has list access to
+  // Also use policy conditions to filter counts (prevent leaking total counts)
+  const policyCtx = createPolicyContext(request, authUser);
+
+  type TableWithPolicy = {
+    table: typeof schemaVisibleTables[number];
+    condition: PolicyApplicationResult['condition'];
+  };
+
+  const visibleTablesWithPolicy: TableWithPolicy[] = options.auth
+    ? (await Promise.all(
+      schemaVisibleTables.map(async (table) => {
+        const tablePolicy = options.policies?.[table.name];
+        const rowPolicy = extractRowPolicy(tablePolicy);
+        const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
+        return policyResult.allowed
+          ? { table, condition: policyResult.condition }
+          : null;
+      }),
+    )).filter((t): t is TableWithPolicy => t !== null)
+    : schemaVisibleTables.map((table) => ({ table, condition: undefined }));
+
+  const visibleTables = visibleTablesWithPolicy.map((t) => t.table);
+
+  // Fetch table counts with policy conditions applied
+  // Each table may have a different WHERE clause, so we run parallel queries
+  // Fail-soft: if a query fails, that table shows "—" instead of a count
+  const countMap = new Map<string, number>();
+  if (visibleTablesWithPolicy.length > 0) {
+    const countResults = await Promise.all(
+      visibleTablesWithPolicy.map(async ({ table, condition }) => {
+        try {
+          let query = options.db
+            .select({ count: sql<number>`count(*)` })
+            .from(table.table);
+          if (condition) {
+            query = query.where(condition);
+          }
+          const result = await query;
+          return {
+            tableName: table.name,
+            count: Number(result[0]?.count ?? 0),
+          };
+        } catch (error) {
+          // Log error but don't fail the whole dashboard
+          if (options.onError) {
+            options.onError(
+              error instanceof Error ? error : new Error(String(error)),
+              {
+                source: 'handler',
+                request: ctx.request,
+                url: ctx.url,
+                route: ctx.route ?? null,
+                table,
+                action: 'dashboard',
+              },
+            );
+          }
+          return { tableName: table.name, count: undefined };
+        }
+      }),
+    );
+    for (const { tableName, count } of countResults) {
+      if (count !== undefined) {
+        countMap.set(tableName, count);
       }
     }
   }
@@ -645,8 +714,11 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  // Generate navigation
-  const navItems = buildNavItems(options.introspected, basePath, table.name);
+  // Generate navigation (filter by policy so sidebar matches dashboard)
+  const allowedByPolicy = await getPolicyVisibleTableNames(ctx);
+  const navItems = buildNavItems(options.introspected, basePath, table.name, {
+    allowedByPolicy,
+  });
 
   // Detect thumbnail field for grid view
   const cmsFields = tableToCmsFields(table);
@@ -1104,7 +1176,11 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  const navItems = buildNavItems(options.introspected, basePath, table.name);
+  // Generate navigation (filter by policy so sidebar matches dashboard)
+  const allowedByPolicy = await getPolicyVisibleTableNames(ctx);
+  const navItems = buildNavItems(options.introspected, basePath, table.name, {
+    allowedByPolicy,
+  });
 
   // Filter CMS fields to only include readable columns
   const cmsFields = tableToCmsFields(table).filter(
@@ -2289,7 +2365,12 @@ async function renderCreateForm(
   const { options, route, pluginService } = ctx;
   const table = route.table!;
   const basePath = options.basePath;
-  const navItems = buildNavItems(options.introspected, basePath, table.name);
+
+  // Generate navigation (filter by policy so sidebar matches dashboard)
+  const allowedByPolicy = await getPolicyVisibleTableNames(ctx);
+  const navItems = buildNavItems(options.introspected, basePath, table.name, {
+    allowedByPolicy,
+  });
 
   // Filter CMS fields to only include writable columns
   // Also include plugin-controlled columns as read-only (so plugins can add custom UI like "Edit with Puck")
@@ -2433,7 +2514,12 @@ async function renderEditForm(
   const table = route.table!;
   const recordId = route.recordId!;
   const basePath = options.basePath;
-  const navItems = buildNavItems(options.introspected, basePath, table.name);
+
+  // Generate navigation (filter by policy so sidebar matches dashboard)
+  const allowedByPolicy = await getPolicyVisibleTableNames(ctx);
+  const navItems = buildNavItems(options.introspected, basePath, table.name, {
+    allowedByPolicy,
+  });
 
   // Get display column value for breadcrumb
   // Only use scalar values to avoid "[object Object]" titles from JSON columns
