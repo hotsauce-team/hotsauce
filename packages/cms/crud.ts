@@ -827,6 +827,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     > = [];
 
     for (const col of table.columns) {
+      // Skip hidden columns
+      if (col.cmsOptions?.hidden) continue;
+
       // Skip columns not readable by this user
       if (!columnResult.readableColumns.includes(col.name)) continue;
 

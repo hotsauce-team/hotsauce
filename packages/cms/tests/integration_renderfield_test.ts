@@ -534,3 +534,79 @@ Deno.test('integration: renderField produces cellOverrides in list view', async 
 
   await client.close();
 });
+
+Deno.test('integration: hidden columns with plugins are not shown in list view', async () => {
+  // Import pg-core directly for this test's custom schema
+  const { pgTable, serial, varchar, json, timestamp } = await import(
+    'drizzle-orm/pg-core'
+  );
+
+  // Define a schema with a hidden column that also has plugin config
+  const pagesWithHidden = pgTable('pages', {
+    id: serial('id').primaryKey(),
+    title: varchar('title', { length: 200 }).notNull(),
+    // This column has BOTH hidden: true AND plugins config
+    content: json('content').$cms({ hidden: true, plugins: { puck: true } }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  });
+  const schemaWithHiddenPlugin = { pages: pagesWithHidden };
+
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithHiddenPlugin });
+
+  // Create table
+  await db.execute(sql`
+    CREATE TABLE pages (
+      id SERIAL PRIMARY KEY,
+      title VARCHAR(200) NOT NULL,
+      content JSON,
+      created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await db.insert(pagesWithHidden).values({
+    title: 'Test Page',
+    content: { blocks: [] },
+  });
+
+  // Track if renderField was called for the hidden column
+  const calledForColumns: string[] = [];
+
+  const plugin = createRenderFieldPlugin('puck', {
+    onRenderField: (ctx) => {
+      calledForColumns.push(ctx.field.name);
+    },
+  });
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    db,
+    schema: schemaWithHiddenPlugin,
+    basePath: '/admin',
+    plugins: [plugin],
+  });
+
+  // GET list view
+  const response = await handler(new Request('http://localhost/admin/pages'));
+
+  assertEquals(response.status, 200);
+  const html = await response.text();
+
+  // The hidden column should NOT trigger renderField
+  assertEquals(
+    calledForColumns.includes('content'),
+    false,
+    'renderField should not be called for hidden columns',
+  );
+
+  // The custom link should NOT appear (since the column is hidden)
+  assertEquals(
+    html.includes(CUSTOM_LINK_LABEL),
+    false,
+    'Hidden column plugin links should not appear in list view',
+  );
+
+  await client.close();
+});
