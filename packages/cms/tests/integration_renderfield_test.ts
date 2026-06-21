@@ -6,7 +6,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 import { createCmsHandler } from '../mod.ts';
-import type { InProcessPluginConfig } from '../plugins/types.ts';
+import type { FilterContext, InProcessPluginConfig } from '../plugins/types.ts';
 import type { UIRenderFieldContext } from '@hotsauce/workers';
 import {
   createPagesTable,
@@ -607,6 +607,184 @@ Deno.test('integration: hidden columns with plugins are not shown in list view',
     false,
     'Hidden column plugin links should not appear in list view',
   );
+
+  await client.close();
+});
+
+Deno.test('integration: renderField filter receives correct action for each view', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema: schemaWithPlugins });
+  await createPagesTable(db);
+
+  async function resetDb() {
+    await db.execute(sql`TRUNCATE TABLE pages RESTART IDENTITY CASCADE`);
+  }
+
+  // Track actions received by the filter for each view
+  const filterActions: { view: string; action: string }[] = [];
+
+  /**
+   * Create a plugin that records filter context and always returns a link
+   */
+  function createFilterTrackingPlugin(): InProcessPluginConfig {
+    return {
+      name: 'filter-tracker',
+      filter: (ctx: FilterContext) => {
+        // Only track ui:renderField hook calls
+        if (ctx.hookType === 'ui:renderField') {
+          filterActions.push({ view: 'unknown', action: ctx.action });
+        }
+        return true; // Always allow
+      },
+      hooks: {
+        ui: {
+          renderField: (ctx: UIRenderFieldContext) => {
+            // Update the last filter action entry with the actual view
+            const last = filterActions[filterActions.length - 1];
+            if (last && last.view === 'unknown') {
+              last.view = ctx.view;
+            }
+
+            if (!ctx.field.plugin) return null;
+            return {
+              link: { label: 'Test Link', href: '/test' },
+            };
+          },
+        },
+      },
+    };
+  }
+
+  await t.step('list view passes action=read to filter', async () => {
+    await resetDb();
+    filterActions.length = 0; // Clear previous calls
+
+    await db.insert(pages).values({ title: 'Test', content: { data: 1 } });
+
+    const plugin = createFilterTrackingPlugin();
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithPlugins,
+      basePath: '/admin',
+      plugins: [plugin],
+    });
+
+    await handler(new Request('http://localhost/admin/pages'));
+
+    // Find the filter call for list view
+    const listCalls = filterActions.filter((a) => a.view === 'list');
+    assertEquals(
+      listCalls.length > 0,
+      true,
+      'renderField should be called for list view',
+    );
+    assertEquals(
+      listCalls[0]!.action,
+      'read',
+      'list view should pass action=read to filter (viewing existing records)',
+    );
+  });
+
+  await t.step('detail view passes action=read to filter', async () => {
+    await resetDb();
+    filterActions.length = 0;
+
+    await db.insert(pages).values({ title: 'Test', content: { data: 1 } });
+
+    const plugin = createFilterTrackingPlugin();
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithPlugins,
+      basePath: '/admin',
+      plugins: [plugin],
+    });
+
+    await handler(new Request('http://localhost/admin/pages/1'));
+
+    const detailCalls = filterActions.filter((a) => a.view === 'detail');
+    assertEquals(
+      detailCalls.length > 0,
+      true,
+      'renderField should be called for detail view',
+    );
+    assertEquals(
+      detailCalls[0]!.action,
+      'read',
+      'detail view should pass action=read to filter (viewing existing record)',
+    );
+  });
+
+  await t.step('create view passes action=create to filter', async () => {
+    await resetDb();
+    filterActions.length = 0;
+
+    const plugin = createFilterTrackingPlugin();
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithPlugins,
+      basePath: '/admin',
+      plugins: [plugin],
+    });
+
+    await handler(new Request('http://localhost/admin/pages/new'));
+
+    const createCalls = filterActions.filter((a) => a.view === 'create');
+    assertEquals(
+      createCalls.length > 0,
+      true,
+      'renderField should be called for create view',
+    );
+    assertEquals(
+      createCalls[0]!.action,
+      'create',
+      'create view should pass action=create to filter (creating new record)',
+    );
+  });
+
+  await t.step('edit view passes action=read to filter', async () => {
+    await resetDb();
+    filterActions.length = 0;
+
+    await db.insert(pages).values({ title: 'Test', content: { data: 1 } });
+
+    const plugin = createFilterTrackingPlugin();
+
+    const handler = createCmsHandler({
+      csrfSecret: TEST_CSRF_SECRET,
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      db,
+      schema: schemaWithPlugins,
+      basePath: '/admin',
+      plugins: [plugin],
+    });
+
+    await handler(new Request('http://localhost/admin/pages/1/edit'));
+
+    const editCalls = filterActions.filter((a) => a.view === 'edit');
+    assertEquals(
+      editCalls.length > 0,
+      true,
+      'renderField should be called for edit view',
+    );
+    assertEquals(
+      editCalls[0]!.action,
+      'read',
+      'edit view should pass action=read to filter (editing existing record)',
+    );
+  });
 
   await client.close();
 });
