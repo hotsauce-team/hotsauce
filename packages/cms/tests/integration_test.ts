@@ -59,6 +59,35 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     assertStringIncludes(html, 'Posts');
   });
 
+  await t.step(
+    'dashboard shows correct record counts and pluralization',
+    async () => {
+      await resetDb();
+      const handler = createHandler();
+
+      // Insert 1 user and 2 posts (posts require authorId FK)
+      const insertResult = await db.insert(users).values({
+        email: 'a@test.com',
+        name: 'A',
+      }).returning();
+      const userId = insertResult[0]!.id;
+      await db.insert(posts).values([
+        { title: 'Post 1', authorId: userId },
+        { title: 'Post 2', authorId: userId },
+      ]);
+
+      const request = new Request('http://localhost/admin');
+      const response = await handler(request);
+
+      assertEquals(response.status, 200);
+      const html = await response.text();
+      // Singular for 1 record
+      assertStringIncludes(html, '1 record');
+      // Plural for 2 records
+      assertStringIncludes(html, '2 records');
+    },
+  );
+
   await t.step('list view shows empty table', async () => {
     await resetDb();
     const handler = createHandler();

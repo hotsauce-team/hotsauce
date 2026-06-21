@@ -430,23 +430,40 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
 
   // Fetch all table counts in a single query using UNION ALL
   // This avoids N concurrent COUNT(*) queries that can saturate the connection pool
+  // Fail-soft: if the query fails, show dashboard without counts rather than 500
   let countMap = new Map<string, number>();
   if (visibleTables.length > 0) {
-    const unionParts = visibleTables.map((table) =>
-      sql`SELECT ${
-        sql.raw(`'${table.name}'`)
-      } as table_name, COUNT(*) as count FROM ${table.table}`
-    );
-    // Join with UNION ALL - reduce from first element to avoid empty accumulator
-    const unionQuery = unionParts.reduce((acc, part) =>
-      sql`${acc} UNION ALL ${part}`
-    );
-    const countResults = await options.db.execute(unionQuery);
-    countMap = new Map(
-      (countResults.rows as Array<
-        { table_name: string; count: string | number }
-      >).map((row) => [row.table_name, Number(row.count)]),
-    );
+    try {
+      const unionParts = visibleTables.map((table) =>
+        // Use parameterized table name (not sql.raw) to prevent injection
+        sql`SELECT ${table.name} as table_name, COUNT(*) as count FROM ${table.table}`
+      );
+      // Join with UNION ALL - reduce from first element to avoid empty accumulator
+      const unionQuery = unionParts.reduce((acc, part) =>
+        sql`${acc} UNION ALL ${part}`
+      );
+      const countResults = await options.db.execute(unionQuery);
+      countMap = new Map(
+        (countResults.rows as Array<
+          { table_name: string; count: string | number }
+        >).map((row) => [row.table_name, Number(row.count)]),
+      );
+    } catch (error) {
+      // Log error but continue rendering dashboard without counts
+      if (options.onError) {
+        options.onError(
+          error instanceof Error ? error : new Error(String(error)),
+          {
+            source: 'handler',
+            request: ctx.request,
+            url: ctx.url,
+            route: ctx.route ?? null,
+            table: undefined,
+            action: 'list',
+          },
+        );
+      }
+    }
   }
 
   const navItems: NavItem[] = [
