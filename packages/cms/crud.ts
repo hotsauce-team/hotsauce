@@ -422,7 +422,7 @@ function getFrontendUrl(
 /**
  * Get table names visible to the current user based on row policies.
  * Used to filter sidebar navigation consistently with dashboard.
- * Returns all schema-visible tables when auth is not configured.
+ * Returns all schema-visible tables when policies are not configured.
  */
 async function getPolicyVisibleTableNames(
   ctx: RouteContext,
@@ -434,8 +434,8 @@ async function getPolicyVisibleTableNames(
     !t.isJunction && !t.cmsOptions?.hidden
   );
 
-  // When no auth configured, all schema-visible tables are allowed
-  if (!options.auth) {
+  // When no policies configured, all schema-visible tables are allowed
+  if (!options.policies) {
     return schemaVisibleTables.map((t) => t.name);
   }
 
@@ -466,7 +466,7 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
   );
 
   // Filter tables by row policy and collect policy conditions for counts
-  // When auth is enabled, only show tables the user has list access to
+  // When policies are configured, only show tables the user has list access to
   // Also use policy conditions to filter counts (prevent leaking total counts)
   const policyCtx = createPolicyContext(request, authUser);
 
@@ -475,7 +475,7 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
     condition: PolicyApplicationResult['condition'];
   };
 
-  const visibleTablesWithPolicy: TableWithPolicy[] = options.auth
+  const visibleTablesWithPolicy: TableWithPolicy[] = options.policies
     ? (await Promise.all(
       schemaVisibleTables.map(async (table) => {
         const tablePolicy = options.policies?.[table.name];

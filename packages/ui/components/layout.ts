@@ -101,7 +101,8 @@ export function breadcrumbs(items: BreadcrumbItem[]): string {
     const isLast = index === items.length - 1;
     if (isLast || !item.href) {
       return html`
-        <span class="cms-breadcrumb-current">${item.label}</span>
+        <span class="cms-breadcrumb-current" aria-current="page">${item
+          .label}</span>
       `;
     }
     return html`

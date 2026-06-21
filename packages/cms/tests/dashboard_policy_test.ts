@@ -143,86 +143,50 @@ Deno.test({
   sanitizeOps: false,
   fn: async (t) => {
     const client = new PGlite();
-    const db = drizzle(client, { schema: schemaWithAuth });
+    try {
+      const db = drizzle(client, { schema: schemaWithAuth });
 
-    await createBasicTables(db);
+      await createBasicTables(db);
 
-    async function resetDb() {
-      await db.execute(
-        sql`TRUNCATE TABLE posts, users RESTART IDENTITY CASCADE`,
-      );
-    }
+      const resetDb = async () => {
+        await db.execute(
+          sql`TRUNCATE TABLE posts, users RESTART IDENTITY CASCADE`,
+        );
+      };
 
-    await t.step('counts filtered by ownedBy policy', async () => {
-      await resetDb();
-
-      // Create two users
-      await db.insert(users).values([
-        { email: 'alice@example.com', name: 'Alice' },
-        { email: 'bob@example.com', name: 'Bob' },
-      ]);
-
-      // Create posts: 3 by Alice (user 1), 7 by Bob (user 2)
-      await db.insert(posts).values([
-        { title: 'Alice Post 1', authorId: 1 },
-        { title: 'Alice Post 2', authorId: 1 },
-        { title: 'Alice Post 3', authorId: 1 },
-        { title: 'Bob Post 1', authorId: 2 },
-        { title: 'Bob Post 2', authorId: 2 },
-        { title: 'Bob Post 3', authorId: 2 },
-        { title: 'Bob Post 4', authorId: 2 },
-        { title: 'Bob Post 5', authorId: 2 },
-        { title: 'Bob Post 6', authorId: 2 },
-        { title: 'Bob Post 7', authorId: 2 },
-      ]);
-
-      // Call handleDashboard directly with Alice (user 1) context
-      const ctx = buildDashboardContext(
-        db,
-        schemaWithAuth,
-        {
-          // Posts filtered by owner - Alice should only see her 3 posts
-          posts: ownedBy(posts, 'authorId'),
-          // Users table has no policy - full access
-        },
-        { id: '1' }, // Alice as user 1
-      );
-
-      const response = await handleDashboard(ctx);
-      assertEquals(response.status, 200);
-
-      const html = await response.text();
-
-      // Should show "3 records" for posts (Alice's posts only), not "10 records"
-      assertStringIncludes(html, 'Posts');
-      assertStringIncludes(html, '3 records'); // Alice's posts only
-
-      // Users table should show all 2 users (no policy = full access)
-      assertStringIncludes(html, 'Users');
-      assertStringIncludes(html, '2 records');
-    });
-
-    await t.step(
-      'table hidden when policy returns allowed: false',
-      async () => {
+      await t.step('counts filtered by ownedBy policy', async () => {
         await resetDb();
 
-        // Create regular user
-        await db.insert(users).values({
-          email: 'regular@example.com',
-          name: 'Regular User',
-        });
+        // Create two users
+        await db.insert(users).values([
+          { email: 'alice@example.com', name: 'Alice' },
+          { email: 'bob@example.com', name: 'Bob' },
+        ]);
 
-        // Call handleDashboard with non-admin user (role: 'editor')
+        // Create posts: 3 by Alice (user 1), 7 by Bob (user 2)
+        await db.insert(posts).values([
+          { title: 'Alice Post 1', authorId: 1 },
+          { title: 'Alice Post 2', authorId: 1 },
+          { title: 'Alice Post 3', authorId: 1 },
+          { title: 'Bob Post 1', authorId: 2 },
+          { title: 'Bob Post 2', authorId: 2 },
+          { title: 'Bob Post 3', authorId: 2 },
+          { title: 'Bob Post 4', authorId: 2 },
+          { title: 'Bob Post 5', authorId: 2 },
+          { title: 'Bob Post 6', authorId: 2 },
+          { title: 'Bob Post 7', authorId: 2 },
+        ]);
+
+        // Call handleDashboard directly with Alice (user 1) context
         const ctx = buildDashboardContext(
           db,
           schemaWithAuth,
           {
-            // Users table only visible to admins
-            users: roleIs('admin'),
-            // Posts table visible to everyone (no policy = full access)
+            // Posts filtered by owner - Alice should only see her 3 posts
+            posts: ownedBy(posts, 'authorId'),
+            // Users table has no policy - full access
           },
-          { id: '1', role: 'editor' }, // Non-admin user
+          { id: '1' }, // Alice as user 1
         );
 
         const response = await handleDashboard(ctx);
@@ -230,74 +194,113 @@ Deno.test({
 
         const html = await response.text();
 
-        // Posts should be visible (0 posts, no policy)
+        // Should show "3 records" for posts (Alice's posts only), not "10 records"
         assertStringIncludes(html, 'Posts');
+        assertStringIncludes(html, '3 records'); // Alice's posts only
 
-        // Users should NOT be visible (roleIs('admin') policy, user is 'editor')
-        // Check that "Users" does not appear in the table cards
-        const tableGridMatch = html.match(
-          /<div class="cms-table-grid">([\s\S]*?)<\/div>/,
-        );
-        const tableGrid = tableGridMatch?.[1] ?? '';
-        assertEquals(
-          tableGrid.includes('>Users<'),
-          false,
-          'Users table should not appear in dashboard cards for non-admin',
-        );
-      },
-    );
+        // Users table should show all 2 users (no policy = full access)
+        assertStringIncludes(html, 'Users');
+        assertStringIncludes(html, '2 records');
+      });
 
-    await t.step('no auth = no policy filtering (full counts)', async () => {
-      await resetDb();
+      await t.step(
+        'table hidden when policy returns allowed: false',
+        async () => {
+          await resetDb();
 
-      // Create users and posts
-      await db.insert(users).values([
-        { email: 'alice@example.com', name: 'Alice' },
-        { email: 'bob@example.com', name: 'Bob' },
-      ]);
+          // Create regular user
+          await db.insert(users).values({
+            email: 'regular@example.com',
+            name: 'Regular User',
+          });
 
-      await db.insert(posts).values([
-        { title: 'Post 1', authorId: 1 },
-        { title: 'Post 2', authorId: 1 },
-        { title: 'Post 3', authorId: 2 },
-      ]);
+          // Call handleDashboard with non-admin user (role: 'editor')
+          const ctx = buildDashboardContext(
+            db,
+            schemaWithAuth,
+            {
+              // Users table only visible to admins
+              users: roleIs('admin'),
+              // Posts table visible to everyone (no policy = full access)
+            },
+            { id: '1', role: 'editor' }, // Non-admin user
+          );
 
-      // Call handleDashboard WITHOUT auth (no authUser)
-      // Note: when auth is undefined in options, policies are not evaluated
-      const introspected = introspectFullSchema(schemaWithAuth);
-      const url = new URL('http://localhost/admin');
-      const request = new Request(url);
+          const response = await handleDashboard(ctx);
+          assertEquals(response.status, 200);
 
-      const options: ResolvedCmsOptions = {
-        introspected,
-        db,
-        basePath: '/admin',
-        title: 'Test CMS',
-        csrfSecret: TEST_CSRF_SECRET,
-        isAuthenticated: () => true,
-        canAccess: () => true,
-        parsers: {},
-        policies:
-          'dangerously-open' as unknown as ResolvedCmsOptions['policies'],
-        // No auth - policies should not filter
-        securityHeaders: {},
-        routeSecurityHeaders: new Map(),
-      };
+          const html = await response.text();
 
-      const route: ParsedRoute = { table: null, action: 'dashboard' };
-      const ctx: RouteContext = { request, options, route, url };
+          // Posts should be visible (0 posts, no policy)
+          assertStringIncludes(html, 'Posts');
 
-      const response = await handleDashboard(ctx);
-      assertEquals(response.status, 200);
+          // Users should NOT be visible (roleIs('admin') policy, user is 'editor')
+          // Check that "Users" does not appear in the table cards
+          const tableGridMatch = html.match(
+            /<div class="cms-table-grid">([\s\S]*?)<\/div>/,
+          );
+          const tableGrid = tableGridMatch?.[1] ?? '';
+          assertEquals(
+            tableGrid.includes('>Users<'),
+            false,
+            'Users table should not appear in dashboard cards for non-admin',
+          );
+        },
+      );
 
-      const html = await response.text();
+      await t.step(
+        'no policies = no policy filtering (full counts)',
+        async () => {
+          await resetDb();
 
-      // Should show full counts (no policy filtering)
-      assertStringIncludes(html, '2 records'); // All users
-      assertStringIncludes(html, '3 records'); // All posts
-    });
+          // Create users and posts
+          await db.insert(users).values([
+            { email: 'alice@example.com', name: 'Alice' },
+            { email: 'bob@example.com', name: 'Bob' },
+          ]);
 
-    client.close();
+          await db.insert(posts).values([
+            { title: 'Post 1', authorId: 1 },
+            { title: 'Post 2', authorId: 1 },
+            { title: 'Post 3', authorId: 2 },
+          ]);
+
+          // Call handleDashboard with empty policies (equivalent to 'dangerously-open')
+          // When policies is {}, no table has a policy, so all get full access
+          const introspected = introspectFullSchema(schemaWithAuth);
+          const url = new URL('http://localhost/admin');
+          const request = new Request(url);
+
+          const options: ResolvedCmsOptions = {
+            introspected,
+            db,
+            basePath: '/admin',
+            title: 'Test CMS',
+            csrfSecret: TEST_CSRF_SECRET,
+            isAuthenticated: () => true,
+            canAccess: () => true,
+            parsers: {},
+            policies: {}, // Empty policies = full access to all tables
+            securityHeaders: {},
+            routeSecurityHeaders: new Map(),
+          };
+
+          const route: ParsedRoute = { table: null, action: 'dashboard' };
+          const ctx: RouteContext = { request, options, route, url };
+
+          const response = await handleDashboard(ctx);
+          assertEquals(response.status, 200);
+
+          const html = await response.text();
+
+          // Should show full counts (no policy filtering)
+          assertStringIncludes(html, '2 records'); // All users
+          assertStringIncludes(html, '3 records'); // All posts
+        },
+      );
+    } finally {
+      client.close();
+    }
   },
 });
 
@@ -310,83 +313,85 @@ Deno.test({
   sanitizeOps: false,
   fn: async (t) => {
     const client = new PGlite();
-    const db = drizzle(client, { schema: schemaWithAuth });
+    try {
+      const db = drizzle(client, { schema: schemaWithAuth });
 
-    await createBasicTables(db);
+      await createBasicTables(db);
 
-    await t.step(
-      'sidebar hides tables when policy returns allowed: false',
-      async () => {
-        // Call handleList on posts table as an editor
-        // The users table has roleIs('admin') policy - should be hidden from sidebar
-        const ctx = buildListContext(
-          db,
-          schemaWithAuth,
-          'posts',
-          {
-            // Users table only visible to admins
-            users: roleIs('admin'),
-            // Posts table visible to everyone
-          },
-          { id: '1', role: 'editor' }, // Non-admin user
-        );
+      await t.step(
+        'sidebar hides tables when policy returns allowed: false',
+        async () => {
+          // Call handleList on posts table as an editor
+          // The users table has roleIs('admin') policy - should be hidden from sidebar
+          const ctx = buildListContext(
+            db,
+            schemaWithAuth,
+            'posts',
+            {
+              // Users table only visible to admins
+              users: roleIs('admin'),
+              // Posts table visible to everyone
+            },
+            { id: '1', role: 'editor' }, // Non-admin user
+          );
 
-        const response = await handleList(ctx);
-        assertEquals(response.status, 200);
+          const response = await handleList(ctx);
+          assertEquals(response.status, 200);
 
-        const html = await response.text();
+          const html = await response.text();
 
-        // Sidebar should show Posts (we're viewing it)
-        // Extract the sidebar navigation
-        const sidebarMatch = html.match(
-          /<aside[^>]*class="cms-sidebar"[^>]*>([\s\S]*?)<\/aside>/,
-        );
-        const sidebar = sidebarMatch?.[1] ?? '';
+          // Sidebar should show Posts (we're viewing it)
+          // Extract the sidebar navigation
+          const sidebarMatch = html.match(
+            /<aside[^>]*class="cms-sidebar"[^>]*>([\s\S]*?)<\/aside>/,
+          );
+          const sidebar = sidebarMatch?.[1] ?? '';
 
-        // Posts should be in sidebar (we have access)
-        assertStringIncludes(sidebar, '>Posts<');
+          // Posts should be in sidebar (we have access)
+          assertStringIncludes(sidebar, '>Posts<');
 
-        // Users should NOT be in sidebar (roleIs('admin') policy, user is 'editor')
-        assertEquals(
-          sidebar.includes('>Users<'),
-          false,
-          'Users table should not appear in sidebar for non-admin',
-        );
-      },
-    );
+          // Users should NOT be in sidebar (roleIs('admin') policy, user is 'editor')
+          assertEquals(
+            sidebar.includes('>Users<'),
+            false,
+            'Users table should not appear in sidebar for non-admin',
+          );
+        },
+      );
 
-    await t.step(
-      'sidebar shows all tables when user has admin role',
-      async () => {
-        // Call handleList on posts table as an admin
-        const ctx = buildListContext(
-          db,
-          schemaWithAuth,
-          'posts',
-          {
-            // Users table only visible to admins
-            users: roleIs('admin'),
-          },
-          { id: '1', role: 'admin' }, // Admin user
-        );
+      await t.step(
+        'sidebar shows all tables when user has admin role',
+        async () => {
+          // Call handleList on posts table as an admin
+          const ctx = buildListContext(
+            db,
+            schemaWithAuth,
+            'posts',
+            {
+              // Users table only visible to admins
+              users: roleIs('admin'),
+            },
+            { id: '1', role: 'admin' }, // Admin user
+          );
 
-        const response = await handleList(ctx);
-        assertEquals(response.status, 200);
+          const response = await handleList(ctx);
+          assertEquals(response.status, 200);
 
-        const html = await response.text();
+          const html = await response.text();
 
-        // Extract the sidebar navigation
-        const sidebarMatch = html.match(
-          /<aside[^>]*class="cms-sidebar"[^>]*>([\s\S]*?)<\/aside>/,
-        );
-        const sidebar = sidebarMatch?.[1] ?? '';
+          // Extract the sidebar navigation
+          const sidebarMatch = html.match(
+            /<aside[^>]*class="cms-sidebar"[^>]*>([\s\S]*?)<\/aside>/,
+          );
+          const sidebar = sidebarMatch?.[1] ?? '';
 
-        // Both tables should be in sidebar for admin
-        assertStringIncludes(sidebar, '>Posts<');
-        assertStringIncludes(sidebar, '>Users<');
-      },
-    );
-
-    client.close();
+          // Both tables should be in sidebar for admin
+          assertStringIncludes(sidebar, '>Posts<');
+          assertStringIncludes(sidebar, '>Users<');
+        },
+      );
+    } finally {
+      client.close();
+    }
   },
 });
