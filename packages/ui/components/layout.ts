@@ -77,7 +77,7 @@ export function defaultStyles(stylesheetUrl = 'styles.css'): string {
 export function nav(items: NavItem[]): string {
   const itemsHtml = items.map((item) => {
     const divider = item.dividerAfter
-      ? '<li class="cms-nav-divider" role="separator"></li>'
+      ? '<li class="cms-nav-divider" aria-hidden="true"></li>'
       : '';
     return html`
       <li class="cms-nav-item${raw(item.active ? ' active' : '')}">
