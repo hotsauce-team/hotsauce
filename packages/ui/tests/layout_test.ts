@@ -111,3 +111,31 @@ Deno.test('layout: includes stylesheet link', () => {
     '<link rel="stylesheet" href="/admin/styles.css">',
   );
 });
+
+Deno.test('layout: sidebar has popover attribute and id for mobile navigation', () => {
+  const result = layout('<p>Content</p>', {
+    title: 'Test Page',
+  });
+
+  // Sidebar should have id="cms-nav" and popover attribute
+  assertStringIncludes(result, 'id="cms-nav"');
+  assertStringIncludes(result, 'popover');
+});
+
+Deno.test('layout: menu toggle has correct accessibility attributes', () => {
+  const result = layout('<p>Content</p>', {
+    title: 'Test Page',
+  });
+
+  // Toggle button should have:
+  // - type="button" (prevent form submission)
+  // - popovertarget="cms-nav" (control the popover)
+  // - aria-controls="cms-nav" (accessibility association)
+  // - aria-label (accessible name)
+  assertStringIncludes(result, 'type="button"');
+  assertStringIncludes(result, 'popovertarget="cms-nav"');
+  assertStringIncludes(result, 'aria-controls="cms-nav"');
+  assertStringIncludes(result, 'aria-label="Menu"');
+  // SVG should be aria-hidden
+  assertStringIncludes(result, 'aria-hidden="true"');
+});

@@ -110,8 +110,8 @@ export function layout(content: string, options: LayoutOptions): string {
     </aside>
     <main class="cms-main">
       <header class="cms-header">
-        <button class="cms-menu-toggle" popovertarget="cms-nav" aria-label="Menu">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <button type="button" class="cms-menu-toggle" popovertarget="cms-nav" aria-controls="cms-nav" aria-label="Menu">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <path d="M3 12h18M3 6h18M3 18h18"/>
           </svg>
         </button>

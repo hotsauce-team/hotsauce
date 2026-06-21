@@ -640,6 +640,10 @@ body {
   .cms-layout {
     flex-direction: column;
   }
+
+  .cms-sidebar {
+    width: 100%;
+  }
 }
 
 /* Popover-enabled mobile navigation */
@@ -659,6 +663,8 @@ body {
       margin: 0;
       border: none;
       padding: 1rem 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     .cms-sidebar::backdrop {
@@ -667,6 +673,11 @@ body {
 
     .cms-header {
       gap: 1rem;
+      justify-content: flex-start;
+    }
+
+    .cms-user {
+      margin-left: auto;
     }
   }
 
