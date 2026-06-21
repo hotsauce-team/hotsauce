@@ -1,8 +1,9 @@
 // List view - table of records
 
-import { attrs, escapeHtml, html, raw } from '../html.ts';
+import { attrs, escapeHtml, getSafeUrl, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
+import type { FieldUIOverride } from '@hotsauce/workers';
 import type { RelationOption } from '../forms/inputs.ts';
 import {
   viewToggle,
@@ -34,6 +35,15 @@ export interface ListColumn {
   /** Format function for cell value */
   format?: (value: unknown) => string;
 }
+
+/**
+ * Cell overrides map: recordId -> columnKey -> FieldUIOverride
+ * Used to render plugin links in list cells.
+ */
+export type CellOverrides = Map<
+  string | number,
+  Record<string, FieldUIOverride>
+>;
 
 /**
  * Options for list view
@@ -107,6 +117,7 @@ export function listTable(
   options: ListViewOptions,
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: Map<string | number, ManyToManyDisplayData[]> = new Map(),
+  cellOverrides: CellOverrides = new Map(),
 ): string {
   const primaryKey = options.primaryKey ?? 'id';
   const showActions = options.showEdit || options.showDelete ||
@@ -149,8 +160,48 @@ export function listTable(
   ).join('\n      ');
 
   const rows = records.map((record) => {
-    const id = record[primaryKey];
+    const id = record[primaryKey] as string | number;
+    const recordOverrides = cellOverrides.get(id) ?? {};
     const cells = columns.map((col) => {
+      // Check for plugin override
+      const override = recordOverrides[col.key];
+      if (override?.link || override?.valueSummary) {
+        // Build summary text (e.g., "8 blocks")
+        const summaryHtml = override.valueSummary
+          ? `<span class="cms-value-summary">${
+            escapeHtml(override.valueSummary)
+          }</span>`
+          : '';
+
+        // Build link button (e.g., "Edit with Puck ↗")
+        // Validate URL to prevent javascript:/data: scheme injection
+        let linkHtml = '';
+        if (override.link) {
+          const safeHref = getSafeUrl(override.link.href);
+          if (safeHref) {
+            const { label, target } = override.link;
+            const targetAttr = target === '_blank'
+              ? ' target="_blank" rel="noopener"'
+              : '';
+            const arrow = target === '_blank' ? ' ↗' : '';
+            linkHtml = `<a href="${
+              escapeHtml(safeHref)
+            }" class="cms-action"${targetAttr}>${
+              escapeHtml(label)
+            }${arrow}</a>`;
+          }
+        }
+
+        // Show both summary and link if both exist
+        const content = summaryHtml && linkHtml
+          ? `${summaryHtml} ${linkHtml}`
+          : summaryHtml || linkHtml;
+
+        // Only use override if we have content, otherwise fall back to default
+        if (content) {
+          return `<td class="cms-td">${content}</td>`;
+        }
+      }
       const value = record[col.key];
       const formatted = col.format
         ? col.format(value)
@@ -257,6 +308,7 @@ export function listView(
   options: ListViewOptions,
   relationData: Record<string, RelationOption[]> = {},
   manyToManyData: Map<string | number, ManyToManyDisplayData[]> = new Map(),
+  cellOverrides: CellOverrides = new Map(),
 ): string {
   const viewToggleHtml = options.viewToggle
     ? viewToggle(options.viewToggle)
@@ -272,7 +324,16 @@ export function listView(
             .baseUrl}/new" class="cms-btn cms-btn-primary">Create New</a>
         </div>
       </header>
-      ${raw(listTable(columns, records, options, relationData, manyToManyData))}
+      ${raw(
+        listTable(
+          columns,
+          records,
+          options,
+          relationData,
+          manyToManyData,
+          cellOverrides,
+        ),
+      )}
     </div>
   `;
 }

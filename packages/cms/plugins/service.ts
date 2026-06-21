@@ -479,7 +479,7 @@ export class PluginService {
 
   /**
    * Execute UI renderField hook for all plugins.
-   * Called when rendering edit/create forms.
+   * Called when rendering any view (list, detail, edit, create).
    * Returns first non-null override, or null for default rendering.
    *
    * @returns Field UI override or null
@@ -491,12 +491,12 @@ export class PluginService {
     if (allPlugins.length === 0) return null;
 
     // Apply plugin filters
-    // Use 'read' action for UI hooks since we're rendering a view
+    // Use 'create' action only for create view, 'read' for all others (edit, detail, list)
     const plugins = this.applyFilter(
       allPlugins,
       'ui:renderField',
       ctx.table,
-      ctx.view === 'edit' ? 'read' : 'create',
+      ctx.view === 'create' ? 'create' : 'read',
       ctx.user,
     );
     if (plugins.length === 0) return null;
