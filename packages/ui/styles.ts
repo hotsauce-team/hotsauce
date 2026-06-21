@@ -65,6 +65,12 @@ body {
 
 .cms-nav { list-style: none; margin: 0; padding: 0; }
 
+.cms-nav-divider {
+  height: 1px;
+  background: var(--cms-gray-700);
+  margin: 0.5rem 1rem;
+}
+
 .cms-nav-item a {
   display: block;
   padding: 0.5rem 1rem;

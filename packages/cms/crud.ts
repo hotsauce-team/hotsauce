@@ -69,6 +69,7 @@ import {
   fetchAllRelationOptions,
   fetchManyToManyData,
   fetchManyToManyDisplayData,
+  getDisplayColumn,
   getEditableColumns,
   getListColumns,
   getPrimaryKeyColumn,
@@ -415,7 +416,7 @@ function getFrontendUrl(
 /**
  * Render the dashboard page
  */
-export function handleDashboard(ctx: RouteContext): Response {
+export async function handleDashboard(ctx: RouteContext): Promise<Response> {
   const { options } = ctx;
   const basePath = options.basePath;
 
@@ -424,8 +425,24 @@ export function handleDashboard(ctx: RouteContext): Response {
     !t.isJunction && !t.cmsOptions?.hidden
   );
 
+  // Fetch record counts for all visible tables
+  const tableCounts = await Promise.all(
+    visibleTables.map(async (table) => {
+      const countResult = await options.db
+        .select({ count: sql<number>`count(*)` })
+        .from(table.table);
+      return { name: table.name, count: Number(countResult[0]?.count ?? 0) };
+    }),
+  );
+  const countMap = new Map(tableCounts.map((t) => [t.name, t.count]));
+
   const navItems: NavItem[] = [
-    { href: cmsUrl(basePath), label: 'Dashboard', active: true },
+    {
+      href: cmsUrl(basePath),
+      label: 'Dashboard',
+      active: true,
+      dividerAfter: true,
+    },
     ...visibleTables.map((t) => ({
       href: cmsUrl(basePath, t.name),
       label: formatTableName(t.name),
@@ -440,14 +457,16 @@ export function handleDashboard(ctx: RouteContext): Response {
     <h2>Tables</h2>
     <div class="cms-table-grid">
       ${raw(
-        visibleTables.map((table) =>
-          html`
+        visibleTables.map((table) => {
+          const count = countMap.get(table.name) ?? 0;
+          const label = count === 1 ? 'record' : 'records';
+          return html`
             <a href="${cmsUrl(basePath, table.name)}" class="cms-table-card">
               <h3>${formatTableName(table.name)}</h3>
-              <p>${table.columns.length} columns</p>
+              <p>${count} ${label}</p>
             </a>
-          `
-        ).join(''),
+          `;
+        }).join(''),
       )}
     </div>
   `;
@@ -1132,11 +1151,18 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
     frontendUrl,
   };
 
+  // Get display column value for the page title (e.g., "Morning Ember" instead of "Sauces")
+  const displayColumn = getDisplayColumn(table);
+  const displayValue = displayColumn
+    ? String(transformedRecord[displayColumn.propertyName] ?? '')
+    : '';
+  const recordTitle = displayValue || formatTableName(table.name);
+
   // Build content with optional flash message
   let content = '';
 
   content += detailView(
-    formatTableName(table.name),
+    recordTitle,
     cmsFields,
     transformedRecord,
     detailOptions,
@@ -1147,7 +1173,7 @@ export async function handleRead(ctx: RouteContext): Promise<Response> {
 
   const page = layout(
     content,
-    buildLayoutOptions(ctx, `View ${formatTableName(table.name)}`, navItems),
+    buildLayoutOptions(ctx, recordTitle, navItems),
   );
 
   return htmlResponse(page, 200, ctx.options.securityHeaders);

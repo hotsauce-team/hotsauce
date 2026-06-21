@@ -37,7 +37,12 @@ export function buildNavItems(
   );
 
   return [
-    { href: cmsUrl(basePath), label: 'Dashboard', active: !activeTable },
+    {
+      href: cmsUrl(basePath),
+      label: 'Dashboard',
+      active: !activeTable,
+      dividerAfter: true,
+    },
     ...visibleTables.map((t) => ({
       href: cmsUrl(basePath, t.name),
       label: formatTableName(t.name),

@@ -15,6 +15,8 @@ export interface NavItem {
   active?: boolean;
   /** Icon (optional, HTML string) */
   icon?: string;
+  /** Show a divider line after this item */
+  dividerAfter?: boolean;
 }
 
 /**
@@ -61,13 +63,16 @@ export function defaultStyles(stylesheetUrl = 'styles.css'): string {
  * Render navigation list
  */
 export function nav(items: NavItem[]): string {
-  const itemsHtml = items.map((item) =>
-    html`
+  const itemsHtml = items.map((item) => {
+    const divider = item.dividerAfter
+      ? '<li class="cms-nav-divider" role="separator"></li>'
+      : '';
+    return html`
       <li class="cms-nav-item${raw(item.active ? ' active' : '')}">
         <a href="${item.href}">${raw(item.icon ?? '')}${item.label}</a>
       </li>
-    `
-  ).join('\n    ');
+    ` + divider;
+  }).join('\n    ');
 
   return `<ul class="cms-nav">
     ${itemsHtml}
