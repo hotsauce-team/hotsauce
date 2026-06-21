@@ -618,4 +618,78 @@ body {
   color: var(--cms-gray-300);
   cursor: not-allowed;
 }
+
+/* Mobile Navigation (Popover API) */
+.cms-menu-toggle {
+  display: none;
+  background: var(--cms-gray-900);
+  color: white;
+  border: none;
+  border-radius: var(--cms-radius);
+  padding: 0.5rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.cms-menu-toggle:hover {
+  background: var(--cms-gray-700);
+}
+
+/* Fallback: sidebar always visible if popover not supported */
+@media (max-width: 768px) {
+  .cms-layout {
+    flex-direction: column;
+  }
+
+  .cms-sidebar {
+    width: 100%;
+  }
+}
+
+/* Popover-enabled mobile navigation */
+@supports selector(:popover-open) {
+  @media (max-width: 768px) {
+    .cms-menu-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .cms-sidebar[popover] {
+      position: fixed;
+      inset: 0 auto 0 0;
+      width: 240px;
+      height: 100%;
+      margin: 0;
+      border: none;
+      padding: 1rem 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+    }
+
+    .cms-sidebar::backdrop {
+      background: rgba(0, 0, 0, 0.4);
+    }
+
+    .cms-header {
+      gap: 1rem;
+      justify-content: flex-start;
+    }
+
+    .cms-user {
+      margin-left: auto;
+    }
+  }
+
+  @media (min-width: 769px) {
+    /* On desktop, sidebar is always visible (override popover hidden state) */
+    .cms-sidebar[popover] {
+      display: block;
+      position: static;
+      height: auto;
+      border: none;
+      margin: 0;
+    }
+  }
+}
 `;
