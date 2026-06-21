@@ -428,16 +428,26 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
     !t.isJunction && !t.cmsOptions?.hidden
   );
 
-  // Fetch record counts for all visible tables
-  const tableCounts = await Promise.all(
-    visibleTables.map(async (table) => {
-      const countResult = await options.db
-        .select({ count: sql<number>`count(*)` })
-        .from(table.table);
-      return { name: table.name, count: Number(countResult[0]?.count ?? 0) };
-    }),
-  );
-  const countMap = new Map(tableCounts.map((t) => [t.name, t.count]));
+  // Fetch all table counts in a single query using UNION ALL
+  // This avoids N concurrent COUNT(*) queries that can saturate the connection pool
+  let countMap = new Map<string, number>();
+  if (visibleTables.length > 0) {
+    const unionParts = visibleTables.map((table) =>
+      sql`SELECT ${
+        sql.raw(`'${table.name}'`)
+      } as table_name, COUNT(*) as count FROM ${table.table}`
+    );
+    // Join with UNION ALL - reduce from first element to avoid empty accumulator
+    const unionQuery = unionParts.reduce((acc, part) =>
+      sql`${acc} UNION ALL ${part}`
+    );
+    const countResults = await options.db.execute(unionQuery);
+    countMap = new Map(
+      (countResults.rows as Array<
+        { table_name: string; count: string | number }
+      >).map((row) => [row.table_name, Number(row.count)]),
+    );
+  }
 
   const navItems: NavItem[] = [
     {
