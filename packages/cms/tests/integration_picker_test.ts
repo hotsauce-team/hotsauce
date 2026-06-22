@@ -789,7 +789,7 @@ Deno.test('integration: picker mode tests', async (t) => {
         observedSources.has(pluginSource('puck')),
         true,
         `Expected policy to receive source='${pluginSource('puck')}' but got: ${
-          [...observedSources].join(', ')
+          [...observedSources].map((s) => s ?? 'undefined').join(', ')
         }`,
       );
     },
