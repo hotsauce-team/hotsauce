@@ -716,11 +716,13 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     );
   }
 
-  // Generate navigation (filter by policy so sidebar matches dashboard)
-  const allowedByPolicy = await getPolicyVisibleTableNames(ctx);
-  const navItems = buildNavItems(options.introspected, basePath, table.name, {
-    allowedByPolicy,
-  });
+  // Generate navigation (filter by policy so sidebar matches dashboard).
+  // Skip in picker mode (pickerLayout has no sidebar) to avoid extra policy evaluation.
+  const navItems = pickerMode
+    ? []
+    : buildNavItems(options.introspected, basePath, table.name, {
+      allowedByPolicy: await getPolicyVisibleTableNames(ctx),
+    });
 
   // Detect thumbnail field for grid view
   const cmsFields = tableToCmsFields(table);
