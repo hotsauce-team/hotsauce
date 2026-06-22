@@ -888,7 +888,11 @@ const handler = createCmsHandler({
   // Use policies for fine-grained access control
   policies: {
     settings: () => false, // Block access to settings
-    posts: (ctx) => ctx.user?.role === 'admin' || ctx.action !== 'delete',
+    posts: (ctx, action) => {
+      if (ctx.user?.role === 'admin') return undefined; // Admin: full access
+      if (action === 'delete') return false; // Non-admin: no delete
+      return undefined; // Non-admin: allow other actions
+    },
   },
 });
 ```
