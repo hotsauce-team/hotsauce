@@ -420,15 +420,9 @@ function getFrontendUrl(
 }
 
 /**
- * Get table names visible to the current user based on canAccess hook and row policies.
+ * Get table names visible to the current user based on row policies.
  * Used to filter sidebar navigation consistently with dashboard.
  * Returns all schema-visible tables when policies are not configured.
- *
- * Applies authorization layers in order:
- * 1. canAccess(request, table, 'list') - table-level authorization
- * 2. Row policy evaluation - filters by policy conditions
- *
- * Fails closed: tables that throw during authorization checks are omitted.
  */
 async function getPolicyVisibleTableNames(
   ctx: RouteContext,
@@ -440,47 +434,19 @@ async function getPolicyVisibleTableNames(
     !t.isJunction && !t.cmsOptions?.hidden
   );
 
-  // Filter by canAccess + row policy
-  // When policies is {}, no table has a row policy, but canAccess still applies
-  const policyCtx = createPolicyContext(request, authUser);
-  const hasPolicies = Object.keys(options.policies).length > 0;
+  // When policies is {}, no table has a policy, so all schema-visible tables are allowed
+  if (Object.keys(options.policies).length === 0) {
+    return schemaVisibleTables.map((t) => t.name);
+  }
 
+  // Filter by row policy
+  const policyCtx = createPolicyContext(request, authUser);
   const results = await Promise.all(
     schemaVisibleTables.map(async (table) => {
-      try {
-        // Check canAccess first (table-level authorization)
-        const canAccessResult = await options.canAccess(request, table, 'list');
-        if (!canAccessResult) {
-          return null;
-        }
-
-        // When no policies configured, canAccess is the only check
-        if (!hasPolicies) {
-          return table.name;
-        }
-
-        // Check row policy
-        const tablePolicy = options.policies?.[table.name];
-        const rowPolicy = extractRowPolicy(tablePolicy);
-        const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
-        return policyResult.allowed ? table.name : null;
-      } catch (error) {
-        // Fail closed: log error and omit table from navigation
-        if (options.onError) {
-          options.onError(
-            error instanceof Error ? error : new Error(String(error)),
-            {
-              source: 'handler',
-              request,
-              url: new URL(request.url),
-              route: ctx.route,
-              action: 'list',
-              table,
-            },
-          );
-        }
-        return null;
-      }
+      const tablePolicy = options.policies?.[table.name];
+      const rowPolicy = extractRowPolicy(tablePolicy);
+      const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
+      return policyResult.allowed ? table.name : null;
     }),
   );
 
@@ -499,7 +465,7 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
     !t.isJunction && !t.cmsOptions?.hidden
   );
 
-  // Filter tables by canAccess + row policy and collect policy conditions for counts
+  // Filter tables by row policy and collect policy conditions for counts
   // When policies are configured, only show tables the user has list access to
   // Also use policy conditions to filter counts (prevent leaking total counts)
   const policyCtx = createPolicyContext(request, authUser);
@@ -511,48 +477,18 @@ export async function handleDashboard(ctx: RouteContext): Promise<Response> {
 
   const hasPolicies = Object.keys(options.policies).length > 0;
 
-  // Apply canAccess + row policy checks with error handling
-  // Fails closed: tables that throw during authorization are omitted
-  const visibleTablesWithPolicy: TableWithPolicy[] = (await Promise.all(
-    schemaVisibleTables.map(async (table) => {
-      try {
-        // Check canAccess first (table-level authorization)
-        const canAccessResult = await options.canAccess(request, table, 'list');
-        if (!canAccessResult) {
-          return null;
-        }
-
-        // Check row policy if configured
-        if (hasPolicies) {
-          const tablePolicy = options.policies[table.name];
-          const rowPolicy = extractRowPolicy(tablePolicy);
-          const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
-          return policyResult.allowed
-            ? { table, condition: policyResult.condition }
-            : null;
-        }
-
-        // No row policy, canAccess passed
-        return { table, condition: undefined };
-      } catch (error) {
-        // Fail closed: log error and omit table from dashboard
-        if (options.onError) {
-          options.onError(
-            error instanceof Error ? error : new Error(String(error)),
-            {
-              source: 'handler',
-              request,
-              url: new URL(request.url),
-              route: ctx.route,
-              action: 'dashboard',
-              table,
-            },
-          );
-        }
-        return null;
-      }
-    }),
-  )).filter((t): t is TableWithPolicy => t !== null);
+  const visibleTablesWithPolicy: TableWithPolicy[] = hasPolicies
+    ? (await Promise.all(
+      schemaVisibleTables.map(async (table) => {
+        const tablePolicy = options.policies[table.name];
+        const rowPolicy = extractRowPolicy(tablePolicy);
+        const policyResult = await applyPolicy(rowPolicy, policyCtx, 'list');
+        return policyResult.allowed
+          ? { table, condition: policyResult.condition }
+          : null;
+      }),
+    )).filter((t): t is TableWithPolicy => t !== null)
+    : schemaVisibleTables.map((table) => ({ table, condition: undefined }));
 
   const visibleTables = visibleTablesWithPolicy.map((t) => t.table);
 

@@ -362,12 +362,6 @@ export interface CmsOptionsBase {
   csrfSecret?: string;
   /** Custom authentication check */
   isAuthenticated?: (request: Request) => Promise<boolean> | boolean;
-  /** Custom authorization check per table */
-  canAccess?: (
-    request: Request,
-    table: IntrospectedTable,
-    action: CrudAction,
-  ) => Promise<boolean> | boolean;
   /**
    * Error handler for unexpected errors.
    *
@@ -601,12 +595,6 @@ export interface ResolvedCmsOptions {
   csrfSecret: string;
   /** Custom authentication check */
   isAuthenticated: (request: Request) => Promise<boolean> | boolean;
-  /** Custom authorization check per table */
-  canAccess: (
-    request: Request,
-    table: IntrospectedTable,
-    action: CrudAction,
-  ) => Promise<boolean> | boolean;
   /** Error handler for unexpected errors */
   onError?: (error: Error, context: ErrorContext) => void;
   /** Custom parsers for validation */
