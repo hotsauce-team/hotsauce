@@ -28,6 +28,7 @@ export function createAdminHandler(db: Database) {
   const s3 = getDemoS3Config();
 
   return createCmsHandler({
+    title: 'The Spice Rack',
     db,
     schema,
     basePath: '/admin',

@@ -83,7 +83,6 @@ const BaseOptionsSchema = z.object({
   // Functions validated as 'any' since Zod's function validation is complex
   // Runtime will fail anyway if these aren't callable
   isAuthenticated: z.any().optional(),
-  canAccess: z.any().optional(),
   onError: z.any().optional(),
 });
 

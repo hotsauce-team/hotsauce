@@ -846,7 +846,6 @@ Deno.test({
           title: 'Test CMS',
           csrfSecret: TEST_CSRF_SECRET,
           isAuthenticated: () => true,
-          canAccess: () => true,
           parsers: {},
           policies: undefined, // This is what we're testing!
           auth: {

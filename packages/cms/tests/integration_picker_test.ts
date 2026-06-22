@@ -753,14 +753,17 @@ Deno.test('integration: picker mode tests', async (t) => {
         },
       ]);
 
-      // Capture the source value the policy actually receives.
-      let observedSource: string | undefined = 'NOT_CALLED';
+      // Capture all source values the policy receives. The policy may be called
+      // multiple times: once for the picker's row policy (with source) and
+      // again for navigation filtering (without source). We verify that at
+      // least one call received the expected plugin source.
+      const observedSources = new Set<string | undefined>();
       const handler = createCmsHandler({
         csrfSecret: TEST_CSRF_SECRET,
         auth: 'dangerously-open',
         policies: {
           media: (ctx) => {
-            observedSource = ctx.source;
+            observedSources.add(ctx.source);
             return undefined; // allow
           },
         },
@@ -782,7 +785,13 @@ Deno.test('integration: picker mode tests', async (t) => {
       const response = await handler(request);
 
       assertEquals(response.status, 200);
-      assertEquals(observedSource, pluginSource('puck'));
+      assertEquals(
+        observedSources.has(pluginSource('puck')),
+        true,
+        `Expected policy to receive source='${pluginSource('puck')}' but got: ${
+          [...observedSources].map((s) => s ?? 'undefined').join(', ')
+        }`,
+      );
     },
   );
 

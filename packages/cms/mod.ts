@@ -976,7 +976,6 @@ export function createCmsHandler(options: CmsOptions): Handler {
     title: options.title ?? 'CMS Admin',
     csrfSecret,
     isAuthenticated: options.isAuthenticated ?? (() => true),
-    canAccess: options.canAccess ?? (() => true),
     onError: options.onError,
     parsers: options.parsers ?? {},
     policies: resolvedPolicies,
@@ -1472,20 +1471,29 @@ export function createCmsHandler(options: CmsOptions): Handler {
           }
         }
 
-        // Authorization check - if plugin route references a table, check access
+        // Authorization check - if plugin route references a table, check row policy
+        // (canAccess was removed - use policies for table-level authorization)
         const pluginTable = pluginRouteMatch.params.table;
         if (pluginTable) {
           const tableInfo = opts.introspected.tables.find(
             (t) => t.name === pluginTable,
           );
           if (tableInfo) {
-            const pluginRouteAction = inferPluginRouteAction(request.method);
-            const authorized = await opts.canAccess(
+            // Row policy check for plugin routes with table context
+            const policyCtx = createPolicyContext(
               request,
-              tableInfo,
-              pluginRouteAction,
+              jwtPayload
+                ? { id: jwtPayload.sub, role: jwtPayload.role }
+                : undefined,
             );
-            if (!authorized) {
+            const tablePolicy = opts.policies[tableInfo.name];
+            const rowPolicy = extractRowPolicy(tablePolicy);
+            const policyResult = await applyPolicy(
+              rowPolicy,
+              policyCtx,
+              inferPluginRouteAction(request.method),
+            );
+            if (!policyResult.allowed) {
               return forbidden('Access denied');
             }
           }
@@ -1543,10 +1551,17 @@ export function createCmsHandler(options: CmsOptions): Handler {
       }
     }
 
-    // Check authorization for table actions
+    // Check authorization for table actions via row policy
+    // (canAccess was removed - use policies for table-level authorization)
     if (route.table && action !== 'dashboard') {
-      const authorized = await opts.canAccess(request, route.table, action);
-      if (!authorized) {
+      const policyCtx = createPolicyContext(
+        request,
+        jwtPayload ? { id: jwtPayload.sub, role: jwtPayload.role } : undefined,
+      );
+      const tablePolicy = opts.policies[route.table.name];
+      const rowPolicy = extractRowPolicy(tablePolicy);
+      const policyResult = await applyPolicy(rowPolicy, policyCtx, action);
+      if (!policyResult.allowed) {
         return forbidden('Access denied');
       }
     }

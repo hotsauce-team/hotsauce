@@ -15,6 +15,18 @@ export interface NavItem {
   active?: boolean;
   /** Icon (optional, HTML string) */
   icon?: string;
+  /** Show a divider line after this item */
+  dividerAfter?: boolean;
+}
+
+/**
+ * Breadcrumb item
+ */
+export interface BreadcrumbItem {
+  /** Display label */
+  label: string;
+  /** URL (optional - last item typically has no href) */
+  href?: string;
 }
 
 /**
@@ -27,6 +39,8 @@ export interface LayoutOptions {
   siteName?: string;
   /** Navigation items */
   nav?: NavItem[];
+  /** Breadcrumb trail (renders above content) */
+  breadcrumbs?: BreadcrumbItem[];
   /** User info for header */
   user?: { name: string; logoutUrl: string; accountUrl?: string };
   /** URL to the stylesheet (default: 'styles.css') */
@@ -61,17 +75,46 @@ export function defaultStyles(stylesheetUrl = 'styles.css'): string {
  * Render navigation list
  */
 export function nav(items: NavItem[]): string {
-  const itemsHtml = items.map((item) =>
-    html`
+  const itemsHtml = items.map((item) => {
+    const divider = item.dividerAfter
+      ? '<li class="cms-nav-divider" aria-hidden="true"></li>'
+      : '';
+    return html`
       <li class="cms-nav-item${raw(item.active ? ' active' : '')}">
         <a href="${item.href}">${raw(item.icon ?? '')}${item.label}</a>
       </li>
-    `
-  ).join('\n    ');
+    ` + divider;
+  }).join('\n    ');
 
   return `<ul class="cms-nav">
     ${itemsHtml}
   </ul>`;
+}
+
+/**
+ * Render breadcrumb trail
+ */
+export function breadcrumbs(items: BreadcrumbItem[]): string {
+  if (!items || items.length === 0) return '';
+
+  const crumbs = items.map((item, index) => {
+    const isLast = index === items.length - 1;
+    if (isLast || !item.href) {
+      return html`
+        <span class="cms-breadcrumb-current" aria-current="page">${item
+          .label}</span>
+      `;
+    }
+    return html`
+      <a href="${item.href}" class="cms-breadcrumb-link">${item.label}</a>
+    `;
+  });
+
+  return `<nav class="cms-breadcrumbs" aria-label="Breadcrumb">
+    ${
+    crumbs.join('<span class="cms-breadcrumb-sep" aria-hidden="true">/</span>')
+  }
+  </nav>`;
 }
 
 /**
@@ -140,6 +183,7 @@ export function layout(content: string, options: LayoutOptions): string {
   }
       </header>
       <div class="cms-content">
+        ${options.breadcrumbs ? breadcrumbs(options.breadcrumbs) : ''}
         ${(options.flashes ?? []).map((f) => alert(f.message, f.type)).join('')}
         ${content}
       </div>

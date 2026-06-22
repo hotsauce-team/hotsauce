@@ -26,18 +26,35 @@ import type { ListColumn, NavItem } from '@hotsauce/ui';
 // Navigation helpers
 // ============================================================================
 
+export interface BuildNavItemsOptions {
+  /** Optional list of table names allowed by policy. If provided, only these tables appear in nav. */
+  allowedByPolicy?: string[];
+}
+
 export function buildNavItems(
   schema: IntrospectedSchema,
   basePath: string,
   activeTable?: string,
+  options?: BuildNavItemsOptions,
 ): NavItem[] {
   // Filter out junction tables and tables marked as hidden via $cms({ hidden: true })
-  const visibleTables = schema.tables.filter((t) =>
+  let visibleTables = schema.tables.filter((t) =>
     !t.isJunction && !t.cmsOptions?.hidden
   );
 
+  // If policy-allowed list is provided, further filter to only those tables
+  if (options?.allowedByPolicy) {
+    const allowedSet = new Set(options.allowedByPolicy);
+    visibleTables = visibleTables.filter((t) => allowedSet.has(t.name));
+  }
+
   return [
-    { href: cmsUrl(basePath), label: 'Dashboard', active: !activeTable },
+    {
+      href: cmsUrl(basePath),
+      label: 'Dashboard',
+      active: !activeTable,
+      dividerAfter: true,
+    },
     ...visibleTables.map((t) => ({
       href: cmsUrl(basePath, t.name),
       label: formatTableName(t.name),

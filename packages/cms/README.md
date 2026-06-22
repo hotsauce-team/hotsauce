@@ -813,20 +813,19 @@ createCmsHandler({
 
 **Base options** (shared by both variants):
 
-| Option            | Type                                                      | Default      | Description                                                                            |
-| ----------------- | --------------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------- |
-| `db`              | `any`                                                     | _(required)_ | Drizzle database instance                                                              |
-| `schema`          | `Record<string, any>`                                     | _(required)_ | Drizzle schema object (e.g., `{ users, posts }`)                                       |
-| `basePath`        | `string`                                                  | `'/admin'`   | Base path for CMS routes                                                               |
-| `title`           | `string`                                                  | `'Admin'`    | Site title for the admin UI                                                            |
-| `csrfSecret`      | `string`                                                  | env var      | CSRF token signing secret (32+ chars). Falls back to `CMS_CSRF_SECRET` env var         |
-| `onError`         | `(error: Error, ctx: ErrorContext) => void`               | —            | Error handler for unexpected errors (see [Error Logging](#error-logging-with-onerror)) |
-| `parsers`         | `Parsers`                                                 | auto-gen     | Custom Zod parsers per table (overrides drizzle-zod)                                   |
-| `plugins`         | `PluginConfig[]`                                          | —            | Plugins (UI overrides, transforms, action hooks)                                       |
-| `storage`         | `string \| (ctx) => string \| undefined`                  | —            | Storage routing: provider ID or resolver function                                      |
-| `csp`             | `CspOptions`                                              | —            | Additional CSP sources (`imgSrc`, `connectSrc`, `frameSrc`, `styleSrc`)                |
-| `isAuthenticated` | `(request: Request) => boolean \| Promise<boolean>`       | —            | Legacy: custom auth check (prefer `auth` option)                                       |
-| `canAccess`       | `(request, table, action) => boolean \| Promise<boolean>` | —            | Legacy: custom per-table authorization                                                 |
+| Option            | Type                                                | Default      | Description                                                                            |
+| ----------------- | --------------------------------------------------- | ------------ | -------------------------------------------------------------------------------------- |
+| `db`              | `any`                                               | _(required)_ | Drizzle database instance                                                              |
+| `schema`          | `Record<string, any>`                               | _(required)_ | Drizzle schema object (e.g., `{ users, posts }`)                                       |
+| `basePath`        | `string`                                            | `'/admin'`   | Base path for CMS routes                                                               |
+| `title`           | `string`                                            | `'Admin'`    | Site title for the admin UI                                                            |
+| `csrfSecret`      | `string`                                            | env var      | CSRF token signing secret (32+ chars). Falls back to `CMS_CSRF_SECRET` env var         |
+| `onError`         | `(error: Error, ctx: ErrorContext) => void`         | —            | Error handler for unexpected errors (see [Error Logging](#error-logging-with-onerror)) |
+| `parsers`         | `Parsers`                                           | auto-gen     | Custom Zod parsers per table (overrides drizzle-zod)                                   |
+| `plugins`         | `PluginConfig[]`                                    | —            | Plugins (UI overrides, transforms, action hooks)                                       |
+| `storage`         | `string \| (ctx) => string \| undefined`            | —            | Storage routing: provider ID or resolver function                                      |
+| `csp`             | `CspOptions`                                        | —            | Additional CSP sources (`imgSrc`, `connectSrc`, `frameSrc`, `styleSrc`)                |
+| `isAuthenticated` | `(request: Request) => boolean \| Promise<boolean>` | —            | Legacy: custom auth check (prefer `auth` option)                                       |
 
 **Auth options** (when `auth` is an object):
 
@@ -886,20 +885,14 @@ const handler = createCmsHandler({
     return session?.user != null;
   },
 
-  // Called for table operations - return false to deny
-  canAccess: async (request, table, action) => {
-    const session = await getSession(request);
-
-    // Admin can do anything
-    if (session?.user?.role === 'admin') return true;
-
-    // Editors can't delete
-    if (action === 'delete') return false;
-
-    // Nobody touches settings except admins
-    if (table.name === 'settings') return false;
-
-    return true;
+  // Use policies for fine-grained access control
+  policies: {
+    settings: () => false, // Block access to settings
+    posts: (ctx, action) => {
+      if (ctx.user?.role === 'admin') return undefined; // Admin: full access
+      if (action === 'delete') return false; // Non-admin: no delete
+      return undefined; // Non-admin: allow other actions
+    },
   },
 });
 ```
@@ -985,7 +978,7 @@ new PasswordProvider({ db, usersTable: users });
 Choose based on your needs:
 
 - **Dedicated table**: Clear separation, everyone in the table can access CMS
-- **Shared table**: Single source of truth, use `canAccess` for role-based authorization
+- **Shared table**: Single source of truth, use `policies` for role-based authorization
 
 ### Auth Options
 
@@ -1225,7 +1218,7 @@ class MyCustomProvider implements AuthProvider {
 
 ### Authorization (Permissions)
 
-> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use `policies` (recommended) or the `canAccess` callback.
+> **Important:** The `auth` option provides **authentication only** (verifying identity). For fine-grained access control, use `policies`.
 
 ## Row-Level Security (Policies)
 
@@ -1427,34 +1420,6 @@ The CMS automatically distinguishes between "record doesn't exist" (404) and "re
 2. CMS queries again without policy
 3. If record exists → 403 Forbidden
 4. If record doesn't exist → 404 Not Found
-
-### Combining with `canAccess`
-
-Policies and `canAccess` can be used together:
-
-- `canAccess` runs first (table-level permission check)
-- Policies run second (row-level filtering)
-
-```ts
-const handler = createCmsHandler({
-  db,
-  schema,
-
-  // Table-level: block entire tables
-  canAccess: (req, table, action) => {
-    if (table.name === 'secrets') return false;
-    return true;
-  },
-
-  auth: {
-    provider: new PasswordProvider({ db, usersTable: schema.adminUsers }),
-  },
-  // Row-level: filter within allowed tables
-  policies: {
-    posts: ownedBy(schema.posts, 'authorId'),
-  },
-});
-```
 
 ### Rate Limiting
 
@@ -2268,20 +2233,20 @@ interface PluginRouteContext {
 - Routes require authentication (same as built-in CMS routes)
 - **Plugin filter is checked BEFORE fetching data** — routes respect the same `filter` function as hooks
 - Filter receives `hookType: 'route'` so you can handle routes separately from hooks
-- If `:table` param references a known table, `canAccess` is checked
+- If `:table` param references a known table, row policies are checked
 - POST requests validate CSRF tokens automatically
 - Row and column policies are applied only when both `:table` and `:id` are present
 
 **Authorization behavior by route shape:**
 
 - Route includes `:table` and `:id`:
-  - `filter` + `canAccess` + row policy + column policy are applied before populating `ctx.record`/`ctx.field`.
+  - `filter` + row policy + column policy are applied before populating `ctx.record`/`ctx.field`.
 - Route includes `:table` but no `:id`:
-  - `filter` + `canAccess` are applied.
-  - Row/column policy filtering does not run automatically because no specific record is loaded.
+  - `filter` + row policy are applied.
+  - Column policy filtering does not run automatically because no specific record is loaded.
 - Route has no `:table` param:
   - `filter` is the primary authorization guard (plus authentication + CSRF for POST).
-  - `canAccess` is not invoked because there is no table context.
+  - Row policies are not invoked because there is no table context.
 
 For routes without `:table`, use a restrictive `filter` and explicit checks inside your handler for any sensitive operation.
 
