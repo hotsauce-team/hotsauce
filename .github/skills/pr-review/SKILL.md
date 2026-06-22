@@ -29,11 +29,18 @@ Or fetch from the current branch's associated PR.
 
 ### 2. Fetch Review Comments
 
-Get all review comments:
+Get all review comments (handles 100+ comments with pagination):
 
 ```bash
-gh api repos/{owner}/{repo}/pulls/{pr_number}/comments
+GH_PAGER=cat gh api --paginate 'repos/{owner}/{repo}/pulls/{pr_number}/comments?per_page=100'
 ```
+
+**Important for large PRs:**
+
+- `--paginate` automatically fetches all pages (GitHub limits 100 items/page)
+- `per_page=100` minimizes API calls for PRs with many comments
+- Quote the URL to prevent shell glob expansion on `?`
+- `GH_PAGER=cat` prevents interactive pager
 
 Or use `fetch_webpage` on the PR discussion URL for context.
 
@@ -102,8 +109,8 @@ Addresses review comment: [link or quote]
 To reply to a specific review comment, use the GitHub API with `in_reply_to`:
 
 ```bash
-# First, get comment IDs
-GH_PAGER=cat gh api repos/{owner}/{repo}/pulls/{pr_number}/comments \
+# First, get comment IDs (handles 100+ comments)
+GH_PAGER=cat gh api --paginate 'repos/{owner}/{repo}/pulls/{pr_number}/comments?per_page=100' \
   --jq '.[] | "\(.id): \(.body[:60])..."'
 
 # Reply to a specific comment
@@ -115,6 +122,8 @@ GH_PAGER=cat gh api repos/{owner}/{repo}/pulls/{pr_number}/comments \
 
 **Important:**
 
+- Use `--paginate` and `per_page=100` to fetch ALL comments on large PRs
+- Quote URLs containing `?` to prevent zsh glob expansion
 - Use `GH_PAGER=cat` to prevent the pager from opening
 - Pipe to `| cat` as fallback if output still opens a pager
 - `in_reply_to` links the reply to the specific review thread

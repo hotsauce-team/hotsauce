@@ -396,3 +396,319 @@ Deno.test({
     }
   },
 });
+
+// ============================================================================
+// canAccess Hook Tests
+// ============================================================================
+
+Deno.test({
+  name: 'canAccess: table-level authorization',
+  sanitizeOps: false,
+  fn: async (t) => {
+    const client = new PGlite();
+    try {
+      const db = drizzle(client, { schema: schemaWithAuth });
+
+      await createBasicTables(db);
+
+      // Helper to build dashboard context with custom canAccess
+      const buildDashboardContextWithCanAccess = (
+        canAccessFn: ResolvedCmsOptions['canAccess'],
+        authUser?: { id: string; role?: string },
+      ): RouteContext => {
+        const introspected = introspectFullSchema(schemaWithAuth);
+        const url = new URL('http://localhost/admin');
+        const request = new Request(url);
+
+        const options: ResolvedCmsOptions = {
+          introspected,
+          db,
+          basePath: '/admin',
+          title: 'Test CMS',
+          csrfSecret: TEST_CSRF_SECRET,
+          isAuthenticated: () => !!authUser,
+          canAccess: canAccessFn,
+          parsers: {},
+          policies: {}, // Empty policies - relying on canAccess only
+          securityHeaders: {},
+          routeSecurityHeaders: new Map(),
+        };
+
+        const route: ParsedRoute = { table: null, action: 'dashboard' };
+        return { request, options, route, url, authUser };
+      };
+
+      // Helper to build list context with custom canAccess
+      const buildListContextWithCanAccess = (
+        tableName: string,
+        canAccessFn: ResolvedCmsOptions['canAccess'],
+        authUser?: { id: string; role?: string },
+      ): RouteContext => {
+        const introspected = introspectFullSchema(schemaWithAuth);
+        const table = introspected.tables.find((t) => t.name === tableName);
+        if (!table) throw new Error(`Table ${tableName} not found`);
+
+        const url = new URL(`http://localhost/admin/${tableName}`);
+        const request = new Request(url);
+
+        const options: ResolvedCmsOptions = {
+          introspected,
+          db,
+          basePath: '/admin',
+          title: 'Test CMS',
+          csrfSecret: TEST_CSRF_SECRET,
+          isAuthenticated: () => !!authUser,
+          canAccess: canAccessFn,
+          parsers: {},
+          policies: {}, // Empty policies - relying on canAccess only
+          securityHeaders: {},
+          routeSecurityHeaders: new Map(),
+        };
+
+        const route: ParsedRoute = {
+          table: table as IntrospectedTable,
+          action: 'list',
+        };
+        return { request, options, route, url, authUser };
+      };
+
+      await t.step('dashboard hides tables blocked by canAccess', async () => {
+        // Create data
+        await db.execute(
+          sql`TRUNCATE TABLE posts, users RESTART IDENTITY CASCADE`,
+        );
+        await db.insert(users).values([
+          { email: 'alice@example.com', name: 'Alice' },
+        ]);
+        await db.insert(posts).values([
+          { title: 'Post 1', authorId: 1 },
+          { title: 'Post 2', authorId: 1 },
+        ]);
+
+        // canAccess blocks "users" table
+        const canAccess: ResolvedCmsOptions['canAccess'] = (
+          _req,
+          table,
+          _action,
+        ) => {
+          return table.name !== 'users';
+        };
+
+        const ctx = buildDashboardContextWithCanAccess(canAccess, { id: '1' });
+        const response = await handleDashboard(ctx);
+        assertEquals(response.status, 200);
+
+        const html = await response.text();
+
+        // Posts should be visible (canAccess returns true)
+        assertStringIncludes(html, '<h3>Posts</h3>');
+        assertStringIncludes(html, '<p>2 records</p>');
+
+        // Users should NOT be visible (canAccess returns false)
+        const tableGridMatch = html.match(
+          /<div class="cms-table-grid">([\s\S]*?)<\/div>/,
+        );
+        const tableGrid = tableGridMatch?.[1] ?? '';
+        assertEquals(
+          tableGrid.includes('>Users<'),
+          false,
+          'Users table should not appear in dashboard when blocked by canAccess',
+        );
+      });
+
+      await t.step('sidebar hides tables blocked by canAccess', async () => {
+        // canAccess blocks "users" table
+        const canAccess: ResolvedCmsOptions['canAccess'] = (
+          _req,
+          table,
+          _action,
+        ) => {
+          return table.name !== 'users';
+        };
+
+        const ctx = buildListContextWithCanAccess('posts', canAccess, {
+          id: '1',
+        });
+        const response = await handleList(ctx);
+        assertEquals(response.status, 200);
+
+        const html = await response.text();
+
+        // Extract the sidebar navigation
+        const sidebarMatch = html.match(
+          /<aside[^>]*class="cms-sidebar"[^>]*>([\s\S]*?)<\/aside>/,
+        );
+        const sidebar = sidebarMatch?.[1] ?? '';
+
+        // Posts should be in sidebar (canAccess returns true)
+        assertStringIncludes(sidebar, '>Posts<');
+
+        // Users should NOT be in sidebar (canAccess returns false)
+        assertEquals(
+          sidebar.includes('>Users<'),
+          false,
+          'Users table should not appear in sidebar when blocked by canAccess',
+        );
+      });
+
+      await t.step('canAccess errors fail closed (table omitted)', async () => {
+        const errors: Error[] = [];
+
+        // canAccess throws for "users" table
+        const canAccess: ResolvedCmsOptions['canAccess'] = (
+          _req,
+          table,
+          _action,
+        ) => {
+          if (table.name === 'users') {
+            throw new Error('Authorization service unavailable');
+          }
+          return true;
+        };
+
+        const introspected = introspectFullSchema(schemaWithAuth);
+        const url = new URL('http://localhost/admin');
+        const request = new Request(url);
+
+        const options: ResolvedCmsOptions = {
+          introspected,
+          db,
+          basePath: '/admin',
+          title: 'Test CMS',
+          csrfSecret: TEST_CSRF_SECRET,
+          isAuthenticated: () => true,
+          canAccess,
+          parsers: {},
+          policies: {},
+          onError: (error) => errors.push(error),
+          securityHeaders: {},
+          routeSecurityHeaders: new Map(),
+        };
+
+        const route: ParsedRoute = { table: null, action: 'dashboard' };
+        const ctx: RouteContext = {
+          request,
+          options,
+          route,
+          url,
+          authUser: { id: '1' },
+        };
+
+        const response = await handleDashboard(ctx);
+        assertEquals(response.status, 200);
+
+        const html = await response.text();
+
+        // Posts should be visible (canAccess returns true)
+        assertStringIncludes(html, '<h3>Posts</h3>');
+
+        // Users should NOT be visible (canAccess threw - fail closed)
+        const tableGridMatch = html.match(
+          /<div class="cms-table-grid">([\s\S]*?)<\/div>/,
+        );
+        const tableGrid = tableGridMatch?.[1] ?? '';
+        assertEquals(
+          tableGrid.includes('>Users<'),
+          false,
+          'Users table should be omitted when canAccess throws',
+        );
+
+        // Error should have been logged via onError
+        // Note: error count may be >1 if multiple code paths check canAccess
+        assertEquals(
+          errors.length > 0,
+          true,
+          'At least one error should be logged',
+        );
+        assertEquals(
+          errors.some((e) => e.message === 'Authorization service unavailable'),
+          true,
+          'Error message should be "Authorization service unavailable"',
+        );
+      });
+
+      await t.step('canAccess works with row policies combined', async () => {
+        // Create data
+        await db.execute(
+          sql`TRUNCATE TABLE posts, users RESTART IDENTITY CASCADE`,
+        );
+        await db.insert(users).values([
+          { email: 'alice@example.com', name: 'Alice' },
+        ]);
+        await db.insert(posts).values([
+          { title: 'Alice Post 1', authorId: 1 },
+          { title: 'Alice Post 2', authorId: 1 },
+        ]);
+
+        // canAccess allows posts but blocks users
+        const canAccess: ResolvedCmsOptions['canAccess'] = (
+          _req,
+          table,
+          _action,
+        ) => {
+          return table.name === 'posts';
+        };
+
+        const introspected = introspectFullSchema(schemaWithAuth);
+        const url = new URL('http://localhost/admin');
+        const request = new Request(url);
+
+        const options: ResolvedCmsOptions = {
+          introspected,
+          db,
+          basePath: '/admin',
+          title: 'Test CMS',
+          csrfSecret: TEST_CSRF_SECRET,
+          isAuthenticated: () => true,
+          canAccess,
+          parsers: {},
+          // Row policy filters posts to only show user's own posts
+          policies: {
+            posts: ownedBy(posts, 'authorId'),
+          },
+          auth: {
+            secret: 'not-used-for-dashboard-test-must-be-32-chars',
+            provider: {} as never,
+            maxAge: 3600,
+            cookieName: 'cms_token',
+            loginTitle: 'Login',
+            identityLabel: 'Email',
+          },
+          securityHeaders: {},
+          routeSecurityHeaders: new Map(),
+        };
+
+        const route: ParsedRoute = { table: null, action: 'dashboard' };
+        const ctx: RouteContext = {
+          request,
+          options,
+          route,
+          url,
+          authUser: { id: '1' }, // Alice's ID
+        };
+
+        const response = await handleDashboard(ctx);
+        assertEquals(response.status, 200);
+
+        const html = await response.text();
+
+        // Posts should be visible with row policy applied (2 posts owned by user 1)
+        assertStringIncludes(html, '<h3>Posts</h3>');
+        assertStringIncludes(html, '<p>2 records</p>');
+
+        // Users should NOT be visible (blocked by canAccess)
+        const tableGridMatch = html.match(
+          /<div class="cms-table-grid">([\s\S]*?)<\/div>/,
+        );
+        const tableGrid = tableGridMatch?.[1] ?? '';
+        assertEquals(
+          tableGrid.includes('>Users<'),
+          false,
+          'Users table should not appear when blocked by canAccess even with policies',
+        );
+      });
+    } finally {
+      client.close();
+    }
+  },
+});
