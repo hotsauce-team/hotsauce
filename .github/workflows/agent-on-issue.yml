@@ -1,0 +1,108 @@
+name: Agent on Issue
+
+# Label-driven state machine on issues, powered by sandcastle (@ai-hero/sandcastle)
+# running Claude Code:
+#   agent:explore   -> research the issue (read-only) and post triage notes
+#   agent:implement -> implement, push a branch, open a PR, request a Copilot review
+# Status labels: agent:in-progress, agent:explored, agent:done, agent:blocked.
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: write # push the agent branch
+  issues: write # label transitions + comments
+
+concurrency:
+  group: agent-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  agent:
+    if: github.event.label.name == 'agent:explore' || github.event.label.name == 'agent:implement'
+    runs-on: ubuntu-latest
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      ISSUE_BODY: ${{ github.event.issue.body }}
+      # 'agent:explore' -> explore, 'agent:implement' -> implement
+      MODE: ${{ github.event.label.name == 'agent:explore' && 'explore' || 'implement' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so the agent branch is clean
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x # agent verifies via `deno task test`
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # runs the sandcastle orchestration script
+
+      - name: Install Claude Code CLI
+        run: npm i -g @anthropic-ai/claude-code # no-sandbox needs `claude` on PATH
+
+      - name: Mark in-progress
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" \
+            --remove-label "${{ github.event.label.name }}" \
+            --add-label "agent:in-progress"
+
+      - name: Run agent
+        id: agent
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          npm install --no-save @ai-hero/sandcastle tsx
+          # Reads MODE; sets step outputs `mode` and (implement only) `branch`.
+          # explore mode writes .sandcastle/triage-notes.md
+          npx tsx .sandcastle/run-issue.ts
+
+      # ---- explore branch ----
+      - name: Post triage notes
+        if: success() && env.MODE == 'explore'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body-file .sandcastle/triage-notes.md
+          gh issue edit "$ISSUE_NUMBER" \
+            --remove-label agent:in-progress --add-label agent:explored
+
+      # ---- implement branch ----
+      - name: Open PR and request Copilot review
+        if: success() && env.MODE == 'implement' && steps.agent.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ secrets.PR_CREATE_TOKEN }} # PAT -> triggers test.yml on the PR
+          BRANCH: ${{ steps.agent.outputs.branch }}
+        run: |
+          PR_URL=$(gh pr create --base main --head "$BRANCH" \
+            --title "Agent: $ISSUE_TITLE (#$ISSUE_NUMBER)" \
+            --body "Automated work for #$ISSUE_NUMBER. Closes #$ISSUE_NUMBER.")
+          gh pr edit "$PR_URL" --add-reviewer @copilot \
+            || echo "::warning::Could not request Copilot review (is Copilot code review enabled?)"
+          echo "PR_URL=$PR_URL" >> "$GITHUB_ENV"
+
+      - name: Finalize implement
+        if: success() && env.MODE == 'implement'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" \
+            --remove-label agent:in-progress --add-label agent:done
+          gh issue comment "$ISSUE_NUMBER" \
+            --body "Opened PR: ${PR_URL:-(no changes produced)}"
+
+      # ---- failure path (both modes) ----
+      - name: Mark blocked
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" \
+            --remove-label agent:in-progress --add-label agent:blocked || true
+          gh issue comment "$ISSUE_NUMBER" \
+            --body "Agent run failed in **$MODE** mode. See workflow logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
