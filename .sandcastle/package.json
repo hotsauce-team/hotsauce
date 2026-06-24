@@ -1,0 +1,13 @@
+{
+  "name": "hotsauce-agent-workflows",
+  "private": true,
+  "type": "module",
+  "description": "Sandcastle agent workflows for the Agent on Issue automation.",
+  "dependencies": {
+    "@ai-hero/sandcastle": "0.10.0"
+  },
+  "devDependencies": {
+    "@standard-schema/spec": "^1.0.0",
+    "tsx": "^4.19.0"
+  }
+}

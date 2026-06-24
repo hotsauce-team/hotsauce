@@ -1,17 +1,21 @@
 name: Agent on Issue
 
 # Label-driven state machine on issues, powered by sandcastle (@ai-hero/sandcastle)
-# running Claude Code:
-#   agent:explore   -> research the issue (read-only) and post triage notes
-#   agent:implement -> implement, push a branch, open a PR, request a Copilot review
+# running Claude Code. Mirrors sandcastle's own agent-workflows layout:
+#   agent:explore   -> read-only research, posts triage notes  (explore/)
+#   agent:implement -> implement on a branch, open a PR, request Copilot (implement/)
 # Status labels: agent:in-progress, agent:explored, agent:done, agent:blocked.
+#
+# Sandbox model follows the examples: no-sandbox (the ephemeral runner IS the
+# sandbox). The agent commits on a branch the workflow pre-creates; the workflow
+# (not the agent) pushes, opens the PR, requests review, and edits labels.
 
 on:
   issues:
     types: [labeled]
 
 permissions:
-  contents: write # push the agent branch
+  contents: write # branch push
   issues: write # label transitions + comments
 
 concurrency:
@@ -25,9 +29,14 @@ jobs:
     env:
       ISSUE_NUMBER: ${{ github.event.issue.number }}
       ISSUE_TITLE: ${{ github.event.issue.title }}
-      ISSUE_BODY: ${{ github.event.issue.body }}
       # 'agent:explore' -> explore, 'agent:implement' -> implement
       MODE: ${{ github.event.label.name == 'agent:explore' && 'explore' || 'implement' }}
+      BRANCH: agent/issue-${{ github.event.issue.number }}
+      OUTPUT_DIR: ${{ github.workspace }}/.sandcastle/output
+      GH_TOKEN: ${{ github.token }} # gh issue view (in scripts), labels, comments
+    defaults:
+      run:
+        working-directory: .sandcastle
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,53 +44,65 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22 # runs the sandcastle orchestration script
+          node-version: 22 # runs the sandcastle workflow scripts (tsx)
 
-      # The agent (Claude Code) and `deno task test` run *inside* this image, so
-      # Deno/Claude live in the container, not on the runner. Build with the host
-      # UID/GID so sandcastle's bind-mounts share an owner with the runner user.
-      - name: Build agent sandbox image
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x # agent runs `deno task test` on the runner
+
+      - name: Install Claude Code CLI
+        working-directory: ${{ github.workspace }}
         run: |
-          docker build -t hotsauce-agent \
-            --build-arg AGENT_UID="$(id -u)" \
-            --build-arg AGENT_GID="$(id -g)" \
-            .sandcastle
+          curl -fsSL https://claude.ai/install.sh | bash
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install workflow dependencies
+        run: npm install
 
       - name: Mark in-progress
-        env:
-          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
         run: |
           gh issue edit "$ISSUE_NUMBER" \
             --remove-label "${{ github.event.label.name }}" \
             --add-label "agent:in-progress"
 
-      - name: Run agent
-        id: agent
+      # ── explore ──────────────────────────────────────────────────────────
+      - name: Explore
+        if: env.MODE == 'explore'
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-        run: |
-          npm install --no-save @ai-hero/sandcastle tsx
-          # Reads MODE; sets step outputs `mode` and (implement only) `branch`.
-          # explore mode writes .sandcastle/triage-notes.md
-          npx tsx .sandcastle/run-issue.mts
+        run: npx tsx agent-workflows/explore/explore.ts
 
-      # ---- explore branch ----
       - name: Post triage notes
         if: success() && env.MODE == 'explore'
-        env:
-          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
         run: |
-          gh issue comment "$ISSUE_NUMBER" --body-file .sandcastle/triage-notes.md
+          gh issue comment "$ISSUE_NUMBER" --body-file "$OUTPUT_DIR/comment.md"
           gh issue edit "$ISSUE_NUMBER" \
             --remove-label agent:in-progress --add-label agent:explored
 
-      # ---- implement branch ----
-      - name: Open PR and request Copilot review
-        if: success() && env.MODE == 'implement' && steps.agent.outputs.branch != ''
+      # ── implement ────────────────────────────────────────────────────────
+      - name: Create agent branch
+        if: env.MODE == 'implement'
+        working-directory: ${{ github.workspace }}
+        run: |
+          git config user.email "agent@hotsauce.local"
+          git config user.name "Hotsauce Agent"
+          git switch -c "$BRANCH"
+
+      - name: Implement
+        if: env.MODE == 'implement'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: npx tsx agent-workflows/implement/implement.ts
+
+      - name: Push, open PR, request Copilot review
+        if: success() && env.MODE == 'implement'
+        working-directory: ${{ github.workspace }}
         env:
           GH_TOKEN: ${{ secrets.PR_CREATE_TOKEN }} # PAT -> triggers test.yml on the PR
-          BRANCH: ${{ steps.agent.outputs.branch }}
         run: |
+          git push origin "$BRANCH"
           PR_URL=$(gh pr create --base main --head "$BRANCH" \
             --title "Agent: $ISSUE_TITLE (#$ISSUE_NUMBER)" \
             --body "Automated work for #$ISSUE_NUMBER. Closes #$ISSUE_NUMBER.")
@@ -91,19 +112,16 @@ jobs:
 
       - name: Finalize implement
         if: success() && env.MODE == 'implement'
-        env:
-          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
         run: |
           gh issue edit "$ISSUE_NUMBER" \
             --remove-label agent:in-progress --add-label agent:done
-          gh issue comment "$ISSUE_NUMBER" \
-            --body "Opened PR: ${PR_URL:-(no changes produced)}"
+          gh issue comment "$ISSUE_NUMBER" --body "Opened PR: $PR_URL"
 
-      # ---- failure path (both modes) ----
+      # ── failure path (both modes) ────────────────────────────────────────
       - name: Mark blocked
         if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
+        working-directory: ${{ github.workspace }}
         run: |
           gh issue edit "$ISSUE_NUMBER" \
             --remove-label agent:in-progress --add-label agent:blocked || true

@@ -1,3 +1,5 @@
-# Transient artifact written by run-issue.ts in explore mode
-triage-notes.md
-node_modules/
+.env
+logs
+worktrees
+node_modules
+output

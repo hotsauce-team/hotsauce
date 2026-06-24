@@ -130,6 +130,8 @@
     "npm/",
     "coverage/",
     ".git/",
-    "scripts/"
+    "scripts/",
+    // Node/tsx sub-project (sandcastle agent workflows) — not Deno code
+    ".sandcastle/"
   ]
 }
