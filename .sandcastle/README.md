@@ -30,14 +30,27 @@ Typical flow: label `agent:explore`, review the triage comment, then label
 
 ## Why these choices
 
-- **`no-sandbox`**: the GitHub Actions runner is already an ephemeral, disposable VM, so the
-  agent runs directly on it — no Dockerfile to build or maintain.
+- **Docker sandbox** (`docker()` + [`Dockerfile`](./Dockerfile)): the agent runs inside a
+  container — sandcastle's intended model, where the container is the safety boundary. This is
+  why we do **not** set `permissionMode`: sandcastle then passes `--dangerously-skip-permissions`
+  for us so the agent runs headlessly. Setting a `permissionMode` would suppress that flag and
+  re-introduce interactive approval prompts that hang in CI. The image bundles the Claude Code
+  CLI and Deno (for `deno task test`), built with the host UID/GID so bind-mounts share an owner.
 - **Branch push uses `GITHUB_TOKEN`; PR creation uses the PAT**: pushing a branch is a
   Contents-write the runner token already has, and pushing a feature branch doesn't trigger
   `test.yml`. Opening the PR with the PAT is what fires `test.yml` (GitHub suppresses workflow
   triggers from the built-in token).
 
 ## Local dry-run
+
+Requires Docker. First build the image (matches the workflow):
+
+```bash
+docker build -t hotsauce-agent \
+  --build-arg AGENT_UID="$(id -u)" --build-arg AGENT_GID="$(id -g)" .sandcastle
+```
+
+Then run the orchestrator:
 
 ```bash
 export MODE=explore                 # or: implement

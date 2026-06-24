@@ -33,16 +33,19 @@ jobs:
         with:
           fetch-depth: 0 # full history so the agent branch is clean
 
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x # agent verifies via `deno task test`
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22 # runs the sandcastle orchestration script
 
-      - name: Install Claude Code CLI
-        run: npm i -g @anthropic-ai/claude-code # no-sandbox needs `claude` on PATH
+      # The agent (Claude Code) and `deno task test` run *inside* this image, so
+      # Deno/Claude live in the container, not on the runner. Build with the host
+      # UID/GID so sandcastle's bind-mounts share an owner with the runner user.
+      - name: Build agent sandbox image
+        run: |
+          docker build -t hotsauce-agent \
+            --build-arg AGENT_UID="$(id -u)" \
+            --build-arg AGENT_GID="$(id -g)" \
+            .sandcastle
 
       - name: Mark in-progress
         env:

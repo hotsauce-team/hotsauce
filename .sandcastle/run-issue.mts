@@ -5,18 +5,33 @@
 //   implement -> implements the change on a branch and pushes it
 //
 // Verified against @ai-hero/sandcastle@0.10.0:
-//   noSandbox()                         -> sandboxes/no-sandbox export
-//   claudeCode(model, { effort, permissionMode })
+//   docker({ imageName })               -> sandboxes/docker export
+//   claudeCode(model, { effort, env })
 //   run(...) -> RunResult { commits: { sha }[]; branch: string }
 //   branchStrategy: { type: "head" } | { type: "branch", branch }
+//
+// Runs the agent in a Docker container (sandcastle's intended model): the
+// container is the safety boundary, so sandcastle passes
+// --dangerously-skip-permissions for us and the agent runs headlessly. We do
+// NOT set permissionMode (that would suppress the skip flag and re-introduce
+// interactive approval prompts that hang in CI).
 import { claudeCode, run } from '@ai-hero/sandcastle';
-import { noSandbox } from '@ai-hero/sandcastle/sandboxes/no-sandbox';
+import { docker } from '@ai-hero/sandcastle/sandboxes/docker';
 import { execSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
+
+// Must match the image tag built in the workflow.
+const IMAGE = 'hotsauce-agent';
 
 const mode = process.env.MODE === 'explore' ? 'explore' : 'implement';
 const issue = process.env.ISSUE_NUMBER;
 if (!issue) throw new Error('ISSUE_NUMBER env var is required');
+
+// Credentials forwarded into the container for the Claude Code CLI.
+const agentEnv: Record<string, string> = {};
+if (process.env.CLAUDE_CODE_OAUTH_TOKEN) {
+  agentEnv.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+}
 
 const out = process.env.GITHUB_OUTPUT;
 const setOutput = (line: string) => {
@@ -31,16 +46,14 @@ const ctx = [
 ].join('\n');
 
 if (mode === 'explore') {
-  // Read-only research. `permissionMode: "plan"` keeps the agent out of edit
-  // mode; we also never push or open a PR here, so any stray writes are
-  // discarded with the ephemeral runner.
+  // Research only. The prompt asks the agent not to change source files, and we
+  // never push or open a PR here, so any stray writes are discarded with the
+  // ephemeral container/runner.
   await run({
-    agent: claudeCode('claude-opus-4-8', {
-      effort: 'high',
-      permissionMode: 'plan',
-    }),
-    sandbox: noSandbox(),
+    agent: claudeCode('claude-opus-4-8', { effort: 'high', env: agentEnv }),
+    sandbox: docker({ imageName: IMAGE }),
     branchStrategy: { type: 'head' },
+    logging: { type: 'stdout' },
     prompt: `${ctx}
 
 Research this issue in the repo WITHOUT changing any source files. Investigate the
@@ -52,9 +65,10 @@ When done, output <promise>COMPLETE</promise>.`,
 } else {
   const branch = `agent/issue-${issue}`;
   const result = await run({
-    agent: claudeCode('claude-opus-4-8', { effort: 'high' }),
-    sandbox: noSandbox(),
+    agent: claudeCode('claude-opus-4-8', { effort: 'high', env: agentEnv }),
+    sandbox: docker({ imageName: IMAGE }),
     branchStrategy: { type: 'branch', branch },
+    logging: { type: 'stdout' },
     prompt: `${ctx}
 
 Implement the change in this Deno repo. Match the existing code patterns and conventions.
