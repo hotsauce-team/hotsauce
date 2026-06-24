@@ -1,0 +1,168 @@
+name: Agent Implement
+
+# agent:implement — the agent implements the issue on a branch; the workflow
+# pushes it, opens a PR, and requests a GitHub Copilot review. Mirrors
+# sandcastle's .github/workflows/agent-implement.yml (minus their sub-issue/PRD
+# handling and their own review-agent loop — we request Copilot instead).
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  implement:
+    if: github.event.label.name == 'agent:implement'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: agent-implement-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      contents: write # branch push
+      issues: write # label transitions + comments
+      pull-requests: write # preflight PR search
+
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      # Refuse if an open PR already closes this issue (avoids duplicate runs).
+      - name: Preflight existing PR
+        id: preflight
+        run: |
+          set -euo pipefail
+          existing=$(gh pr list --state open \
+            --search "in:body \"#${ISSUE_NUMBER}\"" \
+            --json number,url,body \
+            --jq "[.[] | select(.body | test(\"(?i)(closes|fixes|resolves)\\\\s+#${ISSUE_NUMBER}\\\\b\"))]" \
+            || echo '[]')
+          if [ "$(echo "$existing" | jq 'length')" != "0" ]; then
+            echo "refused=true" >> "$GITHUB_OUTPUT"
+            echo "existing_pr_url=$(echo "$existing" | jq -r '.[0].url')" >> "$GITHUB_OUTPUT"
+          else
+            echo "refused=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refuse existing PR
+        if: steps.preflight.outputs.refused == 'true'
+        env:
+          EXISTING_PR_URL: ${{ steps.preflight.outputs.existing_pr_url }}
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --remove-label "agent:implement" || true
+          gh issue comment "$ISSUE_NUMBER" --body "Refused to run: $EXISTING_PR_URL already targets this issue. Close it first, then re-add \`agent:implement\`."
+
+      - name: Transition labels
+        if: steps.preflight.outputs.refused != 'true'
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --remove-label "agent:implement" || true
+          gh issue edit "$ISSUE_NUMBER" --remove-label "agent:blocked" || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "agent:in-progress"
+
+      - name: Checkout main
+        if: steps.preflight.outputs.refused != 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Compute branch name
+        if: steps.preflight.outputs.refused != 'true'
+        id: branch
+        run: |
+          slug=$(echo "$ISSUE_TITLE" | tr '[:upper:]' '[:lower:]' \
+            | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-50)
+          echo "name=agent/issue-${ISSUE_NUMBER}-${slug}" >> "$GITHUB_OUTPUT"
+
+      - name: Create branch
+        if: steps.preflight.outputs.refused != 'true'
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          git config user.name "Hotsauce Agent"
+          git config user.email "agent@hotsauce.local"
+          git checkout -b "$BRANCH"
+
+      - name: Setup Node.js
+        if: steps.preflight.outputs.refused != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Deno
+        if: steps.preflight.outputs.refused != 'true'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x # agent runs `deno task test`
+
+      - name: Install workflow dependencies
+        if: steps.preflight.outputs.refused != 'true'
+        working-directory: .sandcastle
+        run: npm install
+
+      - name: Install Claude Code
+        if: steps.preflight.outputs.refused != 'true'
+        run: npm install -g @anthropic-ai/claude-code
+
+      # Run from the repo root so sandcastle's cwd is the repo; the local tsx
+      # binary resolves @ai-hero/sandcastle from .sandcastle.
+      - name: Run implementation agent
+        if: steps.preflight.outputs.refused != 'true'
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          OUTPUT_DIR: ${{ runner.temp }}
+        run: ./.sandcastle/node_modules/.bin/tsx .sandcastle/agent-workflows/implement/implement.ts
+
+      # Push with the default GITHUB_TOKEN (contents: write).
+      - name: Push branch
+        if: steps.preflight.outputs.refused != 'true' && success()
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: git push --force origin "$BRANCH"
+
+      # PR + review use the PAT so test.yml runs on the agent's PR.
+      - name: Open PR and request Copilot review
+        if: steps.preflight.outputs.refused != 'true' && success()
+        env:
+          GH_TOKEN: ${{ secrets.PR_CREATE_TOKEN }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+        run: |
+          title="Agent: ${ISSUE_TITLE} (#${ISSUE_NUMBER})"
+          title="${title:0:256}"
+          body_file="${RUNNER_TEMP}/pr-body.md"
+          {
+            echo "Closes #${ISSUE_NUMBER}"
+            echo
+            echo "Implemented by the agent-on-issue workflow."
+          } > "$body_file"
+          pr_url=$(gh pr create --base main --head "$BRANCH" --title "$title" --body-file "$body_file" | tail -n1)
+          gh pr edit "$pr_url" --add-reviewer @copilot \
+            || echo "::warning::Could not request Copilot review (is Copilot code review enabled?)"
+          echo "PR_URL=$pr_url" >> "$GITHUB_ENV"
+
+      - name: Finalize implement
+        if: steps.preflight.outputs.refused != 'true' && success()
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --add-label "agent:done"
+          gh issue comment "$ISSUE_NUMBER" --body "Opened PR: $PR_URL"
+
+      - name: Mark blocked on failure
+        if: steps.preflight.outputs.refused != 'true' && failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          reason="(no reason file written; check workflow logs)"
+          if [ -f "${RUNNER_TEMP}/failure_reason.txt" ]; then
+            reason=$(cat "${RUNNER_TEMP}/failure_reason.txt")
+          fi
+          body_file="${RUNNER_TEMP}/failure-comment.md"
+          printf '`agent:implement` run failed.\n\n**Reason:** %s\n\n**Workflow run:** %s\n\nRe-add `agent:implement` to retry.\n' "$reason" "$RUN_URL" > "$body_file"
+          gh issue edit "$ISSUE_NUMBER" --add-label "agent:blocked" || true
+          gh issue comment "$ISSUE_NUMBER" --body-file "$body_file"
+
+      - name: Always remove in-progress
+        if: always() && steps.preflight.outputs.refused != 'true'
+        run: gh issue edit "$ISSUE_NUMBER" --remove-label "agent:in-progress" || true

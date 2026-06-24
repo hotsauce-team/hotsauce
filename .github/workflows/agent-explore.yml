@@ -1,0 +1,87 @@
+name: Agent Explore
+
+# agent:explore — the agent researches the issue (read-only) and posts triage
+# notes as a comment. Mirrors sandcastle's .github/workflows/agent-explore.yml.
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  explore:
+    if: github.event.label.name == 'agent:explore'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: agent-explore-issue-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    permissions:
+      issues: write # label transitions + comments (public repo: checkout needs no token)
+
+    env:
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+      ISSUE_TITLE: ${{ github.event.issue.title }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+
+    steps:
+      - name: Transition labels
+        run: |
+          gh issue edit "$ISSUE_NUMBER" --remove-label "agent:explore" || true
+          gh issue edit "$ISSUE_NUMBER" --remove-label "agent:blocked" || true
+          gh issue edit "$ISSUE_NUMBER" --add-label "agent:in-progress"
+
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x # agent may run `deno task test` while researching
+
+      - name: Install workflow dependencies
+        working-directory: .sandcastle
+        run: npm install
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
+      # Run from the repo root so sandcastle's cwd (process.cwd()) is the repo;
+      # the local tsx binary resolves @ai-hero/sandcastle from .sandcastle.
+      - name: Run explore agent
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          OUTPUT_DIR: ${{ runner.temp }}
+        run: ./.sandcastle/node_modules/.bin/tsx .sandcastle/agent-workflows/explore/explore.ts
+
+      - name: Post exploration comment
+        if: success()
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --body-file "${{ runner.temp }}/comment.md"
+          gh issue edit "$ISSUE_NUMBER" --add-label "agent:explored"
+
+      - name: Mark blocked on failure
+        if: failure()
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          reason="(no reason file written; check workflow logs)"
+          if [ -f "${RUNNER_TEMP}/failure_reason.txt" ]; then
+            reason=$(cat "${RUNNER_TEMP}/failure_reason.txt")
+          fi
+          body_file="${RUNNER_TEMP}/failure-comment.md"
+          printf '`agent:explore` run failed.\n\n**Reason:** %s\n\n**Workflow run:** %s\n\nRe-add `agent:explore` to retry.\n' "$reason" "$RUN_URL" > "$body_file"
+          gh issue edit "$ISSUE_NUMBER" --add-label "agent:blocked" || true
+          gh issue comment "$ISSUE_NUMBER" --body-file "$body_file"
+
+      - name: Always remove in-progress
+        if: always()
+        run: gh issue edit "$ISSUE_NUMBER" --remove-label "agent:in-progress" || true
