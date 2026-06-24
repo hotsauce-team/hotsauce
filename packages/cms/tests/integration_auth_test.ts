@@ -82,7 +82,7 @@ Deno.test('integration: JWT auth tests', async (t) => {
     assertStringIncludes(html, 'form');
     assertStringIncludes(html, 'identity');
     assertStringIncludes(html, 'password');
-    assertStringIncludes(html, '_csrf');
+    assertStringIncludes(html, '__cms_csrf');
   });
 
   await t.step('successful login with correct credentials', async () => {
@@ -102,7 +102,7 @@ Deno.test('integration: JWT auth tests', async (t) => {
     const loginPageRes = await handler(loginPageReq);
     const loginHtml = await loginPageRes.text();
 
-    const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
+    const csrfMatch = loginHtml.match(/name="__cms_csrf" value="([^"]+)"/);
     assertExists(csrfMatch, 'CSRF token should be in login page');
     const csrfToken = csrfMatch[1]!;
 
@@ -110,7 +110,7 @@ Deno.test('integration: JWT auth tests', async (t) => {
     const formData = createFormData({
       identity: 'admin@example.com',
       password: 'admin123',
-      _csrf: csrfToken,
+      __cms_csrf: csrfToken,
     });
 
     const loginReq = new Request('http://localhost/admin/login', {
@@ -145,14 +145,14 @@ Deno.test('integration: JWT auth tests', async (t) => {
       new Request('http://localhost/admin/login'),
     );
     const loginHtml = await loginPageRes.text();
-    const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
+    const csrfMatch = loginHtml.match(/name="__cms_csrf" value="([^"]+)"/);
     const csrfToken = csrfMatch![1]!;
 
     // Submit with wrong password
     const formData = createFormData({
       identity: 'admin@example.com',
       password: 'wrong-password',
-      _csrf: csrfToken,
+      __cms_csrf: csrfToken,
     });
 
     const loginReq = new Request('http://localhost/admin/login', {
@@ -183,13 +183,13 @@ Deno.test('integration: JWT auth tests', async (t) => {
       new Request('http://localhost/admin/login'),
     );
     const loginHtml = await loginPageRes.text();
-    const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
+    const csrfMatch = loginHtml.match(/name="__cms_csrf" value="([^"]+)"/);
     const csrfToken = csrfMatch![1]!;
 
     const formData = createFormData({
       identity: 'admin@example.com',
       password: 'admin123',
-      _csrf: csrfToken,
+      __cms_csrf: csrfToken,
     });
 
     const loginRes = await handler(
@@ -235,13 +235,13 @@ Deno.test('integration: JWT auth tests', async (t) => {
         new Request('http://localhost/admin/login'),
       );
       const loginHtml = await loginPageRes.text();
-      const csrfMatch = loginHtml.match(/name="_csrf" value="([^"]+)"/);
+      const csrfMatch = loginHtml.match(/name="__cms_csrf" value="([^"]+)"/);
       const csrfToken = csrfMatch![1]!;
 
       const formData = createFormData({
         identity: 'admin@example.com',
         password: 'admin123',
-        _csrf: csrfToken,
+        __cms_csrf: csrfToken,
       });
 
       const loginRes = await handler(

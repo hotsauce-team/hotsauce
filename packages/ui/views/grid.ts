@@ -298,7 +298,7 @@ export function gridDetailPanel(
 
   // Delete form
   const deleteAction = `${options.baseUrl}/${panel.id}/delete`;
-  const csrfField = `<input type="hidden" name="_csrf" value="${
+  const csrfField = `<input type="hidden" name="__cms_csrf" value="${
     escapeHtml(panel.csrfToken)
   }" />`;
   const returnField = `<input type="hidden" name="__cms_return" value="${

@@ -458,7 +458,7 @@ packages/core/tests/
 
 Source tokens identify the origin of a CMS request. They are HMAC-SHA256 signed with `CMS_CSRF_SECRET`, have a 4-hour TTL, and carry the value `'cms'` for core forms or `'plugin:{name}'` for plugin requests (e.g., `'plugin:puck'`).
 
-**Picker mode** is a separate rendering path in `handleList` that serves a stripped-down grid for the Puck `ImagePickerField`. It is gated by two independent checks: a valid admin session (JWT cookie) and a valid source token in `?_source=`. The source token prevents other CMS pages from loading the picker grid directly and ensures `ctx.source` is populated in row policies.
+**Picker mode** is a separate rendering path in `handleList` that serves a stripped-down grid for the Puck `ImagePickerField`. It is gated by two independent checks: a valid admin session (JWT cookie) and a valid source token in `?__cms_source=`. The source token prevents other CMS pages from loading the picker grid directly and ensures `ctx.source` is populated in row policies.
 
 Key invariants — do not break these:
 

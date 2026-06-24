@@ -11,8 +11,8 @@ import {
 // Test secret (32+ chars for security requirement)
 const TEST_SECRET = 'test-secret-key-for-csrf-tokens-minimum-32-chars';
 
-Deno.test('getCsrfFieldName: returns _csrf', () => {
-  assertEquals(getCsrfFieldName(), '_csrf');
+Deno.test('getCsrfFieldName: returns __cms_csrf', () => {
+  assertEquals(getCsrfFieldName(), '__cms_csrf');
 });
 
 Deno.test('generateCsrfToken: returns non-empty string', async () => {
@@ -101,7 +101,7 @@ Deno.test('validateCsrfToken: rejects malformed token (wrong parts)', async () =
 });
 
 Deno.test('getCsrfTokenFromFormData: extracts token from form data', () => {
-  const formData: Record<string, string | string[]> = { '_csrf': 'test-token' };
+  const formData: Record<string, string | string[]> = { '__cms_csrf': 'test-token' };
   assertEquals(getCsrfTokenFromFormData(formData), 'test-token');
 });
 
@@ -112,7 +112,7 @@ Deno.test('getCsrfTokenFromFormData: returns null when missing', () => {
 
 Deno.test('getCsrfTokenFromFormData: handles array value', () => {
   const formData: Record<string, string | string[]> = {
-    '_csrf': ['first-token', 'second-token'],
+    '__cms_csrf': ['first-token', 'second-token'],
   };
   assertEquals(getCsrfTokenFromFormData(formData), 'first-token');
 });
@@ -123,7 +123,7 @@ Deno.test('integration: generate and validate token flow', async () => {
 
   // Simulate receiving token in form submission
   const formData: Record<string, string | string[]> = {
-    '_csrf': token,
+    '__cms_csrf': token,
     'name': 'Test User',
   };
 

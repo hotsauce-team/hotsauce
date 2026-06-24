@@ -149,8 +149,8 @@ export const UPLOAD_JS = `
       };
       var formData = new FormData();
       formData.append(config.column, JSON.stringify(fileReference));
-      formData.append('_csrf', config.csrfToken);
-      formData.append('_source', config.sourceToken);
+      formData.append('__cms_csrf', config.csrfToken);
+      formData.append('__cms_source', config.sourceToken);
 
       return fetch(config.basePath + '/' + config.table + '/' + config.recordId, {
         method: 'POST',

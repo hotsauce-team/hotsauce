@@ -377,8 +377,8 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
       );
 
       const formData = createFormData({
-        _csrf: csrfToken,
-        _source: sourceToken,
+        __cms_csrf: csrfToken,
+        __cms_source: sourceToken,
         title: 'Updated',
         __cms_return: '/admin/media',
       });
@@ -413,8 +413,8 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
       );
 
       const formData = createFormData({
-        _csrf: csrfToken,
-        _source: sourceToken,
+        __cms_csrf: csrfToken,
+        __cms_source: sourceToken,
         title: 'Updated',
         __cms_return: 'https://evil.com/steal',
       });
@@ -445,8 +445,8 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
     const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
 
     const formData = createFormData({
-      _csrf: csrfToken,
-      _source: sourceToken,
+      __cms_csrf: csrfToken,
+      __cms_source: sourceToken,
       title: 'Updated',
       __cms_return: '/other-path',
     });
@@ -480,8 +480,8 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
       );
 
       const formData = createFormData({
-        _csrf: csrfToken,
-        _source: sourceToken,
+        __cms_csrf: csrfToken,
+        __cms_source: sourceToken,
         __cms_return: '/admin/media',
       });
 
@@ -517,8 +517,8 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
 
       // Newline could enable header injection
       const formData = createFormData({
-        _csrf: csrfToken,
-        _source: sourceToken,
+        __cms_csrf: csrfToken,
+        __cms_source: sourceToken,
         title: 'Updated',
         __cms_return: '/admin/media\r\nX-Injected: bad',
       });
@@ -554,8 +554,8 @@ Deno.test('integration: __cms_return redirect tests', async (t) => {
 
       // Backslash can be interpreted as / by some browsers
       const formData = createFormData({
-        _csrf: csrfToken,
-        _source: sourceToken,
+        __cms_csrf: csrfToken,
+        __cms_source: sourceToken,
         title: 'Updated',
         __cms_return: '/admin\\evil.com',
       });

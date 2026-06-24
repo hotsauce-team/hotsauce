@@ -352,7 +352,7 @@ export class PasswordProvider implements AuthProvider {
             : ''}
 
           <form method="POST" action="${basePath}/login" class="cms-login-form">
-            <input type="hidden" name="_csrf" value="${csrfToken}" />
+            <input type="hidden" name="__cms_csrf" value="${csrfToken}" />
             <input type="hidden" name="challenge_token" value="${challengeToken}" />
 
             <div class="cms-form-field">

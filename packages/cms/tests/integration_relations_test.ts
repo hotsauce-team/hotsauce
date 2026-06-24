@@ -199,8 +199,8 @@ Deno.test('integration: foreign key relations', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('title', 'Updated Post');
       formData.append('body', 'Updated Content');
       formData.append('authorId', '2'); // Change to Bob
@@ -246,8 +246,8 @@ Deno.test('integration: foreign key relations', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('title', 'Updated Post');
       formData.append('body', 'Content');
       // Don't include authorId - should set to null if optional

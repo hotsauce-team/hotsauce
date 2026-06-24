@@ -277,8 +277,8 @@ Deno.test({
         title: 'Hacked by Bob',
         body: 'Malicious content',
         authorId: '1',
-        _csrf: csrfToken,
-        _source: sourceToken,
+        __cms_csrf: csrfToken,
+        __cms_source: sourceToken,
       });
 
       const request = new Request('http://localhost/admin/posts/1/edit', {
@@ -633,8 +633,8 @@ Deno.test({
         const formData = createFormData({
           name: 'Updated Name',
           email: 'hacked@example.com', // This should be ignored!
-          _csrf: csrfToken,
-          _source: sourceToken,
+          __cms_csrf: csrfToken,
+          __cms_source: sourceToken,
         });
 
         const request = new Request('http://localhost/admin/users/1/edit', {
@@ -762,8 +762,8 @@ Deno.test({
         // Create user without email (it should be auto-filled)
         const formData = createFormData({
           name: 'New User',
-          _csrf: csrfToken,
-          _source: sourceToken,
+          __cms_csrf: csrfToken,
+          __cms_source: sourceToken,
         });
 
         const request = new Request('http://localhost/admin/users/new', {
@@ -992,8 +992,8 @@ Deno.test({
 
         // Update with puck plugin source - should succeed
         const formData = createFormData({
-          _csrf: csrfToken,
-          _source: puckSourceToken,
+          __cms_csrf: csrfToken,
+          __cms_source: puckSourceToken,
           _method: 'PATCH',
           title: 'Updated Page',
           content: JSON.stringify({
@@ -1052,8 +1052,8 @@ Deno.test({
         // Send ONLY content field - exactly what Puck client does
         // Note: NO _method, NO title, only content
         const formData = createFormData({
-          _csrf: csrfToken,
-          _source: puckSourceToken,
+          __cms_csrf: csrfToken,
+          __cms_source: puckSourceToken,
           content: JSON.stringify({
             content: [{
               type: 'HeadingBlock',
@@ -1126,8 +1126,8 @@ Deno.test({
 
         // Update with CMS source - content should NOT be writable
         const formData = createFormData({
-          _csrf: csrfToken,
-          _source: cmsSourceToken,
+          __cms_csrf: csrfToken,
+          __cms_source: cmsSourceToken,
           _method: 'PATCH',
           title: 'CMS Updated Title',
           content: JSON.stringify({ blocks: [{ type: 'should-not-save' }] }),
@@ -1175,8 +1175,8 @@ Deno.test({
 
         // Create with puck plugin source - should include content
         const formData = createFormData({
-          _csrf: csrfToken,
-          _source: puckSourceToken,
+          __cms_csrf: csrfToken,
+          __cms_source: puckSourceToken,
           title: 'New Page via Puck',
           content: JSON.stringify({
             content: [{
@@ -1234,8 +1234,8 @@ Deno.test({
 
         // Create with CMS source - content should be ignored
         const formData = createFormData({
-          _csrf: csrfToken,
-          _source: cmsSourceToken,
+          __cms_csrf: csrfToken,
+          __cms_source: cmsSourceToken,
           title: 'New Page via CMS',
           content: JSON.stringify({ blocks: [{ type: 'should-not-save' }] }),
         });
@@ -1326,7 +1326,7 @@ Deno.test({
       );
     }
 
-    await t.step('create blocked when _source missing', async () => {
+    await t.step('create blocked when __cms_source missing', async () => {
       await resetDb();
 
       const handler = createCmsHandler({
@@ -1338,13 +1338,13 @@ Deno.test({
         policies: {},
       });
 
-      // Generate valid CSRF but no _source
+      // Generate valid CSRF but no __cms_source
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
 
-      // Simulate form submission without _source field
+      // Simulate form submission without __cms_source field
       const formData = createFormData({
-        _csrf: csrfToken,
-        // NO _source field - this should be blocked
+        __cms_csrf: csrfToken,
+        // NO __cms_source field - this should be blocked
         title: 'Test Post',
         body: 'Some content',
       });
@@ -1366,7 +1366,7 @@ Deno.test({
       assertEquals(allPosts.length, 0);
     });
 
-    await t.step('update blocked when _source missing', async () => {
+    await t.step('update blocked when __cms_source missing', async () => {
       await resetDb();
 
       // Create a user and post first
@@ -1389,14 +1389,14 @@ Deno.test({
         policies: {},
       });
 
-      // Generate valid CSRF but no _source
+      // Generate valid CSRF but no __cms_source
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
 
-      // Simulate form submission without _source field
+      // Simulate form submission without __cms_source field
       const formData = createFormData({
-        _csrf: csrfToken,
+        __cms_csrf: csrfToken,
         _method: 'PUT',
-        // NO _source field - this should be blocked
+        // NO __cms_source field - this should be blocked
         title: 'Modified Title',
         body: 'Modified body',
       });
@@ -1419,7 +1419,7 @@ Deno.test({
       assertEquals(post?.body, 'Original body');
     });
 
-    await t.step('create blocked when _source is invalid', async () => {
+    await t.step('create blocked when __cms_source is invalid', async () => {
       await resetDb();
 
       const handler = createCmsHandler({
@@ -1433,10 +1433,10 @@ Deno.test({
 
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
 
-      // Submit with invalid/tampered _source
+      // Submit with invalid/tampered __cms_source
       const formData = createFormData({
-        _csrf: csrfToken,
-        _source: 'cms.abc123.tampered_signature',
+        __cms_csrf: csrfToken,
+        __cms_source: 'cms.abc123.tampered_signature',
         title: 'Test Post',
         body: 'Some content',
       });

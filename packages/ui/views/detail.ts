@@ -246,7 +246,7 @@ export function detailView(
 
   if (options.showDelete) {
     const csrfField = options.csrfToken
-      ? `<input type="hidden" name="_csrf" value="${
+      ? `<input type="hidden" name="__cms_csrf" value="${
         escapeHtml(options.csrfToken)
       }" />`
       : '';

@@ -1130,7 +1130,7 @@ Deno.test('gridDetailPanel: includes CSRF token', () => {
   const options = createGridOptions({ selectedId: 1 });
 
   const result = gridDetailPanel(panel, options);
-  assertStringIncludes(result, 'name="_csrf"');
+  assertStringIncludes(result, 'name="__cms_csrf"');
   assertStringIncludes(result, 'my-csrf-token');
 });
 
