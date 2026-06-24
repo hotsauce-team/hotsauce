@@ -4,8 +4,9 @@ A label-driven state machine that runs a Claude Code agent on GitHub issues via
 [sandcastle](https://github.com/mattpocock/sandcastle) (`@ai-hero/sandcastle`).
 The layout mirrors sandcastle's own `agent-workflows/` examples.
 
-Workflow:
-[`.github/workflows/agent-on-issue.yml`](../.github/workflows/agent-on-issue.yml)
+Workflows (one per action, mirroring sandcastle's `.github/workflows/`):
+[`agent-explore.yml`](../.github/workflows/agent-explore.yml) ·
+[`agent-implement.yml`](../.github/workflows/agent-implement.yml)
 
 ```
 .sandcastle/
