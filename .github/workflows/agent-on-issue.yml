@@ -60,7 +60,7 @@ jobs:
           npm install --no-save @ai-hero/sandcastle tsx
           # Reads MODE; sets step outputs `mode` and (implement only) `branch`.
           # explore mode writes .sandcastle/triage-notes.md
-          npx tsx .sandcastle/run-issue.ts
+          npx tsx .sandcastle/run-issue.mts
 
       # ---- explore branch ----
       - name: Post triage notes

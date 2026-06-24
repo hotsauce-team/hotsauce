@@ -4,7 +4,7 @@ A label-driven state machine that runs a Claude Code agent on GitHub issues via
 [sandcastle](https://github.com/mattpocock/sandcastle) (`@ai-hero/sandcastle`).
 
 Workflow: [`.github/workflows/agent-on-issue.yml`](../.github/workflows/agent-on-issue.yml)
-Orchestration: [`run-issue.ts`](./run-issue.ts)
+Orchestration: [`run-issue.mts`](./run-issue.mts)
 
 ## State machine
 
@@ -46,7 +46,7 @@ export ISSUE_TITLE="Example"
 export ISSUE_BODY="Describe the task"
 export CLAUDE_CODE_OAUTH_TOKEN=...   # from `claude setup-token`
 npm install --no-save @ai-hero/sandcastle tsx
-npx tsx .sandcastle/run-issue.ts
+npx tsx .sandcastle/run-issue.mts
 ```
 
 `explore` produces `.sandcastle/triage-notes.md` and no commits. `implement` creates the
