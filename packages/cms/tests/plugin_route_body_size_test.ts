@@ -164,6 +164,24 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
       assertEquals(res.status, 200);
     },
   );
+
+  await t.step(
+    'no CSRF token in header or body (under the cap) is rejected',
+    async () => {
+      // The fallback must reject, not silently allow, when the body genuinely
+      // carries no token. The body is under the cap, so the size gate passes
+      // and the request reaches CSRF validation, which fails with 403.
+      const form = new URLSearchParams({ notACsrfField: 'value' });
+      const res = await handler(
+        new Request('http://localhost/admin/body-test/default-cap', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: form.toString(),
+        }),
+      );
+      assertEquals(res.status, 403);
+    },
+  );
 });
 
 Deno.test('plugin route validation: maxBodySize must be a positive integer', () => {
