@@ -5,7 +5,7 @@
 import { signPayload, verifyPayload } from './crypto.ts';
 
 /** Form field name for source tokens */
-export const SOURCE_FIELD_NAME: string = '_source';
+export const SOURCE_FIELD_NAME: string = '__cms_source';
 
 /** Token expiry time (4 hours, same as CSRF) */
 const TOKEN_MAX_AGE_MS = 4 * 60 * 60 * 1000;

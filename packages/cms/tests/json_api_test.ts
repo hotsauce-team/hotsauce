@@ -55,8 +55,8 @@ async function createFormDataBody(
   const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
   const formData = createFormData({
     ...data,
-    _csrf: csrfToken,
-    _source: sourceToken,
+    __cms_csrf: csrfToken,
+    __cms_source: sourceToken,
   });
   return { body: formData, csrfToken };
 }
@@ -147,7 +147,7 @@ Deno.test({
         title: 'Test Post',
         body: 'Test content',
         authorId: '1',
-        _csrf: 'invalid-token',
+        __cms_csrf: 'invalid-token',
       });
 
       const response = await handler(

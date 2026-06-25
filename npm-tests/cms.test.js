@@ -99,19 +99,19 @@ describe('@hotsauce/cms CRUD', () => {
     const formHtml = await formRes.text();
 
     // Extract CSRF token
-    const csrfMatch = formHtml.match(/name="_csrf"\s+value="([^"]+)"/);
+    const csrfMatch = formHtml.match(/name="__cms_csrf"\s+value="([^"]+)"/);
     assert.ok(csrfMatch, 'CSRF token not found in form');
     const csrfToken = csrfMatch[1];
 
     // Extract source token (required for write operations)
-    const sourceMatch = formHtml.match(/name="_source"\s+value="([^"]+)"/);
+    const sourceMatch = formHtml.match(/name="__cms_source"\s+value="([^"]+)"/);
     assert.ok(sourceMatch, 'Source token not found in form');
     const sourceToken = sourceMatch[1];
 
     // Submit form
     const form = new URLSearchParams({
-      _csrf: csrfToken,
-      _source: sourceToken,
+      __cms_csrf: csrfToken,
+      __cms_source: sourceToken,
       email: 'test@example.com',
       name: 'Test User',
       bio: 'A test user',
@@ -145,17 +145,17 @@ describe('@hotsauce/cms CRUD', () => {
     assert.equal(formRes.status, 200);
     const formHtml = await formRes.text();
 
-    const csrfMatch = formHtml.match(/name="_csrf"\s+value="([^"]+)"/);
+    const csrfMatch = formHtml.match(/name="__cms_csrf"\s+value="([^"]+)"/);
     const csrfToken = csrfMatch[1];
 
     // Extract source token (required for write operations)
-    const sourceMatch = formHtml.match(/name="_source"\s+value="([^"]+)"/);
+    const sourceMatch = formHtml.match(/name="__cms_source"\s+value="([^"]+)"/);
     const sourceToken = sourceMatch[1];
 
     // Submit update
     const form = new URLSearchParams({
-      _csrf: csrfToken,
-      _source: sourceToken,
+      __cms_csrf: csrfToken,
+      __cms_source: sourceToken,
       email: 'updated@example.com',
       name: 'Updated User',
       bio: 'Updated bio',
@@ -171,14 +171,14 @@ describe('@hotsauce/cms CRUD', () => {
     // Get a fresh CSRF token from the edit page
     const editRes = await request('GET', '/users/1/edit');
     const editHtml = await editRes.text();
-    const csrfMatch = editHtml.match(/name="_csrf"\s+value="([^"]+)"/);
+    const csrfMatch = editHtml.match(/name="__cms_csrf"\s+value="([^"]+)"/);
     const csrfToken = csrfMatch[1];
-    const sourceMatch = editHtml.match(/name="_source"\s+value="([^"]+)"/);
+    const sourceMatch = editHtml.match(/name="__cms_source"\s+value="([^"]+)"/);
     const sourceToken = sourceMatch[1];
 
     const form = new URLSearchParams({
-      _csrf: csrfToken,
-      _source: sourceToken,
+      __cms_csrf: csrfToken,
+      __cms_source: sourceToken,
     });
     const deleteRes = await request('POST', '/users/1/delete', form);
     assert.ok(

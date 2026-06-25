@@ -3,7 +3,7 @@
 
 import { signPayload, verifyPayload } from './crypto.ts';
 
-const CSRF_TOKEN_NAME = '_csrf';
+const CSRF_TOKEN_NAME = '__cms_csrf';
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 const TOKEN_MAX_AGE_MS = 4 * 60 * 60 * 1000; // 4 hours
 const CLOCK_SKEW_MS = 60_000; // 1 minute tolerance for clock drift
@@ -18,7 +18,7 @@ const CLOCK_SKEW_MS = 60_000; // 1 minute tolerance for clock drift
  * @example
  * ```ts
  * const token = await generateCsrfToken(csrfSecret);
- * // Include in form: <input type="hidden" name="_csrf" value="${token}">
+ * // Include in form: <input type="hidden" name="__cms_csrf" value="${token}">
  * ```
  */
 export async function generateCsrfToken(secret: string): Promise<string> {

@@ -146,7 +146,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/media?picker=true&_source=${
+        `http://localhost/admin/media?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );
@@ -227,7 +227,7 @@ Deno.test('integration: picker mode tests', async (t) => {
     );
 
     const request = new Request(
-      `http://localhost/admin/media?picker=true&_source=${
+      `http://localhost/admin/media?picker=true&__cms_source=${
         encodeURIComponent(cmsSourceToken)
       }`,
     );
@@ -284,7 +284,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/photos?picker=true&_source=${
+        `http://localhost/admin/photos?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );
@@ -372,7 +372,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/assets?picker=true&_source=${
+        `http://localhost/admin/assets?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );
@@ -460,7 +460,7 @@ Deno.test('integration: picker mode tests', async (t) => {
     );
 
     const request = new Request(
-      `http://localhost/admin/assets?picker=true&_source=${
+      `http://localhost/admin/assets?picker=true&__cms_source=${
         encodeURIComponent(sourceToken)
       }`,
     );
@@ -540,7 +540,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/gallery?picker=true&_source=${
+        `http://localhost/admin/gallery?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );
@@ -632,7 +632,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/assets?picker=true&_source=${
+        `http://localhost/admin/assets?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );
@@ -718,7 +718,7 @@ Deno.test('integration: picker mode tests', async (t) => {
 
     // Request picker mode with invalid source token
     const request = new Request(
-      'http://localhost/admin/media?picker=true&_source=invalid.token.here',
+      'http://localhost/admin/media?picker=true&__cms_source=invalid.token.here',
     );
     const response = await handler(request);
 
@@ -778,7 +778,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/media?picker=true&_source=${
+        `http://localhost/admin/media?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );
@@ -830,7 +830,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       }.deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef`;
 
       const request = new Request(
-        `http://localhost/admin/media?picker=true&_source=${
+        `http://localhost/admin/media?picker=true&__cms_source=${
           encodeURIComponent(expiredToken)
         }`,
       );
@@ -882,7 +882,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/media?picker=true&_source=${
+        `http://localhost/admin/media?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );
@@ -951,7 +951,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/media?picker=true&_source=${
+        `http://localhost/admin/media?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );
@@ -1023,7 +1023,7 @@ Deno.test('integration: picker mode tests', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/media?picker=true&_source=${
+        `http://localhost/admin/media?picker=true&__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
       );

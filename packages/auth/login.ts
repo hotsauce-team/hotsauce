@@ -40,7 +40,7 @@ export function renderLoginPage(options: {
           : ''}
 
         <form method="POST" action="${basePath}/login" class="cms-login-form">
-          <input type="hidden" name="_csrf" value="${csrfToken}" />
+          <input type="hidden" name="__cms_csrf" value="${csrfToken}" />
 
           <div class="cms-form-field">
             <label for="identity" class="cms-label">${identityLabel}</label>

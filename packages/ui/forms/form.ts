@@ -51,12 +51,12 @@ export function form(
   const submitText = options.submitText ?? 'Save';
   const csrfField = options.csrfToken
     ? html`
-      <input type="hidden" name="_csrf" value="${options.csrfToken}" />
+      <input type="hidden" name="__cms_csrf" value="${options.csrfToken}" />
     `
     : '';
   const sourceField = options.sourceToken
     ? html`
-      <input type="hidden" name="_source" value="${options.sourceToken}" />
+      <input type="hidden" name="__cms_source" value="${options.sourceToken}" />
     `
     : '';
 
@@ -108,7 +108,7 @@ export function deleteForm(options: {
   const buttonText = options.buttonText ?? 'Delete';
   const csrfField = options.csrfToken
     ? html`
-      <input type="hidden" name="_csrf" value="${options.csrfToken}" />
+      <input type="hidden" name="__cms_csrf" value="${options.csrfToken}" />
     `
     : '';
 

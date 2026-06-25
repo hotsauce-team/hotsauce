@@ -84,8 +84,8 @@ Deno.test('integration: file upload tests', async (t) => {
     const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
 
     const formData = new FormData();
-    formData.append('_csrf', csrfToken);
-    formData.append('_source', sourceToken);
+    formData.append('__cms_csrf', csrfToken);
+    formData.append('__cms_source', sourceToken);
     formData.append('name', 'Profile with Avatar');
     formData.append(
       'avatar',
@@ -224,8 +224,8 @@ Deno.test('integration: file upload tests', async (t) => {
 
     // Submit with _clear_avatar=1
     const formData = new FormData();
-    formData.append('_csrf', csrfToken);
-    formData.append('_source', sourceToken);
+    formData.append('__cms_csrf', csrfToken);
+    formData.append('__cms_source', sourceToken);
     formData.append('name', 'Profile to Clear');
     formData.append('_clear_avatar', '1');
 
@@ -253,8 +253,8 @@ Deno.test('integration: file upload tests', async (t) => {
     const largeContent = new Uint8Array(1024 * 1024 + 1); // 1MB + 1 byte
 
     const formData = new FormData();
-    formData.append('_csrf', csrfToken);
-    formData.append('_source', sourceToken);
+    formData.append('__cms_csrf', csrfToken);
+    formData.append('__cms_source', sourceToken);
     formData.append('name', 'Profile with Large Doc');
     formData.append(
       'document',
@@ -283,8 +283,8 @@ Deno.test('integration: file upload tests', async (t) => {
 
     // Document field accepts only PDF
     const formData = new FormData();
-    formData.append('_csrf', csrfToken);
-    formData.append('_source', sourceToken);
+    formData.append('__cms_csrf', csrfToken);
+    formData.append('__cms_source', sourceToken);
     formData.append('name', 'Profile with Wrong Type');
     formData.append(
       'document',
@@ -312,8 +312,8 @@ Deno.test('integration: file upload tests', async (t) => {
     const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
 
     const formData = new FormData();
-    formData.append('_csrf', csrfToken);
-    formData.append('_source', sourceToken);
+    formData.append('__cms_csrf', csrfToken);
+    formData.append('__cms_source', sourceToken);
     formData.append('name', 'Profile with PDF');
     formData.append(
       'document',
@@ -486,8 +486,8 @@ Deno.test('integration: file upload tests', async (t) => {
 
     // Upload a new avatar (PDF pretending to be image for size difference)
     const formData = new FormData();
-    formData.append('_csrf', csrfToken);
-    formData.append('_source', sourceToken);
+    formData.append('__cms_csrf', csrfToken);
+    formData.append('__cms_source', sourceToken);
     formData.append('name', 'Replace Test');
     formData.append(
       'avatar',
@@ -525,7 +525,7 @@ Deno.test('integration: file upload tests', async (t) => {
     const handler = createHandler();
 
     const formData = new FormData();
-    // Deliberately omit _csrf and _source
+    // Deliberately omit __cms_csrf and __cms_source
     formData.append('name', 'Should Fail');
     formData.append(
       'avatar',
@@ -555,8 +555,8 @@ Deno.test('integration: file upload tests', async (t) => {
     const handler = createHandler();
 
     const formData = new FormData();
-    formData.append('_csrf', 'completely-invalid-token');
-    formData.append('_source', 'also-invalid');
+    formData.append('__cms_csrf', 'completely-invalid-token');
+    formData.append('__cms_source', 'also-invalid');
     formData.append('name', 'Should Fail');
     formData.append(
       'avatar',
@@ -963,9 +963,9 @@ Deno.test('integration: policy-gated file serving', async (t) => {
   });
 
   // ──────────────────────────────────────────────────────────────────────
-  // _source token plumbing on /admin/files/...
+  // __cms_source token plumbing on /admin/files/...
   //
-  // /admin/files/... must propagate ?_source=<token> into the policy
+  // /admin/files/... must propagate ?__cms_source=<token> into the policy
   // context so that source-aware row policies behave consistently with
   // the picker list page (handleList). Without this, a policy that allows
   // reads inside the picker iframe would still 404 every thumbnail and
@@ -991,7 +991,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
   }
 
   await t.step(
-    'source-gated row policy: file 404s when _source missing',
+    'source-gated row policy: file 404s when __cms_source missing',
     async () => {
       await seedProfile();
 
@@ -1011,7 +1011,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
   );
 
   await t.step(
-    'source-gated row policy: file serves when valid _source matches',
+    'source-gated row policy: file serves when valid __cms_source matches',
     async () => {
       await seedProfile();
 
@@ -1024,7 +1024,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/files/profiles/avatar/1?_source=${
+        `http://localhost/admin/files/profiles/avatar/1?__cms_source=${
           encodeURIComponent(sourceToken)
         }`,
         { headers: { Cookie: `cms_token=${token}` } },
@@ -1037,7 +1037,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
   );
 
   await t.step(
-    'source-gated row policy: file 404s when _source is for a different plugin',
+    'source-gated row policy: file 404s when __cms_source is for a different plugin',
     async () => {
       await seedProfile();
 
@@ -1050,7 +1050,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
       );
 
       const request = new Request(
-        `http://localhost/admin/files/profiles/avatar/1?_source=${
+        `http://localhost/admin/files/profiles/avatar/1?__cms_source=${
           encodeURIComponent(wrongSourceToken)
         }`,
         { headers: { Cookie: `cms_token=${token}` } },
@@ -1063,7 +1063,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
   );
 
   await t.step(
-    'invalid _source token is treated as missing (no 4xx escalation, policy decides)',
+    'invalid __cms_source token is treated as missing (no 4xx escalation, policy decides)',
     async () => {
       await seedProfile();
 
@@ -1084,7 +1084,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
       const token = await signJwt(payload, AUTH_SECRET);
 
       const request = new Request(
-        'http://localhost/admin/files/profiles/avatar/1?_source=garbage.not.a.token',
+        'http://localhost/admin/files/profiles/avatar/1?__cms_source=garbage.not.a.token',
         { headers: { Cookie: `cms_token=${token}` } },
       );
       const response = await handler(request);
@@ -1097,7 +1097,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
   );
 
   await t.step(
-    'expired _source token is treated as missing',
+    'expired __cms_source token is treated as missing',
     async () => {
       await seedProfile();
 
@@ -1115,7 +1115,7 @@ Deno.test('integration: policy-gated file serving', async (t) => {
       }.deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef`;
 
       const request = new Request(
-        `http://localhost/admin/files/profiles/avatar/1?_source=${
+        `http://localhost/admin/files/profiles/avatar/1?__cms_source=${
           encodeURIComponent(expiredToken)
         }`,
         { headers: { Cookie: `cms_token=${token}` } },
@@ -1191,8 +1191,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
     // Attempt to submit a file reference with a storage key during CREATE
     // This should be rejected - presign requires existing record ID
     const formData = new FormData();
-    formData.append('_csrf', csrfToken);
-    formData.append('_source', sourceToken);
+    formData.append('__cms_csrf', csrfToken);
+    formData.append('__cms_source', sourceToken);
     formData.append('name', 'Tampered Create');
     formData.append(
       'avatar',
@@ -1233,8 +1233,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Tampered Create JSON');
       formData.append(
         'avatar',
@@ -1279,8 +1279,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       // Attempt to submit a key that belongs to record ID 999 when editing record ID 1
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Tampered Update');
       formData.append(
         'avatar',
@@ -1315,8 +1315,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
     // Key from a different table
     const formData = new FormData();
-    formData.append('_csrf', csrfToken);
-    formData.append('_source', sourceToken);
+    formData.append('__cms_csrf', csrfToken);
+    formData.append('__cms_source', sourceToken);
     formData.append('name', 'Cross-Table Attack');
     formData.append(
       'avatar',
@@ -1355,8 +1355,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       // Valid key prefix but wrong storage provider
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Storage Tampering');
       formData.append(
         'avatar',
@@ -1396,8 +1396,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       // Valid key prefix but storage field omitted — should be normalized
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Storage Field Missing');
       formData.append(
         'avatar',
@@ -1436,8 +1436,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       // Valid key with correct prefix for record 1
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Valid Update');
       formData.append(
         'avatar',
@@ -1521,8 +1521,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       // Submit with 'archive' storage (matches resolver for avatar column)
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Resolver Test');
       formData.append(
         'avatar',
@@ -1603,8 +1603,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       // Try to submit with 's3' but resolver routes avatar to 'archive'
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Resolver Mismatch');
       formData.append(
         'avatar',
@@ -1645,8 +1645,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'DB Only');
       formData.append(
         'avatar',
@@ -1710,8 +1710,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Bad Config');
       formData.append(
         'avatar',
@@ -1790,7 +1790,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
+      formData.append('__cms_csrf', csrfToken);
 
       const request = new Request('http://localhost/admin/profiles/1/delete', {
         method: 'POST',
@@ -1865,7 +1865,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
+      formData.append('__cms_csrf', csrfToken);
 
       const request = new Request('http://localhost/admin/profiles/1/delete', {
         method: 'POST',
@@ -1937,7 +1937,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
+      formData.append('__cms_csrf', csrfToken);
 
       const request = new Request('http://localhost/admin/profiles/1/delete', {
         method: 'POST',
@@ -2012,8 +2012,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       // Submit form with only name changed — no file field at all
       // This simulates the S3 edit form where file input is replaced by plugin UI
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Updated name only');
 
       const request = new Request('http://localhost/admin/profiles/1', {
@@ -2117,8 +2117,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       // Update the file field with a new S3 key
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Profile with orphans');
       formData.append(
         'avatar',
@@ -2218,8 +2218,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       // Submit with the same file reference (no change)
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'No change');
       formData.append(
         'avatar',
@@ -2302,8 +2302,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Error test');
       formData.append(
         'avatar',
@@ -2389,8 +2389,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'No listObjects');
       formData.append(
         'avatar',
@@ -2484,8 +2484,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'No deleteObject');
       formData.append(
         'avatar',
@@ -2589,8 +2589,8 @@ Deno.test('integration: file key tampering prevention', async (t) => {
       );
 
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
-      formData.append('_source', sourceToken);
+      formData.append('__cms_csrf', csrfToken);
+      formData.append('__cms_source', sourceToken);
       formData.append('name', 'Grace period test');
       formData.append(
         'avatar',
@@ -2814,7 +2814,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
+      formData.append('__cms_csrf', csrfToken);
 
       const request = new Request('http://localhost/admin/profiles/1/delete', {
         method: 'POST',
@@ -2883,7 +2883,7 @@ Deno.test('integration: file key tampering prevention', async (t) => {
 
       const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
       const formData = new FormData();
-      formData.append('_csrf', csrfToken);
+      formData.append('__cms_csrf', csrfToken);
 
       const request = new Request('http://localhost/admin/profiles/1/delete', {
         method: 'POST',

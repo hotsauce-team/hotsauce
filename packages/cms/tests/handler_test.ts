@@ -403,7 +403,7 @@ Deno.test('createCmsHandler: plugin POST routes work with valid CSRF', async () 
 
   const formData = new FormData();
   formData.append('data', 'test');
-  formData.append('_csrf', csrfToken);
+  formData.append('__cms_csrf', csrfToken);
 
   const request = new Request('http://localhost/admin/test-plugin/submit', {
     method: 'POST',
