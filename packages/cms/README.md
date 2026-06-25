@@ -2287,7 +2287,7 @@ routes: [
       /* ... */
     },
   },
-];
+],
 ```
 
 > ℹ️ This is a defence-in-depth measure; plugin routes are already auth- and
