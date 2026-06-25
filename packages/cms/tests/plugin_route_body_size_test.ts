@@ -1,6 +1,7 @@
 // Plugin Route Body Size Tests
-// Verifies that plugin routes enforce a maximum request body size
-// (Content-Length cap with a streaming byte limit for chunked bodies).
+// Verifies that plugin routes enforce a maximum request body size: an early
+// Content-Length reject, plus a streaming byte cap that aborts mid-transfer
+// for chunked bodies (no Content-Length) so they are never fully buffered.
 
 import { assertEquals, assertThrows } from '@std/assert';
 import { PGlite } from '@electric-sql/pglite';
@@ -102,7 +103,7 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
     'chunked body without Content-Length is still capped',
     async () => {
       // A streamed body has no Content-Length header, so the header check is
-      // bypassed. The fallback check on the buffered body must still reject it.
+      // bypassed. The streaming cap must still abort and reject it.
       const stream = new ReadableStream({
         start(controller) {
           controller.enqueue(new TextEncoder().encode('x'.repeat(100)));
@@ -119,6 +120,39 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
       assertEquals(req.headers.get('content-length'), null);
       const res = await handler(req);
       assertEquals(res.status, 413);
+    },
+  );
+
+  await t.step(
+    'oversized body without CSRF header is capped before the formData fallback',
+    async () => {
+      // No X-CSRF-Token header → the dispatch falls back to reading the token
+      // from the form body. The size gate must reject an oversized body with
+      // 413 before formData() buffers it (rather than parsing then 403-ing).
+      const res = await handler(
+        new Request('http://localhost/admin/body-test/small-cap', {
+          method: 'POST',
+          body: 'this body is well over the ten byte cap',
+        }),
+      );
+      assertEquals(res.status, 413);
+    },
+  );
+
+  await t.step(
+    'CSRF token in the form body (no header) still passes under the cap',
+    async () => {
+      // The body-token fallback is preserved: a request under the cap with the
+      // token in the form body authenticates and succeeds.
+      const form = new URLSearchParams({ _csrf: csrfToken });
+      const res = await handler(
+        new Request('http://localhost/admin/body-test/default-cap', {
+          method: 'POST',
+          headers: { 'content-type': 'application/x-www-form-urlencoded' },
+          body: form.toString(),
+        }),
+      );
+      assertEquals(res.status, 200);
     },
   );
 });
