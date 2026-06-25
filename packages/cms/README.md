@@ -2265,6 +2265,34 @@ For routes without `:table`, use a restrictive `filter` and explicit checks insi
 }
 ```
 
+**Request body size:**
+
+For mutating requests (`POST`/`PUT`/`PATCH`/`DELETE`), the body is capped to guard
+against oversized payloads. Requests whose `Content-Length` exceeds the limit are
+rejected with `413 Request body too large` before the body is read; chunked requests
+(no `Content-Length`) are checked against the same limit after buffering.
+
+The default cap is **200KB (204800 bytes)** — generous for the small JSON payloads
+plugin routes typically handle. Override it per route with `maxBodySize` (a positive
+number of bytes):
+
+```ts
+routes: [
+  {
+    pattern: 'presign',
+    methods: ['POST'],
+    maxBodySize: 1024, // tiny JSON body — reject anything larger
+    handler: (ctx) => {
+      /* ... */
+    },
+  },
+];
+```
+
+> ℹ️ This is a defence-in-depth measure; plugin routes are already auth- and
+> CSRF-gated. The chunked fallback rejects after the body is buffered, so it is not a
+> hard streaming/memory bound.
+
 **Worker Routes:**
 
 Worker plugins can have routes too, but must use `render` instead of `handler`:

@@ -473,4 +473,15 @@ export interface PluginRoute {
     /** Additional origins appended to connect-src (e.g., S3 endpoint for direct uploads) */
     connectSrc?: string[];
   };
+
+  /**
+   * Maximum request body size in bytes for mutating requests (POST/PUT/PATCH/DELETE).
+   *
+   * Requests whose `Content-Length` exceeds this are rejected with `413` before
+   * the body is read. As a fallback for chunked requests (no `Content-Length`),
+   * the buffered body is also checked against this limit after reading.
+   *
+   * Must be a positive finite number. Defaults to 200KB (204800 bytes).
+   */
+  maxBodySize?: number;
 }

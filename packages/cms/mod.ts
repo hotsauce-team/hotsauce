@@ -632,7 +632,24 @@ async function handlePluginRoute(
 
   // Read request body for mutating requests (deferred until after validation)
   if (routeAction === 'update' || routeAction === 'delete') {
+    // Cap the request body size (defence-in-depth; routes are auth + CSRF gated).
+    // Default to 200KB — generous for the JSON payloads plugin routes handle.
+    const maxBody = route.maxBodySize ?? 204_800;
+
+    // Reject early when Content-Length advertises an oversized body.
+    const contentLength = Number(request.headers.get('content-length'));
+    if (Number.isFinite(contentLength) && contentLength > maxBody) {
+      return new Response('Request body too large', { status: 413 });
+    }
+
     body = await request.text();
+
+    // Fallback for chunked/absent Content-Length (e.g. Transfer-Encoding:
+    // chunked), where the header check above is bypassed. The body is already
+    // buffered here, so this is defence-in-depth rather than a hard memory cap.
+    if (new TextEncoder().encode(body).length > maxBody) {
+      return new Response('Request body too large', { status: 413 });
+    }
   }
 
   // Build full context
