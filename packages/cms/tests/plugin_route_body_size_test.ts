@@ -1,6 +1,6 @@
 // Plugin Route Body Size Tests
 // Verifies that plugin routes enforce a maximum request body size
-// (Content-Length cap with a fallback check on the actual buffered body).
+// (Content-Length cap with a streaming byte limit for chunked bodies).
 
 import { assertEquals, assertThrows } from '@std/assert';
 import { PGlite } from '@electric-sql/pglite';
