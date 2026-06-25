@@ -508,6 +508,9 @@ export async function readBodyWithLimit(
   // Reject early when Content-Length advertises an oversized body.
   const contentLength = Number(request.headers.get('content-length'));
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    // Actively cancel the incoming stream so the client isn't left sending a
+    // body we'll never read (mirrors the streaming path's reader.cancel()).
+    await request.body?.cancel();
     return { tooLarge: true, body: '' };
   }
 

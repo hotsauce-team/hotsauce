@@ -64,29 +64,38 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
   });
 
   await t.step(
-    'Content-Length over the per-route cap returns 413',
+    'Content-Length over the per-route cap returns 413 (header fast-path)',
     async () => {
+      // The body is tiny, but an oversized Content-Length must be rejected on
+      // the header alone — before the body is read. A 413 here can only come
+      // from the fast-path, since streaming a 2-byte body would never exceed
+      // the 10-byte cap.
       const res = await handler(
         new Request('http://localhost/admin/body-test/small-cap', {
           method: 'POST',
-          headers: csrfHeaders,
-          body: 'this body is definitely larger than ten bytes',
+          headers: { ...csrfHeaders, 'content-length': '5000' },
+          body: 'hi',
         }),
       );
       assertEquals(res.status, 413);
     },
   );
 
-  await t.step('body over the default 200KB cap returns 413', async () => {
-    const res = await handler(
-      new Request('http://localhost/admin/body-test/default-cap', {
-        method: 'POST',
-        headers: csrfHeaders,
-        body: 'x'.repeat(204_800 + 1),
-      }),
-    );
-    assertEquals(res.status, 413);
-  });
+  await t.step(
+    'body over the default 200KB cap returns 413 (streaming path)',
+    async () => {
+      // No explicit Content-Length, so this exercises the streaming cap: the
+      // body is tallied as it is read and aborted once it crosses the default.
+      const res = await handler(
+        new Request('http://localhost/admin/body-test/default-cap', {
+          method: 'POST',
+          headers: csrfHeaders,
+          body: 'x'.repeat(204_800 + 1),
+        }),
+      );
+      assertEquals(res.status, 413);
+    },
+  );
 
   await t.step('body at the default 200KB cap passes through', async () => {
     const res = await handler(
