@@ -1,6 +1,6 @@
 {
   "name": "@hotsauce/ui",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "exports": "./mod.ts",
   "imports": {
     "@std/media-types": "jsr:@std/media-types@^1.1.0"
