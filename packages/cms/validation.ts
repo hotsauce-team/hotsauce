@@ -46,6 +46,7 @@ const AuthConfigSchema = z.object({
   }).optional(),
   maxAge: z.number().positive().optional(),
   cookieName: z.string().optional(),
+  sameSite: z.enum(['Lax', 'Strict']).optional(),
   loginTitle: z.string().optional(),
   identityLabel: z.string().optional(),
   isRevoked: z.any().optional(),

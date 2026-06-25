@@ -121,6 +121,27 @@ Deno.test('createAuthCookie: handles custom paths', () => {
   assertEquals(cookie2.includes('Path=/cms/admin'), true);
 });
 
+Deno.test('createAuthCookie: defaults to SameSite=Lax', () => {
+  const cookie = createAuthCookie('cms_token', 'abc123', 3600, '/admin', false);
+
+  assertEquals(cookie.includes('SameSite=Lax'), true);
+  assertEquals(cookie.includes('SameSite=Strict'), false);
+});
+
+Deno.test('createAuthCookie: honors SameSite=Strict when requested', () => {
+  const cookie = createAuthCookie(
+    'cms_token',
+    'abc123',
+    3600,
+    '/admin',
+    false,
+    'Strict',
+  );
+
+  assertEquals(cookie.includes('SameSite=Strict'), true);
+  assertEquals(cookie.includes('SameSite=Lax'), false);
+});
+
 // ─────────────────────────────────────────────────────────────
 // createClearCookie tests
 // ─────────────────────────────────────────────────────────────
@@ -153,6 +174,21 @@ Deno.test('createClearCookie: sets empty value', () => {
   const parts = cookie.split('; ');
   const namePart = parts.find((p) => p.startsWith('cms_token='));
   assertEquals(namePart, 'cms_token=');
+});
+
+Deno.test('createClearCookie: defaults to SameSite=Lax', () => {
+  const cookie = createClearCookie('cms_token', '/admin', false);
+
+  assertEquals(cookie.includes('SameSite=Lax'), true);
+  assertEquals(cookie.includes('SameSite=Strict'), false);
+});
+
+Deno.test('createClearCookie: honors SameSite=Strict when requested', () => {
+  // Clearing must match the original cookie's SameSite attribute.
+  const cookie = createClearCookie('cms_token', '/admin', false, 'Strict');
+
+  assertEquals(cookie.includes('SameSite=Strict'), true);
+  assertEquals(cookie.includes('SameSite=Lax'), false);
 });
 
 // ─────────────────────────────────────────────────────────────
