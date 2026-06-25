@@ -242,12 +242,12 @@ URLs are constructed at render time using file proxy routes. When `filename` is 
 ### How It Works
 
 1. User clicks "Pick Image" → Opens a `<dialog>` modal
-2. Modal contains an iframe pointing to `{basePath}/{table}?picker=true&_source=<token>`
+2. Modal contains an iframe pointing to `{basePath}/{table}?picker=true&__cms_source=<token>`
 3. CMS renders a minimal grid view (no sidebar, picker mode)
 4. User clicks an image → CMS posts `cms:media-selected` to parent window
 5. Component validates `event.source` matches the iframe, then calls `onChange`
 
-**Security:** Messages are validated via `event.source` to prevent spoofing from other scripts/tabs. The CMS posts only to `window.location.origin` (same-origin required). The `_source` token is automatically provided by the CMS context.
+**Security:** Messages are validated via `event.source` to prevent spoofing from other scripts/tabs. The CMS posts only to `window.location.origin` (same-origin required). The `__cms_source` token is automatically provided by the CMS context.
 
 ### Source Columns (Alt Text)
 

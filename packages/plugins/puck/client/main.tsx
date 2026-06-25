@@ -122,8 +122,8 @@ export async function initPuckEditor(
 
     const formData = new FormData();
     formData.append(options.column, JSON.stringify(data));
-    formData.append('_csrf', options.csrfToken);
-    formData.append('_source', options.sourceToken);
+    formData.append('__cms_csrf', options.csrfToken);
+    formData.append('__cms_source', options.sourceToken);
 
     try {
       const res = await fetch(url, {

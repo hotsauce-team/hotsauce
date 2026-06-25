@@ -89,7 +89,7 @@ export function renderAccountPage(options: {
                   action="${basePath}/account/2fa/disable"
                   class="cms-inline-form"
                 >
-                  <input type="hidden" name="_csrf" value="${csrfToken}" />
+                  <input type="hidden" name="__cms_csrf" value="${csrfToken}" />
                   <button type="submit" class="cms-btn cms-btn-danger">
                     Disable 2FA
                   </button>
@@ -114,7 +114,7 @@ export function renderAccountPage(options: {
 
       <div class="cms-account-section cms-account-logout">
         <form method="POST" action="${basePath}/logout">
-          <input type="hidden" name="_csrf" value="${csrfToken}" />
+          <input type="hidden" name="__cms_csrf" value="${csrfToken}" />
           <button type="submit" class="cms-btn cms-btn-secondary">
             Sign Out
           </button>
@@ -157,7 +157,7 @@ export function renderPasswordChangePage(options: {
         action="${basePath}/account/password"
         class="cms-account-form"
       >
-        <input type="hidden" name="_csrf" value="${csrfToken}" />
+        <input type="hidden" name="__cms_csrf" value="${csrfToken}" />
 
         <div class="cms-form-field">
           <label for="current_password" class="cms-label">Current Password</label>
@@ -288,7 +288,7 @@ export function render2FASetupPage(options: {
               action="${basePath}/account/2fa/enable"
               class="cms-2fa-verify-form"
             >
-              <input type="hidden" name="_csrf" value="${csrfToken}" />
+              <input type="hidden" name="__cms_csrf" value="${csrfToken}" />
               <input type="hidden" name="setup_token" value="${setupToken}" />
               <div class="cms-form-field">
                 <input
@@ -362,7 +362,7 @@ export function render2FADisablePage(options: {
         action="${basePath}/account/2fa/disable"
         class="cms-account-form"
       >
-        <input type="hidden" name="_csrf" value="${csrfToken}" />
+        <input type="hidden" name="__cms_csrf" value="${csrfToken}" />
 
         <div class="cms-form-field">
           <label for="password" class="cms-label">Password</label>

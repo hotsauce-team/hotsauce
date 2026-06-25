@@ -112,7 +112,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     assertEquals(response.status, 200);
     const html = await response.text();
     assertStringIncludes(html, 'Create Users');
-    assertStringIncludes(html, 'name="_csrf"');
+    assertStringIncludes(html, 'name="__cms_csrf"');
     assertStringIncludes(html, 'name="email"');
     assertStringIncludes(html, 'name="name"');
   });
@@ -124,8 +124,8 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
     const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
     const formData = createFormData({
-      _csrf: csrfToken,
-      _source: sourceToken,
+      __cms_csrf: csrfToken,
+      __cms_source: sourceToken,
       email: 'test@example.com',
       name: 'Test User',
       bio: 'A test user',
@@ -210,7 +210,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     assertStringIncludes(html, 'edit@example.com');
     assertStringIncludes(html, 'Edit Test');
     assertStringIncludes(html, 'Original bio');
-    assertStringIncludes(html, 'name="_csrf"');
+    assertStringIncludes(html, 'name="__cms_csrf"');
   });
 
   await t.step('update record via POST', async () => {
@@ -225,8 +225,8 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
     const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
     const formData = createFormData({
-      _csrf: csrfToken,
-      _source: sourceToken,
+      __cms_csrf: csrfToken,
+      __cms_source: sourceToken,
       email: 'updated@example.com',
       name: 'After Update',
       bio: 'New bio',
@@ -262,7 +262,7 @@ Deno.test('integration: basic CRUD tests', async (t) => {
 
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
     const formData = createFormData({
-      _csrf: csrfToken,
+      __cms_csrf: csrfToken,
     });
 
     const request = new Request('http://localhost/admin/users/1/delete', {
@@ -360,8 +360,8 @@ Deno.test('integration: basic CRUD tests', async (t) => {
     const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
     const sourceToken = await generateSourceToken(SOURCE.CMS, TEST_CSRF_SECRET);
     const formData = createFormData({
-      _csrf: csrfToken,
-      _source: sourceToken,
+      __cms_csrf: csrfToken,
+      __cms_source: sourceToken,
       title: 'Test Post',
       body: 'Post content',
       authorId: '1',

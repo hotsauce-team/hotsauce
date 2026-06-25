@@ -303,7 +303,7 @@ export async function deleteWithPolicy(
  *
  * @param request - The HTTP request
  * @param authUser - Authenticated user from JWT (optional)
- * @param source - Source of the form submission (optional, validated from _source token)
+ * @param source - Source of the form submission (optional, validated from __cms_source token)
  */
 export function createPolicyContext(
   request: Request,

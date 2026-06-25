@@ -150,7 +150,7 @@ Deno.test({
     ): Promise<string> {
       const res = await handler(new Request(url));
       const html = await res.text();
-      const match = html.match(/name="_csrf" value="([^"]+)"/);
+      const match = html.match(/name="__cms_csrf" value="([^"]+)"/);
       if (!match) throw new Error('CSRF token not found');
       return match[1]!;
     }
@@ -181,7 +181,7 @@ Deno.test({
         const formData = createFormData({
           identity: 'regular@example.com',
           password: 'password123',
-          _csrf: csrfToken,
+          __cms_csrf: csrfToken,
         });
 
         const loginRes = await handler(
@@ -227,7 +227,7 @@ Deno.test({
         const formData = createFormData({
           identity: 'secure@example.com',
           password: 'secure123',
-          _csrf: csrfToken,
+          __cms_csrf: csrfToken,
         });
 
         const passwordRes = await handler(
@@ -276,7 +276,7 @@ Deno.test({
           body: createFormData({
             identity: 'secure@example.com',
             password: 'secure123',
-            _csrf: csrfToken1,
+            __cms_csrf: csrfToken1,
           }),
         }),
       );
@@ -290,7 +290,7 @@ Deno.test({
       const challengeToken = challengeMatch[1]!;
 
       // Extract CSRF token from TOTP form
-      const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
+      const csrfMatch = totpFormHtml.match(/name="__cms_csrf" value="([^"]+)"/);
       assertExists(csrfMatch, 'CSRF token should be in TOTP form');
       const csrfToken2 = csrfMatch[1]!;
 
@@ -303,7 +303,7 @@ Deno.test({
           body: createFormData({
             totp_code: validTotp,
             challenge_token: challengeToken,
-            _csrf: csrfToken2,
+            __cms_csrf: csrfToken2,
           }),
         }),
       );
@@ -343,7 +343,7 @@ Deno.test({
           body: createFormData({
             identity: 'secure@example.com',
             password: 'secure123',
-            _csrf: csrfToken1,
+            __cms_csrf: csrfToken1,
           }),
         }),
       );
@@ -353,7 +353,7 @@ Deno.test({
         /name="challenge_token" value="([^"]+)"/,
       );
       const challengeToken = challengeMatch![1]!;
-      const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
+      const csrfMatch = totpFormHtml.match(/name="__cms_csrf" value="([^"]+)"/);
       const csrfToken2 = csrfMatch![1]!;
 
       // Phase 2: Submit INVALID TOTP
@@ -363,7 +363,7 @@ Deno.test({
           body: createFormData({
             totp_code: '000000', // Invalid code
             challenge_token: challengeToken,
-            _csrf: csrfToken2,
+            __cms_csrf: csrfToken2,
           }),
         }),
       );
@@ -403,7 +403,7 @@ Deno.test({
             body: createFormData({
               identity: 'secure@example.com',
               password: 'wrong-password',
-              _csrf: csrfToken,
+              __cms_csrf: csrfToken,
             }),
           }),
         );
@@ -444,7 +444,7 @@ Deno.test({
           body: createFormData({
             identity: 'secure@example.com',
             password: 'secure123',
-            _csrf: csrfToken1,
+            __cms_csrf: csrfToken1,
           }),
         }),
       );
@@ -454,7 +454,7 @@ Deno.test({
         /name="challenge_token" value="([^"]+)"/,
       );
       const challengeToken = challengeMatch![1]!;
-      const csrfMatch = totpFormHtml.match(/name="_csrf" value="([^"]+)"/);
+      const csrfMatch = totpFormHtml.match(/name="__cms_csrf" value="([^"]+)"/);
       const csrfToken2 = csrfMatch![1]!;
 
       // Generate valid code and add spaces (like users often copy-paste)
@@ -468,7 +468,7 @@ Deno.test({
           body: createFormData({
             totp_code: codeWithSpaces,
             challenge_token: challengeToken,
-            _csrf: csrfToken2,
+            __cms_csrf: csrfToken2,
           }),
         }),
       );
@@ -706,7 +706,7 @@ Deno.test('PasswordProvider: renderTotpForm produces valid HTML', async () => {
   assertStringIncludes(html, 'totp_code');
   assertStringIncludes(html, 'challenge_token');
   assertStringIncludes(html, 'test-challenge-token');
-  assertStringIncludes(html, '_csrf');
+  assertStringIncludes(html, '__cms_csrf');
   assertStringIncludes(html, 'test-csrf-token');
   assertStringIncludes(html, 'Verification Code');
 });

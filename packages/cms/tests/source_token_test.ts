@@ -21,8 +21,8 @@ const TEST_SECRET = 'a-very-secure-test-secret-that-is-long-enough';
 // Constants
 // ─────────────────────────────────────────────────────────────
 
-Deno.test('SOURCE_FIELD_NAME is _source', () => {
-  assertEquals(SOURCE_FIELD_NAME, '_source');
+Deno.test('SOURCE_FIELD_NAME is __cms_source', () => {
+  assertEquals(SOURCE_FIELD_NAME, '__cms_source');
 });
 
 Deno.test("SOURCE.CMS is 'cms'", () => {
@@ -188,7 +188,7 @@ Deno.test('validateSourceToken: rejects expired token', async () => {
 
 Deno.test('getSourceTokenFromFormData: extracts token from form data', () => {
   const formData: Record<string, string | string[]> = {
-    '_source': 'cms.123.abc',
+    '__cms_source': 'cms.123.abc',
   };
   const result = getSourceTokenFromFormData(formData);
   assertEquals(result, 'cms.123.abc');
@@ -202,7 +202,7 @@ Deno.test('getSourceTokenFromFormData: returns null when missing', () => {
 
 Deno.test('getSourceTokenFromFormData: handles array value', () => {
   const formData: Record<string, string | string[]> = {
-    '_source': ['first', 'second'],
+    '__cms_source': ['first', 'second'],
   };
   const result = getSourceTokenFromFormData(formData);
   // Should return first value

@@ -595,7 +595,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
   let source: string | undefined;
 
   if (pickerMode) {
-    const sourceToken = url.searchParams.get('_source');
+    const sourceToken = url.searchParams.get('__cms_source');
     const validatedSource = await validateSourceToken(
       sourceToken,
       options.csrfSecret,
@@ -756,9 +756,9 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     // Reuse the (already-validated) raw token from the picker URL so thumbnail
     // requests carry the same source identity. Avoids re-minting per image and
     // lets handleFileServing apply source-aware row policies consistently.
-    const rawSourceToken = url.searchParams.get('_source');
+    const rawSourceToken = url.searchParams.get('__cms_source');
     const sourceQuery = rawSourceToken
-      ? `?_source=${encodeURIComponent(rawSourceToken)}`
+      ? `?__cms_source=${encodeURIComponent(rawSourceToken)}`
       : '';
 
     // Build thumbnails with minimal record data for postMessage.
@@ -847,7 +847,7 @@ export async function handleList(ctx: RouteContext): Promise<Response> {
     const headers: Record<string, string> = {
       ...ctx.options.securityHeaders,
       'X-Frame-Options': 'SAMEORIGIN',
-      // Prevent the signed _source token in the picker URL from leaking
+      // Prevent the signed __cms_source token in the picker URL from leaking
       // to access logs via Referer on same-origin subresource requests.
       'Referrer-Policy': 'no-referrer',
     };

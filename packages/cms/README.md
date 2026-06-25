@@ -197,7 +197,7 @@ Internal handlers for each CRUD operation. These are called by the main handler.
 
 > **Grid view:** Tables with a `thumbnail: true` column automatically use a thumbnail grid instead of a table. Users can toggle between grid and table via `?view=grid` / `?view=table`. Clicking a grid item opens an RHS detail panel (`?selected=<id>`) for inline editing without leaving the list.
 
-> **Picker mode:** Add `?picker=true&_source=<token>` to the list URL to get a minimal iframe-embeddable grid for media selection in visual editors like Puck. The `_source` token is a signed plugin identifier (e.g., `plugin:puck`) that controls which columns are included in the postMessage data. Without a valid token, picker mode returns 403 Forbidden.
+> **Picker mode:** Add `?picker=true&__cms_source=<token>` to the list URL to get a minimal iframe-embeddable grid for media selection in visual editors like Puck. The `__cms_source` token is a signed plugin identifier (e.g., `plugin:puck`) that controls which columns are included in the postMessage data. Without a valid token, picker mode returns 403 Forbidden.
 >
 > **Security:** By default, picker mode only sends the primary key. All other columns (including the file column) require explicit opt-in via `$cms({ plugins: { puck: { role: 'source' } } })`. The `thumbnail: true` option controls grid rendering; `role: 'source'` controls data exposure. See the `@hotsauce/ui` README for postMessage shape details.
 
@@ -266,7 +266,7 @@ CRUD endpoints (`create`, `update`, `delete`) support JSON responses when the re
 const response = await fetch('/admin/posts/1', {
   method: 'POST',
   headers: { 'Accept': 'application/json' },
-  body: formData, // FormData with _csrf field
+  body: formData, // FormData with __cms_csrf field
 });
 
 // Option 2: CSRF token in header (useful for JSON payloads)
@@ -364,7 +364,7 @@ The JSON API enables plugins like visual editors to save data without page reloa
 const handlePublish = async (data) => {
   const formData = new FormData();
   formData.append('content', JSON.stringify(data));
-  formData.append('_csrf', csrfToken);
+  formData.append('__cms_csrf', csrfToken);
 
   const response = await fetch(`/admin/pages/${pageId}`, {
     method: 'POST',
@@ -458,7 +458,7 @@ Notes:
 | ---------------------------------- | ------------------------------------------------- |
 | `generateCsrfToken(secret)`        | Generate HMAC-SHA256 signed token (4-hour expiry) |
 | `validateCsrfToken(token, secret)` | Validate signature and check expiry               |
-| `getCsrfTokenFromFormData(data)`   | Extract `_csrf` field from form                   |
+| `getCsrfTokenFromFormData(data)`   | Extract `__cms_csrf` field from form                   |
 | `getCsrfTokenFromHeader(request)`  | Extract `X-CSRF-Token` header from request        |
 
 **Token Format:** `timestamp.random.signature`
@@ -2320,7 +2320,7 @@ Source tokens identify the origin of form submissions, preventing plugins from m
 
 **Problem:** Without source identification, a malicious plugin could render a form that POSTs to CMS endpoints (e.g., `/admin/posts/1/edit`) and bypass `$cms({ plugins: {...} })` restrictions.
 
-**Solution:** Every form submission includes a signed `_source` token:
+**Solution:** Every form submission includes a signed `__cms_source` token:
 
 | Source          | Meaning                             |
 | --------------- | ----------------------------------- |
@@ -2329,8 +2329,8 @@ Source tokens identify the origin of form submissions, preventing plugins from m
 
 **How it works:**
 
-1. **CMS forms** include: `<input name="_source" value="{signed: cms}" />`
-2. **Plugin forms** include: `<input name="_source" value="{signed: plugin:puck}" />`
+1. **CMS forms** include: `<input name="__cms_source" value="{signed: cms}" />`
+2. **Plugin forms** include: `<input name="__cms_source" value="{signed: plugin:puck}" />`
 3. On POST, CMS validates signature and extracts `ctx.source`
 4. Column policies (from `policiesFromSchema`) check `ctx.source`
 
@@ -2381,7 +2381,7 @@ auth: {
 | Export                                | Purpose                                         |
 | ------------------------------------- | ----------------------------------------------- |
 | `SOURCE`                              | Constants: `SOURCE.CMS`, `SOURCE.PLUGIN_PREFIX` |
-| `SOURCE_FIELD_NAME`                   | Form field name: `'_source'`                    |
+| `SOURCE_FIELD_NAME`                   | Form field name: `'__cms_source'`                    |
 | `pluginSource(name)`                  | Create `'plugin:{name}'` identifier             |
 | `isPluginSource(source)`              | Check if source is a plugin                     |
 | `getPluginName(source)`               | Extract plugin name from source                 |

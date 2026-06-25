@@ -3,7 +3,7 @@
 /**
  * ImagePickerField - Custom Puck field for selecting images from CMS
  *
- * Opens the CMS grid view in an iframe with `?picker=true&_source=...` mode.
+ * Opens the CMS grid view in an iframe with `?picker=true&__cms_source=...` mode.
  * When the user clicks an image, the picker posts a `cms:media-selected`
  * message containing the record data and resolved URL.
  *
@@ -118,7 +118,7 @@ export function ImagePickerField({
   const pickerSrc = `${resolvedBasePath}/${
     encodeURIComponent(table)
   }?picker=true${
-    sourceToken ? `&_source=${encodeURIComponent(sourceToken)}` : ''
+    sourceToken ? `&__cms_source=${encodeURIComponent(sourceToken)}` : ''
   }`;
 
   // Stash onChange in a ref so the message-listener effect doesn't re-register

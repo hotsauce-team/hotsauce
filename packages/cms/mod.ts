@@ -1111,7 +1111,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
           const formData = await request.formData();
 
           // Validate CSRF token
-          const csrfToken = formData.get('_csrf') as string | null;
+          const csrfToken = formData.get('__cms_csrf') as string | null;
           const identity = formData.get('identity') as string | null;
           if (!await validateCsrfToken(csrfToken, csrfSecret)) {
             const newCsrfToken = await generateCsrfToken(csrfSecret);
@@ -1537,7 +1537,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             // Body is now known to be within the cap — safe to buffer it.
             const formData = await request.clone().formData().catch(() => null);
             if (formData) {
-              const formToken = formData.get('_csrf');
+              const formToken = formData.get('__cms_csrf');
               if (typeof formToken === 'string') {
                 csrfToken = formToken;
               }
@@ -1734,7 +1734,7 @@ async function handleFileServing(
   // treated as no token (we don't 403 here — the row policy will deny if it
   // requires a specific source).
   const url = new URL(request.url);
-  const rawSourceToken = url.searchParams.get('_source');
+  const rawSourceToken = url.searchParams.get('__cms_source');
   const source = rawSourceToken
     ? (await validateSourceToken(rawSourceToken, options.csrfSecret)) ??
       undefined

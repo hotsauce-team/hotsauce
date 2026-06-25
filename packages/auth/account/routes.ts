@@ -215,7 +215,7 @@ export async function handlePasswordChange(
   const formData = await request.formData();
 
   // Validate CSRF
-  const csrfToken = formData.get('_csrf') as string | null;
+  const csrfToken = formData.get('__cms_csrf') as string | null;
   if (!await validateCsrfToken(csrfToken, csrfSecret)) {
     const newCsrfToken = await generateCsrfToken(csrfSecret);
     return htmlResponse(
@@ -410,7 +410,7 @@ export async function handle2FAEnable(
   const formData = await request.formData();
 
   // Validate CSRF
-  const csrfToken = formData.get('_csrf') as string | null;
+  const csrfToken = formData.get('__cms_csrf') as string | null;
   if (!await validateCsrfToken(csrfToken, csrfSecret)) {
     return redirect(`${basePath}/account/2fa?error=session_expired`);
   }
@@ -528,7 +528,7 @@ export async function handle2FADisable(
   const formData = await request.formData();
 
   // Validate CSRF
-  const csrfToken = formData.get('_csrf') as string | null;
+  const csrfToken = formData.get('__cms_csrf') as string | null;
   if (!await validateCsrfToken(csrfToken, csrfSecret)) {
     const newCsrfToken = await generateCsrfToken(csrfSecret);
     return htmlResponse(
