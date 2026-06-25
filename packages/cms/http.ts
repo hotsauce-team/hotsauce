@@ -476,6 +476,77 @@ export async function parseFormData(
 }
 
 /**
+ * Result of reading a request body under a size cap.
+ */
+export interface BodyLimitResult {
+  /** True when the body exceeded `maxBytes` and was rejected. */
+  tooLarge: boolean;
+  /** Decoded body text. Empty string when there was no body or it was rejected. */
+  body: string;
+}
+
+/**
+ * Read a request body as text while enforcing a hard byte cap.
+ *
+ * Rejects in two stages:
+ * 1. If `Content-Length` advertises more than `maxBytes`, reject before reading.
+ * 2. Otherwise stream `request.body`, tallying bytes as they arrive, and abort
+ *    the moment the running total exceeds `maxBytes` — cancelling the stream so
+ *    the rest of an oversized (e.g. `Transfer-Encoding: chunked`) body is never
+ *    buffered into memory.
+ *
+ * The body is read here (not re-read by the caller) because a request body
+ * stream can only be consumed once; valid bodies are returned so the handler
+ * can use them without a second read.
+ *
+ * @returns `{ tooLarge: true, body: '' }` when rejected, otherwise the decoded body.
+ */
+export async function readBodyWithLimit(
+  request: Request,
+  maxBytes: number,
+): Promise<BodyLimitResult> {
+  // Reject early when Content-Length advertises an oversized body.
+  const contentLength = Number(request.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    // Actively cancel the incoming stream so the client isn't left sending a
+    // body we'll never read (mirrors the streaming path's reader.cancel()).
+    await request.body?.cancel();
+    return { tooLarge: true, body: '' };
+  }
+
+  if (!request.body) {
+    return { tooLarge: false, body: '' };
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      received += value.length;
+      if (received > maxBytes) {
+        await reader.cancel();
+        return { tooLarge: true, body: '' };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Concatenate the collected chunks, then decode once we know the body fits.
+  const buf = new Uint8Array(received);
+  let offset = 0;
+  for (const chunk of chunks) {
+    buf.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return { tooLarge: false, body: new TextDecoder().decode(buf) };
+}
+
+/**
  * Result of parsing multipart form data with file columns
  */
 export interface ParsedMultipartData {

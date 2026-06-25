@@ -40,6 +40,7 @@ import {
   methodNotAllowed,
   notFound,
   parseFlashFromUrl,
+  readBodyWithLimit,
 } from './http.ts';
 import {
   generateCsrfToken,
@@ -441,6 +442,14 @@ import type { PluginService } from './plugins/service.ts';
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Default request body cap for plugin routes (200KB) — generous for the JSON
+ * payloads plugin routes typically handle. Overridable per route via
+ * `maxBodySize`. Shared by the handler's body read and the dispatch-level CSRF
+ * size gate so both enforce the same limit.
+ */
+const DEFAULT_PLUGIN_ROUTE_MAX_BODY = 204_800;
+
+/**
  * Handle a plugin route.
  * Builds context, fetches record data, then calls handler or Worker.
  */
@@ -632,7 +641,16 @@ async function handlePluginRoute(
 
   // Read request body for mutating requests (deferred until after validation)
   if (routeAction === 'update' || routeAction === 'delete') {
-    body = await request.text();
+    // Cap the request body size (defence-in-depth; routes are auth + CSRF gated).
+    // Default to 200KB — generous for the JSON payloads plugin routes handle.
+    // Streams the body and aborts mid-transfer once the cap is exceeded, so an
+    // oversized chunked body (no Content-Length) is never fully buffered.
+    const maxBody = route.maxBodySize ?? DEFAULT_PLUGIN_ROUTE_MAX_BODY;
+    const result = await readBodyWithLimit(request, maxBody);
+    if (result.tooLarge) {
+      return new Response('Request body too large', { status: 413 });
+    }
+    body = result.body;
   }
 
   // Build full context
@@ -1504,8 +1522,19 @@ export function createCmsHandler(options: CmsOptions): Handler {
           // Try header first (for JSON/API requests)
           let csrfToken = getCsrfTokenFromHeader(request);
 
-          // If no header, try form data
+          // If no header, fall back to reading the token from the form body.
+          // The `formData()` parse below buffers the whole body, so enforce the
+          // route's body cap *first* — streaming a clone and aborting once the
+          // limit is exceeded — to keep an oversized body from being buffered
+          // here, before `handlePluginRoute` gets a chance to cap it.
           if (!csrfToken) {
+            const maxBody = pluginRouteMatch.route.maxBodySize ??
+              DEFAULT_PLUGIN_ROUTE_MAX_BODY;
+            const sizeGate = await readBodyWithLimit(request.clone(), maxBody);
+            if (sizeGate.tooLarge) {
+              return new Response('Request body too large', { status: 413 });
+            }
+            // Body is now known to be within the cap — safe to buffer it.
             const formData = await request.clone().formData().catch(() => null);
             if (formData) {
               const formToken = formData.get('__cms_csrf');

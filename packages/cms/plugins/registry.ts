@@ -502,7 +502,27 @@ export class PluginRegistry {
       );
     }
 
+    this.validateMaxBodySize(pluginName, route);
+
     // Worker routes are validated separately
+  }
+
+  /**
+   * Validate a route's optional maxBodySize (must be a positive integer number
+   * of bytes)
+   */
+  private validateMaxBodySize(pluginName: string, route: PluginRoute): void {
+    if (route.maxBodySize === undefined) return;
+    if (
+      typeof route.maxBodySize !== 'number' ||
+      !Number.isInteger(route.maxBodySize) ||
+      route.maxBodySize <= 0
+    ) {
+      throw new PluginValidationError(
+        pluginName,
+        `Route "${route.pattern}" maxBodySize must be a positive integer`,
+      );
+    }
   }
 
   /**
@@ -546,6 +566,8 @@ export class PluginRegistry {
         `Worker plugin route "${route.pattern}" must have a render string (message type for Worker)`,
       );
     }
+
+    this.validateMaxBodySize(pluginName, route);
   }
 }
 
