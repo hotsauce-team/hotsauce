@@ -123,7 +123,7 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
   );
 });
 
-Deno.test('plugin route validation: maxBodySize must be a positive finite number', () => {
+Deno.test('plugin route validation: maxBodySize must be a positive integer', () => {
   const registry = new PluginRegistry();
 
   assertThrows(
@@ -154,6 +154,24 @@ Deno.test('plugin route validation: maxBodySize must be a positive finite number
             pattern: 'x',
             methods: ['POST'],
             maxBodySize: Number.NaN,
+            handler: () => 'OK',
+          },
+        ],
+      }),
+    Error,
+    'maxBodySize',
+  );
+
+  assertThrows(
+    () =>
+      registry.register({
+        name: 'bad-in-process-float',
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'x',
+            methods: ['POST'],
+            maxBodySize: 0.5,
             handler: () => 'OK',
           },
         ],

@@ -12,6 +12,7 @@ import {
   methodNotAllowed,
   notFound,
   parseFormData,
+  readBodyWithLimit,
   redirect,
 } from '../http.ts';
 import { buildSecurityHeaders, contentDispositionHeader } from '../http.ts';
@@ -633,4 +634,88 @@ Deno.test('contentDispositionHeader: filename with backslash — fallback strips
     contentDispositionHeader('attachment', 'path\\file.txt'),
     'attachment; filename="path_file.txt"; filename*=UTF-8\'\'path%5Cfile.txt',
   );
+});
+
+// =============================================================================
+// readBodyWithLimit tests
+// =============================================================================
+
+/** Build a POST request whose body is a stream (no Content-Length header). */
+function chunkedRequest(stream: ReadableStream<Uint8Array>): Request {
+  return new Request('http://localhost/', {
+    method: 'POST',
+    body: stream,
+    // @ts-ignore: duplex is required for streaming request bodies
+    duplex: 'half',
+  });
+}
+
+Deno.test('readBodyWithLimit: body under the cap is returned', async () => {
+  const req = new Request('http://localhost/', { method: 'POST', body: 'hi' });
+  const result = await readBodyWithLimit(req, 10);
+  assertEquals(result.tooLarge, false);
+  assertEquals(result.body, 'hi');
+});
+
+Deno.test('readBodyWithLimit: body exactly at the cap passes', async () => {
+  const req = new Request('http://localhost/', {
+    method: 'POST',
+    body: 'x'.repeat(10),
+  });
+  const result = await readBodyWithLimit(req, 10);
+  assertEquals(result.tooLarge, false);
+  assertEquals(result.body, 'x'.repeat(10));
+});
+
+Deno.test('readBodyWithLimit: Content-Length over the cap is rejected', async () => {
+  const req = new Request('http://localhost/', {
+    method: 'POST',
+    body: 'x'.repeat(100),
+    headers: { 'content-length': '100' },
+  });
+  const result = await readBodyWithLimit(req, 10);
+  assertEquals(result.tooLarge, true);
+  assertEquals(result.body, '');
+});
+
+Deno.test('readBodyWithLimit: chunked body over the cap is rejected', async () => {
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('x'.repeat(100)));
+      controller.close();
+    },
+  });
+  const req = chunkedRequest(stream);
+  assertEquals(req.headers.get('content-length'), null);
+  const result = await readBodyWithLimit(req, 10);
+  assertEquals(result.tooLarge, true);
+  assertEquals(result.body, '');
+});
+
+Deno.test('readBodyWithLimit: aborts mid-stream before consuming the whole body', async () => {
+  let pulledChunks = 0;
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulledChunks++;
+      // Each chunk is 8 bytes; the cap (10) is exceeded after the 2nd chunk.
+      controller.enqueue(new TextEncoder().encode('xxxxxxxx'));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const result = await readBodyWithLimit(chunkedRequest(stream), 10);
+  assertEquals(result.tooLarge, true);
+  // The stream was cancelled rather than drained to completion.
+  assertEquals(cancelled, true);
+  // Only enough chunks to cross the cap were pulled (not an unbounded number).
+  assertEquals(pulledChunks, 2);
+});
+
+Deno.test('readBodyWithLimit: absent body returns empty string', async () => {
+  const req = new Request('http://localhost/', { method: 'GET' });
+  const result = await readBodyWithLimit(req, 10);
+  assertEquals(result.tooLarge, false);
+  assertEquals(result.body, '');
 });

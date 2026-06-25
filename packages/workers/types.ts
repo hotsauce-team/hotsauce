@@ -475,13 +475,14 @@ export interface PluginRoute {
   };
 
   /**
-   * Maximum request body size in bytes for mutating requests (POST/PUT/PATCH/DELETE).
+   * Maximum request body size in bytes for mutating (`POST`) requests.
    *
    * Requests whose `Content-Length` exceeds this are rejected with `413` before
-   * the body is read. As a fallback for chunked requests (no `Content-Length`),
-   * the buffered body is also checked against this limit after reading.
+   * the body is read. For chunked requests (no `Content-Length`), the body is
+   * streamed and the transfer is aborted once the running byte total exceeds
+   * this limit, so an oversized body is never fully buffered.
    *
-   * Must be a positive finite number. Defaults to 200KB (204800 bytes).
+   * Must be a positive integer. Defaults to 200KB (204800 bytes).
    */
   maxBodySize?: number;
 }

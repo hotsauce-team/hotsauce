@@ -508,18 +508,19 @@ export class PluginRegistry {
   }
 
   /**
-   * Validate a route's optional maxBodySize (must be a positive finite number)
+   * Validate a route's optional maxBodySize (must be a positive integer number
+   * of bytes)
    */
   private validateMaxBodySize(pluginName: string, route: PluginRoute): void {
     if (route.maxBodySize === undefined) return;
     if (
       typeof route.maxBodySize !== 'number' ||
-      !Number.isFinite(route.maxBodySize) ||
+      !Number.isInteger(route.maxBodySize) ||
       route.maxBodySize <= 0
     ) {
       throw new PluginValidationError(
         pluginName,
-        `Route "${route.pattern}" maxBodySize must be a positive finite number`,
+        `Route "${route.pattern}" maxBodySize must be a positive integer`,
       );
     }
   }
