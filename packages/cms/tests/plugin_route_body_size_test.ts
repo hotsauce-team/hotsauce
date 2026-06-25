@@ -144,7 +144,7 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
     async () => {
       // The body-token fallback is preserved: a request under the cap with the
       // token in the form body authenticates and succeeds.
-      const form = new URLSearchParams({ _csrf: csrfToken });
+      const form = new URLSearchParams({ __cms_csrf: csrfToken });
       const res = await handler(
         new Request('http://localhost/admin/body-test/default-cap', {
           method: 'POST',
