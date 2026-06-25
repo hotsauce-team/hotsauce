@@ -913,6 +913,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
       provider: options.auth.provider,
       maxAge: options.auth.maxAge ?? 8 * 60 * 60, // 8 hours
       cookieName: options.auth.cookieName ?? 'cms_token',
+      sameSite: options.auth.sameSite ?? 'Lax',
       loginTitle: options.auth.loginTitle ?? 'Admin Login',
       identityLabel: options.auth.identityLabel ?? 'Email',
       isRevoked: options.auth.isRevoked,
@@ -1055,6 +1056,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               resolvedAuth.cookieName,
               opts.basePath,
               isSecureRequest(request),
+              resolvedAuth.sameSite,
             ),
             ...opts.securityHeaders,
           },
@@ -1180,6 +1182,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
               resolvedAuth.maxAge,
               opts.basePath,
               isSecureRequest(request),
+              resolvedAuth.sameSite,
             );
 
             return new Response(null, {
@@ -1302,6 +1305,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
             resolvedAuth.maxAge,
             opts.basePath,
             isSecureRequest(request),
+            resolvedAuth.sameSite,
           );
 
           return new Response(null, {

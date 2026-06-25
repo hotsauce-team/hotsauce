@@ -126,6 +126,59 @@ Deno.test('integration: JWT auth tests', async (t) => {
     assertExists(setCookie, 'Set-Cookie header should be present');
     assertStringIncludes(setCookie, 'cms_token=');
     assertStringIncludes(setCookie, 'HttpOnly');
+    // Auth cookie defaults to SameSite=Lax for CSRF posture.
+    assertStringIncludes(setCookie, 'SameSite=Lax');
+  });
+
+  await t.step('login honors configured auth.sameSite=Strict', async () => {
+    await resetDb();
+
+    const passwordHash = await hashPassword('admin123');
+    await db.insert(adminUsers).values({
+      email: 'admin@example.com',
+      passwordHash,
+      role: 'admin',
+    });
+
+    const handler = createAuthHandler({
+      auth: {
+        secret: AUTH_SECRET,
+        sameSite: 'Strict',
+        provider: new PasswordProvider({
+          db,
+          usersTable: adminUsers,
+          identityColumn: 'email',
+          passwordColumn: 'passwordHash',
+          roleColumn: 'role',
+        }),
+      },
+    });
+
+    // Get CSRF token from login page
+    const loginPageRes = await handler(
+      new Request('http://localhost/admin/login'),
+    );
+    const loginHtml = await loginPageRes.text();
+    const csrfMatch = loginHtml.match(/name="__cms_csrf" value="([^"]+)"/);
+    assertExists(csrfMatch, 'CSRF token should be in login page');
+
+    const formData = createFormData({
+      identity: 'admin@example.com',
+      password: 'admin123',
+      __cms_csrf: csrfMatch[1]!,
+    });
+
+    const loginRes = await handler(
+      new Request('http://localhost/admin/login', {
+        method: 'POST',
+        body: formData,
+      }),
+    );
+
+    assertEquals(loginRes.status, 302);
+    const setCookie = loginRes.headers.get('Set-Cookie');
+    assertExists(setCookie, 'Set-Cookie header should be present');
+    assertStringIncludes(setCookie, 'SameSite=Strict');
   });
 
   await t.step('rejects invalid password', async () => {

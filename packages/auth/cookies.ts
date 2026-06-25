@@ -2,6 +2,21 @@
 // Shared between auth handlers
 
 /**
+ * SameSite cookie attribute for auth cookies.
+ *
+ * - `Lax` (default): sent on top-level cross-site navigation (e.g. following a
+ *   link into an authed page) but not on cross-site subrequests. Mitigates CSRF
+ *   while preserving normal navigation UX.
+ * - `Strict`: never sent on any cross-site request. Strongest CSRF posture, but
+ *   breaks top-level cross-site navigation into authed pages (an external link
+ *   to the admin lands the user logged-out until they navigate same-site).
+ *
+ * `None` is intentionally not offered: it disables SameSite CSRF protection and
+ * only makes sense for cross-site embedding, which the admin UI does not need.
+ */
+export type SameSite = 'Lax' | 'Strict';
+
+/**
  * Parse JWT token from Cookie header
  *
  * @param request - HTTP request
@@ -35,6 +50,7 @@ export function getTokenFromCookies(
  * @param maxAge - Cookie lifetime in seconds
  * @param path - Cookie path (typically basePath)
  * @param isSecure - Whether to add Secure flag (HTTPS only)
+ * @param sameSite - SameSite attribute (default: 'Lax')
  * @returns Set-Cookie header value
  */
 export function createAuthCookie(
@@ -43,13 +59,14 @@ export function createAuthCookie(
   maxAge: number,
   path: string,
   isSecure: boolean,
+  sameSite: SameSite = 'Lax',
 ): string {
   const parts = [
     `${cookieName}=${token}`,
     `Path=${path}`,
     `Max-Age=${maxAge}`,
     'HttpOnly',
-    'SameSite=Lax',
+    `SameSite=${sameSite}`,
   ];
   if (isSecure) {
     parts.push('Secure');
@@ -63,19 +80,21 @@ export function createAuthCookie(
  * @param cookieName - Cookie name to clear
  * @param path - Cookie path
  * @param isSecure - Whether to add Secure flag (must match original cookie)
+ * @param sameSite - SameSite attribute (default: 'Lax'; should match original)
  * @returns Set-Cookie header value that expires the cookie
  */
 export function createClearCookie(
   cookieName: string,
   path: string,
   isSecure: boolean,
+  sameSite: SameSite = 'Lax',
 ): string {
   const parts = [
     `${cookieName}=`,
     `Path=${path}`,
     'Max-Age=0',
     'HttpOnly',
-    'SameSite=Lax',
+    `SameSite=${sameSite}`,
   ];
   if (isSecure) {
     parts.push('Secure');

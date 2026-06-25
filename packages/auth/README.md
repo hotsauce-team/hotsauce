@@ -134,14 +134,18 @@ Tokens expire after 5 minutes by default.
 
 Cookie utilities for JWT-based authentication.
 
-| Export                                   | Purpose                           |
-| ---------------------------------------- | --------------------------------- |
-| `getTokenFromCookies(request, name)`     | Extract JWT from Cookie           |
-| `createAuthCookie(name, token, options)` | Create Set-Cookie header          |
-| `createClearCookie(name, path, secure)`  | Create Set-Cookie to clear cookie |
-| `isSecureRequest(request)`               | Check if request is HTTPS*        |
+| Export                                                           | Purpose                           |
+| ---------------------------------------------------------------- | --------------------------------- |
+| `getTokenFromCookies(request, name)`                             | Extract JWT from Cookie           |
+| `createAuthCookie(name, token, maxAge, path, secure, sameSite?)` | Create Set-Cookie header          |
+| `createClearCookie(name, path, secure, sameSite?)`               | Create Set-Cookie to clear cookie |
+| `isSecureRequest(request)`                                       | Check if request is HTTPS*        |
 
 \* `isSecureRequest` checks both `X-Forwarded-Proto` header (for TLS-terminating proxies) and the URL protocol.
+
+`sameSite` defaults to `'Lax'` and accepts `'Lax' | 'Strict'`. See
+[SECURITY.md → Cookie SameSite & CSRF posture](../../SECURITY.md#cookie-samesite--csrf-posture)
+for when to choose `'Strict'`.
 
 ### Login Page (`login.ts`)
 
@@ -325,7 +329,7 @@ This approach requires no server-side session storage.
 - **HMAC-SHA256** - Industry standard signing
 - **8-hour default expiry** - Configurable
 - **HttpOnly cookies** - XSS protection
-- **SameSite=Lax** - CSRF protection
+- **SameSite=Lax** - CSRF protection (default; configurable to `Strict` — see [SECURITY.md](../../SECURITY.md#cookie-samesite--csrf-posture))
 
 ## Environment Variables
 

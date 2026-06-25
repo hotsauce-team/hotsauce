@@ -8,7 +8,7 @@ A schema-driven headless CMS derived from your Drizzle ORM definitions. Define y
 
 - **Single source of truth**: Your Drizzle schema defines database tables, TypeScript types, validation rules, AND CMS fields
 - **Minimal dependencies**: Core stack is `drizzle-orm` + `zod` + `drizzle-zod` + `@std/media-types` (all zero transitive deps)
-- **Secure by default**: CSRF protection, JWT auth, row-level policies, column-level policies, XSS-safe templates
+- **Secure by default**: CSRF protection, JWT auth (`HttpOnly` + `SameSite=Lax` cookies, configurable — see the [Security Guide](SECURITY.md#cookie-samesite--csrf-posture)), row-level policies, column-level policies, XSS-safe templates
 - **Flexible & extensible**: Pluggable auth, custom validation, row & column policies, plugins with Worker isolation
 - **Cross-runtime**: Works in Deno and Node.js — Web Standard `Request`/`Response` everywhere
 - **Database-agnostic**: Works with any Drizzle-supported database (Postgres, MySQL, SQLite)

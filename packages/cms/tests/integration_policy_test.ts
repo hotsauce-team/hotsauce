@@ -853,6 +853,7 @@ Deno.test({
             provider: new PasswordProvider({ db, usersTable: adminUsers }),
             maxAge: 3600,
             cookieName: 'cms_token',
+            sameSite: 'Lax',
             loginTitle: 'Login',
             identityLabel: 'Email',
           },

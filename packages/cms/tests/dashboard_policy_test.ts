@@ -54,6 +54,7 @@ function buildDashboardContext(
         provider: {} as never, // Not needed for dashboard
         maxAge: 3600,
         cookieName: 'cms_token',
+        sameSite: 'Lax',
         loginTitle: 'Login',
         identityLabel: 'Email',
       }
@@ -110,6 +111,7 @@ function buildListContext(
         provider: {} as never,
         maxAge: 3600,
         cookieName: 'cms_token',
+        sameSite: 'Lax',
         loginTitle: 'Login',
         identityLabel: 'Email',
       }

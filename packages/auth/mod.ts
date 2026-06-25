@@ -58,6 +58,7 @@ export {
   getTokenFromCookies,
   isSecureRequest,
 } from './cookies.ts';
+export type { SameSite } from './cookies.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Login UI - Login page rendering and styles

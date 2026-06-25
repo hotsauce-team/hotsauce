@@ -1,7 +1,7 @@
 // Handler types and options
 
 import type { IntrospectedSchema, IntrospectedTable } from '@hotsauce/core';
-import type { AuthProvider, JwtPayload } from '@hotsauce/auth';
+import type { AuthProvider, JwtPayload, SameSite } from '@hotsauce/auth';
 import type { Policies } from './policies/types.ts';
 import type { PluginConfig, PluginErrorContext } from './plugins/types.ts';
 import type { PluginRegistry } from './plugins/registry.ts';
@@ -565,6 +565,18 @@ export interface CmsAuthOptions {
   /** Cookie name for JWT (default: 'cms_token') */
   cookieName?: string;
 
+  /**
+   * SameSite attribute for the auth cookie (default: 'Lax').
+   *
+   * - `'Lax'` mitigates CSRF while preserving top-level cross-site navigation
+   *   into authed pages.
+   * - `'Strict'` is the strongest CSRF posture but logs users out when they
+   *   arrive via a cross-site link until they navigate same-site.
+   *
+   * See SECURITY.md → "Cookie SameSite & CSRF posture" for guidance.
+   */
+  sameSite?: SameSite;
+
   /** Title shown on login page (default: 'Admin Login') */
   loginTitle?: string;
 
@@ -621,6 +633,7 @@ export interface ResolvedAuthOptions {
   provider: AuthProvider;
   maxAge: number;
   cookieName: string;
+  sameSite: SameSite;
   loginTitle: string;
   identityLabel: string;
   isRevoked?: (payload: JwtPayload) => Promise<boolean> | boolean;

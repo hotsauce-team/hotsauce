@@ -11,7 +11,7 @@ HotSauce CMS implements multiple layers of security:
 - **HS256 signing** with HMAC-SHA256
 - **8-hour default token expiry** (configurable)
 - **HttpOnly cookies** to prevent XSS token theft
-- **SameSite=Lax** to prevent CSRF attacks
+- **SameSite=Lax** to prevent CSRF attacks (configurable — see [Cookie SameSite & CSRF posture](#cookie-samesite--csrf-posture))
 - **Secure flag** automatically set for HTTPS connections
 - **Clock skew tolerance** (60 seconds) for distributed systems
 
@@ -24,6 +24,59 @@ const jwtSecret = crypto.randomUUID() + crypto.randomUUID();
 // ❌ Don't use weak secrets
 const jwtSecret = 'secret123';
 ```
+
+#### Cookie SameSite & CSRF posture
+
+The auth cookie's `SameSite` attribute is the first line of CSRF defense: it
+tells the browser when to attach the cookie to requests that originate from
+other sites. HotSauce defaults to **`SameSite=Lax`** and lets you opt into
+`Strict` via `auth.sameSite`.
+
+```typescript
+createCmsHandler({
+  db,
+  schema,
+  auth: {
+    provider,
+    sameSite: 'Strict', // default is 'Lax'
+  },
+  policies,
+});
+```
+
+**Why `Lax` is the default:**
+
+- It blocks the cookie on cross-site **subrequests** (e.g. a hidden form or
+  `fetch` from an attacker's page), which is the CSRF vector that matters.
+- It still sends the cookie on top-level cross-site **navigation** (clicking a
+  link into an admin page), so deep links and bookmarks keep working while the
+  user stays logged in.
+
+**When `Strict` is appropriate:** `Strict` never sends the cookie on _any_
+cross-site request, including top-level navigation. That is the strongest
+posture, but it has a real UX cost — a user who follows an external link to the
+admin (from email, chat, another app) arrives **logged out** until they
+navigate same-site, because the browser withholds the cookie on that first
+request. Choose `Strict` when the admin is never reached via cross-site links
+and you want the tightest CSRF boundary; otherwise `Lax` is the better default.
+
+`SameSite=None` is intentionally **not** offered: it disables SameSite CSRF
+protection entirely and only makes sense for cross-site embedding, which the
+admin UI does not require.
+
+> **SameSite is not a complete CSRF defense.** It is a browser heuristic, not a
+> guarantee (older browsers and some edge cases ignore it). HotSauce also issues
+> HMAC-signed [CSRF tokens](#2-csrf-protection) on every state-changing request
+> and makes logout POST-only — `SameSite` is defense-in-depth on top of those.
+
+**Deployment caveat (reverse proxies & `Secure`):** `SameSite` is only
+meaningfully protective alongside the `Secure` flag, which HotSauce adds
+automatically when the request is HTTPS. Behind a TLS-terminating proxy the
+origin sees plain HTTP, so HotSauce inspects the `X-Forwarded-Proto` header (via
+`isSecureRequest()` in `packages/auth/cookies.ts`) to detect the original
+scheme. Ensure your proxy sets `X-Forwarded-Proto: https`, otherwise the
+`Secure` flag is omitted and the cookie can leak over HTTP. See
+[Production Deployment → HTTPS](#https).
 
 ### 2. CSRF Protection
 

@@ -458,7 +458,7 @@ Notes:
 | ---------------------------------- | ------------------------------------------------- |
 | `generateCsrfToken(secret)`        | Generate HMAC-SHA256 signed token (4-hour expiry) |
 | `validateCsrfToken(token, secret)` | Validate signature and check expiry               |
-| `getCsrfTokenFromFormData(data)`   | Extract `__cms_csrf` field from form                   |
+| `getCsrfTokenFromFormData(data)`   | Extract `__cms_csrf` field from form              |
 | `getCsrfTokenFromHeader(request)`  | Extract `X-CSRF-Token` header from request        |
 
 **Token Format:** `timestamp.random.signature`
@@ -829,15 +829,16 @@ createCmsHandler({
 
 **Auth options** (when `auth` is an object):
 
-| Option               | Type                   | Default         | Description                                                    |
-| -------------------- | ---------------------- | --------------- | -------------------------------------------------------------- |
-| `auth.provider`      | `AuthProvider`         | _(required)_    | Login provider (e.g., `PasswordProvider`)                      |
-| `auth.secret`        | `string`               | env var         | JWT signing secret (32+ chars). Falls back to `CMS_JWT_SECRET` |
-| `auth.maxAge`        | `number`               | `28800` (8hr)   | Token lifetime in seconds                                      |
-| `auth.cookieName`    | `string`               | `'cms_token'`   | Cookie name for JWT                                            |
-| `auth.loginTitle`    | `string`               | `'Admin Login'` | Title shown on login page                                      |
-| `auth.identityLabel` | `string`               | `'Email'`       | Label for identity field on login page                         |
-| `auth.isRevoked`     | `(payload) => boolean` | —               | Check if a token has been revoked                              |
+| Option               | Type                   | Default         | Description                                                                                              |
+| -------------------- | ---------------------- | --------------- | -------------------------------------------------------------------------------------------------------- |
+| `auth.provider`      | `AuthProvider`         | _(required)_    | Login provider (e.g., `PasswordProvider`)                                                                |
+| `auth.secret`        | `string`               | env var         | JWT signing secret (32+ chars). Falls back to `CMS_JWT_SECRET`                                           |
+| `auth.maxAge`        | `number`               | `28800` (8hr)   | Token lifetime in seconds                                                                                |
+| `auth.cookieName`    | `string`               | `'cms_token'`   | Cookie name for JWT                                                                                      |
+| `auth.sameSite`      | `'Lax' \| 'Strict'`    | `'Lax'`         | Cookie SameSite attribute for CSRF posture ([guidance](../../SECURITY.md#cookie-samesite--csrf-posture)) |
+| `auth.loginTitle`    | `string`               | `'Admin Login'` | Title shown on login page                                                                                |
+| `auth.identityLabel` | `string`               | `'Email'`       | Label for identity field on login page                                                                   |
+| `auth.isRevoked`     | `(payload) => boolean` | —               | Check if a token has been revoked                                                                        |
 
 **Policies** (required when `auth` is configured):
 
@@ -990,6 +991,7 @@ auth: {
   
   // Optional
   cookieName: 'cms_token',        // Default: 'cms_token'
+  sameSite: 'Lax',                // Default: 'Lax' ('Strict' for tighter CSRF)
   maxAge: 60 * 60 * 8,            // Default: 8 hours (in seconds)
   loginTitle: 'Admin Login',      // Default: 'Admin Login'
   identityLabel: 'Email',         // Default: 'Email'
@@ -1001,18 +1003,18 @@ auth: {
 
 ### Auth Exports
 
-| Export                                  | Purpose                             |
-| --------------------------------------- | ----------------------------------- |
-| `PasswordProvider`                      | Password + optional TOTP auth       |
-| `hashPassword(password)`                | Hash password with PBKDF2-SHA256    |
-| `verifyPassword(password, hash)`        | Verify password against hash        |
-| `signJwt(payload, secret)`              | Sign a JWT token                    |
-| `verifyJwt(token, secret)`              | Verify and decode JWT               |
-| `createJwtPayload(id, role?, maxAge?)`  | Create JWT payload with expiry      |
-| `AuthProvider`                          | Interface for custom auth providers |
-| `getTokenFromCookies(req, name)`        | Parse JWT from cookie header        |
-| `createAuthCookie(...)`                 | Create Set-Cookie header for JWT    |
-| `createClearCookie(name, path, secure)` | Create Set-Cookie to clear JWT      |
+| Export                                                           | Purpose                             |
+| ---------------------------------------------------------------- | ----------------------------------- |
+| `PasswordProvider`                                               | Password + optional TOTP auth       |
+| `hashPassword(password)`                                         | Hash password with PBKDF2-SHA256    |
+| `verifyPassword(password, hash)`                                 | Verify password against hash        |
+| `signJwt(payload, secret)`                                       | Sign a JWT token                    |
+| `verifyJwt(token, secret)`                                       | Verify and decode JWT               |
+| `createJwtPayload(id, role?, maxAge?)`                           | Create JWT payload with expiry      |
+| `AuthProvider`                                                   | Interface for custom auth providers |
+| `getTokenFromCookies(req, name)`                                 | Parse JWT from cookie header        |
+| `createAuthCookie(name, token, maxAge, path, secure, sameSite?)` | Create Set-Cookie header for JWT    |
+| `createClearCookie(name, path, secure, sameSite?)`               | Create Set-Cookie to clear JWT      |
 
 ### Auth Routes
 
@@ -1209,7 +1211,7 @@ class MyCustomProvider implements AuthProvider {
 ### Security Features
 
 - **HttpOnly cookies** - Tokens not accessible via JavaScript (XSS protection)
-- **SameSite=Lax** - CSRF protection for cross-site requests
+- **SameSite=Lax** - CSRF protection for cross-site requests (default; set `auth.sameSite: 'Strict'` for the tightest posture — see [SECURITY.md → Cookie SameSite & CSRF posture](../../SECURITY.md#cookie-samesite--csrf-posture))
 - **Secure flag** - Cookie only sent over HTTPS (in production)
 - **PBKDF2-SHA256** - 600,000 iterations, 16-byte salt, 32-byte key
 - **Constant-time comparison** - Timing attack resistance
@@ -2381,7 +2383,7 @@ auth: {
 | Export                                | Purpose                                         |
 | ------------------------------------- | ----------------------------------------------- |
 | `SOURCE`                              | Constants: `SOURCE.CMS`, `SOURCE.PLUGIN_PREFIX` |
-| `SOURCE_FIELD_NAME`                   | Form field name: `'__cms_source'`                    |
+| `SOURCE_FIELD_NAME`                   | Form field name: `'__cms_source'`               |
 | `pluginSource(name)`                  | Create `'plugin:{name}'` identifier             |
 | `isPluginSource(source)`              | Check if source is a plugin                     |
 | `getPluginName(source)`               | Extract plugin name from source                 |
