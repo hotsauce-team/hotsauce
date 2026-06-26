@@ -101,3 +101,21 @@ export const asString = (value: unknown, label: string): string => {
   }
   return value;
 };
+
+export const asNumber = (value: unknown, label: string): number => {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite number`);
+  }
+  return value;
+};
+
+export const asArray = <T>(
+  value: unknown,
+  label: string,
+  item: (value: unknown, label: string) => T,
+): readonly T[] => {
+  if (!Array.isArray(value)) {
+    throw new Error(`${label} must be an array`);
+  }
+  return value.map((entry, index) => item(entry, `${label}[${index}]`));
+};
