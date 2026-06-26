@@ -97,27 +97,27 @@ Deno.test('listTable: renders delete action', () => {
   assertStringIncludes(result, 'confirm');
 });
 
-Deno.test('listTable: strips tags from text values (no executable HTML)', () => {
+Deno.test('listTable: escapes record values (no executable HTML)', () => {
   const columns = [{ key: 'name', label: 'Name' }];
   const records = [{ id: 1, name: '<script>alert("xss")</script>' }];
 
   const result = listTable(columns, records, { baseUrl: '/admin/users' });
 
-  // Tags are stripped from data, so no live <script> survives.
+  // Values are escaped, so no live <script> survives and the tags are shown
+  // faithfully as text.
   assertEquals(result.includes('<script>'), false);
-  // The inner text remains, safely escaped (quotes encoded).
+  assertStringIncludes(result, '&lt;script&gt;');
   assertStringIncludes(result, 'alert(&quot;xss&quot;)');
 });
 
-Deno.test('listTable: strips HTML tags from stored markup values', () => {
+Deno.test('listTable: escapes stored markup faithfully (no tag stripping)', () => {
   const columns = [{ key: 'bioHtml', label: 'Bio Html' }];
   const records = [{ id: 1, bioHtml: '<p>A short bio</p>' }];
 
   const result = listTable(columns, records, { baseUrl: '/admin/users' });
 
-  // Literal tags should NOT be shown to the user.
-  assertEquals(result.includes('&lt;p&gt;'), false);
-  // Inner text is preserved.
+  // Markup is shown faithfully as escaped text, not stripped.
+  assertStringIncludes(result, '&lt;p&gt;');
   assertStringIncludes(result, 'A short bio');
 });
 
@@ -137,9 +137,20 @@ Deno.test('listTable: truncates over-long text with an ellipsis', () => {
 
   const result = listTable(columns, records, { baseUrl: '/admin/users' });
 
-  // Truncated to 100 chars + ellipsis; the full 150-char string is gone.
-  assertEquals(result.includes('a'.repeat(101)), false);
+  // Truncated to 100 chars + ellipsis; the full 150-char string is not shown
+  // as visible cell text.
   assertStringIncludes(result, 'a'.repeat(100) + '…');
+});
+
+Deno.test('listTable: exposes the full value via a title tooltip when truncated', () => {
+  const long = 'a'.repeat(150);
+  const columns = [{ key: 'name', label: 'Name' }];
+  const records = [{ id: 1, name: long }];
+
+  const result = listTable(columns, records, { baseUrl: '/admin/users' });
+
+  // The visible text is truncated, but the full value is available on hover.
+  assertStringIncludes(result, `title="${long}"`);
 });
 
 Deno.test('listTable: does not truncate text at or under the limit', () => {

@@ -16,37 +16,6 @@ export function escapeHtml(unsafe: unknown): string {
 }
 
 /**
- * Strip HTML tags from a string, leaving only the text content.
- *
- * Useful for rendering stored markup (e.g. a `<p>...</p>` value) as plain text
- * in compact contexts like list table cells, where literal tags are noise.
- * Runtime-agnostic and zero-dependency (no DOM parsing).
- *
- * NOTE: This removes tag-like sequences, not a full HTML sanitizer. Strip the
- * raw string BEFORE escaping — stripping after escaping would not match the
- * already-encoded `&lt;`/`&gt;` entities.
- *
- * A "tag" is recognised conservatively as `<` (optionally followed by `/`)
- * immediately followed by an ASCII letter, up to the next `>`. This preserves
- * stray comparison operators and spaced brackets (`a < b and c > d`, `5 > 3`),
- * which the naive `/<[^>]*>/` would have eaten. Spans that genuinely look like
- * a tag are still removed, so an angle-bracketed word (e.g. `<name>` or an
- * email written as `<user@example.com>`) is treated as markup and stripped.
- *
- * @example
- * ```ts
- * stripHtmlTags('<p>Hello <strong>world</strong></p>') // 'Hello world'
- * stripHtmlTags('a < b and c > d') // 'a < b and c > d'
- * ```
- */
-export function stripHtmlTags(unsafe: unknown): string {
-  if (unsafe === null || unsafe === undefined) {
-    return '';
-  }
-  return String(unsafe).replace(/<\/?[a-zA-Z][^>]*>/g, '');
-}
-
-/**
  * Escape a string for use in a URL path segment.
  * Uses encodeURIComponent to ensure special characters are percent-encoded.
  *

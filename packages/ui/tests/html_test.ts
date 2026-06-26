@@ -10,7 +10,6 @@ import {
   join,
   raw,
   SafeHtml,
-  stripHtmlTags,
   when,
 } from '../html.ts';
 
@@ -30,44 +29,6 @@ Deno.test('escapeHtml: handles null and undefined', () => {
 Deno.test('escapeHtml: converts non-strings to string', () => {
   assertEquals(escapeHtml(123), '123');
   assertEquals(escapeHtml(true), 'true');
-});
-
-// stripHtmlTags tests
-Deno.test('stripHtmlTags: removes HTML tags, keeps text content', () => {
-  assertEquals(stripHtmlTags('<p>Hello world</p>'), 'Hello world');
-  assertEquals(
-    stripHtmlTags('<strong>Bold</strong> and <em>italic</em>'),
-    'Bold and italic',
-  );
-  assertEquals(
-    stripHtmlTags('<a href="/x">link</a>'),
-    'link',
-  );
-});
-
-Deno.test('stripHtmlTags: leaves plain text untouched', () => {
-  assertEquals(stripHtmlTags('just text'), 'just text');
-  assertEquals(stripHtmlTags(''), '');
-});
-
-Deno.test('stripHtmlTags: handles null and undefined', () => {
-  assertEquals(stripHtmlTags(null), '');
-  assertEquals(stripHtmlTags(undefined), '');
-});
-
-Deno.test('stripHtmlTags: removes self-closing and multiline tags', () => {
-  assertEquals(stripHtmlTags('a<br/>b'), 'ab');
-  assertEquals(stripHtmlTags('x<div\n class="y">z</div>'), 'xz');
-});
-
-Deno.test('stripHtmlTags: preserves angle brackets that are not tags', () => {
-  // Comparison operators and spaced brackets are not HTML tags and must
-  // survive (a tag start requires `<` immediately followed by a letter or `/`).
-  assertEquals(stripHtmlTags('a < b and c > d'), 'a < b and c > d');
-  assertEquals(stripHtmlTags('5 > 3 is true'), '5 > 3 is true');
-  assertEquals(stripHtmlTags('x <= y'), 'x <= y');
-  // A real tag adjacent to a comparison: only the tag is removed.
-  assertEquals(stripHtmlTags('a < b <strong>bold</strong>'), 'a < b bold');
 });
 
 // escapeUrlPath tests

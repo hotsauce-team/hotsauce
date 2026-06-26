@@ -1,13 +1,6 @@
 // List view - table of records
 
-import {
-  attrs,
-  escapeHtml,
-  getSafeUrl,
-  html,
-  raw,
-  stripHtmlTags,
-} from '../html.ts';
+import { attrs, escapeHtml, getSafeUrl, html, raw } from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import type { FieldUIOverride } from '@hotsauce/workers';
@@ -120,17 +113,22 @@ function defaultFormat(
     return '<span class="cms-json">[JSON]</span>';
   }
 
-  // Plain text: strip any stored markup (e.g. a `<p>...</p>` value would
-  // otherwise show literal tags), then cap length as a fallback for the CSS
-  // 2-line clamp. Strip and truncate BEFORE escaping so we never cut through an
-  // entity sequence like `&amp;`. The `cms-cell-text` wrapper carries the clamp
-  // and is applied only here, so trusted cell markup (badges, JSON, links,
-  // null dashes) stays unclamped.
-  const stripped = stripHtmlTags(String(value));
-  const text = stripped.length > TEXT_CELL_MAX_LENGTH
-    ? stripped.slice(0, TEXT_CELL_MAX_LENGTH) + '…'
-    : stripped;
-  return `<span class="cms-cell-text">${escapeHtml(text)}</span>`;
+  // Plain text: cap length as a fallback for the CSS 2-line clamp, then escape.
+  // The value is shown faithfully (any stored markup appears as escaped text,
+  // bounded by the clamp) — we do not strip tags, which would corrupt plain-text
+  // values containing `<word>` and mis-handle entities. Truncate the raw string
+  // BEFORE escaping so we never cut through an entity sequence like `&amp;`. The
+  // `cms-cell-text` wrapper carries the clamp and is applied only here, so
+  // trusted cell markup (badges, JSON, links, null dashes) stays unclamped. When
+  // truncated, expose the full value via a `title` tooltip.
+  const str = String(value);
+  const truncated = str.length > TEXT_CELL_MAX_LENGTH
+    ? str.slice(0, TEXT_CELL_MAX_LENGTH) + '…'
+    : str;
+  const title = str.length > TEXT_CELL_MAX_LENGTH
+    ? ` title="${escapeHtml(str)}"`
+    : '';
+  return `<span class="cms-cell-text"${title}>${escapeHtml(truncated)}</span>`;
 }
 
 /**
