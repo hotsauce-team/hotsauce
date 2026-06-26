@@ -139,9 +139,115 @@ jobs:
             echo "Implemented by the agent-on-issue workflow."
           } > "$body_file"
           pr_url=$(gh pr create --base main --head "$BRANCH" --title "$title" --body-file "$body_file" | tail -n1)
+          # Request Copilot now; it reviews asynchronously, concurrently with the
+          # Claude reviewer below.
           gh pr edit "$pr_url" --add-reviewer @copilot \
             || echo "::warning::Could not request Copilot review (is Copilot code review enabled?)"
           echo "PR_URL=$pr_url" >> "$GITHUB_ENV"
+          echo "PR_NUMBER=$(gh pr view "$pr_url" --json number -q .number)" >> "$GITHUB_ENV"
+
+      # --- Review round: a Claude reviewer + Copilot, then one pass of fixes ---
+
+      # The agent emits structured findings (OUTPUT_DIR/review.json); the workflow
+      # posts them. Runs concurrently with the Copilot request above.
+      - name: Run Claude review agent
+        if: steps.preflight.outputs.refused != 'true' && success()
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          OUTPUT_DIR: ${{ runner.temp }}
+        run: ./.sandcastle/node_modules/.bin/tsx .sandcastle/agent-workflows/review/review.ts
+
+      - name: Post Claude review
+        if: steps.preflight.outputs.refused != 'true' && success()
+        run: |
+          set -euo pipefail
+          review_file="${RUNNER_TEMP}/review.json"
+          if [ ! -s "$review_file" ]; then
+            echo "No review.json produced; skipping."
+            exit 0
+          fi
+          payload="${RUNNER_TEMP}/review-payload.json"
+          jq '{event: "COMMENT", body: .summary,
+               comments: [.comments[] | {path, line, side, body}]}' \
+            "$review_file" > "$payload"
+          gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}/reviews" -X POST --input "$payload" \
+            || echo "::warning::Could not post Claude review."
+
+      # Copilot reviews asynchronously; poll (bounded) so the fix agent sees its
+      # comments. A timeout is a warning, not a failure.
+      - name: Wait for Copilot review
+        if: steps.preflight.outputs.refused != 'true' && success()
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 600 )) # ~10 min cap, inside the 60 min budget
+          while :; do
+            count=$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}/reviews" \
+              --jq '[.[] | select(.user.login | test("copilot";"i"))] | length' 2>/dev/null || echo 0)
+            if [ "${count:-0}" -gt 0 ]; then
+              echo "Copilot review detected."
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::warning::Copilot review did not arrive within the timeout; proceeding with available comments."
+              break
+            fi
+            sleep 20
+          done
+
+      # Fix agent: fetch all comments (Copilot + Claude), fix + commit, emit
+      # replies (OUTPUT_DIR/replies.json). Exits early if there are no comments.
+      - name: Run address-review agent
+        if: steps.preflight.outputs.refused != 'true' && success()
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          BRANCH: ${{ steps.branch.outputs.name }}
+          OUTPUT_DIR: ${{ runner.temp }}
+        run: ./.sandcastle/node_modules/.bin/tsx .sandcastle/agent-workflows/address-review/address-review.ts
+
+      # Deterministic gate so a broken fix lands the issue on agent:blocked
+      # rather than relying on the async test.yml run.
+      - name: Run tests after fixes
+        if: steps.preflight.outputs.refused != 'true' && success()
+        run: deno task test
+
+      # Re-push fix commits with the PAT so test.yml re-runs on the PR.
+      - name: Re-push review fixes
+        if: steps.preflight.outputs.refused != 'true' && success()
+        env:
+          BRANCH: ${{ steps.branch.outputs.name }}
+          PR_CREATE_TOKEN: ${{ secrets.PR_CREATE_TOKEN }}
+        run: |
+          set -euo pipefail
+          ahead=$(git rev-list --count "origin/${BRANCH}..${BRANCH}")
+          if [ "$ahead" -eq 0 ]; then
+            echo "No new commits from the review round; nothing to re-push."
+            exit 0
+          fi
+          git remote set-url origin "https://x-access-token:${PR_CREATE_TOKEN}@github.com/${GH_REPO}.git"
+          git push origin "$BRANCH"
+
+      - name: Post review replies
+        if: steps.preflight.outputs.refused != 'true' && success()
+        run: |
+          set -euo pipefail
+          replies_file="${RUNNER_TEMP}/replies.json"
+          if [ ! -s "$replies_file" ]; then
+            echo "No replies to post."
+            exit 0
+          fi
+          count=$(jq 'length' "$replies_file")
+          if [ "$count" -eq 0 ]; then
+            echo "No replies to post."
+            exit 0
+          fi
+          for i in $(seq 0 $(( count - 1 ))); do
+            cid=$(jq -r ".[$i].comment_id" "$replies_file")
+            body=$(jq -r ".[$i].body" "$replies_file")
+            gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}/comments" \
+              -X POST -f body="$body" -F in_reply_to="$cid" \
+              || echo "::warning::Could not post reply to comment $cid."
+          done
 
       - name: Finalize implement
         if: steps.preflight.outputs.refused != 'true' && success()

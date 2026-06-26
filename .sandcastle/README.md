@@ -19,9 +19,17 @@ Workflows (one per action, mirroring sandcastle's `.github/workflows/`):
     │   ├── explore.ts
     │   ├── prompt.md            # produce pass
     │   └── extraction.md        # structured <output> pass
-    └── implement/               # agent:implement — implement on a branch
-        ├── implement.ts
-        └── prompt.md
+    ├── implement/               # agent:implement — implement on a branch
+    │   ├── implement.ts
+    │   └── prompt.md
+    ├── review/                  # review round — read-only Claude reviewer
+    │   ├── review.ts            # emits review.json (inline comments)
+    │   ├── prompt.md
+    │   └── extraction.md
+    └── address-review/          # review round — fix Copilot + Claude comments
+        ├── address-review.ts    # fixes + commits, emits replies.json
+        ├── prompt.md
+        └── extraction.md
 ```
 
 ## State machine
@@ -29,7 +37,7 @@ Workflows (one per action, mirroring sandcastle's `.github/workflows/`):
 | Add this label    | Agent does                                           | On success                                        | On failure                                       |
 | ----------------- | ---------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------ |
 | `agent:explore`   | Researches the issue read-only, emits triage notes   | −`in-progress`, +`agent:explored`, comments notes | −`in-progress`, +`agent:blocked`, comments error |
-| `agent:implement` | Implements on `agent/issue-<n>`, the workflow PRs it | −`in-progress`, +`agent:done`, comments PR link   | −`in-progress`, +`agent:blocked`, comments error |
+| `agent:implement` | Implements on `agent/issue-<n>`, the workflow PRs it, then runs one **review round** (Copilot + a Claude reviewer) and addresses the comments | −`in-progress`, +`agent:done`, comments PR link   | −`in-progress`, +`agent:blocked`, comments error |
 
 Both add `agent:in-progress` on start. Typical flow: label `agent:explore`,
 review the triage comment, then label `agent:implement`.
@@ -38,16 +46,24 @@ review the triage comment, then label `agent:implement`.
 
 - **`noSandbox()`** — the ephemeral GitHub Actions runner is the sandbox. No
   `permissionMode` is set; headless `claude -p` edits/commits without prompts.
-- **Separation of duties** — the agent only researches (explore) or edits +
-  commits on a pre-created branch (implement). It never pushes, opens PRs, or
-  edits labels. The **workflow** pushes, opens the PR, requests Copilot, and
-  drives labels.
-- **Explore uses structured output** — the agent emits an `<output>{comment}`
-  block (`run-with-extraction.ts`); the script writes it to
-  `OUTPUT_DIR/comment.md` and the workflow posts it.
-- **Branch push uses `GITHUB_TOKEN`; PR creation uses `PR_CREATE_TOKEN`** (a
-  fine-grained PAT, Pull requests: write) so `test.yml` runs on the agent's PR —
-  the built-in token can't trigger downstream workflows.
+- **Separation of duties** — the agents only research (explore), edit + commit
+  on a pre-created branch (implement, address-review), or read + report (review).
+  They never push, open PRs, edit labels, or call the GitHub API. The **workflow**
+  pushes, opens the PR, requests Copilot, posts the Claude review and the review
+  replies, and drives labels.
+- **Structured output everywhere** — agents emit an `<output>` block
+  (`run-with-extraction.ts`) the workflow consumes: explore → `comment.md`;
+  review → `review.json` (inline comments); address-review → `replies.json`
+  (threaded replies). The workflow posts all of it.
+- **Review round (one pass)** — after the PR opens, the workflow requests Copilot
+  (async) and posts the `review/` agent's findings as inline comments, so both
+  reviews land together. It polls (bounded, ~10 min; a timeout is a warning) for
+  Copilot, then runs `address-review/` over **all** comments. If the post-fix
+  `deno task test` fails the issue goes `agent:blocked`; otherwise fixes are
+  re-pushed and replies posted before `agent:done`.
+- **Branch push uses `GITHUB_TOKEN`; PR creation and the re-push of review fixes
+  use `PR_CREATE_TOKEN`** (a fine-grained PAT, Pull requests: write) so `test.yml`
+  runs on the agent's PR — the built-in token can't trigger downstream workflows.
 
 ## One-time setup
 
@@ -74,4 +90,13 @@ npx tsx agent-workflows/explore/explore.ts
 export BRANCH=agent/issue-123
 git switch -c "$BRANCH"
 npx tsx agent-workflows/implement/implement.ts
+
+# review -> read-only; needs a branch with a diff vs main. Writes output/review.json
+export PR_NUMBER=456
+npx tsx agent-workflows/review/review.ts
+
+# address-review -> fetches the PR's review comments, fixes + commits.
+# Writes output/replies.json. Needs GH_REPO=owner/repo and a real PR with comments.
+export GH_REPO=owner/repo
+npx tsx agent-workflows/address-review/address-review.ts
 ```
