@@ -60,6 +60,16 @@ Deno.test('stripHtmlTags: removes self-closing and multiline tags', () => {
   assertEquals(stripHtmlTags('x<div\n class="y">z</div>'), 'xz');
 });
 
+Deno.test('stripHtmlTags: preserves angle brackets that are not tags', () => {
+  // Comparison operators and spaced brackets are not HTML tags and must
+  // survive (a tag start requires `<` immediately followed by a letter or `/`).
+  assertEquals(stripHtmlTags('a < b and c > d'), 'a < b and c > d');
+  assertEquals(stripHtmlTags('5 > 3 is true'), '5 > 3 is true');
+  assertEquals(stripHtmlTags('x <= y'), 'x <= y');
+  // A real tag adjacent to a comparison: only the tag is removed.
+  assertEquals(stripHtmlTags('a < b <strong>bold</strong>'), 'a < b bold');
+});
+
 // escapeUrlPath tests
 Deno.test('escapeUrlPath: encodes special URL characters', () => {
   assertEquals(escapeUrlPath('hello world'), 'hello%20world');
