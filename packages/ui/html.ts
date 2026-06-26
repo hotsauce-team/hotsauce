@@ -16,6 +16,29 @@ export function escapeHtml(unsafe: unknown): string {
 }
 
 /**
+ * Strip HTML tags from a string, leaving only the text content.
+ *
+ * Useful for rendering stored markup (e.g. a `<p>...</p>` value) as plain text
+ * in compact contexts like list table cells, where literal tags are noise.
+ * Runtime-agnostic and zero-dependency (no DOM parsing).
+ *
+ * NOTE: This removes tag-like sequences, not a full HTML sanitizer. Strip the
+ * raw string BEFORE escaping — stripping after escaping would not match the
+ * already-encoded `&lt;`/`&gt;` entities.
+ *
+ * @example
+ * ```ts
+ * stripHtmlTags('<p>Hello <strong>world</strong></p>') // 'Hello world'
+ * ```
+ */
+export function stripHtmlTags(unsafe: unknown): string {
+  if (unsafe === null || unsafe === undefined) {
+    return '';
+  }
+  return String(unsafe).replace(/<[^>]*>/g, '');
+}
+
+/**
  * Escape a string for use in a URL path segment.
  * Uses encodeURIComponent to ensure special characters are percent-encoded.
  *

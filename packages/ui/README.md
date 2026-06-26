@@ -43,6 +43,7 @@ Tagged template literal with automatic XSS escaping.
 | `html`                     | Tagged template that auto-escapes values  |
 | `raw(string)`              | Mark trusted HTML (skip escaping)         |
 | `escapeHtml(value)`        | Manual HTML escaping                      |
+| `stripHtmlTags(value)`     | Remove HTML tags, keep text content       |
 | `escapeUrlPath(segment)`   | Percent-encode URL path segments          |
 | `getSafeUrl(url)`          | Validate URL (blocks `javascript:` etc.)  |
 | `attrs(object)`            | Build attribute strings safely            |

@@ -1,6 +1,13 @@
 // List view - table of records
 
-import { attrs, escapeHtml, getSafeUrl, html, raw } from '../html.ts';
+import {
+  attrs,
+  escapeHtml,
+  getSafeUrl,
+  html,
+  raw,
+  stripHtmlTags,
+} from '../html.ts';
 import type { CMSField } from '@hotsauce/core';
 import { isValidFileReference } from '@hotsauce/core';
 import type { FieldUIOverride } from '@hotsauce/workers';
@@ -70,6 +77,13 @@ export interface ListViewOptions {
 }
 
 /**
+ * Fallback character cap for plain-text list cells. The primary line limit is
+ * the CSS 2-line clamp on `.cms-cell-text` (see styles.ts); this cap keeps the
+ * rendered HTML small for browsers without `-webkit-line-clamp` support.
+ */
+const TEXT_CELL_MAX_LENGTH = 100;
+
+/**
  * Default value formatter
  */
 function defaultFormat(
@@ -105,7 +119,18 @@ function defaultFormat(
     }
     return '<span class="cms-json">[JSON]</span>';
   }
-  return escapeHtml(String(value));
+
+  // Plain text: strip any stored markup (e.g. a `<p>...</p>` value would
+  // otherwise show literal tags), then cap length as a fallback for the CSS
+  // 2-line clamp. Strip and truncate BEFORE escaping so we never cut through an
+  // entity sequence like `&amp;`. The `cms-cell-text` wrapper carries the clamp
+  // and is applied only here, so trusted cell markup (badges, JSON, links,
+  // null dashes) stays unclamped.
+  const stripped = stripHtmlTags(String(value));
+  const text = stripped.length > TEXT_CELL_MAX_LENGTH
+    ? stripped.slice(0, TEXT_CELL_MAX_LENGTH) + '…'
+    : stripped;
+  return `<span class="cms-cell-text">${escapeHtml(text)}</span>`;
 }
 
 /**

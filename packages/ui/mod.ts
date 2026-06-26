@@ -15,6 +15,7 @@ export {
   join,
   raw,
   SafeHtml,
+  stripHtmlTags,
   when,
 } from './html.ts';
 

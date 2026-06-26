@@ -97,13 +97,87 @@ Deno.test('listTable: renders delete action', () => {
   assertStringIncludes(result, 'confirm');
 });
 
-Deno.test('listTable: escapes record values', () => {
+Deno.test('listTable: strips tags from text values (no executable HTML)', () => {
   const columns = [{ key: 'name', label: 'Name' }];
   const records = [{ id: 1, name: '<script>alert("xss")</script>' }];
 
   const result = listTable(columns, records, { baseUrl: '/admin/users' });
 
-  assertStringIncludes(result, '&lt;script&gt;');
+  // Tags are stripped from data, so no live <script> survives.
+  assertEquals(result.includes('<script>'), false);
+  // The inner text remains, safely escaped (quotes encoded).
+  assertStringIncludes(result, 'alert(&quot;xss&quot;)');
+});
+
+Deno.test('listTable: strips HTML tags from stored markup values', () => {
+  const columns = [{ key: 'bioHtml', label: 'Bio Html' }];
+  const records = [{ id: 1, bioHtml: '<p>A short bio</p>' }];
+
+  const result = listTable(columns, records, { baseUrl: '/admin/users' });
+
+  // Literal tags should NOT be shown to the user.
+  assertEquals(result.includes('&lt;p&gt;'), false);
+  // Inner text is preserved.
+  assertStringIncludes(result, 'A short bio');
+});
+
+Deno.test('listTable: wraps plain text cells in a clamp container', () => {
+  const columns = [{ key: 'name', label: 'Name' }];
+  const records = [{ id: 1, name: 'Alice' }];
+
+  const result = listTable(columns, records, { baseUrl: '/admin/users' });
+
+  assertStringIncludes(result, 'cms-cell-text');
+});
+
+Deno.test('listTable: truncates over-long text with an ellipsis', () => {
+  const long = 'a'.repeat(150);
+  const columns = [{ key: 'name', label: 'Name' }];
+  const records = [{ id: 1, name: long }];
+
+  const result = listTable(columns, records, { baseUrl: '/admin/users' });
+
+  // Truncated to 100 chars + ellipsis; the full 150-char string is gone.
+  assertEquals(result.includes('a'.repeat(101)), false);
+  assertStringIncludes(result, 'a'.repeat(100) + '…');
+});
+
+Deno.test('listTable: does not truncate text at or under the limit', () => {
+  const exact = 'b'.repeat(100);
+  const columns = [{ key: 'name', label: 'Name' }];
+  const records = [{ id: 1, name: exact }];
+
+  const result = listTable(columns, records, { baseUrl: '/admin/users' });
+
+  assertStringIncludes(result, exact);
+  assertEquals(result.includes('…'), false);
+});
+
+Deno.test('listTable: leaves non-text cells (null, JSON, file badge) unclamped', () => {
+  const columns = [
+    { key: 'missing', label: 'Missing' },
+    { key: 'data', label: 'Data' },
+    { key: 'file', label: 'File' },
+  ];
+  const records = [{
+    id: 1,
+    missing: null,
+    data: { some: 'object' },
+    file: {
+      key: 'uploads/x.pdf',
+      filename: 'x.pdf',
+      contentType: 'application/pdf',
+      size: 100,
+    },
+  }];
+
+  const result = listTable(columns, records, { baseUrl: '/admin/users' });
+
+  // Trusted cell markup is emitted as-is, not stripped or clamped.
+  assertStringIncludes(result, 'cms-null');
+  assertStringIncludes(result, 'cms-json');
+  assertStringIncludes(result, 'cms-file-badge');
+  assertStringIncludes(result, 'x.pdf');
 });
 
 Deno.test('listTable: uses custom format function', () => {
