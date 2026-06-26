@@ -1,0 +1,102 @@
+name: Benchmark
+
+# Same-run A/B benchmark of the CMS's critical request->response CRUD path.
+# The PR's benchmark files are run twice on the same runner: once against the
+# PR's package source, once against the base branch's package source. Running
+# back-to-back on one machine cancels most runner timing variance.
+#
+# Deliberately kept SEPARATE from test.yml (the required merge gate) so a flaky
+# timing comparison can never block merges on its own. A regression must
+# reproduce on a confirmation run before the check fails.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Regression threshold: a benchmark must be more than this % slower than the
+# base branch to count as a regression.
+env:
+  THRESHOLD: '10'
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/deno
+            .deno_cache
+          key: ${{ runner.os }}-deno-${{ hashFiles('deno.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-
+
+      - name: Run benchmarks (A/B) and compare
+        id: bench
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -e
+          git fetch origin "$BASE_REF"
+
+          # Run one A/B pass: bench PR source, then bench base-branch package
+          # source using the PR's (identical) benchmark files. Writes the
+          # markdown report to $1 and returns compare.ts's exit code.
+          run_ab() {
+            local out="$1"
+            deno bench -P --json benchmarks/ > pr.json
+            git checkout FETCH_HEAD -- packages
+            deno bench -P --json benchmarks/ > main.json
+            git checkout HEAD -- packages
+            set +e
+            deno run --allow-read benchmarks/compare.ts main.json pr.json "$THRESHOLD" > "$out"
+            local code=$?
+            set -e
+            return $code
+          }
+
+          fail=false
+          run_ab report.md && first=0 || first=$?
+          if [ "${first:-0}" -ne 0 ]; then
+            echo "Regression flagged on first pass — re-running to confirm..."
+            run_ab report.md && second=0 || second=$?
+            if [ "${second:-0}" -ne 0 ]; then
+              fail=true
+              printf '\n_Regression reproduced on a confirmation run._\n' >> report.md
+            else
+              printf '\n_First pass flagged a regression but it did not reproduce on a confirmation run — treating as runner noise._\n' >> report.md
+            fi
+          fi
+
+          echo "fail=$fail" >> "$GITHUB_OUTPUT"
+          cat report.md
+
+      # New comment each run (no sticky/update-in-place). Skip fork PRs, whose
+      # GITHUB_TOKEN is read-only and cannot comment.
+      - name: Comment results on PR
+        if: always() && github.event.pull_request.head.repo.full_name == github.repository && hashFiles('report.md') != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file report.md
+
+      - name: Fail on confirmed regression
+        if: steps.bench.outputs.fail == 'true'
+        run: |
+          echo "::error::Confirmed performance regression vs ${{ github.base_ref }} (> ${THRESHOLD}% slower)."
+          exit 1

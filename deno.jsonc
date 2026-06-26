@@ -60,6 +60,8 @@
     "test:watch": "deno test -P --watch",
     "test:drizzle-compat": "deno test -P packages/core/tests/drizzle_compat_test.ts",
     "test:npm": "./scripts/npm/test-npm.sh", // builds + tests in Docker
+    // Benchmarking (critical CMS paths — see benchmarks/)
+    "bench": "deno bench -P benchmarks/",
     // Code quality tasks
     "check": "deno check packages/*/mod.ts",
     "lint": "deno lint",
@@ -87,6 +89,26 @@
   // Test configuration with fine-grained permissions
   "test": {
     "include": ["packages/*/tests/"],
+    "permissions": {
+      "read": [
+        "./packages",
+        "./node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.data",
+        "./node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.wasm",
+        "./node_modules/.deno/sql.js@1.13.0/node_modules/sql.js/dist/sql-wasm.wasm"
+      ],
+      "env": [
+        "CMS_2FA_SECRET",
+        "CMS_CSRF_SECRET",
+        "CMS_JWT_SECRET",
+        "CMS_TESTING"
+      ]
+    }
+  },
+
+  // Benchmark configuration — mirrors test.permissions.
+  // Benchmark files live outside packages/*/ so Deno.bench/Deno.* is allowed here.
+  "bench": {
+    "include": ["benchmarks/"],
     "permissions": {
       "read": [
         "./packages",
