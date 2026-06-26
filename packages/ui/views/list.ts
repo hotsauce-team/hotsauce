@@ -70,6 +70,13 @@ export interface ListViewOptions {
 }
 
 /**
+ * Fallback character cap for plain-text list cells. The primary line limit is
+ * the CSS 2-line clamp on `.cms-cell-text` (see styles.ts); this cap keeps the
+ * rendered HTML small for browsers without `-webkit-line-clamp` support.
+ */
+const TEXT_CELL_MAX_LENGTH = 100;
+
+/**
  * Default value formatter
  */
 function defaultFormat(
@@ -105,7 +112,23 @@ function defaultFormat(
     }
     return '<span class="cms-json">[JSON]</span>';
   }
-  return escapeHtml(String(value));
+
+  // Plain text: cap length as a fallback for the CSS 2-line clamp, then escape.
+  // The value is shown faithfully (any stored markup appears as escaped text,
+  // bounded by the clamp) — we do not strip tags, which would corrupt plain-text
+  // values containing `<word>` and mis-handle entities. Truncate the raw string
+  // BEFORE escaping so we never cut through an entity sequence like `&amp;`. The
+  // `cms-cell-text` wrapper carries the clamp and is applied only here, so
+  // trusted cell markup (badges, JSON, links, null dashes) stays unclamped. When
+  // truncated, expose the full value via a `title` tooltip.
+  const str = String(value);
+  const truncated = str.length > TEXT_CELL_MAX_LENGTH
+    ? str.slice(0, TEXT_CELL_MAX_LENGTH) + '…'
+    : str;
+  const title = str.length > TEXT_CELL_MAX_LENGTH
+    ? ` title="${escapeHtml(str)}"`
+    : '';
+  return `<span class="cms-cell-text"${title}>${escapeHtml(truncated)}</span>`;
 }
 
 /**

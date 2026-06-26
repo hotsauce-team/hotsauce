@@ -351,6 +351,18 @@ body {
   border-bottom: 1px solid var(--cms-gray-200);
 }
 
+/*
+ * Clamp plain-text cell content to 2 lines. Applied only to .cms-cell-text
+ * (emitted for plain-text list values), so trusted cell markup — file badges,
+ * JSON tags, plugin links, action buttons — is never clamped or hidden.
+ */
+.cms-cell-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .cms-tr:hover { background: var(--cms-gray-50); }
 
 .cms-actions { white-space: nowrap; }
