@@ -15,9 +15,9 @@
  * `globalThis.process`. The default adapter works on Deno and Node 20+ without
  * either runtime being a compile-time dependency.
  *
- * Tests inject an in-memory adapter (`createMemoryFsAdapter`) so they stay
- * runtime-agnostic and never touch disk — important because the project's test
- * permissions grant no filesystem write access.
+ * Most tests inject an in-memory adapter (`createMemoryFsAdapter`) so they stay
+ * runtime-agnostic, but the suite also includes scoped disk-adapter tests under
+ * `packages/plugins/fs-storage/tests/.tmp` (see `deno.jsonc` test permissions).
  *
  * @module
  */
