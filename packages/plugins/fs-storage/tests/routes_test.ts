@@ -369,6 +369,36 @@ Deno.test('disk adapter: list() lists real keys and ignores the in-flight stagin
   });
 });
 
+Deno.test('disk adapter: put() sweeps temps orphaned by an earlier crash', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+    const base = dir.replace(/\/+$/, '');
+    await Deno.mkdir(`${base}/.uploads-tmp`, { recursive: true });
+    const exists = (p: string) =>
+      Deno.lstat(p).then(() => true).catch(() => false);
+
+    // A temp left by a crashed upload, aged past the 1h TTL.
+    const stale = `${base}/.uploads-tmp/${crypto.randomUUID()}`;
+    await Deno.writeFile(stale, new Uint8Array([9]));
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await Deno.utime(stale, old, old);
+
+    // A fresh temp from a concurrent in-flight upload — must be left alone.
+    const fresh = `${base}/.uploads-tmp/${crypto.randomUUID()}`;
+    await Deno.writeFile(fresh, new Uint8Array([7]));
+
+    // Any put triggers the (throttled) sweep.
+    await fs.put('posts/image/1/real.bin', new Uint8Array([1, 2]));
+
+    assertEquals(await exists(stale), false); // reclaimed
+    assertEquals(await exists(fresh), true); // too new to touch
+    assertEquals(
+      (await fs.list('posts/image/1/')).map((e) => e.key),
+      ['posts/image/1/real.bin'],
+    );
+  });
+});
+
 Deno.test('routes (disk): presign → _upload writes real bytes → _serve streams them', async () => {
   await withDiskDir(async (dir) => {
     const { plugin } = makePlugin(createDiskFsAdapter(dir));

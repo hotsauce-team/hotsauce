@@ -277,6 +277,18 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
   const TEMP_DIRNAME = '.uploads-tmp';
   const tempDir = `${base}/${TEMP_DIRNAME}`;
 
+  // A staged temp is normally renamed into place (or `removeQuietly`'d on a
+  // handled failure) within a single `put`. The only way one survives is a hard
+  // crash/kill between the write and the rename; such a file is then invisible
+  // to orphan-GC (it lives outside any record prefix and `list()` skips this
+  // dir). A staged temp older than this is therefore certainly abandoned and
+  // safe to delete — the window is generous so it can never race a slow
+  // in-flight upload.
+  const TEMP_TTL_MS = 60 * 60 * 1000; // 1 hour
+  // Throttle the opportunistic sweep to at most once per TTL per adapter
+  // instance (the adapter is normally long-lived, built once at startup).
+  let lastSweepAt = 0;
+
   async function ensureDir(dir: string): Promise<void> {
     if (Deno) {
       await Deno.mkdir(dir, { recursive: true });
@@ -298,11 +310,49 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     } catch { /* temp may never have been created */ }
   }
 
+  /**
+   * Delete staged temp files older than {@link TEMP_TTL_MS} — the only temps
+   * that outlive their `put` are those orphaned by a hard crash mid-write, and
+   * nothing else ever reclaims them. Best-effort and fault-tolerant: a missing
+   * dir or a file that vanishes mid-sweep is ignored.
+   */
+  async function sweepStaleTemps(): Promise<void> {
+    let names: string[];
+    try {
+      if (Deno) {
+        names = [];
+        for await (const e of Deno.readDir(tempDir)) names.push(e.name);
+      } else {
+        const fs = await nodeFs();
+        names = await fs.readdir(tempDir);
+      }
+    } catch {
+      return; // no staging dir yet, or unreadable — nothing to sweep
+    }
+    const cutoff = Date.now() - TEMP_TTL_MS;
+    await Promise.all(names.map(async (name) => {
+      const p = `${tempDir}/${name}`;
+      try {
+        const st = Deno ? await Deno.stat(p) : await (await nodeFs()).stat(p);
+        if ((st.mtime?.getTime() ?? 0) < cutoff) await removeQuietly(p);
+      } catch { /* vanished between readdir and stat — ignore */ }
+    }));
+  }
+
   return {
     async put(key, data, opts) {
       const path = keyToPath(rootDir, key);
       await ensureDir(parentDir(path));
       await ensureDir(tempDir);
+
+      // Opportunistically reclaim temps orphaned by an earlier crashed upload
+      // (throttled). Runs before the new temp is created, so it never targets
+      // the write we're about to make.
+      if (Date.now() - lastSweepAt >= TEMP_TTL_MS) {
+        lastSweepAt = Date.now();
+        await sweepStaleTemps();
+      }
+
       const tmp = `${tempDir}/${crypto.randomUUID()}`;
 
       // Fast path: bytes already in hand — verify size before writing.

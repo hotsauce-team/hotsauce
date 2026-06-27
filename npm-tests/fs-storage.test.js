@@ -11,11 +11,13 @@
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  lstat,
   mkdir,
   mkdtemp,
   readFile,
   rm,
   stat,
+  utimes,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -90,6 +92,33 @@ describe('@hotsauce/plugins-fs-storage disk adapter (Node)', () => {
     assert.deepEqual(
       allKeys.sort(),
       ['posts/image/1/real.bin', trickyKey].sort(),
+    );
+  });
+
+  it('put() sweeps temps orphaned by an earlier crash', async () => {
+    const dir = await freshDir();
+    const fs = createDiskFsAdapter(dir);
+    const exists = (p) => lstat(p).then(() => true).catch(() => false);
+    await mkdir(join(dir, '.uploads-tmp'), { recursive: true });
+
+    // A temp left by a crashed upload, aged past the 1h TTL.
+    const stale = join(dir, '.uploads-tmp', crypto.randomUUID());
+    await writeFile(stale, new Uint8Array([9]));
+    const old = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await utimes(stale, old, old);
+
+    // A fresh temp from a concurrent in-flight upload — must be left alone.
+    const fresh = join(dir, '.uploads-tmp', crypto.randomUUID());
+    await writeFile(fresh, new Uint8Array([7]));
+
+    // Any put triggers the (throttled) sweep.
+    await fs.put('posts/image/1/real.bin', new Uint8Array([1, 2]));
+
+    assert.equal(await exists(stale), false); // reclaimed
+    assert.equal(await exists(fresh), true); // too new to touch
+    assert.deepEqual(
+      (await fs.list('posts/image/1/')).map((e) => e.key),
+      ['posts/image/1/real.bin'],
     );
   });
 });

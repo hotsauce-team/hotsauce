@@ -162,8 +162,12 @@ plugin's own tests so they never touch disk).
 - **Unauthenticated writes** — the `_upload` route is not a generic
   write-to-disk endpoint: it requires an admin session, a valid CSRF token, and
   a short-lived signed token that binds the exact key, size, and content type.
-- **Atomic writes** — the disk adapter writes to a temp file and renames, so a
-  half-written file is never visible under its final key.
+- **Atomic writes** — the disk adapter stages each upload in a sibling
+  `.uploads-tmp/` directory and renames it into place, so a half-written file is
+  never visible under its final key. A temp orphaned by a hard crash mid-write
+  is reclaimed by an age-based sweep on a later upload (anything older than an
+  hour); abandoned _completed_ uploads are reclaimed by the CMS orphan-cleanup
+  (same as the S3 backend).
 - **Scriptable content** — the `_serve` route always responds with
   `attachment` + `nosniff` + a strict CSP, so SVG/HTML uploads can't execute if
   opened directly.
