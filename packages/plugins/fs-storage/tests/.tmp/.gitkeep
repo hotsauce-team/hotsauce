@@ -1,0 +1,6 @@
+# Scratch directory for fs-storage disk-adapter tests.
+#
+# Deno's test permission group (deno.jsonc -> test.permissions.write) grants
+# write access to exactly this directory. Disk-adapter tests create uniquely
+# named temp subdirs here (Deno.makeTempDir) and clean them up afterwards, so
+# this directory should normally contain only this file.

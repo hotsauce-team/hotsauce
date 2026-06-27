@@ -1,22 +1,34 @@
 /**
  * Filesystem Storage Plugin Tests
  *
- * Runtime-agnostic: an in-memory {@link FileSystemAdapter} is injected, so the
- * tests never touch disk (the project's test permissions grant no FS writes).
+ * Most cases inject the in-memory {@link FileSystemAdapter} and stay
+ * runtime-agnostic. The `disk adapter` / `routes (disk)` cases additionally
+ * exercise the real {@link createDiskFsAdapter} against actual files on disk,
+ * writing into uniquely-named temp dirs under `./tests/.tmp` — the single
+ * directory the test permission group (`deno.jsonc` → `test.permissions.write`)
+ * grants write access to. (The disk adapter's Node `node:fs/promises` branch is
+ * covered separately by `npm-tests/fs-storage.test.js`.)
  *
  * Covers:
  * - Upload request validation (size / accept / content-type cross-check)
  * - Key safety (path-traversal guard)
- * - In-memory adapter behaviour
+ * - In-memory and on-disk adapter behaviour
  * - Signed token round-trip, expiry, tampering
  * - Provider methods (presignUpload, signDownloadUrl, delete, list)
- * - Route handlers end-to-end (presign → _upload → _serve)
+ * - Route handlers end-to-end (presign → _upload → _serve), in-memory and on-disk
  */
 
-import { assertEquals, assertStringIncludes, assertThrows } from '@std/assert';
+import {
+  assertEquals,
+  assertRejects,
+  assertStringIncludes,
+  assertThrows,
+} from '@std/assert';
 import type { PluginRouteContext } from '@hotsauce/cms';
+import type { FileSystemAdapter } from '../types.ts';
 import {
   assertSafeKey,
+  createDiskFsAdapter,
   createFsStoragePlugin,
   createMemoryFsAdapter,
   keyToPath,
@@ -26,6 +38,24 @@ import {
 } from '../mod.ts';
 
 const SECRET = 'test-signing-secret-at-least-16-chars';
+
+// Scratch root for disk-adapter tests. The test permission group grants write
+// access to exactly this directory (see deno.jsonc → test.permissions.write).
+const TMP_ROOT = `${import.meta.dirname}/.tmp`;
+
+/**
+ * Run `fn` with a fresh, uniquely-named temp directory under {@link TMP_ROOT},
+ * removing it afterwards. Each test gets its own dir so the suite stays safe to
+ * run with `--parallel`.
+ */
+async function withDiskDir(fn: (dir: string) => Promise<void>): Promise<void> {
+  const dir = await Deno.makeTempDir({ dir: TMP_ROOT });
+  try {
+    await fn(dir);
+  } finally {
+    await Deno.remove(dir, { recursive: true });
+  }
+}
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -59,7 +89,10 @@ function makeCtx(
   };
 }
 
-function makePlugin(adapter = createMemoryFsAdapter(), extra = {}) {
+function makePlugin(
+  adapter: FileSystemAdapter = createMemoryFsAdapter(),
+  extra = {},
+) {
   const plugin = createFsStoragePlugin({
     basePath: '/admin',
     rootDir: './uploads',
@@ -201,6 +234,117 @@ Deno.test('memory adapter: put / get / delete / list round-trip', async () => {
   assertEquals((await fs.list('posts/image/1/')).length, 0);
   // Deleting a missing key is a no-op.
   await fs.delete('posts/image/1/a.bin');
+});
+
+// ─────────────────────────────────────────────────────────────
+// Disk adapter (real filesystem I/O under a temp dir)
+// ─────────────────────────────────────────────────────────────
+
+Deno.test('disk adapter: put / get / delete / list round-trip', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+    const bytes = new Uint8Array([1, 2, 3, 4]);
+    await fs.put('posts/image/1/a.bin', bytes);
+    await fs.put('posts/image/2/b.bin', new Uint8Array([9]));
+
+    // Bytes round-trip through the adapter ...
+    assertEquals(await fs.get('posts/image/1/a.bin'), bytes);
+    // ... and actually landed on disk under rootDir.
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, 'posts/image/1/a.bin')),
+      bytes,
+    );
+
+    const listed = await fs.list('posts/image/1/');
+    assertEquals(listed.length, 1);
+    assertEquals(listed[0]!.key, 'posts/image/1/a.bin');
+    assertEquals(listed[0]!.size, 4);
+
+    await fs.delete('posts/image/1/a.bin');
+    assertEquals((await fs.list('posts/image/1/')).length, 0);
+    // The file is gone from disk too.
+    await assertRejects(() => Deno.stat(keyToPath(dir, 'posts/image/1/a.bin')));
+    // Deleting a missing key is a no-op.
+    await fs.delete('posts/image/1/a.bin');
+  });
+});
+
+Deno.test('disk adapter: list() ignores only in-flight .tmp-{uuid} writes', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+    // A legitimate upload whose filename merely contains `.tmp-`.
+    await fs.put('posts/image/1/report.tmp-old.pdf', new Uint8Array([1]));
+    await fs.put('posts/image/1/real.bin', new Uint8Array([2, 3]));
+
+    // Simulate a partially-written atomic put left on disk.
+    const stray = keyToPath(dir, 'posts/image/1/real.bin') +
+      `.tmp-${crypto.randomUUID()}`;
+    await Deno.writeFile(stray, new Uint8Array([9, 9, 9]));
+
+    const keys = (await fs.list('posts/image/1/')).map((e) => e.key).sort();
+    // The legit `.tmp-old.pdf` file survives; the UUID-suffixed temp is skipped.
+    assertEquals(keys, [
+      'posts/image/1/real.bin',
+      'posts/image/1/report.tmp-old.pdf',
+    ]);
+  });
+});
+
+Deno.test('routes (disk): presign → _upload writes real bytes → _serve streams them', async () => {
+  await withDiskDir(async (dir) => {
+    const { plugin } = makePlugin(createDiskFsAdapter(dir));
+    const fileBytes = new Uint8Array([10, 20, 30, 40, 50]);
+
+    // 1. Presign
+    const presignRoute = findRoute(plugin, ':table/:id/:column', 'POST');
+    const presignRes = await presignRoute.handler(makeCtx({
+      table: 'posts',
+      recordId: '42',
+      column: 'image',
+      method: 'POST',
+      field: { name: 'image', type: 'file', config: { file: true } },
+      requestUrl: 'http://localhost/admin/fs-storage/posts/42/image',
+      body: JSON.stringify({
+        filename: 'photo.png',
+        contentType: 'image/png',
+        size: fileBytes.length,
+      }),
+      params: { table: 'posts', id: '42', column: 'image' },
+    })) as Response;
+    assertEquals(presignRes.status, 200);
+    const presignJson = await presignRes.json();
+    const uploadUrl = 'http://localhost' + presignJson.upload.url;
+
+    // 2. Upload
+    const uploadRoute = findRoute(plugin, '_upload', 'POST');
+    const uploadRes = await uploadRoute.handler(makeCtx({
+      method: 'POST',
+      requestUrl: uploadUrl,
+      body: JSON.stringify({ data: bytesToBase64(fileBytes) }),
+    })) as Response;
+    assertEquals(uploadRes.status, 200);
+
+    // Bytes were written to a real file under rootDir.
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, presignJson.key)),
+      fileBytes,
+    );
+
+    // 3. Serve reads them back off disk.
+    const serveUrl = await plugin.storageProvider!.signDownloadUrl!({
+      storage: 'fs',
+      key: presignJson.key,
+      filename: 'photo.png',
+      request: new Request('http://localhost/admin/files/posts/image/42'),
+    });
+    const serveRoute = findRoute(plugin, '_serve', 'GET');
+    const serveRes = await serveRoute.handler(makeCtx({
+      requestUrl: serveUrl,
+    })) as Response;
+    assertEquals(serveRes.status, 200);
+    const served = new Uint8Array(await serveRes.arrayBuffer());
+    assertEquals(served, fileBytes);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────

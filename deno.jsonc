@@ -95,6 +95,11 @@
         "./node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.wasm",
         "./node_modules/.deno/sql.js@1.13.0/node_modules/sql.js/dist/sql-wasm.wasm"
       ],
+      // The fs-storage disk-adapter tests exercise real disk I/O against
+      // uniquely-named temp dirs created under this single, scoped directory.
+      "write": [
+        "./packages/plugins/fs-storage/tests/.tmp"
+      ],
       "env": [
         "CMS_2FA_SECRET",
         "CMS_CSRF_SECRET",
