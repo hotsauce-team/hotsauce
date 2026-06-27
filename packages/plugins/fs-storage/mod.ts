@@ -48,7 +48,7 @@ import type {
 import { getFileKeyPrefix, isValidFileKey } from '@hotsauce/core';
 import { typeByExtension } from '@std/media-types';
 import { attrs, html, raw } from '@hotsauce/ui';
-import { getEnv } from '@hotsauce/cms';
+import { contentDispositionHeader, getEnv } from '@hotsauce/cms';
 import type {
   FileSystemAdapter,
   FsStoragePluginOptions,
@@ -714,7 +714,9 @@ export function createFsStoragePlugin(
         },
       },
       // Serving route (GET /admin/fs-storage/_serve?token=...)
-      // Streams bytes from disk. Authorised by the signed download token.
+      // Reads the file from disk (once) and serves it. Authorised by the signed
+      // download token. The adapter exposes no streaming `get`, so the body is
+      // held in memory for the duration of the response.
       {
         pattern: '_serve',
         methods: ['GET'],
@@ -751,18 +753,27 @@ export function createFsStoragePlugin(
             (extMatch ? typeByExtension(extMatch[0]!.toLowerCase()) : null) ??
               'application/octet-stream';
 
-          const safeBytes = new Uint8Array(bytes);
           // Always attachment + nosniff + strict CSP: directly-served files
           // bypass the per-file CSP the DB-inline path applies, so harden here
           // (scriptable content like SVG must never run inline).
-          return new Response(new Blob([safeBytes], { type: contentType }), {
+          //
+          // `bytes` is handed to `Response` directly (no clone, no `Blob`
+          // wrapper — both were redundant copies). The cast bridges the
+          // `Uint8Array<ArrayBufferLike>` vs `BufferSource` generic friction in
+          // the DOM lib types; a `Uint8Array` is a valid body at runtime.
+          return new Response(bytes as unknown as BodyInit, {
             status: 200,
             headers: {
               'Content-Type': contentType,
-              'Content-Length': String(safeBytes.length),
-              'Content-Disposition': `attachment; filename="${
-                filename.replace(/["\\]/g, '_')
-              }"`,
+              'Content-Length': String(bytes.length),
+              // `contentDispositionHeader` emits the dual `filename` +
+              // `filename*=UTF-8''…` form; a raw interpolation here would throw a
+              // `TypeError` (header values are ByteStrings) for any non-ASCII
+              // filename such as `写真.jpg`.
+              'Content-Disposition': contentDispositionHeader(
+                'attachment',
+                filename,
+              ),
               'X-Content-Type-Options': 'nosniff',
               'X-Frame-Options': 'DENY',
               'Content-Security-Policy':

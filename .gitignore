@@ -9,9 +9,8 @@ dist/
 # Coverage
 coverage/
 
-# fs-storage disk-adapter test scratch (the dir itself is kept via .gitkeep)
-packages/plugins/fs-storage/tests/.tmp/*
-!packages/plugins/fs-storage/tests/.tmp/.gitkeep
+# fs-storage disk-adapter test scratch (created on demand by the tests)
+packages/plugins/fs-storage/tests/.tmp/
 
 # Environment
 .env

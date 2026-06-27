@@ -269,6 +269,14 @@ function parentDir(path: string): string {
 export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
   const Deno = denoNs();
 
+  const base = rootDir.replace(/\/+$/, '');
+  // In-flight uploads are written here, not beside their final path, so a temp
+  // file can never collide with (or be mistaken for) a real key. The leading
+  // dot is a segment the key sanitizer never produces, so `list()` can skip it
+  // by name. See `assertSafeKey` / `generateObjectKey`.
+  const TEMP_DIRNAME = '.uploads-tmp';
+  const tempDir = `${base}/${TEMP_DIRNAME}`;
+
   async function ensureDir(dir: string): Promise<void> {
     if (Deno) {
       await Deno.mkdir(dir, { recursive: true });
@@ -294,7 +302,8 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     async put(key, data, opts) {
       const path = keyToPath(rootDir, key);
       await ensureDir(parentDir(path));
-      const tmp = `${path}.tmp-${crypto.randomUUID()}`;
+      await ensureDir(tempDir);
+      const tmp = `${tempDir}/${crypto.randomUUID()}`;
 
       // Fast path: bytes already in hand — verify size before writing.
       if (data instanceof Uint8Array) {
@@ -333,11 +342,19 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
         }
       }
 
-      if (Deno) {
-        await Deno.rename(tmp, path);
-      } else {
-        const fs = await nodeFs();
-        await fs.rename(tmp, path);
+      // Commit. If the rename itself fails (ENOSPC on the metadata op, EPERM, a
+      // concurrently-removed parent, a locked target on Windows), clean up the
+      // temp file so it isn't orphaned in `tempDir`.
+      try {
+        if (Deno) {
+          await Deno.rename(tmp, path);
+        } else {
+          const fs = await nodeFs();
+          await fs.rename(tmp, path);
+        }
+      } catch (err) {
+        await removeQuietly(tmp);
+        throw err;
       }
     },
 
@@ -371,10 +388,17 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
 
     async list(prefix) {
       assertSafeKeyPrefix(prefix);
-      const base = rootDir.replace(/\/+$/, '');
       const results: Array<
         { key: string; size: number; lastModified: Date }
       > = [];
+
+      // Walk only the subtree that could contain `prefix`. For the common
+      // orphan-cleanup prefix (`table/column/id/`) this descends straight to
+      // that directory instead of scanning the whole `rootDir` tree. A prefix
+      // with no trailing slash keeps its last (partial) segment as a leaf
+      // filter via the `startsWith` check below.
+      const slash = prefix.lastIndexOf('/');
+      const startRel = slash >= 0 ? prefix.slice(0, slash) : '';
 
       async function walk(relDir: string): Promise<void> {
         const absDir = relDir ? `${base}/${relDir}` : base;
@@ -404,38 +428,41 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
         }
 
         for (const entry of entries) {
-          // Skip partial writes still in flight. Anchor to the actual temp
-          // suffix (`.tmp-${crypto.randomUUID()}`) so a legitimate upload whose
-          // filename merely contains `.tmp-` isn't silently dropped from listings.
-          if (
-            /\.tmp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-              .test(entry.name)
-          ) {
-            continue;
-          }
+          // Never descend into the in-flight upload staging dir — temp files
+          // there are not real keys.
+          if (!relDir && entry.name === TEMP_DIRNAME) continue;
           const childRel = relDir ? `${relDir}/${entry.name}` : entry.name;
           if (entry.isDir) {
             await walk(childRel);
           } else if (childRel.startsWith(prefix)) {
             const absPath = `${base}/${childRel}`;
-            let size = 0;
-            let lastModified = new Date(0);
-            if (Deno) {
-              const st = await Deno.stat(absPath);
-              size = st.size;
-              lastModified = st.mtime ?? new Date(0);
-            } else {
-              const fs = await nodeFs();
-              const st = await fs.stat(absPath);
-              size = st.size;
-              lastModified = st.mtime ?? new Date(0);
+            // deno-lint-ignore no-explicit-any
+            let st: any;
+            try {
+              st = Deno
+                ? await Deno.stat(absPath)
+                : await (await nodeFs()).stat(
+                  absPath,
+                );
+            } catch (err) {
+              // The file vanished between the directory read and its stat (e.g.
+              // a concurrent record delete or orphan cleanup). Skip it rather
+              // than failing the whole listing.
+              const name = (err as { name?: string })?.name;
+              const code = (err as { code?: string })?.code;
+              if (name === 'NotFound' || code === 'ENOENT') continue;
+              throw err;
             }
-            results.push({ key: childRel, size, lastModified });
+            results.push({
+              key: childRel,
+              size: st.size,
+              lastModified: st.mtime ?? new Date(0),
+            });
           }
         }
       }
 
-      await walk('');
+      await walk(startRel);
       return results;
     },
   };

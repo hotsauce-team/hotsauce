@@ -49,6 +49,8 @@ const TMP_ROOT = `${import.meta.dirname}/.tmp`;
  * run with `--parallel`.
  */
 async function withDiskDir(fn: (dir: string) => Promise<void>): Promise<void> {
+  // Created on demand so the scratch dir is not checked into the repo.
+  await Deno.mkdir(TMP_ROOT, { recursive: true });
   const dir = await Deno.makeTempDir({ dir: TMP_ROOT });
   try {
     await fn(dir);
@@ -339,24 +341,31 @@ Deno.test('disk adapter: put / get / delete / list round-trip', async () => {
   });
 });
 
-Deno.test('disk adapter: list() ignores only in-flight .tmp-{uuid} writes', async () => {
+Deno.test('disk adapter: list() lists real keys and ignores the in-flight staging dir', async () => {
   await withDiskDir(async (dir) => {
     const fs = createDiskFsAdapter(dir);
-    // A legitimate upload whose filename merely contains `.tmp-`.
-    await fs.put('posts/image/1/report.tmp-old.pdf', new Uint8Array([1]));
+    // A legitimate upload whose on-disk name *ends* in a UUID-shaped `.tmp-`
+    // suffix. The old name-anchored skip dropped exactly this shape from
+    // listings (so orphan-GC never saw it); it must now be listed.
+    const trickyKey = `posts/image/1/data.tmp-${crypto.randomUUID()}`;
+    await fs.put(trickyKey, new Uint8Array([1]));
     await fs.put('posts/image/1/real.bin', new Uint8Array([2, 3]));
 
-    // Simulate a partially-written atomic put left on disk.
-    const stray = keyToPath(dir, 'posts/image/1/real.bin') +
-      `.tmp-${crypto.randomUUID()}`;
-    await Deno.writeFile(stray, new Uint8Array([9, 9, 9]));
+    // Simulate an in-flight atomic put left in the dedicated staging dir.
+    const base = dir.replace(/\/+$/, '');
+    await Deno.mkdir(`${base}/.uploads-tmp`, { recursive: true });
+    await Deno.writeFile(
+      `${base}/.uploads-tmp/${crypto.randomUUID()}`,
+      new Uint8Array([9, 9, 9]),
+    );
 
     const keys = (await fs.list('posts/image/1/')).map((e) => e.key).sort();
-    // The legit `.tmp-old.pdf` file survives; the UUID-suffixed temp is skipped.
-    assertEquals(keys, [
-      'posts/image/1/real.bin',
-      'posts/image/1/report.tmp-old.pdf',
-    ]);
+    assertEquals(keys, ['posts/image/1/real.bin', trickyKey].sort());
+
+    // A full listing (prefix '') also excludes the staging dir's contents.
+    const allKeys = (await fs.list('')).map((e) => e.key);
+    assertEquals(allKeys.some((k) => k.includes('.uploads-tmp')), false);
+    assertEquals(allKeys.sort(), ['posts/image/1/real.bin', trickyKey].sort());
   });
 });
 
@@ -745,6 +754,41 @@ Deno.test('routes: _upload rejects a size mismatch', async () => {
   assertEquals(res.status, 400);
 });
 
+Deno.test('routes: _upload maps a BodyTooLargeError to 413', async () => {
+  // Simulate the cms `capStream` erroring the body mid-flight once it exceeds
+  // the route's maxBodySize: `put` rejects with a `BodyTooLargeError`. This
+  // exercises the name-based 413 branch in the `_upload` handler, which the
+  // adapter-level (`SizeMismatchError`/success) and cms-level (catch-all 413)
+  // tests never reach.
+  const oversizing: FileSystemAdapter = {
+    ...createMemoryFsAdapter(),
+    put() {
+      const err = new Error('body exceeded the cap');
+      err.name = 'BodyTooLargeError';
+      return Promise.reject(err);
+    },
+  };
+  const { plugin } = makePlugin(oversizing);
+  const token = await signToken({
+    kind: 'upload',
+    table: 'posts',
+    column: 'image',
+    recordId: '42',
+    key: 'posts/image/42/x.png',
+    size: 3,
+    contentType: 'image/png',
+    exp: Math.floor(Date.now() / 1000) + 100,
+  }, SECRET);
+  const uploadRoute = findRoute(plugin, '_upload', 'POST');
+  const res = await uploadRoute.handler(makeCtx({
+    method: 'POST',
+    requestUrl: 'http://localhost/admin/fs-storage/_upload?token=' +
+      encodeURIComponent(token),
+    bodyStream: streamOf(new Uint8Array([1, 2, 3])),
+  })) as Response;
+  assertEquals(res.status, 413);
+});
+
 Deno.test('routes: _serve rejects an invalid token', async () => {
   const { plugin } = makePlugin();
   const serveRoute = findRoute(plugin, '_serve', 'GET');
@@ -768,6 +812,34 @@ Deno.test('routes: _serve 404s when the file is missing', async () => {
       encodeURIComponent(token),
   })) as Response;
   assertEquals(res.status, 404);
+});
+
+Deno.test('routes: _serve handles a non-ASCII filename without throwing', async () => {
+  // A header value built by raw interpolation throws a `TypeError` (header
+  // values are ByteStrings) for any code unit > 0xFF, permanently 500-ing the
+  // download of an ordinarily-named file. `contentDispositionHeader` emits the
+  // dual `filename` + `filename*=UTF-8''…` form instead.
+  const { plugin, adapter } = makePlugin();
+  await adapter.put('posts/image/42/x.png', new Uint8Array([1, 2, 3]));
+  const token = await signToken({
+    kind: 'download',
+    key: 'posts/image/42/x.png',
+    filename: '写真😀.png',
+    exp: Math.floor(Date.now() / 1000) + 100,
+  }, SECRET);
+  const serveRoute = findRoute(plugin, '_serve', 'GET');
+  const res = await serveRoute.handler(makeCtx({
+    requestUrl: 'http://localhost/admin/fs-storage/_serve?token=' +
+      encodeURIComponent(token),
+  })) as Response;
+  assertEquals(res.status, 200);
+  const cd = res.headers.get('Content-Disposition') ?? '';
+  assertStringIncludes(cd, 'attachment');
+  assertStringIncludes(cd, "filename*=UTF-8''");
+  assertEquals(
+    new Uint8Array(await res.arrayBuffer()),
+    new Uint8Array([1, 2, 3]),
+  );
 });
 
 Deno.test('routes: _assets serve embedded css and js', async () => {
