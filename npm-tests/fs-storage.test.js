@@ -65,6 +65,21 @@ describe('@hotsauce/plugins-fs-storage disk adapter (Node)', () => {
     await fs.delete('posts/image/1/a.bin');
   });
 
+  it('getStream yields the bytes and exact size (Node stream branch)', async () => {
+    const dir = await freshDir();
+    const fs = createDiskFsAdapter(dir);
+    const bytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    await fs.put('posts/image/1/a.bin', bytes);
+
+    const { stream, size } = await fs.getStream('posts/image/1/a.bin');
+    assert.equal(size, bytes.length);
+    const chunks = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    assert.deepEqual(new Uint8Array(Buffer.concat(chunks)), bytes);
+
+    await assert.rejects(() => fs.getStream('posts/image/1/missing.bin'));
+  });
+
   it('list() lists real keys and ignores the in-flight staging dir', async () => {
     const dir = await freshDir();
     const fs = createDiskFsAdapter(dir);

@@ -341,6 +341,30 @@ Deno.test('disk adapter: put / get / delete / list round-trip', async () => {
   });
 });
 
+Deno.test('disk adapter: getStream yields the bytes and exact size', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+    const bytes = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    await fs.put('posts/image/1/a.bin', bytes);
+
+    const { stream, size } = await fs.getStream!('posts/image/1/a.bin');
+    assertEquals(size, bytes.length);
+    // Drain the stream and confirm it reproduces the file exactly.
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+    const joined = new Uint8Array(chunks.reduce((n, c) => n + c.length, 0));
+    let off = 0;
+    for (const c of chunks) {
+      joined.set(c, off);
+      off += c.length;
+    }
+    assertEquals(joined, bytes);
+
+    // A missing key rejects (the route maps that to 404).
+    await assertRejects(() => fs.getStream!('posts/image/1/missing.bin'));
+  });
+});
+
 Deno.test('disk adapter: list() lists real keys and ignores the in-flight staging dir', async () => {
   await withDiskDir(async (dir) => {
     const fs = createDiskFsAdapter(dir);

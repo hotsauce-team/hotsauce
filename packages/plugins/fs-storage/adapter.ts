@@ -45,6 +45,17 @@ export interface FileSystemAdapter {
   ): Promise<void>;
   /** Read bytes for `key`. Rejects if the key does not exist. */
   get(key: string): Promise<Uint8Array>;
+  /**
+   * Open `key` as a byte stream (plus its total `size` for `Content-Length`),
+   * so a download can be piped straight to the response without buffering the
+   * whole file in memory. Rejects if the key does not exist.
+   *
+   * Optional: callers must fall back to {@link FileSystemAdapter.get} when an
+   * adapter doesn't implement it.
+   */
+  getStream?(
+    key: string,
+  ): Promise<{ stream: ReadableStream<Uint8Array>; size: number }>;
   /** Delete `key`. A missing key is not an error. */
   delete(key: string): Promise<void>;
   /** List objects whose key starts with `prefix`. */
@@ -210,6 +221,21 @@ export function createMemoryFsAdapter(
         return Promise.reject(new Error(`Not found: ${key}`));
       }
       return Promise.resolve(entry.data);
+    },
+    getStream(key) {
+      assertSafeKey(key);
+      const entry = store.get(key);
+      if (!entry) {
+        return Promise.reject(new Error(`Not found: ${key}`));
+      }
+      const bytes = entry.data;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+      return Promise.resolve({ stream, size: bytes.length });
     },
     delete(key) {
       assertSafeKey(key);
@@ -416,6 +442,29 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
       const fs = await nodeFs();
       const buf = await fs.readFile(path);
       return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    },
+
+    async getStream(key) {
+      const path = keyToPath(rootDir, key);
+      if (Deno) {
+        // `Deno.open` rejects if the file is missing; the returned `readable`
+        // closes the fd when the body is fully read or cancelled.
+        const file = await Deno.open(path, { read: true });
+        const { size } = await file.stat();
+        return { stream: file.readable, size };
+      }
+      const fs = await nodeFs();
+      // stat first so a missing file rejects *before* we hand back a stream
+      // (createReadStream would otherwise only error asynchronously).
+      const { size } = await fs.stat(path);
+      // deno-lint-ignore no-explicit-any
+      const { createReadStream } = await import('node:fs') as any;
+      // deno-lint-ignore no-explicit-any
+      const { Readable } = await import('node:stream') as any;
+      const stream = Readable.toWeb(
+        createReadStream(path),
+      ) as ReadableStream<Uint8Array>;
+      return { stream, size };
     },
 
     async delete(key) {

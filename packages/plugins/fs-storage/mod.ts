@@ -714,9 +714,10 @@ export function createFsStoragePlugin(
         },
       },
       // Serving route (GET /admin/fs-storage/_serve?token=...)
-      // Reads the file from disk (once) and serves it. Authorised by the signed
-      // download token. The adapter exposes no streaming `get`, so the body is
-      // held in memory for the duration of the response.
+      // Streams the file from disk straight to the response. Authorised by the
+      // signed download token. When the adapter exposes `getStream` (both
+      // built-in adapters do) the body is never fully buffered; a custom
+      // adapter without it falls back to the buffered `get`.
       {
         pattern: '_serve',
         methods: ['GET'],
@@ -738,10 +739,21 @@ export function createFsStoragePlugin(
             return new Response('Invalid or expired token', { status: 403 });
           }
 
-          let bytes: Uint8Array;
+          // Stream the bytes straight from disk; fall back to a buffered read
+          // for adapters that don't implement `getStream`.
+          let body: ReadableStream<Uint8Array> | Uint8Array;
+          let contentLength: number;
           try {
             assertSafeKey(payload.key);
-            bytes = await options.fs.get(payload.key);
+            if (options.fs.getStream) {
+              const opened = await options.fs.getStream(payload.key);
+              body = opened.stream;
+              contentLength = opened.size;
+            } else {
+              const bytes = await options.fs.get(payload.key);
+              body = bytes;
+              contentLength = bytes.length;
+            }
           } catch {
             return new Response('Not found', { status: 404 });
           }
@@ -757,15 +769,14 @@ export function createFsStoragePlugin(
           // bypass the per-file CSP the DB-inline path applies, so harden here
           // (scriptable content like SVG must never run inline).
           //
-          // `bytes` is handed to `Response` directly (no clone, no `Blob`
-          // wrapper — both were redundant copies). The cast bridges the
-          // `Uint8Array<ArrayBufferLike>` vs `BufferSource` generic friction in
-          // the DOM lib types; a `Uint8Array` is a valid body at runtime.
-          return new Response(bytes as unknown as BodyInit, {
+          // A `ReadableStream` is a valid body as-is; the `Uint8Array` fallback
+          // needs the cast to bridge the `Uint8Array<ArrayBufferLike>` vs
+          // `BufferSource` generic friction in the DOM lib types.
+          return new Response(body as unknown as BodyInit, {
             status: 200,
             headers: {
               'Content-Type': contentType,
-              'Content-Length': String(bytes.length),
+              'Content-Length': String(contentLength),
               // `contentDispositionHeader` emits the dual `filename` +
               // `filename*=UTF-8''…` form; a raw interpolation here would throw a
               // `TypeError` (header values are ByteStrings) for any non-ASCII
