@@ -406,6 +406,13 @@ export interface PluginRouteContext {
   requestUrl: string;
   /** HTTP method (GET, POST) */
   method: string;
+  /**
+   * The request's `Content-Type` header (may include parameters, e.g.
+   * `image/png` or `text/plain; charset=utf-8`), or `undefined` if absent.
+   * Lets in-process routes validate the upload's declared type against a bound
+   * value. Serializable, so it is safe to send to Worker render routes too.
+   */
+  contentType?: string;
   /** Request body (for POST requests, raw text) */
   body?: string;
   /**

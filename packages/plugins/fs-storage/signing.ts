@@ -59,6 +59,11 @@ export interface UploadTokenPayload {
   key: string;
   /** Exact byte length the upload must match */
   size: number;
+  /**
+   * Declared MIME type (validated against extension/accept at presign). The
+   * `_upload` route rejects a request whose `Content-Type` doesn't match this.
+   */
+  contentType: string;
   /** Expiry — epoch seconds */
   exp: number;
 }

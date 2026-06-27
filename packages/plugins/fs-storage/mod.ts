@@ -223,12 +223,11 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
         ctx.filename,
       );
 
-      // The token binds key/size/record but not content type: `_upload` has no
-      // access to the request's `Content-Type` header (it isn't exposed on the
-      // in-process route context), so a content-type claim couldn't be
-      // enforced. The declared type is still validated at presign time
-      // (`validatePresignRequest`), and `_serve` neutralises scriptable content
-      // regardless (attachment + nosniff + CSP).
+      // The token binds key/size/record AND content type. `_upload` rejects a
+      // request whose `Content-Type` header doesn't match `contentType` here —
+      // the same guarantee S3's signed-header PUT gives, enforced at our own
+      // route instead of the bucket. The declared type is also cross-checked
+      // against the extension/accept list at presign (`validatePresignRequest`).
       return signToken({
         kind: 'upload',
         table: ctx.table,
@@ -236,6 +235,7 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
         recordId: ctx.recordId!,
         key,
         size: ctx.size,
+        contentType: ctx.contentType,
         exp: nowSeconds() + options.expirySeconds,
       }, options.signingSecret).then((token) => ({
         key,
@@ -244,7 +244,8 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
           url: `${options.basePath}/fs-storage/_upload?token=${
             encodeURIComponent(token)
           }`,
-          // A hint for the client's POST; not an enforced constraint.
+          // The client must echo this exact `Content-Type` on the upload POST
+          // (it is checked against the token).
           headers: {
             'Content-Type': ctx.contentType || 'application/octet-stream',
           },
@@ -691,6 +692,18 @@ export function createFsStoragePlugin(
             )
           ) {
             return jsonResponse({ error: 'Invalid key' }, 403);
+          }
+
+          // Enforce the token-bound content type: the request must declare the
+          // same MIME type that was validated at presign (the guarantee S3's
+          // signed-header PUT gives, applied at our own route). Compare the
+          // essence only — ignore any parameters (e.g. `; charset=`) and case.
+          const essence = (v: string | undefined) =>
+            (v ?? '').split(';')[0]!.trim().toLowerCase();
+          if (essence(ctx.contentType) !== essence(payload.contentType)) {
+            return jsonResponse({
+              error: 'Content-Type does not match the upload token',
+            }, 415);
           }
 
           if (!ctx.bodyStream) {

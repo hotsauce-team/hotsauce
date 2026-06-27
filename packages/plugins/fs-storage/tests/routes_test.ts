@@ -453,6 +453,7 @@ Deno.test('routes (disk): presign → _upload writes real bytes → _serve strea
     const uploadRes = await uploadRoute.handler(makeCtx({
       method: 'POST',
       requestUrl: uploadUrl,
+      contentType: 'image/png',
       bodyStream: streamOf(fileBytes),
     })) as Response;
     assertEquals(uploadRes.status, 200);
@@ -492,6 +493,7 @@ Deno.test('signToken / verifyToken: upload token round-trips', async () => {
     recordId: '42',
     key: 'posts/image/42/x.png',
     size: 123,
+    contentType: 'image/png',
     exp: Math.floor(Date.now() / 1000) + 100,
   }, SECRET);
 
@@ -667,6 +669,7 @@ Deno.test('routes: presign → _upload writes bytes → _serve streams them', as
   const uploadRes = await uploadRoute.handler(makeCtx({
     method: 'POST',
     requestUrl: uploadUrl,
+    contentType: 'image/png',
     bodyStream: streamOf(fileBytes),
   })) as Response;
   assertEquals(uploadRes.status, 200);
@@ -794,6 +797,7 @@ Deno.test('routes: _upload rejects a size mismatch', async () => {
     recordId: '42',
     key: 'posts/image/42/x.png',
     size: 999,
+    contentType: 'image/png',
     exp: Math.floor(Date.now() / 1000) + 100,
   }, SECRET);
   const uploadRoute = findRoute(plugin, '_upload', 'POST');
@@ -801,9 +805,63 @@ Deno.test('routes: _upload rejects a size mismatch', async () => {
     method: 'POST',
     requestUrl: 'http://localhost/admin/fs-storage/_upload?token=' +
       encodeURIComponent(token),
+    contentType: 'image/png',
     bodyStream: streamOf(new Uint8Array([1, 2, 3])),
   })) as Response;
   assertEquals(res.status, 400);
+});
+
+Deno.test('routes: _upload rejects a Content-Type that does not match the token', async () => {
+  const fs = createMemoryFsAdapter();
+  const { plugin } = makePlugin(fs);
+  const token = await signToken({
+    kind: 'upload',
+    table: 'posts',
+    column: 'image',
+    recordId: '42',
+    key: 'posts/image/42/x.png',
+    size: 3,
+    contentType: 'image/png',
+    exp: Math.floor(Date.now() / 1000) + 100,
+  }, SECRET);
+  const uploadRoute = findRoute(plugin, '_upload', 'POST');
+  const res = await uploadRoute.handler(makeCtx({
+    method: 'POST',
+    requestUrl: 'http://localhost/admin/fs-storage/_upload?token=' +
+      encodeURIComponent(token),
+    // The request declares a different type than the token bound.
+    contentType: 'text/html',
+    bodyStream: streamOf(new Uint8Array([1, 2, 3])),
+  })) as Response;
+  assertEquals(res.status, 415);
+  // Nothing was written.
+  assertEquals((await fs.list('')).length, 0);
+});
+
+Deno.test('routes: _upload accepts a Content-Type with parameters (charset)', async () => {
+  // The client may send `text/plain; charset=utf-8`; only the essence must
+  // match the token's `text/plain`.
+  const fs = createMemoryFsAdapter();
+  const { plugin } = makePlugin(fs);
+  const token = await signToken({
+    kind: 'upload',
+    table: 'posts',
+    column: 'doc',
+    recordId: '42',
+    key: 'posts/doc/42/x.txt',
+    size: 3,
+    contentType: 'text/plain',
+    exp: Math.floor(Date.now() / 1000) + 100,
+  }, SECRET);
+  const uploadRoute = findRoute(plugin, '_upload', 'POST');
+  const res = await uploadRoute.handler(makeCtx({
+    method: 'POST',
+    requestUrl: 'http://localhost/admin/fs-storage/_upload?token=' +
+      encodeURIComponent(token),
+    contentType: 'text/plain; charset=utf-8',
+    bodyStream: streamOf(new Uint8Array([1, 2, 3])),
+  })) as Response;
+  assertEquals(res.status, 200);
 });
 
 Deno.test('routes: _upload maps a BodyTooLargeError to 413', async () => {
@@ -828,6 +886,7 @@ Deno.test('routes: _upload maps a BodyTooLargeError to 413', async () => {
     recordId: '42',
     key: 'posts/image/42/x.png',
     size: 3,
+    contentType: 'image/png',
     exp: Math.floor(Date.now() / 1000) + 100,
   }, SECRET);
   const uploadRoute = findRoute(plugin, '_upload', 'POST');
@@ -835,6 +894,7 @@ Deno.test('routes: _upload maps a BodyTooLargeError to 413', async () => {
     method: 'POST',
     requestUrl: 'http://localhost/admin/fs-storage/_upload?token=' +
       encodeURIComponent(token),
+    contentType: 'image/png',
     bodyStream: streamOf(new Uint8Array([1, 2, 3])),
   })) as Response;
   assertEquals(res.status, 413);

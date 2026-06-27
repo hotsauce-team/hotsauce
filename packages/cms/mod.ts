@@ -532,6 +532,7 @@ async function handlePluginRoute(
     basePath: options.basePath,
     requestUrl: request.url,
     method: request.method,
+    contentType: request.headers.get('content-type') ?? undefined,
     body,
     bodyStream,
     params,
