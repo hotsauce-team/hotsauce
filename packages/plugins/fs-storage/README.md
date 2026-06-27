@@ -55,8 +55,9 @@ const handler = createCmsHandler({
 });
 ```
 
-> **Runtime permissions.** On Deno, grant `--allow-read`/`--allow-write` for
-> `rootDir`. On Node 20+/Bun no flags are needed. Filesystem access is
+> **Runtime permissions.** On Deno, the runtime needs read and write access to
+> `rootDir` (configure it in your `deno.jsonc` permissions, scoped to that
+> directory). On Node 20+/Bun no configuration is needed. Filesystem access is
 > feature-detected at call time (the package references no `Deno.*` symbol at
 > module load), consistent with the rest of the runtime-agnostic codebase.
 

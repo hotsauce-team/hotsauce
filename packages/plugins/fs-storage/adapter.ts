@@ -268,8 +268,15 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
         }
 
         for (const entry of entries) {
-          // Skip partial writes still in flight.
-          if (entry.name.includes('.tmp-')) continue;
+          // Skip partial writes still in flight. Anchor to the actual temp
+          // suffix (`.tmp-${crypto.randomUUID()}`) so a legitimate upload whose
+          // filename merely contains `.tmp-` isn't silently dropped from listings.
+          if (
+            /\.tmp-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+              .test(entry.name)
+          ) {
+            continue;
+          }
           const childRel = relDir ? `${relDir}/${entry.name}` : entry.name;
           if (entry.isDir) {
             await walk(childRel);
