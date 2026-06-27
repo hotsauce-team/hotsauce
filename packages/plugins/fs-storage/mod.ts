@@ -75,6 +75,9 @@ export const FS_DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
 /** Default upload-route body cap: 14MB, enough for a 10MB file once base64-inflated. */
 const FS_DEFAULT_MAX_UPLOAD_BYTES = 14 * 1024 * 1024;
 
+/** Byte overhead of the `{"data":"…"}` JSON wrapper around the base64 payload. */
+const UPLOAD_JSON_OVERHEAD = 16;
+
 // ─────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────
@@ -332,8 +335,21 @@ export function createFsStoragePlugin(
     );
   }
 
-  const fs: FileSystemAdapter = pluginOptions.fs ??
-    createDiskFsAdapter(pluginOptions.rootDir);
+  let fs: FileSystemAdapter;
+  if (pluginOptions.fs) {
+    fs = pluginOptions.fs;
+  } else {
+    // The default disk adapter maps keys onto `rootDir`. An empty/whitespace
+    // rootDir would resolve keys to `/${key}` (the filesystem root), so reject
+    // it with a clear configuration error rather than writing under `/`.
+    const rootDir = pluginOptions.rootDir;
+    if (typeof rootDir !== 'string' || rootDir.trim() === '') {
+      throw new Error(
+        'fs-storage: rootDir is required (a non-empty directory path) when no custom fs adapter is provided.',
+      );
+    }
+    fs = createDiskFsAdapter(rootDir);
+  }
 
   const options: ResolvedFsOptions = {
     storageId: pluginOptions.storageId ?? 'fs',
@@ -455,6 +471,12 @@ export function createFsStoragePlugin(
           const resolvedFieldConfig = resolveFileConfig(
             ctx.field?.config as Record<string, unknown> | undefined,
           );
+          // Only render the upload page for columns explicitly configured as
+          // file fields (`$cms({ file: ... })`). Otherwise this URL could be
+          // used as an upload entrypoint for arbitrary columns.
+          if (!resolvedFieldConfig) {
+            return new Response('Not found', { status: 404 });
+          }
           const acceptValue = resolvedFieldConfig?.accept;
           const maxSizeValue = resolvedFieldConfig?.maxSize;
           const acceptAttr = typeof acceptValue === 'string'
@@ -583,9 +605,33 @@ export function createFsStoragePlugin(
           const fieldConfig = ctx.field?.config as
             | Record<string, unknown>
             | undefined;
+
+          // Only mint upload tokens for columns explicitly configured as file
+          // fields. Without this, an authenticated user could generate
+          // arbitrary on-disk keys for any table/column/id (validatePresignRequest
+          // is a no-op when `$cms({ file: ... })` is absent).
+          if (!resolveFileConfig(fieldConfig)) {
+            return jsonResponse({ error: 'Not a file field' }, 404);
+          }
+
           const validationError = validatePresignRequest(body, fieldConfig);
           if (validationError) {
             return jsonResponse(validationError, 400);
+          }
+
+          // Reject up front if the (base64-inflated) body would exceed the
+          // upload route's body cap. Otherwise presign succeeds but `_upload`
+          // is later rejected at the cap with an opaque 413.
+          const inflatedBytes = Math.ceil(body.size / 3) * 4 +
+            UPLOAD_JSON_OVERHEAD;
+          if (inflatedBytes > options.maxUploadBytes) {
+            const label = options.maxUploadBytes >= 1_048_576
+              ? `${Math.round(options.maxUploadBytes / 1_048_576)}MB`
+              : `${Math.round(options.maxUploadBytes / 1024)}KB`;
+            return jsonResponse({
+              error:
+                `File too large for the upload route (max request body ~${label}). Raise maxUploadBytes to accept larger files.`,
+            }, 400);
           }
 
           const presignResult = await storageProvider.presignUpload!({

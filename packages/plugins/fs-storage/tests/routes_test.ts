@@ -424,6 +424,80 @@ Deno.test('routes: presign → _upload writes bytes → _serve streams them', as
   assertEquals(served, fileBytes);
 });
 
+Deno.test('routes: presign 404s when the column is not a file field', async () => {
+  const { plugin } = makePlugin();
+  const presignRoute = findRoute(plugin, ':table/:id/:column', 'POST');
+  const res = await presignRoute.handler(makeCtx({
+    table: 'posts',
+    recordId: '42',
+    column: 'title',
+    method: 'POST',
+    // A non-file column: config has no `file` marker.
+    field: { name: 'title', type: 'text', config: {} },
+    requestUrl: 'http://localhost/admin/fs-storage/posts/42/title',
+    body: JSON.stringify({
+      filename: 'photo.png',
+      contentType: 'image/png',
+      size: 5,
+    }),
+    params: { table: 'posts', id: '42', column: 'title' },
+  })) as Response;
+  assertEquals(res.status, 404);
+});
+
+Deno.test('routes: presign rejects a file too large for the upload route', async () => {
+  const { plugin } = makePlugin(createMemoryFsAdapter(), {
+    maxUploadBytes: 1024,
+  });
+  const presignRoute = findRoute(plugin, ':table/:id/:column', 'POST');
+  const res = await presignRoute.handler(makeCtx({
+    table: 'posts',
+    recordId: '42',
+    column: 'image',
+    method: 'POST',
+    // maxSize 0 disables the per-column size check, so only the upload-route
+    // body cap (maxUploadBytes) can reject it.
+    field: { name: 'image', type: 'file', config: { file: { maxSize: 0 } } },
+    requestUrl: 'http://localhost/admin/fs-storage/posts/42/image',
+    body: JSON.stringify({
+      filename: 'photo.png',
+      contentType: 'image/png',
+      size: 4096,
+    }),
+    params: { table: 'posts', id: '42', column: 'image' },
+  })) as Response;
+  assertEquals(res.status, 400);
+  const json = await res.json();
+  assertStringIncludes(json.error, 'upload route');
+});
+
+Deno.test('routes: upload page 404s when the column is not a file field', async () => {
+  const { plugin } = makePlugin();
+  const pageRoute = findRoute(plugin, ':table/:id/:column', 'GET');
+  const res = await pageRoute.handler(makeCtx({
+    table: 'posts',
+    recordId: '42',
+    column: 'title',
+    field: { name: 'title', type: 'text', config: {} },
+    requestUrl: 'http://localhost/admin/fs-storage/posts/42/title',
+    params: { table: 'posts', id: '42', column: 'title' },
+  })) as Response;
+  assertEquals(res.status, 404);
+});
+
+Deno.test('createFsStoragePlugin: throws on empty rootDir without a custom adapter', () => {
+  assertThrows(
+    () =>
+      createFsStoragePlugin({
+        basePath: '/admin',
+        rootDir: '   ',
+        signingSecret: SECRET,
+      }),
+    Error,
+    'rootDir is required',
+  );
+});
+
 Deno.test('routes: _upload rejects an invalid token', async () => {
   const { plugin } = makePlugin();
   const uploadRoute = findRoute(plugin, '_upload', 'POST');

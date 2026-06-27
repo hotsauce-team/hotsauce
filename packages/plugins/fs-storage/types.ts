@@ -54,9 +54,10 @@ export interface FsStoragePluginOptions {
    * Keys map to `{rootDir}/{table}/{column}/{recordId}/{uuid}-{filename}`.
    *
    * The host runtime must have read/write permission to this directory.
-   * Ignored when a custom {@link FsStoragePluginOptions.fs} adapter is provided.
+   * Required unless a custom {@link FsStoragePluginOptions.fs} adapter is
+   * provided, in which case it is ignored.
    */
-  rootDir: string;
+  rootDir?: string;
 
   /**
    * Secret used to sign short-lived upload/download tokens (HMAC-SHA256).
@@ -110,7 +111,7 @@ export interface FsStoragePluginOptions {
 export interface ResolvedFsOptions {
   storageId: string;
   basePath: string;
-  rootDir: string;
+  rootDir?: string;
   signingSecret: string;
   publicBaseUrl?: string;
   expirySeconds: number;
