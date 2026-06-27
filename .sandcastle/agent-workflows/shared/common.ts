@@ -56,6 +56,7 @@ export const writeText = (filename: string, value: string): void => {
 // sandbox. Credentials are forwarded via env.
 export const claudeAgent = () =>
   sandcastle.claudeCode("claude-opus-4-8", {
+    effort: "high",
     env: {
       CLAUDE_CODE_OAUTH_TOKEN: required("CLAUDE_CODE_OAUTH_TOKEN"),
     },
