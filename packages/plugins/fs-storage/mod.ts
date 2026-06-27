@@ -72,11 +72,12 @@ export { signToken, verifyToken } from './signing.ts';
 /** Default max file size for filesystem uploads: 10MB. Set maxSize: 0 in $cms() to disable. */
 export const FS_DEFAULT_MAX_SIZE = 10 * 1024 * 1024;
 
-/** Default upload-route body cap: 14MB, enough for a 10MB file once base64-inflated. */
-const FS_DEFAULT_MAX_UPLOAD_BYTES = 14 * 1024 * 1024;
-
-/** Byte overhead of the `{"data":"…"}` JSON wrapper around the base64 payload. */
-const UPLOAD_JSON_OVERHEAD = 16;
+/**
+ * Default upload-route body cap. The file is streamed raw (no base64), so this
+ * is a plain byte cap sized to the 10MB default max file size plus a little
+ * headroom.
+ */
+const FS_DEFAULT_MAX_UPLOAD_BYTES = 11 * 1024 * 1024;
 
 // ─────────────────────────────────────────────────────────────
 // Helpers
@@ -193,15 +194,6 @@ function generateObjectKey(
   return `${getFileKeyPrefix(table, column, recordId)}${uuid}-${safeFilename}`;
 }
 
-function decodeBase64(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) {
-    bytes[i] = bin.charCodeAt(i);
-  }
-  return bytes;
-}
-
 /** Build the relative serving URL path for a key, segment-encoded. */
 function encodeKeyPath(key: string): string {
   return key.split('/').map(encodeURIComponent).join('/');
@@ -220,8 +212,8 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
 
     /**
      * Mint a signed, single-use upload URL pointing back at the plugin's own
-     * `_upload` route. The browser POSTs the (base64) bytes there; the route
-     * verifies the token and writes via the adapter.
+     * `_upload` route. The browser POSTs the raw file bytes there; the route
+     * verifies the token and streams them to disk via the adapter.
      */
     presignUpload(ctx: PresignContext): Promise<PresignResult> {
       const key = generateObjectKey(
@@ -247,7 +239,9 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
           url: `${options.basePath}/fs-storage/_upload?token=${
             encodeURIComponent(token)
           }`,
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': ctx.contentType || 'application/octet-stream',
+          },
         },
       }));
     },
@@ -619,12 +613,11 @@ export function createFsStoragePlugin(
             return jsonResponse(validationError, 400);
           }
 
-          // Reject up front if the (base64-inflated) body would exceed the
-          // upload route's body cap. Otherwise presign succeeds but `_upload`
-          // is later rejected at the cap with an opaque 413.
-          const inflatedBytes = Math.ceil(body.size / 3) * 4 +
-            UPLOAD_JSON_OVERHEAD;
-          if (inflatedBytes > options.maxUploadBytes) {
+          // Reject up front if the file would exceed the upload route's body
+          // cap. Otherwise presign succeeds but `_upload` is later rejected at
+          // the cap with an opaque 413. The body is streamed raw, so the cap is
+          // compared against the file size directly.
+          if (body.size > options.maxUploadBytes) {
             const label = options.maxUploadBytes >= 1_048_576
               ? `${Math.round(options.maxUploadBytes / 1_048_576)}MB`
               : `${Math.round(options.maxUploadBytes / 1024)}KB`;
@@ -654,12 +647,16 @@ export function createFsStoragePlugin(
         },
       },
       // Upload sink (POST /admin/fs-storage/_upload?token=...)
-      // Receives base64 bytes; authorised by the signed upload token only
-      // (no :table/:id params, so no record fetch — the token binds everything).
+      // Receives the raw file bytes as a stream; authorised by the signed
+      // upload token only (no :table/:id params, so no record fetch — the token
+      // binds everything). `bodyType: 'stream'` hands the body straight through
+      // as a byte stream, so the file is written to disk without a base64/text
+      // round-trip and is never fully buffered.
       {
         pattern: '_upload',
         methods: ['POST'],
         maxBodySize: options.maxUploadBytes,
+        bodyType: 'stream',
         handler: async (ctx) => {
           let token: string | null = null;
           try {
@@ -690,32 +687,26 @@ export function createFsStoragePlugin(
             return jsonResponse({ error: 'Invalid key' }, 403);
           }
 
-          let data: string;
-          try {
-            if (!ctx.body) throw new Error('No body');
-            const parsed = JSON.parse(ctx.body);
-            data = parsed.data;
-            if (typeof data !== 'string') throw new Error('Missing data');
-          } catch {
-            return jsonResponse({ error: 'Invalid JSON body' }, 400);
-          }
-
-          let bytes: Uint8Array;
-          try {
-            bytes = decodeBase64(data);
-          } catch {
-            return jsonResponse({ error: 'Invalid base64 data' }, 400);
-          }
-
-          // Enforce the token-bound size exactly.
-          if (bytes.length !== payload.size) {
-            return jsonResponse({ error: 'Size mismatch' }, 400);
+          if (!ctx.bodyStream) {
+            return jsonResponse({ error: 'No body' }, 400);
           }
 
           try {
             assertSafeKey(payload.key);
-            await options.fs.put(payload.key, bytes);
-          } catch {
+            // Stream straight to disk, enforcing the token-bound size exactly.
+            // The adapter rejects (and commits nothing) on a size mismatch or
+            // if the cap is exceeded mid-stream.
+            await options.fs.put(payload.key, ctx.bodyStream, {
+              expectedSize: payload.size,
+            });
+          } catch (err) {
+            const name = (err as { name?: string })?.name;
+            if (name === 'BodyTooLargeError') {
+              return jsonResponse({ error: 'File too large' }, 413);
+            }
+            if (name === 'SizeMismatchError') {
+              return jsonResponse({ error: 'Size mismatch' }, 400);
+            }
             return jsonResponse({ error: 'Failed to write file' }, 500);
           }
 

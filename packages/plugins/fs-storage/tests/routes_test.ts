@@ -61,10 +61,14 @@ async function withDiskDir(fn: (dir: string) => Promise<void>): Promise<void> {
 // Helpers
 // ─────────────────────────────────────────────────────────────
 
-function bytesToBase64(bytes: Uint8Array): string {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
-  return btoa(bin);
+/** A single-chunk byte stream, as the upload route now consumes its body. */
+function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    },
+  });
 }
 
 function makeCtx(
@@ -236,9 +240,75 @@ Deno.test('memory adapter: put / get / delete / list round-trip', async () => {
   await fs.delete('posts/image/1/a.bin');
 });
 
+/** A multi-chunk byte stream, to exercise the streaming write path. */
+function multiChunkStream(chunks: Uint8Array[]): ReadableStream<Uint8Array> {
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+}
+
+Deno.test('memory adapter: put accepts a stream and concatenates chunks', async () => {
+  const fs = createMemoryFsAdapter();
+  await fs.put(
+    'posts/image/1/a.bin',
+    multiChunkStream([new Uint8Array([1, 2]), new Uint8Array([3, 4, 5])]),
+    { expectedSize: 5 },
+  );
+  assertEquals(
+    await fs.get('posts/image/1/a.bin'),
+    new Uint8Array([1, 2, 3, 4, 5]),
+  );
+});
+
+Deno.test('memory adapter: put rejects a stream that misses expectedSize, committing nothing', async () => {
+  const fs = createMemoryFsAdapter();
+  await assertRejects(
+    () =>
+      fs.put('posts/image/1/a.bin', streamOf(new Uint8Array([1, 2, 3])), {
+        expectedSize: 5,
+      }),
+    Error,
+    'Size mismatch',
+  );
+  assertEquals((await fs.list('posts/image/1/')).length, 0);
+});
+
 // ─────────────────────────────────────────────────────────────
 // Disk adapter (real filesystem I/O under a temp dir)
 // ─────────────────────────────────────────────────────────────
+
+Deno.test('disk adapter: put streams to disk and enforces expectedSize', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+
+    // A multi-chunk stream lands as a single contiguous file.
+    await fs.put(
+      'posts/image/1/a.bin',
+      multiChunkStream([new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])]),
+      { expectedSize: 5 },
+    );
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, 'posts/image/1/a.bin')),
+      new Uint8Array([1, 2, 3, 4, 5]),
+    );
+
+    // A size mismatch rejects and leaves nothing behind — not even a temp file.
+    await assertRejects(
+      () =>
+        fs.put('posts/image/2/b.bin', streamOf(new Uint8Array([9])), {
+          expectedSize: 4,
+        }),
+      Error,
+      'Size mismatch',
+    );
+    assertEquals((await fs.list('posts/image/2/')).length, 0);
+    // No leftover temp files under the dir for the rejected key.
+    assertEquals((await fs.list('posts/image/2')).length, 0);
+  });
+});
 
 Deno.test('disk adapter: put / get / delete / list round-trip', async () => {
   await withDiskDir(async (dir) => {
@@ -320,7 +390,7 @@ Deno.test('routes (disk): presign → _upload writes real bytes → _serve strea
     const uploadRes = await uploadRoute.handler(makeCtx({
       method: 'POST',
       requestUrl: uploadUrl,
-      body: JSON.stringify({ data: bytesToBase64(fileBytes) }),
+      bodyStream: streamOf(fileBytes),
     })) as Response;
     assertEquals(uploadRes.status, 200);
 
@@ -530,12 +600,12 @@ Deno.test('routes: presign → _upload writes bytes → _serve streams them', as
   assertEquals(presignJson.storage, 'fs');
   const uploadUrl = 'http://localhost' + presignJson.upload.url;
 
-  // 2. Upload (base64 JSON to the signed _upload route)
+  // 2. Upload (raw bytes streamed to the signed _upload route)
   const uploadRoute = findRoute(plugin, '_upload', 'POST');
   const uploadRes = await uploadRoute.handler(makeCtx({
     method: 'POST',
     requestUrl: uploadUrl,
-    body: JSON.stringify({ data: bytesToBase64(fileBytes) }),
+    bodyStream: streamOf(fileBytes),
   })) as Response;
   assertEquals(uploadRes.status, 200);
 
@@ -648,7 +718,7 @@ Deno.test('routes: _upload rejects an invalid token', async () => {
   const res = await uploadRoute.handler(makeCtx({
     method: 'POST',
     requestUrl: 'http://localhost/admin/fs-storage/_upload?token=garbage',
-    body: JSON.stringify({ data: bytesToBase64(new Uint8Array([1])) }),
+    bodyStream: streamOf(new Uint8Array([1])),
   })) as Response;
   assertEquals(res.status, 403);
 });
@@ -670,7 +740,7 @@ Deno.test('routes: _upload rejects a size mismatch', async () => {
     method: 'POST',
     requestUrl: 'http://localhost/admin/fs-storage/_upload?token=' +
       encodeURIComponent(token),
-    body: JSON.stringify({ data: bytesToBase64(new Uint8Array([1, 2, 3])) }),
+    bodyStream: streamOf(new Uint8Array([1, 2, 3])),
   })) as Response;
   assertEquals(res.status, 400);
 });

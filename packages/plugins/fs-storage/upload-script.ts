@@ -5,9 +5,9 @@
  * Flow (mirrors the S3 plugin, but bytes land on the app server):
  *   1. POST file metadata to this page's URL → receive { key, upload } with a
  *      signed, single-use upload URL pointing back at the plugin's own route.
- *   2. Read the file as base64 and POST it as JSON to that upload URL. (Plugin
- *      route bodies are text-decoded by the CMS, so binary is base64-encoded to
- *      survive transit faithfully.)
+ *   2. POST the raw file bytes to that upload URL. The route reads the body as
+ *      a byte stream (`bodyType: 'stream'`), so the file is sent as-is — no
+ *      base64/JSON wrapper.
  *   3. Save the FileReference onto the record.
  *
  * Reads configuration from a <script type="application/json" id="upload-config">
@@ -87,20 +87,6 @@ export const UPLOAD_JS = `
     });
   }
 
-  // Read a File as base64 (without the data: prefix).
-  function readAsBase64(file) {
-    return new Promise(function(resolve, reject) {
-      var reader = new FileReader();
-      reader.onload = function() {
-        var result = reader.result || '';
-        var comma = result.indexOf(',');
-        resolve(comma >= 0 ? result.slice(comma + 1) : '');
-      };
-      reader.onerror = function() { reject(new Error('Could not read file')); };
-      reader.readAsDataURL(file);
-    });
-  }
-
   function doUpload(file) {
     // Step 1: Get signed upload URL (POST metadata to this page).
     return fetch(window.location.href, {
@@ -128,26 +114,25 @@ export const UPLOAD_JS = `
       progressBar.style.display = 'block';
       progress.style.width = '50%';
 
-      // Step 2: base64-encode and POST the bytes to the signed upload URL.
-      return readAsBase64(file).then(function(base64) {
-        var upload = presignData.upload;
-        var headers = upload.headers || {};
-        headers['X-CSRF-Token'] = config.csrfToken;
-        return fetch(upload.url, {
-          method: upload.method,
-          headers: headers,
-          body: JSON.stringify({ data: base64 }),
-        }).then(function(putRes) {
-          progress.style.width = '100%';
-          if (!putRes.ok) {
-            return putRes.json().catch(function() {
-              return { error: 'Upload failed (' + putRes.status + ')' };
-            }).then(function(err) {
-              throw new Error(err.error || 'Upload failed');
-            });
-          }
-          return presignData;
-        });
+      // Step 2: POST the raw file bytes to the signed upload URL. The route
+      // reads the body as a byte stream, so no base64/JSON wrapper is needed.
+      var upload = presignData.upload;
+      var headers = upload.headers || {};
+      headers['X-CSRF-Token'] = config.csrfToken;
+      return fetch(upload.url, {
+        method: upload.method,
+        headers: headers,
+        body: file,
+      }).then(function(putRes) {
+        progress.style.width = '100%';
+        if (!putRes.ok) {
+          return putRes.json().catch(function() {
+            return { error: 'Upload failed (' + putRes.status + ')' };
+          }).then(function(err) {
+            throw new Error(err.error || 'Upload failed');
+          });
+        }
+        return presignData;
       });
     }).then(function(presignData) {
       status.textContent = 'Saving to record...';

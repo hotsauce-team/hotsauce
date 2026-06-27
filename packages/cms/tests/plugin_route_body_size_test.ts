@@ -47,6 +47,30 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
             maxBodySize: 10,
             handler: () => 'OK',
           },
+          {
+            pattern: 'stream-cap',
+            methods: ['POST'],
+            maxBodySize: 10,
+            bodyType: 'stream',
+            handler: async (ctx) => {
+              // The body must arrive as a raw byte stream, never decoded text.
+              if (ctx.body !== undefined) {
+                return new Response('body should be undefined', { status: 500 });
+              }
+              if (!ctx.bodyStream) {
+                return new Response('missing bodyStream', { status: 500 });
+              }
+              // Draining the capped stream throws if the cap is exceeded;
+              // a consumer maps that to a client error (here, 413).
+              try {
+                let total = 0;
+                for await (const chunk of ctx.bodyStream) total += chunk.length;
+                return new Response(String(total));
+              } catch {
+                return new Response('too large', { status: 413 });
+              }
+            },
+          },
         ],
       },
     ],
@@ -120,6 +144,59 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
         },
       });
       const req = new Request('http://localhost/admin/body-test/small-cap', {
+        method: 'POST',
+        headers: csrfHeaders,
+        body: stream,
+        // @ts-ignore: duplex is required for streaming request bodies
+        duplex: 'half',
+      });
+      assertEquals(req.headers.get('content-length'), null);
+      const res = await handler(req);
+      assertEquals(res.status, 413);
+    },
+  );
+
+  await t.step(
+    'stream route: body arrives as a raw byte stream (body undefined)',
+    async () => {
+      const res = await handler(
+        new Request('http://localhost/admin/body-test/stream-cap', {
+          method: 'POST',
+          headers: csrfHeaders,
+          body: 'hello', // 5 bytes, under the 10-byte cap
+        }),
+      );
+      assertEquals(res.status, 200);
+      assertEquals(await res.text(), '5'); // byte count drained from the stream
+    },
+  );
+
+  await t.step(
+    'stream route: Content-Length over the cap returns 413 (header fast-path)',
+    async () => {
+      const res = await handler(
+        new Request('http://localhost/admin/body-test/stream-cap', {
+          method: 'POST',
+          headers: { ...csrfHeaders, 'content-length': '5000' },
+          body: 'hi',
+        }),
+      );
+      assertEquals(res.status, 413);
+    },
+  );
+
+  await t.step(
+    'stream route: chunked body over the cap aborts mid-stream',
+    async () => {
+      // No Content-Length, so the streaming cap must error the stream as the
+      // handler drains it once the running total crosses the 10-byte cap.
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('x'.repeat(100)));
+          controller.close();
+        },
+      });
+      const req = new Request('http://localhost/admin/body-test/stream-cap', {
         method: 'POST',
         headers: csrfHeaders,
         body: stream,

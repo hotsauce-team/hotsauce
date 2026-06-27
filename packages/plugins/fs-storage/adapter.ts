@@ -29,8 +29,20 @@
  * adapter maps keys onto `rootDir`; an in-memory adapter keeps them in a `Map`.
  */
 export interface FileSystemAdapter {
-  /** Write bytes for `key`, creating parent directories as needed. */
-  put(key: string, data: Uint8Array): Promise<void>;
+  /**
+   * Write bytes for `key`, creating parent directories as needed.
+   *
+   * `data` may be a `Uint8Array` or a byte `ReadableStream` (streamed straight
+   * to storage without buffering the whole payload). When `opts.expectedSize`
+   * is given, the write is rejected — and nothing is committed under `key` — if
+   * the actual byte count differs, so callers can bind an upload to an exact
+   * size without re-reading it.
+   */
+  put(
+    key: string,
+    data: Uint8Array | ReadableStream<Uint8Array>,
+    opts?: PutOptions,
+  ): Promise<void>;
   /** Read bytes for `key`. Rejects if the key does not exist. */
   get(key: string): Promise<Uint8Array>;
   /** Delete `key`. A missing key is not an error. */
@@ -39,6 +51,79 @@ export interface FileSystemAdapter {
   list(
     prefix: string,
   ): Promise<Array<{ key: string; size: number; lastModified: Date }>>;
+}
+
+/** Options for {@link FileSystemAdapter.put}. */
+export interface PutOptions {
+  /**
+   * Exact expected byte length. If the data's actual size differs, `put`
+   * rejects and commits nothing under the key.
+   */
+  expectedSize?: number;
+}
+
+/**
+ * A `TransformStream` that tallies bytes flowing through it. Place it before a
+ * runtime write so the byte count is known once the write resolves, without a
+ * second pass or a `stat`.
+ */
+function countingTransform(): {
+  stream: TransformStream<Uint8Array, Uint8Array>;
+  getCount: () => number;
+} {
+  let count = 0;
+  const stream = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      count += chunk.length;
+      controller.enqueue(chunk);
+    },
+  });
+  return { stream, getCount: () => count };
+}
+
+/** Drain a byte stream into a single `Uint8Array`. */
+async function drainStream(
+  stream: ReadableStream<Uint8Array>,
+): Promise<Uint8Array> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      total += value.length;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return out;
+}
+
+/**
+ * Thrown by {@link FileSystemAdapter.put} when the data's actual byte count
+ * doesn't match a supplied `expectedSize`. Carries a stable `name` so callers
+ * can map it to a client error (e.g. `400`) without importing the class.
+ */
+export class SizeMismatchError extends Error {
+  constructor(expected: number, actual: number) {
+    super(`Size mismatch: expected ${expected} bytes, received ${actual}`);
+    this.name = 'SizeMismatchError';
+  }
+}
+
+/** Throw a {@link SizeMismatchError} if `actual` doesn't match `expectedSize`. */
+function assertExpectedSize(actual: number, expected?: number): void {
+  if (expected !== undefined && actual !== expected) {
+    throw new SizeMismatchError(expected, actual);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -110,10 +195,13 @@ export function createMemoryFsAdapter(
     new Map<string, { data: Uint8Array; lastModified: Date }>();
   return {
     store,
-    put(key, data) {
+    async put(key, data, opts) {
       assertSafeKey(key);
-      store.set(key, { data: new Uint8Array(data), lastModified: new Date() });
-      return Promise.resolve();
+      const bytes = data instanceof Uint8Array
+        ? new Uint8Array(data)
+        : await drainStream(data);
+      assertExpectedSize(bytes.length, opts?.expectedSize);
+      store.set(key, { data: bytes, lastModified: new Date() });
     },
     get(key) {
       assertSafeKey(key);
@@ -190,17 +278,65 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     }
   }
 
+  /** Best-effort removal of a temp file (ignores "not found"). */
+  async function removeQuietly(path: string): Promise<void> {
+    try {
+      if (Deno) {
+        await Deno.remove(path);
+      } else {
+        const fs = await nodeFs();
+        await fs.rm(path, { force: true });
+      }
+    } catch { /* temp may never have been created */ }
+  }
+
   return {
-    async put(key, data) {
+    async put(key, data, opts) {
       const path = keyToPath(rootDir, key);
       await ensureDir(parentDir(path));
       const tmp = `${path}.tmp-${crypto.randomUUID()}`;
+
+      // Fast path: bytes already in hand — verify size before writing.
+      if (data instanceof Uint8Array) {
+        assertExpectedSize(data.length, opts?.expectedSize);
+        try {
+          if (Deno) {
+            await Deno.writeFile(tmp, data);
+          } else {
+            const fs = await nodeFs();
+            await fs.writeFile(tmp, data);
+          }
+        } catch (err) {
+          await removeQuietly(tmp);
+          throw err;
+        }
+      } else {
+        // Stream path: pipe to the temp file while counting bytes, so the body
+        // is never fully buffered. The temp file is removed on any failure
+        // (oversize/abort mid-stream, or a size mismatch) so a half-written or
+        // wrong-sized file is never committed under `key`.
+        const { stream: counter, getCount } = countingTransform();
+        const counted = data.pipeThrough(counter);
+        try {
+          if (Deno) {
+            await Deno.writeFile(tmp, counted);
+          } else {
+            const fs = await nodeFs();
+            // deno-lint-ignore no-explicit-any
+            const { Readable } = await import('node:stream') as any;
+            await fs.writeFile(tmp, Readable.fromWeb(counted));
+          }
+          assertExpectedSize(getCount(), opts?.expectedSize);
+        } catch (err) {
+          await removeQuietly(tmp);
+          throw err;
+        }
+      }
+
       if (Deno) {
-        await Deno.writeFile(tmp, data);
         await Deno.rename(tmp, path);
       } else {
         const fs = await nodeFs();
-        await fs.writeFile(tmp, data);
         await fs.rename(tmp, path);
       }
     },

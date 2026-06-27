@@ -90,10 +90,10 @@ export interface FsStoragePluginOptions {
 
   /**
    * Maximum request body size (bytes) accepted by the upload route.
-   * Uploads are base64-encoded in transit (~+33%), so this is set generously
-   * above the largest raw file you expect.
+   * The file is streamed raw (no base64), so this is a plain byte cap — set it
+   * at or just above the largest file you expect.
    *
-   * @default 14_680_064 (14MB — fits a 10MB file once base64-inflated)
+   * @default 11_534_336 (11MB — the 10MB default max file size plus headroom)
    */
   maxUploadBytes?: number;
 

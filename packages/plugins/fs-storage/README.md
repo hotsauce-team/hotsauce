@@ -22,9 +22,10 @@ A browser can't write to your server's disk that way, so this plugin keeps the
 byte path inside the CMS:
 
 - **Upload** — the plugin mints a short-lived, HMAC-signed upload token bound to
-  the table/column/record/key/size, then receives the bytes on its **own**
-  `_upload` route and writes them to disk. (Plugin route bodies are
-  text-decoded by the CMS, so the client base64-encodes the file in transit.)
+  the table/column/record/key/size, then receives the raw file bytes on its
+  **own** `_upload` route and streams them to disk. (The route declares
+  `bodyType: 'stream'`, so the body is delivered as a byte stream — the file is
+  sent as-is, with no base64 or JSON wrapper, and is never fully buffered.)
 - **Download** — `signDownloadUrl()` returns an absolute, token-signed URL to
   the plugin's **own** `_serve` route, which streams the file from disk with
   `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, and a
@@ -85,7 +86,7 @@ tables without `$cms({ autoDraft: true })` — identical to the S3 plugin.
 | `storageId`      | `string`            | Storage provider id (default `'fs'`).                                              |
 | `publicBaseUrl`  | `string`            | Serve files from a static server/CDN at this URL instead of the plugin.            |
 | `expirySeconds`  | `number`            | Token / redirect expiry (default `900`).                                           |
-| `maxUploadBytes` | `number`            | Upload route body cap (default `14MB`; base64 inflates ~33%).                      |
+| `maxUploadBytes` | `number`            | Upload route body cap. Raw byte cap (default `11MB`).                              |
 | `fs`             | `FileSystemAdapter` | Custom backend. Defaults to a disk adapter rooted at `rootDir`.                    |
 
 ## Serving with nginx / caddy

@@ -408,6 +408,14 @@ export interface PluginRouteContext {
   method: string;
   /** Request body (for POST requests, raw text) */
   body?: string;
+  /**
+   * Raw request body as a byte stream, for routes that declare
+   * `bodyType: 'stream'`. Populated only for in-process routes (Worker routes
+   * receive the decoded `body` string instead). The stream is size-capped by
+   * the route's `maxBodySize` and errors mid-transfer if the cap is exceeded,
+   * so the body is never fully buffered. When present, `body` is left undefined.
+   */
+  bodyStream?: ReadableStream<Uint8Array>;
   /** Additional route params from pattern matching */
   params: Record<string, string>;
 }
@@ -485,4 +493,19 @@ export interface PluginRoute {
    * Must be a positive integer. Defaults to 200KB (204800 bytes).
    */
   maxBodySize?: number;
+
+  /**
+   * How the request body is delivered to an in-process `handler`.
+   *
+   * - `'text'` (default): the body is read and UTF-8 decoded into
+   *   {@link PluginRouteContext.body}.
+   * - `'stream'`: the raw body is exposed as
+   *   {@link PluginRouteContext.bodyStream} (a byte `ReadableStream`) without
+   *   decoding, so binary uploads avoid a text round-trip. Still capped by
+   *   `maxBodySize`. Ignored for Worker (`render`) routes, which always receive
+   *   the decoded `body` string.
+   *
+   * @default 'text'
+   */
+  bodyType?: 'text' | 'stream';
 }
