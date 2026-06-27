@@ -11,7 +11,9 @@
     "./puck/client/globals": "./puck/client/globals.ts",
     "./s3-storage": "./s3-storage/mod.ts",
     "./s3-storage/signing": "./s3-storage/signing.ts",
-    "./s3-storage/types": "./s3-storage/types.ts"
+    "./s3-storage/types": "./s3-storage/types.ts",
+    "./fs-storage": "./fs-storage/mod.ts",
+    "./fs-storage/types": "./fs-storage/types.ts"
   },
   "tasks": {
     "build:puck": "deno run --unstable-bundle --allow-read --allow-write --allow-net puck/build.ts"
@@ -22,6 +24,7 @@
       "audit-log/",
       "puck/",
       "s3-storage/",
+      "fs-storage/",
       "README.md",
       "LICENSE"
     ]

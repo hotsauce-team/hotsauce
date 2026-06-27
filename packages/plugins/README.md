@@ -216,6 +216,62 @@ Works with AWS S3, MinIO, Cloudflare R2, Backblaze B2, DigitalOcean Spaces, and 
 
 See [s3-storage/README.md](./s3-storage/README.md) for detailed documentation.
 
+### Filesystem Storage
+
+Local-disk storage for file uploads. Stores files on the application server and
+serves them from the app itself — no nginx, CDN, or object store required. It's
+the local-disk counterpart to the S3 plugin and uses the same `StorageProvider`
+contract.
+
+```typescript
+import { createFsStoragePlugin } from '@hotsauce/plugins/fs-storage';
+import { createCmsHandler } from '@hotsauce/cms';
+
+const handler = createCmsHandler({
+  db,
+  schema,
+  basePath: '/admin',
+  plugins: [
+    createFsStoragePlugin({
+      basePath: '/admin',
+      rootDir: './uploads',
+      // Signs short-lived upload/download tokens; falls back to CMS_CSRF_SECRET.
+      signingSecret: process.env.CMS_CSRF_SECRET!,
+    }),
+  ],
+  // Route all file fields to the filesystem (simple string)
+  storage: 'fs',
+  // Or use a function for per-column routing:
+  // storage: (ctx) => ctx.column === 'avatar' ? undefined : 'fs',
+});
+```
+
+#### Schema Setup
+
+Mark JSON columns with `.$cms({ file: true })`:
+
+```typescript
+file: jsonb('file').$cms({ file: true }),
+```
+
+#### Configuration Options
+
+| Option          | Type     | Description                                                            |
+| --------------- | -------- | ---------------------------------------------------------------------- |
+| `basePath`      | `string` | Base path of the CMS admin (e.g., `/admin`)                            |
+| `rootDir`       | `string` | Directory on disk where files are stored                               |
+| `signingSecret` | `string` | HMAC secret for upload/download tokens (defaults to `CMS_CSRF_SECRET`) |
+| `storageId`     | `string` | Storage ID (default: `'fs'`)                                           |
+| `publicBaseUrl` | `string` | Serve files via a static server/CDN instead of the plugin's route      |
+| `expirySeconds` | `number` | Token / redirect expiry in seconds (default: 900)                      |
+
+Set `publicBaseUrl` to let nginx/caddy serve the predictable on-disk layout
+directly. **Note:** a raw static mount bypasses CMS row/column policies — only
+expose buckets that are safe to serve publicly.
+
+See [fs-storage/README.md](./fs-storage/README.md) for detailed documentation,
+including the nginx/caddy setup and security notes.
+
 ## Creating Custom Plugins
 
 Plugins run in isolated Web Workers. You provide the Worker instance, giving full control over permissions. See the [handlers README](../handlers/README.md#plugins) for detailed documentation.

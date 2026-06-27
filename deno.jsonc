@@ -42,6 +42,7 @@
     "@hotsauce/plugins/puck": "./packages/plugins/puck/mod.ts",
     "@hotsauce/plugins/puck/types": "./packages/plugins/puck/types.ts",
     "@hotsauce/plugins/s3-storage": "./packages/plugins/s3-storage/mod.ts",
+    "@hotsauce/plugins/fs-storage": "./packages/plugins/fs-storage/mod.ts",
 
     // Optional peer dependency for 2FA QR code generation
     "qrcode-generator": "npm:qrcode-generator@^2.0.4",
