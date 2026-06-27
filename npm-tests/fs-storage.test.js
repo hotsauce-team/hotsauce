@@ -10,7 +10,14 @@
 
 import { after, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -56,23 +63,33 @@ describe('@hotsauce/plugins-fs-storage disk adapter (Node)', () => {
     await fs.delete('posts/image/1/a.bin');
   });
 
-  it('list() ignores only in-flight .tmp-{uuid} writes', async () => {
+  it('list() lists real keys and ignores the in-flight staging dir', async () => {
     const dir = await freshDir();
     const fs = createDiskFsAdapter(dir);
 
-    // A legitimate upload whose filename merely contains `.tmp-`.
-    await fs.put('posts/image/1/report.tmp-old.pdf', new Uint8Array([1]));
+    // A legitimate upload whose on-disk name *ends* in a UUID-shaped `.tmp-`
+    // suffix — the shape the old name-anchored skip wrongly dropped from
+    // listings (so orphan-GC never saw it). It must now be listed.
+    const trickyKey = `posts/image/1/data.tmp-${crypto.randomUUID()}`;
+    await fs.put(trickyKey, new Uint8Array([1]));
     await fs.put('posts/image/1/real.bin', new Uint8Array([2, 3]));
 
-    // Simulate a partially-written atomic put left on disk.
-    const stray = join(dir, 'posts/image/1/real.bin') +
-      `.tmp-${crypto.randomUUID()}`;
-    await writeFile(stray, new Uint8Array([9, 9, 9]));
+    // Simulate an in-flight atomic put left in the dedicated staging dir.
+    await mkdir(join(dir, '.uploads-tmp'), { recursive: true });
+    await writeFile(
+      join(dir, '.uploads-tmp', crypto.randomUUID()),
+      new Uint8Array([9, 9, 9]),
+    );
 
     const keys = (await fs.list('posts/image/1/')).map((e) => e.key).sort();
-    assert.deepEqual(keys, [
-      'posts/image/1/real.bin',
-      'posts/image/1/report.tmp-old.pdf',
-    ]);
+    assert.deepEqual(keys, ['posts/image/1/real.bin', trickyKey].sort());
+
+    // A full listing (prefix '') also excludes the staging dir's contents.
+    const allKeys = (await fs.list('')).map((e) => e.key);
+    assert.equal(allKeys.some((k) => k.includes('.uploads-tmp')), false);
+    assert.deepEqual(
+      allKeys.sort(),
+      ['posts/image/1/real.bin', trickyKey].sort(),
+    );
   });
 });
