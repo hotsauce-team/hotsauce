@@ -492,7 +492,6 @@ Deno.test('signToken / verifyToken: upload token round-trips', async () => {
     recordId: '42',
     key: 'posts/image/42/x.png',
     size: 123,
-    contentType: 'image/png',
     exp: Math.floor(Date.now() / 1000) + 100,
   }, SECRET);
 
@@ -795,7 +794,6 @@ Deno.test('routes: _upload rejects a size mismatch', async () => {
     recordId: '42',
     key: 'posts/image/42/x.png',
     size: 999,
-    contentType: 'image/png',
     exp: Math.floor(Date.now() / 1000) + 100,
   }, SECRET);
   const uploadRoute = findRoute(plugin, '_upload', 'POST');
@@ -830,7 +828,6 @@ Deno.test('routes: _upload maps a BodyTooLargeError to 413', async () => {
     recordId: '42',
     key: 'posts/image/42/x.png',
     size: 3,
-    contentType: 'image/png',
     exp: Math.floor(Date.now() / 1000) + 100,
   }, SECRET);
   const uploadRoute = findRoute(plugin, '_upload', 'POST');

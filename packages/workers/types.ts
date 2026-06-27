@@ -414,6 +414,10 @@ export interface PluginRouteContext {
    * receive the decoded `body` string instead). The stream is size-capped by
    * the route's `maxBodySize` and errors mid-transfer if the cap is exceeded,
    * so the body is never fully buffered. When present, `body` is left undefined.
+   *
+   * NOTE: a `ReadableStream` is not serializable, so this field makes the
+   * context *not* fully serializable. It is therefore in-process only and is
+   * never populated for (or sent to) Worker render routes.
    */
   bodyStream?: ReadableStream<Uint8Array>;
   /** Additional route params from pattern matching */

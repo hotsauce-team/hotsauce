@@ -161,7 +161,8 @@ plugin's own tests so they never touch disk).
   `isValidFileKey()` prefix check.
 - **Unauthenticated writes** — the `_upload` route is not a generic
   write-to-disk endpoint: it requires an admin session, a valid CSRF token, and
-  a short-lived signed token that binds the exact key, size, and content type.
+  a short-lived signed token that binds the exact key, size, and target record
+  (table/column/record id).
 - **Atomic writes** — the disk adapter stages each upload in a sibling
   `.uploads-tmp/` directory and renames it into place, so a half-written file is
   never visible under its final key. A temp orphaned by a hard crash mid-write

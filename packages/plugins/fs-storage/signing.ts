@@ -59,8 +59,6 @@ export interface UploadTokenPayload {
   key: string;
   /** Exact byte length the upload must match */
   size: number;
-  /** Declared MIME type */
-  contentType: string;
   /** Expiry — epoch seconds */
   exp: number;
 }
@@ -73,8 +71,6 @@ export interface DownloadTokenPayload {
   key: string;
   /** Filename for Content-Disposition */
   filename?: string;
-  /** MIME type to serve with */
-  contentType?: string;
   /** Expiry — epoch seconds */
   exp: number;
 }

@@ -223,6 +223,12 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
         ctx.filename,
       );
 
+      // The token binds key/size/record but not content type: `_upload` has no
+      // access to the request's `Content-Type` header (it isn't exposed on the
+      // in-process route context), so a content-type claim couldn't be
+      // enforced. The declared type is still validated at presign time
+      // (`validatePresignRequest`), and `_serve` neutralises scriptable content
+      // regardless (attachment + nosniff + CSP).
       return signToken({
         kind: 'upload',
         table: ctx.table,
@@ -230,7 +236,6 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
         recordId: ctx.recordId!,
         key,
         size: ctx.size,
-        contentType: ctx.contentType,
         exp: nowSeconds() + options.expirySeconds,
       }, options.signingSecret).then((token) => ({
         key,
@@ -239,6 +244,7 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
           url: `${options.basePath}/fs-storage/_upload?token=${
             encodeURIComponent(token)
           }`,
+          // A hint for the client's POST; not an enforced constraint.
           headers: {
             'Content-Type': ctx.contentType || 'application/octet-stream',
           },
