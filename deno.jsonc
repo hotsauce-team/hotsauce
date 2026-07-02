@@ -68,11 +68,6 @@
     // JRS
     "update-jsr-paths": "deno run --allow-read=deno.jsonc --allow-write=deno.jsonc scripts/jsr/update_jsr_paths.ts",
     "update-package-versions": "deno run --allow-read=packages,deno.jsonc --allow-write=packages,deno.jsonc scripts/jsr/update_package_versions.ts",
-    // Example-specific tasks
-    "example:seed": "deno task -f example-deno-server seed",
-    "example:dev": "deno task -f example-deno-server dev",
-    "example:dev:watch": "deno task -f example-deno-server dev:watch",
-    "example:dev:debug": "deno task -f example-deno-server dev:debug",
     "demo:seed": "deno task -f demo-app seed",
     "demo:dev": "deno task -f demo-app dev",
     "demo:dev:watch": "deno task -f demo-app dev:watch",
