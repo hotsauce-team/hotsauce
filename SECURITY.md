@@ -258,11 +258,16 @@ The filesystem storage plugin maps storage keys onto a directory tree under
   paths, `..`/`.`/empty segments, backslashes, control characters, and the
   reserved upload-staging directory are all rejected. This blocks _textual_
   path traversal.
-- **Symlink containment** (`symlinkContainment`, default **on**) — each key's
-  real path is resolved and rejected if a symlink under `rootDir` redirects it
-  outside. Key validation alone can't catch this: a symlink is a legitimate
-  path with no `..` in it. Containment costs one `realpath` syscall per file
-  operation.
+- **Symlink containment** (`symlinkContainment`, default **on**) — a key's real
+  path is resolved and an operation is refused if a symlink under `rootDir`
+  redirects it outside. Reads (`get`/`getStream`) resolve the full key and
+  reject any escape. Writes and deletes resolve the parent directory, so an
+  escape via an intermediate directory symlink is rejected while a final-segment
+  symlink is replaced (`put`) or unlinked (`delete`) in place rather than
+  followed — the link is removed, its outside target untouched. Listing skips
+  symlinked entries entirely (they are never keys the adapter created). Key
+  validation alone can't catch any of this: a symlink is a legitimate path with
+  no `..` in it. Containment costs one `realpath` syscall per file operation.
 
 ```typescript
 createFsStoragePlugin({
