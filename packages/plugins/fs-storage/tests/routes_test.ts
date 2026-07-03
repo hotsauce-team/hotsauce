@@ -339,6 +339,19 @@ Deno.test('disk adapter: sequential puts both commit (memoized temp dir)', async
       await Deno.readFile(keyToPath(dir, 'posts/image/1/b.bin')),
       new Uint8Array([3, 4, 5]),
     );
+
+    // Out-of-band deletion of the staging dir (tmp reaper, operator cleanup)
+    // must not wedge the adapter: the interrupted put fails, but the memo is
+    // dropped so the next put recreates the dir and succeeds.
+    await Deno.remove(`${dir}/.uploads-tmp`, { recursive: true });
+    await assertRejects(() =>
+      fs.put('posts/image/1/c.bin', new Uint8Array([6]))
+    );
+    await fs.put('posts/image/1/c.bin', new Uint8Array([6]));
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, 'posts/image/1/c.bin')),
+      new Uint8Array([6]),
+    );
   });
 });
 

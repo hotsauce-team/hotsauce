@@ -499,6 +499,21 @@ Deno.test('presign validation: uppercase extension is validated', () => {
   assertEquals(result, null);
 });
 
+/** Storage provider off a plugin built with the standard test options. */
+function makeProvider(extra: Record<string, unknown> = {}) {
+  const plugin = createS3StoragePlugin({
+    endpoint: 'http://localhost:9000',
+    region: 'us-east-1',
+    bucket: 'test-bucket',
+    accessKeyId: 'test-key',
+    secretAccessKey: 'test-secret',
+    urlStyle: 'path',
+    basePath: '/admin',
+    ...extra,
+  });
+  return plugin.storageProvider!;
+}
+
 // ─────────────────────────────────────────────────────────────
 // ListObjectsV2 Pagination Tests
 // ─────────────────────────────────────────────────────────────
@@ -559,19 +574,7 @@ Deno.test('listObjects: paginates through multiple pages', async () => {
   }) as typeof fetch;
 
   try {
-    // Import and create the storage provider
-    const { createS3StoragePlugin } = await import('../mod.ts');
-    const plugin = createS3StoragePlugin({
-      endpoint: 'http://localhost:9000',
-      region: 'us-east-1',
-      bucket: 'test-bucket',
-      accessKeyId: 'test-key',
-      secretAccessKey: 'test-secret',
-      urlStyle: 'path',
-      basePath: '/admin',
-    });
-
-    const provider = plugin.storageProvider!;
+    const provider = makeProvider();
     const results = await provider.listObjects!('prefix/');
 
     // Should have made 2 fetch calls (2 pages)
@@ -622,18 +625,7 @@ Deno.test('listObjects: single page (not truncated) makes one request', async ()
   }) as typeof fetch;
 
   try {
-    const { createS3StoragePlugin } = await import('../mod.ts');
-    const plugin = createS3StoragePlugin({
-      endpoint: 'http://localhost:9000',
-      region: 'us-east-1',
-      bucket: 'test-bucket',
-      accessKeyId: 'test-key',
-      secretAccessKey: 'test-secret',
-      urlStyle: 'path',
-      basePath: '/admin',
-    });
-
-    const provider = plugin.storageProvider!;
+    const provider = makeProvider();
     const results = await provider.listObjects!('prefix/');
 
     // Only 1 fetch call for non-truncated response
@@ -648,20 +640,6 @@ Deno.test('listObjects: single page (not truncated) makes one request', async ()
 // ─────────────────────────────────────────────────────────────
 // signDownloadUrl: key safety + CDN URL building
 // ─────────────────────────────────────────────────────────────
-
-function makeProvider(extra: Record<string, unknown> = {}) {
-  const plugin = createS3StoragePlugin({
-    endpoint: 'http://localhost:9000',
-    region: 'us-east-1',
-    bucket: 'test-bucket',
-    accessKeyId: 'test-key',
-    secretAccessKey: 'test-secret',
-    urlStyle: 'path',
-    basePath: '/admin',
-    ...extra,
-  });
-  return plugin.storageProvider!;
-}
 
 Deno.test('signDownloadUrl: CDN branch trims trailing slashes and segment-encodes the key', async () => {
   const provider = makeProvider({ cdnBaseUrl: 'https://cdn.example.com/' });

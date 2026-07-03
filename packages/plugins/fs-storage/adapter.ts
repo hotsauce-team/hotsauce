@@ -337,6 +337,21 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     return tempDirReady;
   }
 
+  /**
+   * The memo above never re-checks the staging dir, so an out-of-band
+   * deletion (tmp reaper, operator cleanup) would otherwise fail every later
+   * upload with ENOENT. On a not-found failure, drop the memo so the next
+   * `put` recreates the dir. (The failing upload itself can't be retried —
+   * a streamed body is already consumed by then.)
+   */
+  function resetTempDirIfLost(err: unknown): void {
+    const name = (err as { name?: string })?.name;
+    const code = (err as { code?: string })?.code;
+    if (name === 'NotFound' || code === 'ENOENT') {
+      tempDirReady = null;
+    }
+  }
+
   /** Best-effort removal of a temp file (ignores "not found"). */
   async function removeQuietly(path: string): Promise<void> {
     try {
@@ -408,6 +423,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
             await fs.writeFile(tmp, data);
           }
         } catch (err) {
+          resetTempDirIfLost(err);
           await removeQuietly(tmp);
           throw err;
         }
@@ -429,6 +445,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
           }
           assertExpectedSize(getCount(), opts?.expectedSize);
         } catch (err) {
+          resetTempDirIfLost(err);
           await removeQuietly(tmp);
           throw err;
         }
@@ -445,6 +462,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
           await fs.rename(tmp, path);
         }
       } catch (err) {
+        resetTempDirIfLost(err);
         await removeQuietly(tmp);
         throw err;
       }
