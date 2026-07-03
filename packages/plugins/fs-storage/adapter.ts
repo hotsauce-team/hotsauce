@@ -324,6 +324,19 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     }
   }
 
+  // `tempDir` is fixed for the adapter's lifetime, so create it once and
+  // memoize (like `nodeFsPromise` above) instead of paying a recursive mkdir
+  // on every upload. A failure is not memoized: the first upload before
+  // `rootDir` exists must not poison every later one.
+  let tempDirReady: Promise<void> | null = null;
+  function ensureTempDir(): Promise<void> {
+    tempDirReady ??= ensureDir(tempDir).catch((err) => {
+      tempDirReady = null;
+      throw err;
+    });
+    return tempDirReady;
+  }
+
   /** Best-effort removal of a temp file (ignores "not found"). */
   async function removeQuietly(path: string): Promise<void> {
     try {
@@ -370,8 +383,9 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
   return {
     async put(key, data, opts) {
       const path = keyToPath(rootDir, key);
-      await ensureDir(parentDir(path));
-      await ensureDir(tempDir);
+      // The parent dir varies per key; the memoized temp-dir creation runs
+      // concurrently instead of serializing a second awaited mkdir on it.
+      await Promise.all([ensureDir(parentDir(path)), ensureTempDir()]);
 
       // Opportunistically reclaim temps orphaned by an earlier crashed upload
       // (throttled). Runs before the new temp is created, so it never targets

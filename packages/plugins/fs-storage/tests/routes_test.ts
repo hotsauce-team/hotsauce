@@ -320,6 +320,28 @@ Deno.test('disk adapter: put streams to disk and enforces expectedSize', async (
   });
 });
 
+Deno.test('disk adapter: sequential puts both commit (memoized temp dir)', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+
+    // The staging dir is created once and memoized; a second put must reuse
+    // it and still land both files under their final keys.
+    await fs.put('posts/image/1/a.bin', new Uint8Array([1, 2]));
+    await fs.put('posts/image/1/b.bin', streamOf(new Uint8Array([3, 4, 5])), {
+      expectedSize: 3,
+    });
+
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, 'posts/image/1/a.bin')),
+      new Uint8Array([1, 2]),
+    );
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, 'posts/image/1/b.bin')),
+      new Uint8Array([3, 4, 5]),
+    );
+  });
+});
+
 Deno.test('disk adapter: put / get / delete / list round-trip', async () => {
   await withDiskDir(async (dir) => {
     const fs = createDiskFsAdapter(dir);
