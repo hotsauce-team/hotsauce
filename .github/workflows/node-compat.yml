@@ -45,6 +45,7 @@ jobs:
           cp -r npm/auth npm-tests/packages/
           cp -r npm/cms npm-tests/packages/
           cp -r npm/plugins-fs-storage npm-tests/packages/
+          cp -r npm/plugins-s3-storage npm-tests/packages/
 
       - name: Install test dependencies
         working-directory: npm-tests

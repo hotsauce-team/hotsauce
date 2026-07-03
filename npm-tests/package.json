@@ -7,7 +7,7 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "node --test smoke.test.js cms.test.js fs-storage.test.js"
+    "test": "node --test smoke.test.js cms.test.js fs-storage.test.js s3-storage.test.js"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.3.15",
