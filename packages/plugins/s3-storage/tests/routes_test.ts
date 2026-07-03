@@ -6,9 +6,9 @@
  * - Route body: POST body is passed to plugin route handlers
  */
 
-import { assertEquals, assertStringIncludes } from '@std/assert';
+import { assertEquals, assertRejects, assertStringIncludes } from '@std/assert';
 import { buildObjectUrl, presignUrl } from '../sigv4.ts';
-import { validatePresignRequest } from '../mod.ts';
+import { createS3StoragePlugin, validatePresignRequest } from '../mod.ts';
 
 // ─────────────────────────────────────────────────────────────
 // PublicEndpoint Tests
@@ -375,6 +375,14 @@ Deno.test('presign validation: wildcard */* accepts anything', () => {
   assertEquals(result, null);
 });
 
+Deno.test('presign validation: */* inside an accept list matches any type', () => {
+  const result = validatePresignRequest(
+    { filename: 'photo.png', contentType: 'image/png', size: 1000 },
+    { file: { accept: 'application/pdf,*/*' } },
+  );
+  assertEquals(result, null);
+});
+
 Deno.test('presign validation: no config means no restrictions', () => {
   const body = {
     filename: 'huge.bin',
@@ -635,4 +643,60 @@ Deno.test('listObjects: single page (not truncated) makes one request', async ()
   } finally {
     globalThis.fetch = originalFetch;
   }
+});
+
+// ─────────────────────────────────────────────────────────────
+// signDownloadUrl: key safety + CDN URL building
+// ─────────────────────────────────────────────────────────────
+
+function makeProvider(extra: Record<string, unknown> = {}) {
+  const plugin = createS3StoragePlugin({
+    endpoint: 'http://localhost:9000',
+    region: 'us-east-1',
+    bucket: 'test-bucket',
+    accessKeyId: 'test-key',
+    secretAccessKey: 'test-secret',
+    urlStyle: 'path',
+    basePath: '/admin',
+    ...extra,
+  });
+  return plugin.storageProvider!;
+}
+
+Deno.test('signDownloadUrl: CDN branch trims trailing slashes and segment-encodes the key', async () => {
+  const provider = makeProvider({ cdnBaseUrl: 'https://cdn.example.com/' });
+
+  const url = await provider.signDownloadUrl!({
+    storage: 's3',
+    key: 'media/file/1/a b.png',
+  });
+  assertEquals(url, 'https://cdn.example.com/media/file/1/a%20b.png');
+});
+
+Deno.test('signDownloadUrl: CDN branch rejects a traversal key', async () => {
+  const provider = makeProvider({ cdnBaseUrl: 'https://cdn.example.com' });
+
+  await assertRejects(
+    () =>
+      provider.signDownloadUrl!({
+        storage: 's3',
+        key: 'media/file/1/../../etc/passwd',
+      }),
+    Error,
+    'Invalid storage key',
+  );
+});
+
+Deno.test('signDownloadUrl: presign branch rejects a traversal key', async () => {
+  const provider = makeProvider();
+
+  await assertRejects(
+    () =>
+      provider.signDownloadUrl!({
+        storage: 's3',
+        key: 'media/file/1/../../etc/passwd',
+      }),
+    Error,
+    'Invalid storage key',
+  );
 });

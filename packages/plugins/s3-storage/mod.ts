@@ -129,6 +129,7 @@ export function validatePresignRequest(
     const patterns = accept.split(',').map((p) => p.trim().toLowerCase());
     const type = body.contentType.toLowerCase();
     const matched = patterns.some((pattern) => {
+      if (pattern === '*/*') return true;
       if (pattern === type) return true;
       if (pattern.endsWith('/*')) {
         return type.startsWith(pattern.slice(0, -1));
@@ -170,6 +171,49 @@ function generateObjectKey(
   const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
   // Use shared prefix from core to ensure consistency with key validation
   return `${getFileKeyPrefix(table, column, recordId)}${uuid}-${safeFilename}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Key safety
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Validate that a storage key is safe to embed in a URL path.
+ *
+ * `isValidFileKey` (core) checks that a key carries the right
+ * `{table}/{column}/{recordId}/` prefix, but it does NOT guard against path
+ * traversal. This does: it rejects absolute paths, backslashes, `.`/`..`
+ * segments, empty segments, and control characters — so a tampered or
+ * malicious key can never escape the CDN base or bucket prefix.
+ *
+ * @throws Error if the key is unsafe.
+ */
+function assertSafeKey(key: string): void {
+  if (typeof key !== 'string' || key.length === 0) {
+    throw new Error('Invalid storage key: empty');
+  }
+  // No absolute paths, no Windows drive letters, no backslashes.
+  if (key.startsWith('/') || key.startsWith('\\') || /^[a-zA-Z]:/.test(key)) {
+    throw new Error(`Invalid storage key: absolute path "${key}"`);
+  }
+  if (key.includes('\\')) {
+    throw new Error(`Invalid storage key: backslash in "${key}"`);
+  }
+  // deno-lint-ignore no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(key)) {
+    throw new Error('Invalid storage key: control character');
+  }
+  const segments = key.split('/');
+  for (const segment of segments) {
+    if (segment === '' || segment === '.' || segment === '..') {
+      throw new Error(`Invalid storage key: unsafe segment in "${key}"`);
+    }
+  }
+}
+
+/** Build the relative URL path for a key, segment-encoded. */
+function encodeKeyPath(key: string): string {
+  return key.split('/').map(encodeURIComponent).join('/');
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -248,6 +292,11 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
      * Generate a signed GET URL for downloads.
      */
     async signDownloadUrl(ctx: SignDownloadContext): Promise<string> {
+      // Core's isValidFileKey only validates the key prefix — reject
+      // traversal/unsafe keys here before either branch links or signs them
+      // (mirrors fs-storage's signDownloadUrl).
+      assertSafeKey(ctx.key);
+
       const bucket = typeof options.bucket === 'function'
         ? options.bucket({
           request: ctx.request ?? new Request('https://internal'),
@@ -262,7 +311,9 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
       // If CDN is configured, use it for download URLs
       if (options.cdnBaseUrl) {
         // CDN URLs don't need signing (CDN handles auth via origin)
-        return `${options.cdnBaseUrl}/${ctx.key}`;
+        return `${options.cdnBaseUrl.replace(/\/+$/, '')}/${
+          encodeKeyPath(ctx.key)
+        }`;
       }
 
       // Build object URL using publicEndpoint (browser-facing)
