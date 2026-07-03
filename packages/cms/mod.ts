@@ -692,86 +692,70 @@ async function handlePluginRoute(
   try {
     if (route.handler) {
       // In-process handler
-      try {
-        const result = await route.handler(ctx);
-        if (result instanceof Response) {
-          const ct = result.headers.get('content-type') ?? '';
-          if (ct.startsWith('text/html')) {
-            // Enforce all security headers for HTML responses
-            // (plugins cannot override CSP, X-Frame-Options, etc.)
-            for (const [k, v] of Object.entries(effectiveHeaders)) {
-              result.headers.set(k, v);
-            }
-          } else {
-            // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
-            result.headers.set('X-Content-Type-Options', 'nosniff');
+      const result = await route.handler(ctx);
+      if (result instanceof Response) {
+        const ct = result.headers.get('content-type') ?? '';
+        if (ct.startsWith('text/html')) {
+          // Enforce all security headers for HTML responses
+          // (plugins cannot override CSP, X-Frame-Options, etc.)
+          for (const [k, v] of Object.entries(effectiveHeaders)) {
+            result.headers.set(k, v);
           }
-          return result;
+        } else {
+          // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
+          result.headers.set('X-Content-Type-Options', 'nosniff');
         }
-        // String result - wrap in HTML response with security headers
-        return new Response(result, {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            ...effectiveHeaders,
-          },
-        });
-      } catch (error) {
-        // Generate request ID to correlate error logs with user-facing response
-        const requestId = crypto.randomUUID();
-        options.onError?.(error as Error, {
-          source: 'handler',
-          request,
-          url: new URL(request.url),
-          route: null, // Plugin routes don't use ParsedRoute
-          action: routeAction,
-          requestId,
-          plugin: plugin.name,
-        });
-        return new Response(`Plugin error (request: ${requestId})`, {
-          status: 500,
-        });
+        return result;
       }
+      // String result - wrap in HTML response with security headers
+      return new Response(result, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          ...effectiveHeaders,
+        },
+      });
     }
 
     if (route.render && pluginService) {
       // Worker render - use executor
-      try {
-        const html = await pluginService.executeRouteRender(
-          plugin.name,
-          route.render,
-          ctx,
-        );
-        return new Response(html, {
-          headers: {
-            'Content-Type': 'text/html; charset=utf-8',
-            ...effectiveHeaders,
-          },
-        });
-      } catch (error) {
-        // Generate request ID to correlate error logs with user-facing response
-        const requestId = crypto.randomUUID();
-        options.onError?.(error as Error, {
-          source: 'handler',
-          request,
-          url: new URL(request.url),
-          route: null, // Plugin routes don't use ParsedRoute
-          action: routeAction,
-          requestId,
-          plugin: plugin.name,
-        });
-        return new Response(`Plugin error (request: ${requestId})`, {
-          status: 500,
-        });
-      }
+      const html = await pluginService.executeRouteRender(
+        plugin.name,
+        route.render,
+        ctx,
+      );
+      return new Response(html, {
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          ...effectiveHeaders,
+        },
+      });
     }
 
     // No handler or render configured (should be caught by validation)
     return new Response('Route not configured', { status: 500 });
+  } catch (error) {
+    // Generate request ID to correlate error logs with user-facing response
+    const requestId = crypto.randomUUID();
+    options.onError?.(error as Error, {
+      source: 'handler',
+      request,
+      url: new URL(request.url),
+      route: null, // Plugin routes don't use ParsedRoute
+      action: routeAction,
+      requestId,
+      plugin: plugin.name,
+    });
+    return new Response(`Plugin error (request: ${requestId})`, {
+      status: 500,
+    });
   } finally {
-    // A handler that consumed (or is still piping) the body holds the
+    // A handler that consumed the body via getReader()/pipeTo() holds the
     // stream's lock; a fully-drained, closed stream is unlocked but cancel()
-    // is then a resolved no-op. Swallow rejections — an unhandled rejection
-    // is fatal on Node.
+    // is then a resolved no-op. NOTE: new Response(bodyStream) does NOT lock
+    // the stream until serialization, so returning the raw stream as a
+    // response body is unsupported (it would be cancelled here) — see the
+    // bodyStream contract in workers/types.ts. Swallow rejections — an
+    // unhandled rejection is fatal on Node.
     if (bodyStream && !bodyStream.locked) {
       bodyStream.cancel().catch(() => {});
     }
