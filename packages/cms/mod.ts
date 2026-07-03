@@ -35,6 +35,7 @@ import type {
 import {
   base64ToUint8Array,
   buildSecurityHeaders,
+  capStream,
   contentDispositionHeader,
   forbidden,
   methodNotAllowed,
@@ -232,6 +233,7 @@ export {
   jsonResponse,
   jsonSuccess,
   jsonValidationError,
+  matchesAcceptPattern,
   methodNotAllowed,
   notFound,
   parseFlashFromUrl,
@@ -513,6 +515,7 @@ async function handlePluginRoute(
   // Body is read lazily after validation to avoid processing large payloads
   // for requests that will be rejected anyway (invalid table, record, or policy)
   let body: string | undefined;
+  let bodyStream: ReadableStream<Uint8Array> | undefined;
 
   // Build base context (without record data)
   const baseCtx: Omit<PluginRouteContext, 'record' | 'value' | 'field'> = {
@@ -530,7 +533,9 @@ async function handlePluginRoute(
     basePath: options.basePath,
     requestUrl: request.url,
     method: request.method,
+    contentType: request.headers.get('content-type') ?? undefined,
     body,
+    bodyStream,
     params,
   };
 
@@ -646,11 +651,23 @@ async function handlePluginRoute(
     // Streams the body and aborts mid-transfer once the cap is exceeded, so an
     // oversized chunked body (no Content-Length) is never fully buffered.
     const maxBody = route.maxBodySize ?? DEFAULT_PLUGIN_ROUTE_MAX_BODY;
-    const result = await readBodyWithLimit(request, maxBody);
-    if (result.tooLarge) {
-      return new Response('Request body too large', { status: 413 });
+    if (route.bodyType === 'stream' && route.handler) {
+      // Stream routes (in-process only) get the raw bytes without a text
+      // round-trip — the body never lands in `ctx.body` as a string. The cap
+      // is enforced lazily by erroring the stream mid-transfer; an oversized
+      // Content-Length is still rejected up front here.
+      const result = capStream(request, maxBody);
+      if (result.tooLarge) {
+        return new Response('Request body too large', { status: 413 });
+      }
+      bodyStream = result.stream ?? undefined;
+    } else {
+      const result = await readBodyWithLimit(request, maxBody);
+      if (result.tooLarge) {
+        return new Response('Request body too large', { status: 413 });
+      }
+      body = result.body;
     }
-    body = result.body;
   }
 
   // Build full context
@@ -660,6 +677,7 @@ async function handlePluginRoute(
     value,
     field,
     body, // Add body to context (overrides undefined from baseCtx)
+    bodyStream, // Raw byte stream for `bodyType: 'stream'` routes
   };
 
   // Use route-specific headers if plugin route has CSP overrides

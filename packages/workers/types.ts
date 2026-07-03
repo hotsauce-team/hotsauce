@@ -406,8 +406,27 @@ export interface PluginRouteContext {
   requestUrl: string;
   /** HTTP method (GET, POST) */
   method: string;
+  /**
+   * The request's `Content-Type` header (may include parameters, e.g.
+   * `image/png` or `text/plain; charset=utf-8`), or `undefined` if absent.
+   * Lets in-process routes validate the upload's declared type against a bound
+   * value. Serializable, so it is safe to send to Worker render routes too.
+   */
+  contentType?: string;
   /** Request body (for POST requests, raw text) */
   body?: string;
+  /**
+   * Raw request body as a byte stream, for routes that declare
+   * `bodyType: 'stream'`. Populated only for in-process routes (Worker routes
+   * receive the decoded `body` string instead). The stream is size-capped by
+   * the route's `maxBodySize` and errors mid-transfer if the cap is exceeded,
+   * so the body is never fully buffered. When present, `body` is left undefined.
+   *
+   * NOTE: a `ReadableStream` is not serializable, so this field makes the
+   * context *not* fully serializable. It is therefore in-process only and is
+   * never populated for (or sent to) Worker render routes.
+   */
+  bodyStream?: ReadableStream<Uint8Array>;
   /** Additional route params from pattern matching */
   params: Record<string, string>;
 }
@@ -485,4 +504,21 @@ export interface PluginRoute {
    * Must be a positive integer. Defaults to 200KB (204800 bytes).
    */
   maxBodySize?: number;
+
+  /**
+   * How the request body is delivered to an in-process `handler`.
+   *
+   * - `'text'` (default): the body is read and UTF-8 decoded into
+   *   {@link PluginRouteContext.body}.
+   * - `'stream'`: the raw body is exposed as
+   *   {@link PluginRouteContext.bodyStream} (a byte `ReadableStream`) without
+   *   decoding, so binary uploads avoid a text round-trip. Still capped by
+   *   `maxBodySize`. In-process (`handler`) routes only — a stream cannot be
+   *   sent across the Worker boundary, so declaring `'stream'` on a `render`
+   *   route is a registration error. Worker routes still accept POST bodies
+   *   as normal; they are always delivered as the decoded `body` string.
+   *
+   * @default 'text'
+   */
+  bodyType?: 'text' | 'stream';
 }

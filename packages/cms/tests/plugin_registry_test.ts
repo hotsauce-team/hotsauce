@@ -644,6 +644,29 @@ Deno.test('PluginRegistry: rejects Worker plugin with routes', () => {
   );
 });
 
+Deno.test("PluginRegistry: rejects bodyType 'stream' on a Worker route", () => {
+  const registry = new PluginRegistry();
+
+  assertThrows(
+    () =>
+      registry.register({
+        name: 'worker-with-stream-route',
+        worker: new MockWorker() as unknown as Worker,
+        filter: 'dangerously-open',
+        routes: [
+          {
+            pattern: 'upload',
+            methods: ['POST'],
+            render: 'upload-page',
+            bodyType: 'stream', // streams are not serializable to a Worker
+          },
+        ],
+      } as unknown as PluginConfig),
+    PluginValidationError,
+    "cannot use bodyType: 'stream'",
+  );
+});
+
 Deno.test('PluginRegistry: accepts Worker plugin without hooks (all hooks)', () => {
   const registry = new PluginRegistry();
   registry.register({

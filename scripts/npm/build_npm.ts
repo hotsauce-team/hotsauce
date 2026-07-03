@@ -3,9 +3,9 @@
  *
  * Usage: deno run -A scripts/build_npm.ts [version]
  *
- * This script builds @hotsauce/core, @hotsauce/ui, @hotsauce/auth, and @hotsauce/cms
- * packages for npm distribution. Tests are NOT run during build - use npm-tests/
- * for Node.js e2e testing.
+ * This script builds @hotsauce/core, @hotsauce/ui, @hotsauce/auth, @hotsauce/cms,
+ * and @hotsauce/plugins-fs-storage packages for npm distribution. Tests are NOT
+ * run during build - use npm-tests/ for Node.js e2e testing.
  */
 
 import { build, emptyDir } from 'jsr:@deno/dnt@0.42.3';
@@ -42,7 +42,7 @@ const repoUrlShort = 'https://github.com/hotsauce-team/hotsauce';
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/core
 // ─────────────────────────────────────────────────────────────
-console.log('\n[1/4] Building @hotsauce/core...');
+console.log('\n[1/5] Building @hotsauce/core...');
 await emptyDir('./npm/core');
 await build({
   ...sharedOptions,
@@ -77,7 +77,7 @@ await build({
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/ui
 // ─────────────────────────────────────────────────────────────
-console.log('\n[2/4] Building @hotsauce/ui...');
+console.log('\n[2/5] Building @hotsauce/ui...');
 await emptyDir('./npm/ui');
 await build({
   ...sharedOptions,
@@ -108,7 +108,7 @@ await build({
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/auth
 // ─────────────────────────────────────────────────────────────
-console.log('\n[3/4] Building @hotsauce/auth...');
+console.log('\n[3/5] Building @hotsauce/auth...');
 await emptyDir('./npm/auth');
 await build({
   ...sharedOptions,
@@ -138,7 +138,7 @@ await build({
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/cms
 // ─────────────────────────────────────────────────────────────
-console.log('\n[4/4] Building @hotsauce/cms...');
+console.log('\n[4/5] Building @hotsauce/cms...');
 await emptyDir('./npm/cms');
 await build({
   ...sharedOptions,
@@ -177,5 +177,64 @@ await build({
   },
 });
 
+// ─────────────────────────────────────────────────────────────
+// Build @hotsauce/plugins-fs-storage
+//
+// Scoped to the fs-storage plugin only — building the whole @hotsauce/plugins
+// package would pull in the browser-targeting puck/React code, which has no
+// place in a Node build. This package mainly exists so npm-tests/ can exercise
+// the disk adapter's node:fs/promises branch on real Node.
+// ─────────────────────────────────────────────────────────────
+console.log('\n[5/5] Building @hotsauce/plugins-fs-storage...');
+await emptyDir('./npm/plugins-fs-storage');
+await build({
+  ...sharedOptions,
+  entryPoints: [
+    './packages/plugins/fs-storage/mod.ts',
+    {
+      name: './types',
+      path: './packages/plugins/fs-storage/types.ts',
+    },
+  ],
+  outDir: './npm/plugins-fs-storage',
+  package: {
+    name: '@hotsauce/plugins-fs-storage',
+    version,
+    description: 'Filesystem-backed file storage plugin for @hotsauce/cms',
+    license: 'MIT',
+    repository: {
+      type: 'git',
+      url: repoUrl,
+      directory: 'packages/plugins/fs-storage',
+    },
+    bugs: { url: `${repoUrlShort}/issues` },
+    engines: { node: '>=20.0.0' },
+  },
+  mappings: {
+    [`${baseUrl}/packages/core/mod.ts`]: {
+      name: '@hotsauce/core',
+      version: `>=${version}`,
+    },
+    [`${baseUrl}/packages/ui/mod.ts`]: {
+      name: '@hotsauce/ui',
+      version: `>=${version}`,
+    },
+    [`${baseUrl}/packages/cms/mod.ts`]: {
+      name: '@hotsauce/cms',
+      version: `>=${version}`,
+    },
+  },
+  postBuild() {
+    Deno.copyFileSync(
+      'packages/plugins/LICENSE',
+      'npm/plugins-fs-storage/LICENSE',
+    );
+    Deno.copyFileSync(
+      'packages/plugins/fs-storage/README.md',
+      'npm/plugins-fs-storage/README.md',
+    );
+  },
+});
+
 console.log('\n✅ All packages built successfully!');
-console.log('   npm/core, npm/ui, npm/auth, npm/cms');
+console.log('   npm/core, npm/ui, npm/auth, npm/cms, npm/plugins-fs-storage');

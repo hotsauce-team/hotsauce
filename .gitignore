@@ -9,6 +9,9 @@ dist/
 # Coverage
 coverage/
 
+# fs-storage disk-adapter test scratch (created on demand by the tests)
+packages/plugins/fs-storage/tests/.tmp/
+
 # Environment
 .env
 .env.local

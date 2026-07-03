@@ -547,6 +547,80 @@ export async function readBodyWithLimit(
 }
 
 /**
+ * Thrown into a {@link capStream} stream when the running byte total exceeds the
+ * cap mid-transfer. A consumer (e.g. an upload route) can `instanceof`-check it
+ * to map the failure to a `413` rather than a generic `500`.
+ */
+export class BodyTooLargeError extends Error {
+  constructor(message = 'Request body too large') {
+    super(message);
+    this.name = 'BodyTooLargeError';
+  }
+}
+
+/**
+ * Result of capping a request body stream.
+ */
+export interface CapStreamResult {
+  /** True when `Content-Length` already advertises an oversized body. */
+  tooLarge: boolean;
+  /**
+   * The size-capped byte stream, or `null` when rejected up front
+   * (`tooLarge`) or the request had no body. The stream errors with a
+   * {@link BodyTooLargeError} if the running total exceeds `maxBytes`.
+   */
+  stream: ReadableStream<Uint8Array> | null;
+}
+
+/**
+ * Expose a request body as a size-capped byte stream **without buffering it**.
+ *
+ * The streaming, non-decoding counterpart to {@link readBodyWithLimit}: it
+ * shares the same two-stage cap (reject early on an oversized `Content-Length`,
+ * otherwise tally bytes as they flow and error the stream the moment the running
+ * total exceeds `maxBytes`) but hands the raw bytes straight through, so binary
+ * payloads never make a lossy text round-trip and the whole body is never held
+ * in memory at once.
+ *
+ * @returns `{ tooLarge: true, stream: null }` when rejected up front, otherwise
+ * the capped stream (`null` when the request had no body).
+ */
+export function capStream(
+  request: Request,
+  maxBytes: number,
+): CapStreamResult {
+  // Reject early when Content-Length advertises an oversized body.
+  const contentLength = Number(request.headers.get('content-length'));
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    // Cancel so the client isn't left sending a body we'll never read.
+    // Swallow rejections: a failed cancel would otherwise surface as an
+    // unhandled rejection (fatal on Node).
+    request.body?.cancel().catch(() => {});
+    return { tooLarge: true, stream: null };
+  }
+
+  if (!request.body) {
+    return { tooLarge: false, stream: null };
+  }
+
+  let received = 0;
+  const cap = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      received += chunk.length;
+      if (received > maxBytes) {
+        // Errors the readable side; the consumer's write/pipe rejects so an
+        // oversized (e.g. chunked) body is never fully buffered.
+        controller.error(new BodyTooLargeError());
+        return;
+      }
+      controller.enqueue(chunk);
+    },
+  });
+
+  return { tooLarge: false, stream: request.body.pipeThrough(cap) };
+}
+
+/**
  * Result of parsing multipart form data with file columns
  */
 export interface ParsedMultipartData {
@@ -685,6 +759,10 @@ export function matchesAcceptPattern(
   const type = mimeType.toLowerCase();
 
   for (const pattern of patterns) {
+    // '*/*' as one entry in a list ('application/pdf,*/*') — the bare-string
+    // short-circuit above doesn't cover it, and the '/*' prefix branch would
+    // test startsWith('*/'), which never matches.
+    if (pattern === '*/*') return true;
     if (pattern === type) return true;
     if (pattern.endsWith('/*')) {
       const prefix = pattern.slice(0, -1); // 'image/' from 'image/*'

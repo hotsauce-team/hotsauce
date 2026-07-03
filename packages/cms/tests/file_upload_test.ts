@@ -34,6 +34,11 @@ Deno.test('matchesAcceptPattern: matches */*', () => {
   assertEquals(matchesAcceptPattern('text/plain', '*/*'), true);
 });
 
+Deno.test('matchesAcceptPattern: matches */* inside a comma-separated list', () => {
+  assertEquals(matchesAcceptPattern('image/png', 'application/pdf,*/*'), true);
+  assertEquals(matchesAcceptPattern('text/plain', 'image/*, */*'), true);
+});
+
 Deno.test('matchesAcceptPattern: matches comma-separated patterns', () => {
   assertEquals(
     matchesAcceptPattern('image/png', 'image/png, image/jpeg'),

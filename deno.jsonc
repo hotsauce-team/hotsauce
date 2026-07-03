@@ -42,6 +42,7 @@
     "@hotsauce/plugins/puck": "./packages/plugins/puck/mod.ts",
     "@hotsauce/plugins/puck/types": "./packages/plugins/puck/types.ts",
     "@hotsauce/plugins/s3-storage": "./packages/plugins/s3-storage/mod.ts",
+    "@hotsauce/plugins/fs-storage": "./packages/plugins/fs-storage/mod.ts",
 
     // Optional peer dependency for 2FA QR code generation
     "qrcode-generator": "npm:qrcode-generator@^2.0.4",
@@ -93,6 +94,11 @@
         "./node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.data",
         "./node_modules/.deno/@electric-sql+pglite@0.3.15/node_modules/@electric-sql/pglite/dist/pglite.wasm",
         "./node_modules/.deno/sql.js@1.13.0/node_modules/sql.js/dist/sql-wasm.wasm"
+      ],
+      // The fs-storage disk-adapter tests exercise real disk I/O against
+      // uniquely-named temp dirs created under this single, scoped directory.
+      "write": [
+        "./packages/plugins/fs-storage/tests/.tmp"
       ],
       "env": [
         "CMS_2FA_SECRET",
