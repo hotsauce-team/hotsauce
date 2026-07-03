@@ -641,12 +641,25 @@ Deno.test('listObjects: single page (not truncated) makes one request', async ()
 // signDownloadUrl: key safety + CDN URL building
 // ─────────────────────────────────────────────────────────────
 
-Deno.test('signDownloadUrl: CDN branch trims trailing slashes and segment-encodes the key', async () => {
+Deno.test('signDownloadUrl: CDN branch trims trailing slashes and encodes the key', async () => {
   const provider = makeProvider({ cdnBaseUrl: 'https://cdn.example.com/' });
 
   const url = await provider.signDownloadUrl!({
     storage: 's3',
     key: 'media/file/1/a b.png',
+  });
+  assertEquals(url, 'https://cdn.example.com/media/file/1/a%20b.png');
+});
+
+Deno.test('signDownloadUrl: CDN branch does not double-encode a pre-encoded key', async () => {
+  // Key encoding must match the presigned branch (URL pathname semantics):
+  // an existing %XX escape is preserved, so a legacy pre-encoded key
+  // addresses the same object on both branches.
+  const provider = makeProvider({ cdnBaseUrl: 'https://cdn.example.com' });
+
+  const url = await provider.signDownloadUrl!({
+    storage: 's3',
+    key: 'media/file/1/a%20b.png',
   });
   assertEquals(url, 'https://cdn.example.com/media/file/1/a%20b.png');
 });

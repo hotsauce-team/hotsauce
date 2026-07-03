@@ -211,11 +211,6 @@ function assertSafeKey(key: string): void {
   }
 }
 
-/** Build the relative URL path for a key, segment-encoded. */
-function encodeKeyPath(key: string): string {
-  return key.split('/').map(encodeURIComponent).join('/');
-}
-
 // ─────────────────────────────────────────────────────────────
 // Storage Provider Implementation
 // ─────────────────────────────────────────────────────────────
@@ -310,10 +305,14 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
 
       // If CDN is configured, use it for download URLs
       if (options.cdnBaseUrl) {
-        // CDN URLs don't need signing (CDN handles auth via origin)
-        return `${options.cdnBaseUrl.replace(/\/+$/, '')}/${
-          encodeKeyPath(ctx.key)
-        }`;
+        // CDN URLs don't need signing (CDN handles auth via origin). Build
+        // via the URL API so key encoding matches the presigned branch
+        // (buildObjectUrl): unsafe characters are encoded, but existing %XX
+        // escapes are preserved — a pre-encoded legacy key addresses the
+        // same object on both branches instead of being double-encoded.
+        const url = new URL(options.cdnBaseUrl);
+        url.pathname = `${url.pathname.replace(/\/+$/, '')}/${ctx.key}`;
+        return url.toString();
       }
 
       // Build object URL using publicEndpoint (browser-facing)
