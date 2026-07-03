@@ -233,6 +233,7 @@ export {
   jsonResponse,
   jsonSuccess,
   jsonValidationError,
+  matchesAcceptPattern,
   methodNotAllowed,
   notFound,
   parseFlashFromUrl,

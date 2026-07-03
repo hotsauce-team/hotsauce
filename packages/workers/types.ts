@@ -513,7 +513,8 @@ export interface PluginRoute {
    * - `'stream'`: the raw body is exposed as
    *   {@link PluginRouteContext.bodyStream} (a byte `ReadableStream`) without
    *   decoding, so binary uploads avoid a text round-trip. Still capped by
-   *   `maxBodySize`. Ignored for Worker (`render`) routes, which always receive
+   *   `maxBodySize`. Rejected at plugin registration for Worker (`render`)
+   *   routes — a stream is not serializable, so Worker routes always receive
    *   the decoded `body` string.
    *
    * @default 'text'

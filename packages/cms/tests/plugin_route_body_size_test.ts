@@ -55,7 +55,9 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
             handler: async (ctx) => {
               // The body must arrive as a raw byte stream, never decoded text.
               if (ctx.body !== undefined) {
-                return new Response('body should be undefined', { status: 500 });
+                return new Response('body should be undefined', {
+                  status: 500,
+                });
               }
               if (!ctx.bodyStream) {
                 return new Response('missing bodyStream', { status: 500 });

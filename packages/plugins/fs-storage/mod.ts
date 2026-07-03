@@ -48,7 +48,12 @@ import type {
 import { getFileKeyPrefix, isValidFileKey } from '@hotsauce/core';
 import { typeByExtension } from '@std/media-types';
 import { attrs, html, raw } from '@hotsauce/ui';
-import { contentDispositionHeader, getEnv, jsonResponse } from '@hotsauce/cms';
+import {
+  contentDispositionHeader,
+  getEnv,
+  jsonResponse,
+  matchesAcceptPattern,
+} from '@hotsauce/cms';
 import type {
   FileSystemAdapter,
   FsStoragePluginOptions,
@@ -150,20 +155,8 @@ export function validatePresignRequest(
   const accept = typeof normalizedConfig.accept === 'string'
     ? normalizedConfig.accept
     : undefined;
-  if (accept && accept !== '*/*') {
-    const patterns = accept.split(',').map((p) => p.trim().toLowerCase());
-    const type = body.contentType.toLowerCase();
-    const matched = patterns.some((pattern) => {
-      if (pattern === '*/*') return true;
-      if (pattern === type) return true;
-      if (pattern.endsWith('/*')) {
-        return type.startsWith(pattern.slice(0, -1));
-      }
-      return false;
-    });
-    if (!matched) {
-      return { error: `Invalid file type. Accepted: ${accept}` };
-    }
+  if (accept && !matchesAcceptPattern(body.contentType, accept)) {
+    return { error: `Invalid file type. Accepted: ${accept}` };
   }
 
   return null;

@@ -759,6 +759,10 @@ export function matchesAcceptPattern(
   const type = mimeType.toLowerCase();
 
   for (const pattern of patterns) {
+    // '*/*' as one entry in a list ('application/pdf,*/*') — the bare-string
+    // short-circuit above doesn't cover it, and the '/*' prefix branch would
+    // test startsWith('*/'), which never matches.
+    if (pattern === '*/*') return true;
     if (pattern === type) return true;
     if (pattern.endsWith('/*')) {
       const prefix = pattern.slice(0, -1); // 'image/' from 'image/*'

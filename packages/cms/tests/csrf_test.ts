@@ -101,7 +101,9 @@ Deno.test('validateCsrfToken: rejects malformed token (wrong parts)', async () =
 });
 
 Deno.test('getCsrfTokenFromFormData: extracts token from form data', () => {
-  const formData: Record<string, string | string[]> = { '__cms_csrf': 'test-token' };
+  const formData: Record<string, string | string[]> = {
+    '__cms_csrf': 'test-token',
+  };
   assertEquals(getCsrfTokenFromFormData(formData), 'test-token');
 });
 

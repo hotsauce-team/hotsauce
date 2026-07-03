@@ -567,6 +567,19 @@ export class PluginRegistry {
       );
     }
 
+    // Streaming bodies are in-process only: a ReadableStream is not
+    // serializable, so dispatch never delivers `bodyStream` to a Worker.
+    // Reject at registration rather than silently handing the Worker a
+    // lossy decoded-text body at request time.
+    if (route.bodyType === 'stream') {
+      throw new PluginValidationError(
+        pluginName,
+        `Worker plugin route "${route.pattern}" cannot use bodyType: 'stream'. ` +
+          'Streaming bodies are only delivered to in-process handler routes; ' +
+          'Worker render routes always receive the decoded text body.',
+      );
+    }
+
     this.validateMaxBodySize(pluginName, route);
   }
 }
