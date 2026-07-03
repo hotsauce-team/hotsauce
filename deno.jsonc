@@ -120,7 +120,13 @@
   "fmt": {
     "indentWidth": 2,
     "singleQuote": true,
-    "proseWrap": "preserve"
+    "proseWrap": "preserve",
+    "exclude": [
+      // AUTO-GENERATED bundles (written by packages/plugins/puck/build.ts) —
+      // regenerating them shouldn't require a format pass to keep CI green
+      "packages/plugins/puck/bundle-embedded.ts",
+      "packages/plugins/puck/css-embedded.ts"
+    ]
   },
 
   // Linting
@@ -138,6 +144,9 @@
     ".git/",
     "scripts/",
     // Node/tsx sub-project (sandcastle agent workflows) — not Deno code
-    ".sandcastle/"
+    ".sandcastle/",
+    // Claude Code worktrees/config — nested checkouts otherwise re-enter the
+    // graph with paths the root-relative excludes above don't match
+    ".claude/"
   ]
 }
