@@ -3,9 +3,9 @@
  *
  * Usage: deno run -A scripts/build_npm.ts [version]
  *
- * This script builds @hotsauce/core, @hotsauce/ui, @hotsauce/auth, and @hotsauce/cms
- * packages for npm distribution. Tests are NOT run during build - use npm-tests/
- * for Node.js e2e testing.
+ * This script builds @hotsauce/core, @hotsauce/ui, @hotsauce/auth, @hotsauce/cms,
+ * and @hotsauce/plugins-fs-storage packages for npm distribution. Tests are NOT
+ * run during build - use npm-tests/ for Node.js e2e testing.
  */
 
 import { build, emptyDir } from 'jsr:@deno/dnt@0.42.3';
@@ -42,7 +42,7 @@ const repoUrlShort = 'https://github.com/hotsauce-team/hotsauce';
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/core
 // ─────────────────────────────────────────────────────────────
-console.log('\n[1/4] Building @hotsauce/core...');
+console.log('\n[1/5] Building @hotsauce/core...');
 await emptyDir('./npm/core');
 await build({
   ...sharedOptions,
@@ -77,7 +77,7 @@ await build({
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/ui
 // ─────────────────────────────────────────────────────────────
-console.log('\n[2/4] Building @hotsauce/ui...');
+console.log('\n[2/5] Building @hotsauce/ui...');
 await emptyDir('./npm/ui');
 await build({
   ...sharedOptions,
@@ -108,7 +108,7 @@ await build({
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/auth
 // ─────────────────────────────────────────────────────────────
-console.log('\n[3/4] Building @hotsauce/auth...');
+console.log('\n[3/5] Building @hotsauce/auth...');
 await emptyDir('./npm/auth');
 await build({
   ...sharedOptions,

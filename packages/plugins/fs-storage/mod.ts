@@ -540,10 +540,10 @@ export function createFsStoragePlugin(
                     >${id}</strong> | Column: <strong>${column}</strong>
                   </p>
 
-                  <div class="upload-area" id="uploadArea">
+                  <label class="upload-area" id="uploadArea">
                     <input type="file" id="fileInput" ${attrs(acceptAttr)}>
                     <p>Click or drag a file here to upload</p>
-                  </div>
+                  </label>
 
                   <p id="uploadHints" class="upload-hints"></p>
 

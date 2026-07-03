@@ -12,11 +12,25 @@ export const UPLOAD_CSS = `
   cursor: pointer;
   transition: border-color 0.2s;
 }
-.upload-area:hover, .upload-area.dragover {
+.upload-area:hover, .upload-area.dragover, .upload-area:focus-within {
   border-color: #4a90d9;
   background: #f0f7ff;
 }
-.upload-area input[type="file"] { display: none; }
+.upload-area:focus-within { outline: 2px solid #4a90d9; outline-offset: 2px; }
+/* Visually hidden but still focusable, so keyboard users can Tab to the
+   input and open the picker with Enter/Space (display:none would remove
+   it from the tab order entirely). */
+.upload-area input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
 .progress-bar {
   height: 20px;
   background: #e0e0e0;

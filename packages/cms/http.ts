@@ -593,7 +593,9 @@ export function capStream(
   const contentLength = Number(request.headers.get('content-length'));
   if (Number.isFinite(contentLength) && contentLength > maxBytes) {
     // Cancel so the client isn't left sending a body we'll never read.
-    void request.body?.cancel();
+    // Swallow rejections: a failed cancel would otherwise surface as an
+    // unhandled rejection (fatal on Node).
+    request.body?.cancel().catch(() => {});
     return { tooLarge: true, stream: null };
   }
 

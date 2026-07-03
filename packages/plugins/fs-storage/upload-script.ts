@@ -24,7 +24,9 @@ export const UPLOAD_JS = `
   const status = document.getElementById('status');
   const fileInfo = document.getElementById('fileInfo');
 
-  uploadArea.addEventListener('click', function() { fileInput.click(); });
+  // No click handler needed: uploadArea is a <label> wrapping the file
+  // input, so clicks open the picker natively (a JS fileInput.click()
+  // would fire a second time when the input's click bubbles back up).
   uploadArea.addEventListener('dragover', function(e) {
     e.preventDefault();
     uploadArea.classList.add('dragover');
