@@ -360,7 +360,9 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
       const p = `${tempDir}/${name}`;
       try {
         const st = Deno ? await Deno.stat(p) : await (await nodeFs()).stat(p);
-        if ((st.mtime?.getTime() ?? 0) < cutoff) await removeQuietly(p);
+        // A null mtime (some virtual/network filesystems) means the age is
+        // unknown — keep the temp rather than risk sweeping an in-flight one.
+        if ((st.mtime?.getTime() ?? Infinity) < cutoff) await removeQuietly(p);
       } catch { /* vanished between readdir and stat — ignore */ }
     }));
   }

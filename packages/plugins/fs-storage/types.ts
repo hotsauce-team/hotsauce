@@ -111,7 +111,6 @@ export interface FsStoragePluginOptions {
 export interface ResolvedFsOptions {
   storageId: string;
   basePath: string;
-  rootDir?: string;
   signingSecret: string;
   publicBaseUrl?: string;
   expirySeconds: number;

@@ -48,7 +48,7 @@ import type {
 import { getFileKeyPrefix, isValidFileKey } from '@hotsauce/core';
 import { typeByExtension } from '@std/media-types';
 import { attrs, html, raw } from '@hotsauce/ui';
-import { contentDispositionHeader, getEnv } from '@hotsauce/cms';
+import { contentDispositionHeader, getEnv, jsonResponse } from '@hotsauce/cms';
 import type {
   FileSystemAdapter,
   FsStoragePluginOptions,
@@ -89,13 +89,6 @@ function safeJsonForHtml(value: unknown): string {
     .replaceAll('&', '\\u0026')
     .replaceAll('<', '\\u003c')
     .replaceAll('>', '\\u003e');
-}
-
-function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }
 
 function resolveFileConfig(
@@ -161,6 +154,7 @@ export function validatePresignRequest(
     const patterns = accept.split(',').map((p) => p.trim().toLowerCase());
     const type = body.contentType.toLowerCase();
     const matched = patterns.some((pattern) => {
+      if (pattern === '*/*') return true;
       if (pattern === type) return true;
       if (pattern.endsWith('/*')) {
         return type.startsWith(pattern.slice(0, -1));
@@ -262,6 +256,11 @@ function createStorageProvider(options: ResolvedFsOptions): StorageProvider {
      *   URL and 302-redirects to it.
      */
     async signDownloadUrl(ctx: SignDownloadContext): Promise<string> {
+      // Core's isValidFileKey only checks the key prefix, so a persisted key
+      // could still smuggle `..` segments; reject here so neither branch ever
+      // signs or links a traversal path. (The caller treats a throw as a
+      // generic serve failure.)
+      assertSafeKey(ctx.key);
       if (options.publicBaseUrl) {
         return `${options.publicBaseUrl.replace(/\/+$/, '')}/${
           encodeKeyPath(ctx.key)
@@ -355,7 +354,6 @@ export function createFsStoragePlugin(
   const options: ResolvedFsOptions = {
     storageId: pluginOptions.storageId ?? 'fs',
     basePath: pluginOptions.basePath,
-    rootDir: pluginOptions.rootDir,
     signingSecret,
     publicBaseUrl: pluginOptions.publicBaseUrl,
     expirySeconds: pluginOptions.expirySeconds ?? 900,
@@ -665,12 +663,20 @@ export function createFsStoragePlugin(
         maxBodySize: options.maxUploadBytes,
         bodyType: 'stream',
         handler: async (ctx) => {
+          // Rejections before `fs.put` leave the request body unread; cancel
+          // it so runtimes that don't auto-discard an unread body aren't left
+          // holding the connection open until the client finishes uploading.
+          const reject = (res: Response): Response => {
+            ctx.bodyStream?.cancel().catch(() => {});
+            return res;
+          };
+
           let token: string | null = null;
           try {
             token = new URL(ctx.requestUrl).searchParams.get('token');
           } catch { /* malformed URL */ }
           if (!token) {
-            return jsonResponse({ error: 'Missing token' }, 400);
+            return reject(jsonResponse({ error: 'Missing token' }, 400));
           }
 
           const payload = await verifyToken(
@@ -679,7 +685,9 @@ export function createFsStoragePlugin(
             'upload',
           );
           if (!payload) {
-            return jsonResponse({ error: 'Invalid or expired token' }, 403);
+            return reject(
+              jsonResponse({ error: 'Invalid or expired token' }, 403),
+            );
           }
 
           // Defense-in-depth: the key must match the bound record.
@@ -691,7 +699,7 @@ export function createFsStoragePlugin(
               payload.recordId,
             )
           ) {
-            return jsonResponse({ error: 'Invalid key' }, 403);
+            return reject(jsonResponse({ error: 'Invalid key' }, 403));
           }
 
           // Enforce the token-bound content type: the request must declare the
@@ -701,9 +709,9 @@ export function createFsStoragePlugin(
           const essence = (v: string | undefined) =>
             (v ?? '').split(';')[0]!.trim().toLowerCase();
           if (essence(ctx.contentType) !== essence(payload.contentType)) {
-            return jsonResponse({
+            return reject(jsonResponse({
               error: 'Content-Type does not match the upload token',
-            }, 415);
+            }, 415));
           }
 
           if (!ctx.bodyStream) {
@@ -719,14 +727,17 @@ export function createFsStoragePlugin(
               expectedSize: payload.size,
             });
           } catch (err) {
+            // `reject` is safe here even when `put` already consumed the
+            // stream: cancelling a locked/finished stream just rejects, and
+            // that rejection is swallowed.
             const name = (err as { name?: string })?.name;
             if (name === 'BodyTooLargeError') {
-              return jsonResponse({ error: 'File too large' }, 413);
+              return reject(jsonResponse({ error: 'File too large' }, 413));
             }
             if (name === 'SizeMismatchError') {
-              return jsonResponse({ error: 'Size mismatch' }, 400);
+              return reject(jsonResponse({ error: 'Size mismatch' }, 400));
             }
-            return jsonResponse({ error: 'Failed to write file' }, 500);
+            return reject(jsonResponse({ error: 'Failed to write file' }, 500));
           }
 
           return jsonResponse({ ok: true, key: payload.key });

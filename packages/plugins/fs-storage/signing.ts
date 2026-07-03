@@ -35,14 +35,25 @@ function encodeJson(value: unknown): string {
   return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
 }
 
+// The signing secret is fixed for the plugin's lifetime, but tokens are
+// signed/verified on every presign, download-URL render, upload, and serve —
+// memoize the CryptoKey so the WebCrypto import runs once per secret, not per
+// request. (In practice this holds one entry per configured plugin instance.)
+const keyCache = new Map<string, Promise<CryptoKey>>();
+
 function importKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(secret),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign', 'verify'],
-  );
+  let key = keyCache.get(secret);
+  if (!key) {
+    key = crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify'],
+    );
+    keyCache.set(secret, key);
+  }
+  return key;
 }
 
 /** Payload bound to an upload token (`POST {basePath}/fs-storage/_upload`). */

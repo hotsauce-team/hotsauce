@@ -175,6 +175,14 @@ Deno.test('validatePresignRequest: rejects type not in accept list', () => {
   assertStringIncludes(result!.error, 'Invalid file type');
 });
 
+Deno.test('validatePresignRequest: */* inside an accept list matches any type', () => {
+  const result = validatePresignRequest(
+    { filename: 'photo.png', contentType: 'image/png', size: 1000 },
+    { file: { accept: 'application/pdf,*/*' } },
+  );
+  assertEquals(result, null);
+});
+
 Deno.test('validatePresignRequest: no config means no restrictions', () => {
   const result = validatePresignRequest(
     {
@@ -603,6 +611,24 @@ Deno.test('provider.signDownloadUrl: uses publicBaseUrl when set', async () => {
   assertEquals(url, 'https://cdn.example.com/files/posts/image/42/x.png');
 });
 
+Deno.test('provider.signDownloadUrl: rejects a traversal key even with publicBaseUrl', async () => {
+  // Core's isValidFileKey is prefix-only, so a tampered persisted key could
+  // still carry `..` segments — signDownloadUrl must refuse to link it.
+  const { plugin } = makePlugin(createMemoryFsAdapter(), {
+    publicBaseUrl: 'https://cdn.example.com/files',
+  });
+  await assertRejects(
+    () =>
+      plugin.storageProvider!.signDownloadUrl!({
+        storage: 'fs',
+        key: 'posts/image/42/../../../etc/passwd',
+        filename: 'passwd',
+      }),
+    Error,
+    'unsafe segment',
+  );
+});
+
 Deno.test('provider.signDownloadUrl: builds absolute _serve URL from request origin', async () => {
   const { plugin } = makePlugin();
   const url = await plugin.storageProvider!.signDownloadUrl!({
@@ -786,6 +812,29 @@ Deno.test('routes: _upload rejects an invalid token', async () => {
     bodyStream: streamOf(new Uint8Array([1])),
   })) as Response;
   assertEquals(res.status, 403);
+});
+
+Deno.test('routes: _upload cancels the unread body stream when rejecting early', async () => {
+  const { plugin } = makePlugin();
+  const uploadRoute = findRoute(plugin, '_upload', 'POST');
+  let cancelled = false;
+  const bodyStream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1]));
+    },
+    cancel() {
+      cancelled = true;
+    },
+  });
+  const res = await uploadRoute.handler(makeCtx({
+    method: 'POST',
+    requestUrl: 'http://localhost/admin/fs-storage/_upload?token=garbage',
+    bodyStream,
+  })) as Response;
+  assertEquals(res.status, 403);
+  // Cancellation is fire-and-forget; give the microtask a beat to land.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assertEquals(cancelled, true);
 });
 
 Deno.test('routes: _upload rejects a size mismatch', async () => {
