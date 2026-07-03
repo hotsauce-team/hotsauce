@@ -19,6 +19,33 @@
  * runtime-agnostic, but the suite also includes scoped disk-adapter tests under
  * `packages/plugins/fs-storage/tests/.tmp` (see `deno.jsonc` test permissions).
  *
+ * ## Key safety and symlink containment
+ *
+ * Two layers keep an operation from touching a file outside `rootDir`:
+ *
+ * 1. **Textual key validation** (`assertSafeKey`, always on): rejects absolute
+ *    paths, backslashes, control chars, and `.`/`..`/empty segments before a
+ *    key becomes a path. This alone can't stop a *symlink* planted under
+ *    `rootDir` — a symlink is a legitimate path with no `..` in it.
+ * 2. **Symlink containment** (`symlinkContainment`, default on): resolves real
+ *    paths (`realpath`) and refuses operations that escape `rootDir`. The check
+ *    is asymmetric by necessity, because the two kinds of operation follow
+ *    symlinks differently:
+ *    - **Reads** (`get`/`getStream`) *follow* the final component to read it, so
+ *      they resolve the **full key path** and reject any escape.
+ *    - **Writes/removes** (`put`/`delete`) do **not** follow the final
+ *      component — `rename` replaces it and `remove` unlinks it — so they
+ *      resolve only the **parent** container. An escape via an intermediate
+ *      directory symlink is still rejected; a final-segment symlink is replaced
+ *      (`put`) or unlinked (`delete`) in place, so a planted link is removable
+ *      without its outside target ever being written or read.
+ *    - **`list`** skips symlinked entries entirely — the adapter only ever
+ *      creates regular files and real directories, so a symlink is never a key
+ *      it produced.
+ *
+ * Containment is not TOCTOU-proof and is opt-out; see SECURITY.md for the
+ * deployment guidance (dedicated `rootDir`, OS-level isolation for multi-tenant).
+ *
  * @module
  */
 
