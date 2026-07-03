@@ -32,6 +32,34 @@ byte path inside the CMS:
   strict `Content-Security-Policy`. The CMS `/files/` route still enforces
   row/column policies, then 302-redirects to it.
 
+## Installation
+
+**Deno / JSR** — the plugin ships as part of the `@hotsauce/plugins` package:
+
+```bash
+deno add jsr:@hotsauce/plugins
+```
+
+```ts
+import { createFsStoragePlugin } from '@hotsauce/plugins/fs-storage';
+```
+
+**Node / npm** — published standalone as
+[`@hotsauce/plugins-fs-storage`](https://www.npmjs.com/package/@hotsauce/plugins-fs-storage)
+(note the different import specifier):
+
+```bash
+npm install @hotsauce/plugins-fs-storage
+```
+
+```ts
+import { createFsStoragePlugin } from '@hotsauce/plugins-fs-storage';
+```
+
+Sub-exports follow the same shape on both registries: types at
+`@hotsauce/plugins/fs-storage/types` (JSR) /
+`@hotsauce/plugins-fs-storage/types` (npm).
+
 ## Usage
 
 ```typescript

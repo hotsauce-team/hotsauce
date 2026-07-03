@@ -12,9 +12,32 @@ S3-compatible storage plugin for HotSauce CMS. Enables direct browser-to-S3 uplo
 
 ## Installation
 
+**Deno / JSR** — the plugin ships as part of the `@hotsauce/plugins` package:
+
+```bash
+deno add jsr:@hotsauce/plugins
+```
+
 ```ts
 import { createS3StoragePlugin } from '@hotsauce/plugins/s3-storage';
 ```
+
+**Node / npm** — published standalone as
+[`@hotsauce/plugins-s3-storage`](https://www.npmjs.com/package/@hotsauce/plugins-s3-storage)
+(note the different import specifier):
+
+```bash
+npm install @hotsauce/plugins-s3-storage
+```
+
+```ts
+import { createS3StoragePlugin } from '@hotsauce/plugins-s3-storage';
+```
+
+Sub-exports follow the same shape on both registries: types at
+`@hotsauce/plugins/s3-storage/types` (JSR) /
+`@hotsauce/plugins-s3-storage/types` (npm), and the standalone SigV4 signing
+utilities at `.../signing`.
 
 ## Basic Usage
 
