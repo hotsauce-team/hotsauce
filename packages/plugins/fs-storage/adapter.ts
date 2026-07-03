@@ -315,6 +315,24 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
   // instance (the adapter is normally long-lived, built once at startup).
   let lastSweepAt = 0;
 
+  /**
+   * `keyToPath` plus this adapter's reserved-name rule: a key must not point
+   * into the staging dir. `assertSafeKey` allows a leading-dot segment, but a
+   * key under {@link TEMP_DIRNAME} would be hidden from `list()` and — worse —
+   * deleted by {@link sweepStaleTemps}, which assumes everything there is an
+   * orphaned temp. (CMS-minted keys always start with a table name, so this
+   * only guards direct adapter API use.)
+   */
+  function resolveKeyPath(key: string): string {
+    const path = keyToPath(rootDir, key);
+    if (key === TEMP_DIRNAME || key.startsWith(`${TEMP_DIRNAME}/`)) {
+      throw new Error(
+        `Invalid storage key: "${TEMP_DIRNAME}" is reserved for upload staging`,
+      );
+    }
+    return path;
+  }
+
   async function ensureDir(dir: string): Promise<void> {
     if (Deno) {
       await Deno.mkdir(dir, { recursive: true });
@@ -397,7 +415,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
 
   return {
     async put(key, data, opts) {
-      const path = keyToPath(rootDir, key);
+      const path = resolveKeyPath(key);
       // The parent dir varies per key; the memoized temp-dir creation runs
       // concurrently instead of serializing a second awaited mkdir on it.
       await Promise.all([ensureDir(parentDir(path)), ensureTempDir()]);
@@ -469,7 +487,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     },
 
     async get(key) {
-      const path = keyToPath(rootDir, key);
+      const path = resolveKeyPath(key);
       if (Deno) {
         return await Deno.readFile(path);
       }
@@ -479,7 +497,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     },
 
     async getStream(key) {
-      const path = keyToPath(rootDir, key);
+      const path = resolveKeyPath(key);
       if (Deno) {
         // `Deno.open` rejects if the file is missing; the returned `readable`
         // closes the fd when the body is fully read or cancelled.
@@ -502,7 +520,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     },
 
     async delete(key) {
-      const path = keyToPath(rootDir, key);
+      const path = resolveKeyPath(key);
       try {
         if (Deno) {
           await Deno.remove(path);

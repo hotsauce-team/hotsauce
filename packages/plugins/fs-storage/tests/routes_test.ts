@@ -320,6 +320,28 @@ Deno.test('disk adapter: put streams to disk and enforces expectedSize', async (
   });
 });
 
+Deno.test('disk adapter: rejects keys under the reserved staging dir', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+
+    // A key inside .uploads-tmp would be hidden from list() and reaped by the
+    // stale-temp sweeper — reserved for staging, so every method rejects it.
+    for (const key of ['.uploads-tmp', '.uploads-tmp/evil.bin']) {
+      await assertRejects(
+        () => fs.put(key, new Uint8Array([1])),
+        Error,
+        'reserved',
+      );
+      await assertRejects(() => fs.get(key), Error, 'reserved');
+      await assertRejects(() => fs.delete(key), Error, 'reserved');
+    }
+
+    // A merely dot-prefixed sibling is still a legal key.
+    await fs.put('.uploads/ok.bin', new Uint8Array([1]));
+    assertEquals((await fs.list('.uploads/')).length, 1);
+  });
+});
+
 Deno.test('disk adapter: sequential puts both commit (memoized temp dir)', async () => {
   await withDiskDir(async (dir) => {
     const fs = createDiskFsAdapter(dir);
