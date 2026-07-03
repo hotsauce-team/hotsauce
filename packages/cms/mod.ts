@@ -686,84 +686,96 @@ async function handlePluginRoute(
   const effectiveHeaders = options.routeSecurityHeaders.get(routeKey) ??
     options.securityHeaders;
 
-  // Dispatch based on route type
-  if (route.handler) {
-    // In-process handler
-    try {
-      const result = await route.handler(ctx);
-      if (result instanceof Response) {
-        const ct = result.headers.get('content-type') ?? '';
-        if (ct.startsWith('text/html')) {
-          // Enforce all security headers for HTML responses
-          // (plugins cannot override CSP, X-Frame-Options, etc.)
-          for (const [k, v] of Object.entries(effectiveHeaders)) {
-            result.headers.set(k, v);
+  // Dispatch based on route type. Dispatch owns bodyStream cleanup: once the
+  // handler settles, an unconsumed capped stream is cancelled below so the
+  // client transfer is aborted (handlers used to do this themselves).
+  try {
+    if (route.handler) {
+      // In-process handler
+      try {
+        const result = await route.handler(ctx);
+        if (result instanceof Response) {
+          const ct = result.headers.get('content-type') ?? '';
+          if (ct.startsWith('text/html')) {
+            // Enforce all security headers for HTML responses
+            // (plugins cannot override CSP, X-Frame-Options, etc.)
+            for (const [k, v] of Object.entries(effectiveHeaders)) {
+              result.headers.set(k, v);
+            }
+          } else {
+            // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
+            result.headers.set('X-Content-Type-Options', 'nosniff');
           }
-        } else {
-          // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
-          result.headers.set('X-Content-Type-Options', 'nosniff');
+          return result;
         }
-        return result;
+        // String result - wrap in HTML response with security headers
+        return new Response(result, {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            ...effectiveHeaders,
+          },
+        });
+      } catch (error) {
+        // Generate request ID to correlate error logs with user-facing response
+        const requestId = crypto.randomUUID();
+        options.onError?.(error as Error, {
+          source: 'handler',
+          request,
+          url: new URL(request.url),
+          route: null, // Plugin routes don't use ParsedRoute
+          action: routeAction,
+          requestId,
+          plugin: plugin.name,
+        });
+        return new Response(`Plugin error (request: ${requestId})`, {
+          status: 500,
+        });
       }
-      // String result - wrap in HTML response with security headers
-      return new Response(result, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          ...effectiveHeaders,
-        },
-      });
-    } catch (error) {
-      // Generate request ID to correlate error logs with user-facing response
-      const requestId = crypto.randomUUID();
-      options.onError?.(error as Error, {
-        source: 'handler',
-        request,
-        url: new URL(request.url),
-        route: null, // Plugin routes don't use ParsedRoute
-        action: routeAction,
-        requestId,
-        plugin: plugin.name,
-      });
-      return new Response(`Plugin error (request: ${requestId})`, {
-        status: 500,
-      });
+    }
+
+    if (route.render && pluginService) {
+      // Worker render - use executor
+      try {
+        const html = await pluginService.executeRouteRender(
+          plugin.name,
+          route.render,
+          ctx,
+        );
+        return new Response(html, {
+          headers: {
+            'Content-Type': 'text/html; charset=utf-8',
+            ...effectiveHeaders,
+          },
+        });
+      } catch (error) {
+        // Generate request ID to correlate error logs with user-facing response
+        const requestId = crypto.randomUUID();
+        options.onError?.(error as Error, {
+          source: 'handler',
+          request,
+          url: new URL(request.url),
+          route: null, // Plugin routes don't use ParsedRoute
+          action: routeAction,
+          requestId,
+          plugin: plugin.name,
+        });
+        return new Response(`Plugin error (request: ${requestId})`, {
+          status: 500,
+        });
+      }
+    }
+
+    // No handler or render configured (should be caught by validation)
+    return new Response('Route not configured', { status: 500 });
+  } finally {
+    // A handler that consumed (or is still piping) the body holds the
+    // stream's lock; a fully-drained, closed stream is unlocked but cancel()
+    // is then a resolved no-op. Swallow rejections — an unhandled rejection
+    // is fatal on Node.
+    if (bodyStream && !bodyStream.locked) {
+      bodyStream.cancel().catch(() => {});
     }
   }
-
-  if (route.render && pluginService) {
-    // Worker render - use executor
-    try {
-      const html = await pluginService.executeRouteRender(
-        plugin.name,
-        route.render,
-        ctx,
-      );
-      return new Response(html, {
-        headers: {
-          'Content-Type': 'text/html; charset=utf-8',
-          ...effectiveHeaders,
-        },
-      });
-    } catch (error) {
-      // Generate request ID to correlate error logs with user-facing response
-      const requestId = crypto.randomUUID();
-      options.onError?.(error as Error, {
-        source: 'handler',
-        request,
-        url: new URL(request.url),
-        route: null, // Plugin routes don't use ParsedRoute
-        action: routeAction,
-        requestId,
-        plugin: plugin.name,
-      });
-      return new Response(`Plugin error (request: ${requestId})`, {
-        status: 500,
-      });
-    }
-  }
-
-  // No handler or render configured (should be caught by validation)
-  return new Response('Route not configured', { status: 500 });
 }
 
 /**

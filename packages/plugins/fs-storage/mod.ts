@@ -656,20 +656,15 @@ export function createFsStoragePlugin(
         maxBodySize: options.maxUploadBytes,
         bodyType: 'stream',
         handler: async (ctx) => {
-          // Rejections before `fs.put` leave the request body unread; cancel
-          // it so runtimes that don't auto-discard an unread body aren't left
-          // holding the connection open until the client finishes uploading.
-          const reject = (res: Response): Response => {
-            ctx.bodyStream?.cancel().catch(() => {});
-            return res;
-          };
-
+          // Rejections before `fs.put` leave the request body unread; dispatch
+          // cancels the unconsumed stream after the handler settles, so early
+          // returns can hand back the error Response directly.
           let token: string | null = null;
           try {
             token = new URL(ctx.requestUrl).searchParams.get('token');
           } catch { /* malformed URL */ }
           if (!token) {
-            return reject(jsonResponse({ error: 'Missing token' }, 400));
+            return jsonResponse({ error: 'Missing token' }, 400);
           }
 
           const payload = await verifyToken(
@@ -678,9 +673,7 @@ export function createFsStoragePlugin(
             'upload',
           );
           if (!payload) {
-            return reject(
-              jsonResponse({ error: 'Invalid or expired token' }, 403),
-            );
+            return jsonResponse({ error: 'Invalid or expired token' }, 403);
           }
 
           // Defense-in-depth: the key must match the bound record.
@@ -692,7 +685,7 @@ export function createFsStoragePlugin(
               payload.recordId,
             )
           ) {
-            return reject(jsonResponse({ error: 'Invalid key' }, 403));
+            return jsonResponse({ error: 'Invalid key' }, 403);
           }
 
           // Enforce the token-bound content type: the request must declare the
@@ -702,9 +695,9 @@ export function createFsStoragePlugin(
           const essence = (v: string | undefined) =>
             (v ?? '').split(';')[0]!.trim().toLowerCase();
           if (essence(ctx.contentType) !== essence(payload.contentType)) {
-            return reject(jsonResponse({
+            return jsonResponse({
               error: 'Content-Type does not match the upload token',
-            }, 415));
+            }, 415);
           }
 
           if (!ctx.bodyStream) {
@@ -720,17 +713,14 @@ export function createFsStoragePlugin(
               expectedSize: payload.size,
             });
           } catch (err) {
-            // `reject` is safe here even when `put` already consumed the
-            // stream: cancelling a locked/finished stream just rejects, and
-            // that rejection is swallowed.
             const name = (err as { name?: string })?.name;
             if (name === 'BodyTooLargeError') {
-              return reject(jsonResponse({ error: 'File too large' }, 413));
+              return jsonResponse({ error: 'File too large' }, 413);
             }
             if (name === 'SizeMismatchError') {
-              return reject(jsonResponse({ error: 'Size mismatch' }, 400));
+              return jsonResponse({ error: 'Size mismatch' }, 400);
             }
-            return reject(jsonResponse({ error: 'Failed to write file' }, 500));
+            return jsonResponse({ error: 'Failed to write file' }, 500);
           }
 
           return jsonResponse({ ok: true, key: payload.key });

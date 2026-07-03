@@ -814,28 +814,8 @@ Deno.test('routes: _upload rejects an invalid token', async () => {
   assertEquals(res.status, 403);
 });
 
-Deno.test('routes: _upload cancels the unread body stream when rejecting early', async () => {
-  const { plugin } = makePlugin();
-  const uploadRoute = findRoute(plugin, '_upload', 'POST');
-  let cancelled = false;
-  const bodyStream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new Uint8Array([1]));
-    },
-    cancel() {
-      cancelled = true;
-    },
-  });
-  const res = await uploadRoute.handler(makeCtx({
-    method: 'POST',
-    requestUrl: 'http://localhost/admin/fs-storage/_upload?token=garbage',
-    bodyStream,
-  })) as Response;
-  assertEquals(res.status, 403);
-  // Cancellation is fire-and-forget; give the microtask a beat to land.
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assertEquals(cancelled, true);
-});
+// NOTE: early-reject cancellation of the unread body stream is owned by
+// dispatch now — covered in packages/cms/tests/plugin_route_body_size_test.ts.
 
 Deno.test('routes: _upload rejects a size mismatch', async () => {
   const { plugin } = makePlugin();

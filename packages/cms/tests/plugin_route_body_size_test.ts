@@ -263,6 +263,126 @@ Deno.test('plugin route: maxBodySize enforcement', async (t) => {
   );
 });
 
+Deno.test('plugin route: dispatch cancels an unconsumed bodyStream', async (t) => {
+  const client = new PGlite();
+  const db = drizzle(client, { schema });
+  await createBasicTables(db);
+
+  const csrfToken = await generateCsrfToken(TEST_CSRF_SECRET);
+  const csrfHeaders = { 'X-CSRF-Token': csrfToken };
+
+  const handler = createCmsHandler({
+    csrfSecret: TEST_CSRF_SECRET,
+    auth: 'dangerously-open',
+    policies: 'dangerously-open',
+    db,
+    schema,
+    basePath: '/admin',
+    plugins: [
+      {
+        name: 'cancel-test',
+        filter: 'dangerously-open' as const,
+        routes: [
+          {
+            pattern: 'consumes',
+            methods: ['POST'],
+            bodyType: 'stream',
+            handler: async (ctx) => {
+              let total = 0;
+              for await (const chunk of ctx.bodyStream!) total += chunk.length;
+              return new Response(String(total));
+            },
+          },
+          {
+            pattern: 'ignores',
+            methods: ['POST'],
+            bodyType: 'stream',
+            // Early reject without touching the stream — dispatch must cancel
+            // the unread body so the client transfer is aborted.
+            handler: () => new Response('nope', { status: 403 }),
+          },
+          {
+            pattern: 'throws',
+            methods: ['POST'],
+            bodyType: 'stream',
+            handler: () => {
+              throw new Error('boom');
+            },
+          },
+        ],
+      },
+    ],
+  });
+
+  /** Build a streaming POST whose source records upstream cancellation. */
+  const makeStreamRequest = (
+    pattern: string,
+    { close }: { close: boolean },
+  ) => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('hello'));
+        if (close) controller.close();
+      },
+      cancel() {
+        cancelled = true;
+      },
+    });
+    const request = new Request(
+      `http://localhost/admin/cancel-test/${pattern}`,
+      {
+        method: 'POST',
+        headers: csrfHeaders,
+        body,
+        // @ts-ignore: duplex is required for streaming request bodies
+        duplex: 'half',
+      },
+    );
+    return { request, wasCancelled: () => cancelled };
+  };
+
+  // Cancellation is fire-and-forget; give the microtask a beat to land.
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  await t.step(
+    'handler consumes the stream: source is not cancelled',
+    async () => {
+      const { request, wasCancelled } = makeStreamRequest('consumes', {
+        close: true,
+      });
+      const res = await handler(request);
+      assertEquals(res.status, 200);
+      assertEquals(await res.text(), '5');
+      await tick();
+      assertEquals(wasCancelled(), false);
+    },
+  );
+
+  await t.step('handler ignores the stream: source is cancelled', async () => {
+    const { request, wasCancelled } = makeStreamRequest('ignores', {
+      close: false,
+    });
+    const res = await handler(request);
+    assertEquals(res.status, 403);
+    await tick();
+    assertEquals(wasCancelled(), true);
+  });
+
+  await t.step(
+    'handler throws before consuming: source is cancelled',
+    async () => {
+      const { request, wasCancelled } = makeStreamRequest('throws', {
+        close: false,
+      });
+      const res = await handler(request);
+      assertEquals(res.status, 500);
+      await tick();
+      assertEquals(wasCancelled(), true);
+    },
+  );
+});
+
 Deno.test('plugin route validation: maxBodySize must be a positive integer', () => {
   const registry = new PluginRegistry();
 
