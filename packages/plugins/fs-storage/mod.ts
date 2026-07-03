@@ -66,6 +66,7 @@ import { UPLOAD_JS } from './upload-script.ts';
 
 // Re-export types for convenience
 export type { FileSystemAdapter, FsStoragePluginOptions } from './types.ts';
+export type { DiskFsAdapterOptions } from './adapter.ts';
 export {
   assertSafeKey,
   createDiskFsAdapter,
@@ -341,7 +342,9 @@ export function createFsStoragePlugin(
         'fs-storage: rootDir is required (a non-empty directory path) when no custom fs adapter is provided.',
       );
     }
-    fs = createDiskFsAdapter(rootDir);
+    fs = createDiskFsAdapter(rootDir, {
+      symlinkContainment: pluginOptions.symlinkContainment,
+    });
   }
 
   const options: ResolvedFsOptions = {

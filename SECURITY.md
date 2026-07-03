@@ -249,6 +249,50 @@ const policies = {
 - Combine with row policies for defense-in-depth
 - Test that restricted columns are truly absent from API responses
 
+### 9. File Storage (fs-storage plugin)
+
+The filesystem storage plugin maps storage keys onto a directory tree under
+`rootDir`. Two layers keep a request from reaching a file it shouldn't:
+
+- **Key validation** — every key is checked before it touches disk: absolute
+  paths, `..`/`.`/empty segments, backslashes, control characters, and the
+  reserved upload-staging directory are all rejected. This blocks _textual_
+  path traversal.
+- **Symlink containment** (`symlinkContainment`, default **on**) — each key's
+  real path is resolved and rejected if a symlink under `rootDir` redirects it
+  outside. Key validation alone can't catch this: a symlink is a legitimate
+  path with no `..` in it. Containment costs one `realpath` syscall per file
+  operation.
+
+```typescript
+createFsStoragePlugin({
+  basePath: '/admin',
+  rootDir: './uploads',
+  // symlinkContainment defaults to true; only disable it if `rootDir` is a
+  // directory your app exclusively controls AND you intentionally use
+  // symlinks inside it.
+  symlinkContainment: false,
+});
+```
+
+**Best Practices:**
+
+- Point `rootDir` at a directory your application **exclusively controls**. The
+  symlink risk only exists if another (untrusted) process can create entries
+  under `rootDir` — e.g. a shared or multi-tenant mount.
+- Keep `symlinkContainment` on unless you have a specific reason to allow
+  symlinks inside `rootDir`. It is **not** TOCTOU-proof: a symlink swapped in
+  between the check and the file open still wins. For hard multi-tenant
+  isolation, enforce containment at the OS level (a dedicated mount, a
+  container, or `openat2(RESOLVE_BENEATH)`) rather than relying on it alone.
+- Scope the runtime's filesystem permissions to `rootDir` (e.g. Deno
+  `--allow-read`/`--allow-write` scoped to that path) as defense-in-depth —
+  though note a symlink under `rootDir` textually resolves within the granted
+  scope, so permission scoping does not by itself stop symlink escape.
+- Only set `publicBaseUrl` for buckets safe to expose: a raw static mount
+  serves bytes without the CMS row/column policy checks the `/files/` route
+  enforces.
+
 ## Environment Variables
 
 ### Required Secrets

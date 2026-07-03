@@ -320,6 +320,12 @@ Deno.test('disk adapter: put streams to disk and enforces expectedSize', async (
   });
 });
 
+// NOTE: symlink-containment escape/toggle cases live in
+// npm-tests/fs-storage.test.js — Deno.symlink requires unscoped fs
+// permissions the test harness withholds, while Node creates symlinks freely
+// (and that also covers the Node realpath branch). The disk tests here all run
+// with containment ON by default, so they cover the non-escape realpath path.
+
 Deno.test('disk adapter: rejects keys under the reserved staging dir', async () => {
   await withDiskDir(async (dir) => {
     const fs = createDiskFsAdapter(dir);

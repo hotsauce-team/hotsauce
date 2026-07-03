@@ -98,6 +98,18 @@ export interface FsStoragePluginOptions {
   maxUploadBytes?: number;
 
   /**
+   * Resolve each stored key's real path and reject it if a symlink under
+   * `rootDir` redirects it outside (one extra `realpath` syscall per file
+   * operation). Applies only to the default disk adapter — ignored when a
+   * custom {@link FsStoragePluginOptions.fs} adapter is provided. Turn off
+   * only when `rootDir` is a directory your app exclusively controls and you
+   * intentionally place symlinks inside it. See SECURITY.md.
+   *
+   * @default true
+   */
+  symlinkContainment?: boolean;
+
+  /**
    * Custom filesystem backend. Defaults to a disk-backed adapter rooted at
    * {@link FsStoragePluginOptions.rootDir}. Inject an in-memory adapter for
    * tests or an alternative backend for custom storage.

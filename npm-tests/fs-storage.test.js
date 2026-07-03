@@ -17,6 +17,7 @@ import {
   readFile,
   rm,
   stat,
+  symlink,
   utimes,
   writeFile,
 } from 'node:fs/promises';
@@ -134,6 +135,53 @@ describe('@hotsauce/plugins-fs-storage disk adapter (Node)', () => {
     assert.deepEqual(
       (await fs.list('posts/image/1/')).map((e) => e.key),
       ['posts/image/1/real.bin'],
+    );
+  });
+
+  // Symlink containment: exercised here (not in the Deno suite) because
+  // Deno.symlink needs unscoped fs permissions the Deno test harness withholds,
+  // whereas Node creates symlinks freely — and this covers the Node realpath
+  // branch of assertContained.
+  it('symlink containment blocks a key that resolves outside rootDir', async () => {
+    const dir = await freshDir();
+    const outside = await freshDir();
+    await writeFile(join(outside, 'secret.txt'), 'TOP SECRET');
+    // A symlink planted under rootDir pointing at a file outside it.
+    await symlink(join(outside, 'secret.txt'), join(dir, 'escape.txt'));
+
+    const fs = createDiskFsAdapter(dir); // containment on by default
+    await assert.rejects(fs.get('escape.txt'), /outside rootDir/);
+    await assert.rejects(fs.getStream('escape.txt'), /outside rootDir/);
+    await assert.rejects(fs.delete('escape.txt'), /outside rootDir/);
+  });
+
+  it('symlink containment can be turned off', async () => {
+    const dir = await freshDir();
+    const outside = await freshDir();
+    await writeFile(join(outside, 'secret.txt'), 'TOP SECRET');
+    await symlink(join(outside, 'secret.txt'), join(dir, 'escape.txt'));
+
+    const fs = createDiskFsAdapter(dir, { symlinkContainment: false });
+    // Off: the symlink is followed and the outside file leaks through.
+    assert.equal(
+      new TextDecoder().decode(await fs.get('escape.txt')),
+      'TOP SECRET',
+    );
+  });
+
+  it('symlink containment allows links that stay inside rootDir', async () => {
+    const dir = await freshDir();
+    const fs = createDiskFsAdapter(dir);
+    await fs.put('posts/image/1/real.bin', new Uint8Array([7, 8, 9]));
+    // A symlink whose target is also under rootDir resolves cleanly.
+    await symlink(
+      join(dir, 'posts/image/1/real.bin'),
+      join(dir, 'inside-link.bin'),
+    );
+
+    assert.deepEqual(
+      await fs.get('inside-link.bin'),
+      new Uint8Array([7, 8, 9]),
     );
   });
 });
