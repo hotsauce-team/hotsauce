@@ -55,7 +55,7 @@ export const writeText = (filename: string, value: string): void => {
 // The agent runs on the runner (no-sandbox); the runner IS the disposable
 // sandbox. Credentials are forwarded via env.
 export const claudeAgent = () =>
-  sandcastle.claudeCode("claude-opus-4-8", {
+  sandcastle.claudeCode("claude-fable-5", {
     effort: "high",
     env: {
       CLAUDE_CODE_OAUTH_TOKEN: required("CLAUDE_CODE_OAUTH_TOKEN"),
