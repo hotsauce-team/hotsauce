@@ -1,0 +1,165 @@
+name: Benchmarks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+  # Weekly run keeps the gh-pages trend chart fresh even without merges
+  schedule:
+    - cron: '0 6 * * 1' # 6 AM UTC Mondays
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  # Same-runner A/B comparison: base ref and PR ref are benchmarked
+  # back-to-back on one runner, so run-to-run machine variance mostly
+  # cancels out of the ratios. Informational by default; set the repo
+  # variable BENCH_STRICT=true to make regressions fail the job.
+  bench-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+
+      - name: Checkout base ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base-ref
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/deno
+            .deno_cache
+          key: ${{ runner.os }}-deno-${{ hashFiles('deno.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-
+
+      - name: Run benchmarks (base)
+        working-directory: base-ref
+        run: |
+          # Base ref may predate the bench suite; treat that as "no baselines"
+          if deno task bench:json > "$RUNNER_TEMP/base.json"; then
+            echo "Base benchmarks captured"
+          else
+            echo '{"benches":[]}' > "$RUNNER_TEMP/base.json"
+            echo "Base ref has no runnable bench task; all benches will be reported as new"
+          fi
+
+      - name: Run benchmarks (PR)
+        run: deno task bench:json > "$RUNNER_TEMP/pr.json"
+
+      - name: Compare
+        run: |
+          deno run --allow-read scripts/bench/compare.ts \
+            "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/pr.json" \
+            | tee "$RUNNER_TEMP/summary.md"
+          cat "$RUNNER_TEMP/summary.md" >> "$GITHUB_STEP_SUMMARY"
+
+      # Sticky comment: updated in place on each push to the PR.
+      # Skipped for fork PRs, where the token cannot write comments;
+      # the step summary above still carries the results.
+      - name: Comment on PR
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- bench-comparison -->';
+            const body = marker + '\n' +
+              fs.readFileSync(process.env.RUNNER_TEMP + '/summary.md', 'utf8');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find((c) => c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      # Promotion path: flip the BENCH_STRICT repo variable to true once the
+      # comparison has proven flake-free, and regressions will fail the job.
+      - name: Strict gate
+        if: vars.BENCH_STRICT == 'true'
+        run: |
+          deno run --allow-read scripts/bench/compare.ts \
+            "$RUNNER_TEMP/base.json" "$RUNNER_TEMP/pr.json" --fail > /dev/null
+
+  # Trend tracking: results from main are stored on gh-pages by
+  # github-action-benchmark, which renders an interactive chart at
+  # https://hotsauce-team.github.io/hotsauce/bench/
+  bench-main:
+    if: github.event_name != 'pull_request' && github.repository == 'hotsauce-team/hotsauce'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Cache Deno dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/deno
+            .deno_cache
+          key: ${{ runner.os }}-deno-${{ hashFiles('deno.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-deno-
+
+      - name: Run benchmarks
+        run: deno task bench:json > "$RUNNER_TEMP/bench.json"
+
+      - name: Convert to github-action-benchmark format
+        run: |
+          deno run --allow-read scripts/bench/convert_gha.ts \
+            "$RUNNER_TEMP/bench.json" > "$RUNNER_TEMP/gha.json"
+
+      - name: Store result and update trend chart
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: hotsauce-cms benchmarks
+          tool: customSmallerIsBetter
+          output-file-path: ${{ runner.temp }}/gha.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: gh-pages
+          benchmark-data-dir-path: bench
+          auto-push: true
+          # Alert (as a commit comment) when a result is 50% slower than
+          # the previous main run; never fail the job on cross-run noise.
+          alert-threshold: '150%'
+          comment-on-alert: true
+          fail-on-alert: false
