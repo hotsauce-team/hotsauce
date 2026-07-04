@@ -61,6 +61,9 @@
     "test:watch": "deno test -P --watch",
     "test:drizzle-compat": "deno test -P packages/core/tests/drizzle_compat_test.ts",
     "test:npm": "./scripts/npm/test-npm.sh", // builds + tests in Docker
+    // Benchmarks (see BENCHMARKS.md)
+    "bench": "deno bench -P",
+    "bench:json": "deno bench -P --json",
     // Code quality tasks
     "check": "deno check packages/*/mod.ts",
     "lint": "deno lint",
@@ -102,6 +105,20 @@
       ],
       "env": [
         "CMS_2FA_SECRET",
+        "CMS_CSRF_SECRET",
+        "CMS_JWT_SECRET",
+        "CMS_TESTING"
+      ]
+    }
+  },
+
+  // Benchmark configuration with fine-grained permissions.
+  // E2E handler benches use in-memory node:sqlite, so no wasm/db file reads.
+  "bench": {
+    "include": ["packages/*/benches/"],
+    "permissions": {
+      "read": ["./packages"],
+      "env": [
         "CMS_CSRF_SECRET",
         "CMS_JWT_SECRET",
         "CMS_TESTING"

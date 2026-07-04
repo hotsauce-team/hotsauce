@@ -18,7 +18,8 @@
       "LICENSE"
     ],
     "exclude": [
-      "tests/"
+      "tests/",
+      "benches/"
     ]
   }
 }

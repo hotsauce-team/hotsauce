@@ -17,7 +17,8 @@
       "LICENSE"
     ],
     "exclude": [
-      "extend/drizzle.d.ts"
+      "extend/drizzle.d.ts",
+      "benches/"
     ]
   }
 }
