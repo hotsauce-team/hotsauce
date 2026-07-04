@@ -1,7 +1,7 @@
 /**
  * Build npm packages using dnt (Deno to Node transform)
  *
- * Usage: deno run -A scripts/build_npm.ts [version]
+ * Usage: deno run -A scripts/npm/build_npm.ts [version]
  *
  * This script builds @hotsauce/core, @hotsauce/ui, @hotsauce/auth, @hotsauce/cms,
  * @hotsauce/plugins-fs-storage, and @hotsauce/plugins-s3-storage packages for
