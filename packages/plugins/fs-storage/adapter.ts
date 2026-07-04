@@ -19,6 +19,33 @@
  * runtime-agnostic, but the suite also includes scoped disk-adapter tests under
  * `packages/plugins/fs-storage/tests/.tmp` (see `deno.jsonc` test permissions).
  *
+ * ## Key safety and symlink containment
+ *
+ * Two layers keep an operation from touching a file outside `rootDir`:
+ *
+ * 1. **Textual key validation** (`assertSafeKey`, always on): rejects absolute
+ *    paths, backslashes, control chars, and `.`/`..`/empty segments before a
+ *    key becomes a path. This alone can't stop a *symlink* planted under
+ *    `rootDir` — a symlink is a legitimate path with no `..` in it.
+ * 2. **Symlink containment** (`symlinkContainment`, default on): resolves real
+ *    paths (`realpath`) and refuses operations that escape `rootDir`. The check
+ *    is asymmetric by necessity, because the two kinds of operation follow
+ *    symlinks differently:
+ *    - **Reads** (`get`/`getStream`) *follow* the final component to read it, so
+ *      they resolve the **full key path** and reject any escape.
+ *    - **Writes/removes** (`put`/`delete`) do **not** follow the final
+ *      component — `rename` replaces it and `remove` unlinks it — so they
+ *      resolve only the **parent** container. An escape via an intermediate
+ *      directory symlink is still rejected; a final-segment symlink is replaced
+ *      (`put`) or unlinked (`delete`) in place, so a planted link is removable
+ *      without its outside target ever being written or read.
+ *    - **`list`** skips symlinked entries entirely — the adapter only ever
+ *      creates regular files and real directories, so a symlink is never a key
+ *      it produced.
+ *
+ * Containment is not TOCTOU-proof and is opt-out; see SECURITY.md for the
+ * deployment guidance (dedicated `rootDir`, OS-level isolation for multi-tenant).
+ *
  * @module
  */
 
@@ -167,6 +194,15 @@ export function assertSafeKey(key: string): void {
   if (/[\x00-\x1f\x7f]/.test(key)) {
     throw new Error('Invalid storage key: control character');
   }
+  // Reject percent-encoding. Keys are minted from a restricted charset and
+  // never contain '%'. On disk `%2f`/`%2e` are literal characters (the path is
+  // not URL-decoded), but the `publicBaseUrl` static-serve branch embeds the
+  // key in a URL a proxy/CDN may decode into a separator or dot-segment
+  // (%2f -> '/', %2e -> '.') — smuggling traversal past the literal checks
+  // below. Reject the encoded form at the source, matching s3-storage.
+  if (key.includes('%')) {
+    throw new Error(`Invalid storage key: percent-encoding in "${key}"`);
+  }
   const segments = key.split('/');
   for (const segment of segments) {
     if (segment === '' || segment === '.' || segment === '..') {
@@ -292,10 +328,47 @@ function parentDir(path: string): string {
  * The caller (the user's server) is responsible for granting the runtime
  * read/write permission to `rootDir`.
  */
-export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
-  const Deno = denoNs();
+/** Options for {@link createDiskFsAdapter}. */
+export interface DiskFsAdapterOptions {
+  /**
+   * Resolve each key's real filesystem path (following symlinks) and reject it
+   * if it escapes `rootDir`. `assertSafeKey` blocks textual traversal (`..`,
+   * absolute paths), but a symlink planted under `rootDir` by another process
+   * would otherwise let a key read or write outside it. Costs one extra
+   * `realpath` syscall per `get`/`getStream`/`delete`/`put`.
+   *
+   * Leave this on unless `rootDir` is a directory your application exclusively
+   * controls AND you legitimately place symlinks inside it. Not TOCTOU-proof
+   * (a symlink swapped in after the check still wins); for hard multi-tenant
+   * isolation prefer an OS sandbox (a dedicated mount, container, or
+   * `RESOLVE_BENEATH`). See SECURITY.md.
+   *
+   * @default true
+   */
+  symlinkContainment?: boolean;
+}
 
-  const base = rootDir.replace(/\/+$/, '');
+export function createDiskFsAdapter(
+  rootDir: string,
+  opts: DiskFsAdapterOptions = {},
+): FileSystemAdapter {
+  const Deno = denoNs();
+  const symlinkContainment = opts.symlinkContainment ?? true;
+
+  // Trim trailing separators, forward and back (Windows accepts both).
+  const base = rootDir.replace(/[/\\]+$/, '');
+  // Reject a root that maps keys onto a filesystem/drive root rather than a
+  // dedicated subdirectory — POSIX '/'/'//' (→ ''), or a Windows drive/UNC
+  // root like 'C:\', 'C:', 'C:/', or '\\'. Otherwise a key would resolve to
+  // `${root}/${key}` at the very top of a volume: without containment it writes
+  // there silently, and with it operations fail later with a confusing
+  // realPath NotFound. `base` is what remains after trailing separators are
+  // stripped, so a root-only value is an optional drive letter plus separators.
+  if (/^([a-zA-Z]:)?[/\\]*$/.test(base)) {
+    throw new Error(
+      'fs-storage: rootDir must not be a filesystem or drive root; use a dedicated subdirectory.',
+    );
+  }
   // In-flight uploads are written here, not beside their final path, so a temp
   // file can never collide with (or be mistaken for) a real key. The leading
   // dot is a segment the key sanitizer never produces, so `list()` can skip it
@@ -315,12 +388,147 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
   // instance (the adapter is normally long-lived, built once at startup).
   let lastSweepAt = 0;
 
+  /**
+   * `keyToPath` plus this adapter's reserved-name rule: a key must not point
+   * into the staging dir. `assertSafeKey` allows a leading-dot segment, but a
+   * key under {@link TEMP_DIRNAME} would be hidden from `list()` and — worse —
+   * deleted by {@link sweepStaleTemps}, which assumes everything there is an
+   * orphaned temp. (CMS-minted keys always start with a table name, so this
+   * only guards direct adapter API use.)
+   */
+  function resolveKeyPath(key: string): string {
+    const path = keyToPath(rootDir, key);
+    if (key === TEMP_DIRNAME || key.startsWith(`${TEMP_DIRNAME}/`)) {
+      throw new Error(
+        `Invalid storage key: "${TEMP_DIRNAME}" is reserved for upload staging`,
+      );
+    }
+    return path;
+  }
+
+  function isMissing(err: unknown): boolean {
+    const name = (err as { name?: string })?.name;
+    const code = (err as { code?: string })?.code;
+    return name === 'NotFound' || code === 'ENOENT';
+  }
+
+  async function realPath(p: string): Promise<string> {
+    if (Deno) return await Deno.realPath(p);
+    return await (await nodeFs()).realpath(p);
+  }
+
+  // `realPath` normalizes its output to the OS path separator, so the
+  // containment prefix check below must use that separator — on Windows a
+  // contained path (`C:\root\x`) would otherwise fail `startsWith('C:\root/')`
+  // and every operation would be rejected. Detected via the feature-detected
+  // runtime, like the I/O calls above.
+  const nodeProcess =
+    (globalThis as unknown as { process?: { platform?: string } }).process;
+  const isWindows = Deno
+    ? Deno.build?.os === 'windows'
+    : nodeProcess?.platform === 'win32';
+  const pathSep = isWindows ? '\\' : '/';
+
+  // `rootDir` may itself be a symlink (e.g. /var/data -> /mnt/vol); resolve it
+  // once so containment compares real paths to real paths. Memoized like the
+  // temp dir; a failure (base not created yet) is not cached. The resolved
+  // base is held for the adapter's lifetime, so if `rootDir` is repointed to a
+  // new target while the process runs, restart to pick it up — otherwise
+  // containment compares against the stale target and rejects valid keys.
+  let realBaseReady: Promise<string> | null = null;
+  function ensureRealBase(): Promise<string> {
+    realBaseReady ??= realPath(base).catch((err) => {
+      realBaseReady = null;
+      throw err;
+    });
+    return realBaseReady;
+  }
+
+  // Two containment checks, one per operation kind — the asymmetry is the point
+  // (see the module header's "Key safety and symlink containment"):
+  //   • assertContained(path)       — reads: the op *follows* the final
+  //     component, so the fully-resolved path must be inside rootDir.
+  //   • assertParentContained(path) — writes/deletes: rename/remove act on the
+  //     final node itself (replace/unlink, no follow), so only its parent must
+  //     be inside rootDir.
+  // Both no-op when `symlinkContainment` is off.
+
+  /**
+   * Resolve `path` in full (following a final-segment symlink) and assert its
+   * real location stays within `rootDir`. Use for **reads** (`get`/`getStream`)
+   * and for a location that must itself be inside root (the staging dir): the
+   * caller dereferences `path`, so an escaping final symlink must be rejected
+   * up front. A missing path is left for the caller's own operation to report
+   * (preserving NotFound semantics).
+   */
+  async function assertContained(path: string): Promise<void> {
+    if (!symlinkContainment) return;
+    let real: string;
+    try {
+      real = await realPath(path);
+    } catch (err) {
+      if (isMissing(err)) return; // the real op will surface the missing path
+      throw err;
+    }
+    const realBase = await ensureRealBase();
+    if (real !== realBase && !real.startsWith(`${realBase}${pathSep}`)) {
+      throw new Error(
+        `Invalid storage key: resolves outside rootDir (symlink escape)`,
+      );
+    }
+  }
+
+  /**
+   * Assert the **parent** of `path` stays within `rootDir`. Use for **writes
+   * and deletes**: `rename`/`remove` operate on the final node itself
+   * (replacing or unlinking a symlink rather than following it), so only its
+   * container must be contained. Checking the full path instead would reject
+   * replacing or removing a key that happens to be a symlink — and leave a
+   * planted escaping link un-removable. An intermediate directory symlink still
+   * escapes the parent and is rejected.
+   */
+  function assertParentContained(path: string): Promise<void> {
+    return assertContained(parentDir(path));
+  }
+
   async function ensureDir(dir: string): Promise<void> {
     if (Deno) {
       await Deno.mkdir(dir, { recursive: true });
     } else {
       const fs = await nodeFs();
       await fs.mkdir(dir, { recursive: true });
+    }
+  }
+
+  // `tempDir` is fixed for the adapter's lifetime, so create it once and
+  // memoize (like `nodeFsPromise` above) instead of paying a recursive mkdir
+  // on every upload. A failure is not memoized: the first upload before
+  // `rootDir` exists must not poison every later one.
+  let tempDirReady: Promise<void> | null = null;
+  function ensureTempDir(): Promise<void> {
+    tempDirReady ??= ensureDir(tempDir)
+      // Staged bytes are written here before the rename, so verify the staging
+      // dir itself isn't a symlink escaping rootDir (checked once per memo).
+      .then(() => assertContained(tempDir))
+      .catch((err) => {
+        tempDirReady = null;
+        throw err;
+      });
+    return tempDirReady;
+  }
+
+  /**
+   * The memo above never re-checks the staging dir, so an out-of-band
+   * deletion (tmp reaper, operator cleanup) would otherwise fail every later
+   * upload with ENOENT. On a not-found failure, drop the memo so the next
+   * `put` recreates the dir. (The failing upload itself can't be retried —
+   * a streamed body is already consumed by then.)
+   */
+  function resetTempDirIfLost(err: unknown): void {
+    const name = (err as { name?: string })?.name;
+    const code = (err as { code?: string })?.code;
+    if (name === 'NotFound' || code === 'ENOENT') {
+      tempDirReady = null;
     }
   }
 
@@ -369,9 +577,22 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
 
   return {
     async put(key, data, opts) {
-      const path = keyToPath(rootDir, key);
-      await ensureDir(parentDir(path));
-      await ensureDir(tempDir);
+      const path = resolveKeyPath(key);
+      // The parent dir varies per key; the memoized temp-dir creation runs
+      // concurrently instead of serializing a second awaited mkdir on it.
+      await Promise.all([ensureDir(parentDir(path)), ensureTempDir()]);
+
+      // The final path doesn't exist yet, so check its (now-created) parent: if
+      // a symlink under rootDir redirected it outside, reject before writing any
+      // bytes. This runs after ensureDir, so a pre-planted intermediate
+      // directory symlink means the recursive mkdir will already have created
+      // empty dirs at the symlink's target — but no file content is ever
+      // committed there, no data is read, and triggering it requires write
+      // access under rootDir (to plant the symlink) plus process write
+      // permission at the target. Checking before mkdir would need a walk up to
+      // the deepest existing ancestor (extra syscalls per upload) to avoid only
+      // that empty-dir side effect, which isn't worth it.
+      await assertParentContained(path);
 
       // Opportunistically reclaim temps orphaned by an earlier crashed upload
       // (throttled). Runs before the new temp is created, so it never targets
@@ -394,6 +615,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
             await fs.writeFile(tmp, data);
           }
         } catch (err) {
+          resetTempDirIfLost(err);
           await removeQuietly(tmp);
           throw err;
         }
@@ -415,6 +637,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
           }
           assertExpectedSize(getCount(), opts?.expectedSize);
         } catch (err) {
+          resetTempDirIfLost(err);
           await removeQuietly(tmp);
           throw err;
         }
@@ -431,13 +654,15 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
           await fs.rename(tmp, path);
         }
       } catch (err) {
+        resetTempDirIfLost(err);
         await removeQuietly(tmp);
         throw err;
       }
     },
 
     async get(key) {
-      const path = keyToPath(rootDir, key);
+      const path = resolveKeyPath(key);
+      await assertContained(path);
       if (Deno) {
         return await Deno.readFile(path);
       }
@@ -447,7 +672,8 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     },
 
     async getStream(key) {
-      const path = keyToPath(rootDir, key);
+      const path = resolveKeyPath(key);
+      await assertContained(path);
       if (Deno) {
         // `Deno.open` rejects if the file is missing; the returned `readable`
         // closes the fd when the body is fully read or cancelled.
@@ -470,7 +696,11 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
     },
 
     async delete(key) {
-      const path = keyToPath(rootDir, key);
+      const path = resolveKeyPath(key);
+      // remove() unlinks the final node itself (a symlink here is removed, not
+      // followed), so containment is checked on the parent. See
+      // assertParentContained.
+      await assertParentContained(path);
       try {
         if (Deno) {
           await Deno.remove(path);
@@ -503,12 +733,18 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
 
       async function walk(relDir: string): Promise<void> {
         const absDir = relDir ? `${base}/${relDir}` : base;
-        let entries: Array<{ name: string; isDir: boolean }>;
+        let entries: Array<
+          { name: string; isDir: boolean; isSymlink: boolean }
+        >;
         try {
           if (Deno) {
             entries = [];
             for await (const e of Deno.readDir(absDir)) {
-              entries.push({ name: e.name, isDir: e.isDirectory });
+              entries.push({
+                name: e.name,
+                isDir: e.isDirectory,
+                isSymlink: e.isSymlink,
+              });
             }
           } else {
             const fs = await nodeFs();
@@ -519,6 +755,7 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
             entries = dirents.map((d) => ({
               name: d.name,
               isDir: d.isDirectory(),
+              isSymlink: d.isSymbolicLink(),
             }));
           }
         } catch (err) {
@@ -532,6 +769,13 @@ export function createDiskFsAdapter(rootDir: string): FileSystemAdapter {
           // Never descend into the in-flight upload staging dir — temp files
           // there are not real keys.
           if (!relDir && entry.name === TEMP_DIRNAME) continue;
+          // The adapter only ever creates regular files (write+rename) and real
+          // directories (mkdir), so a symlink is never a key it produced. Skip
+          // it unconditionally: enumerating one would `stat`-follow it and
+          // report a foreign target's size/mtime as a key, and feed orphan-GC a
+          // phantom it can't reclaim. (Independent of `symlinkContainment`,
+          // which governs whether get/delete *follow* a caller-named key.)
+          if (entry.isSymlink) continue;
           const childRel = relDir ? `${relDir}/${entry.name}` : entry.name;
           if (entry.isDir) {
             await walk(childRel);

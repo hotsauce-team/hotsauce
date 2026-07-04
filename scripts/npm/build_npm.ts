@@ -1,11 +1,12 @@
 /**
  * Build npm packages using dnt (Deno to Node transform)
  *
- * Usage: deno run -A scripts/build_npm.ts [version]
+ * Usage: deno run -A scripts/npm/build_npm.ts [version]
  *
  * This script builds @hotsauce/core, @hotsauce/ui, @hotsauce/auth, @hotsauce/cms,
- * and @hotsauce/plugins-fs-storage packages for npm distribution. Tests are NOT
- * run during build - use npm-tests/ for Node.js e2e testing.
+ * @hotsauce/plugins-fs-storage, and @hotsauce/plugins-s3-storage packages for
+ * npm distribution. Tests are NOT run during build - use npm-tests/ for Node.js
+ * e2e testing.
  */
 
 import { build, emptyDir } from 'jsr:@deno/dnt@0.42.3';
@@ -42,7 +43,7 @@ const repoUrlShort = 'https://github.com/hotsauce-team/hotsauce';
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/core
 // ─────────────────────────────────────────────────────────────
-console.log('\n[1/5] Building @hotsauce/core...');
+console.log('\n[1/6] Building @hotsauce/core...');
 await emptyDir('./npm/core');
 await build({
   ...sharedOptions,
@@ -77,7 +78,7 @@ await build({
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/ui
 // ─────────────────────────────────────────────────────────────
-console.log('\n[2/5] Building @hotsauce/ui...');
+console.log('\n[2/6] Building @hotsauce/ui...');
 await emptyDir('./npm/ui');
 await build({
   ...sharedOptions,
@@ -108,7 +109,7 @@ await build({
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/auth
 // ─────────────────────────────────────────────────────────────
-console.log('\n[3/5] Building @hotsauce/auth...');
+console.log('\n[3/6] Building @hotsauce/auth...');
 await emptyDir('./npm/auth');
 await build({
   ...sharedOptions,
@@ -138,7 +139,7 @@ await build({
 // ─────────────────────────────────────────────────────────────
 // Build @hotsauce/cms
 // ─────────────────────────────────────────────────────────────
-console.log('\n[4/5] Building @hotsauce/cms...');
+console.log('\n[4/6] Building @hotsauce/cms...');
 await emptyDir('./npm/cms');
 await build({
   ...sharedOptions,
@@ -185,7 +186,7 @@ await build({
 // place in a Node build. This package mainly exists so npm-tests/ can exercise
 // the disk adapter's node:fs/promises branch on real Node.
 // ─────────────────────────────────────────────────────────────
-console.log('\n[5/5] Building @hotsauce/plugins-fs-storage...');
+console.log('\n[5/6] Building @hotsauce/plugins-fs-storage...');
 await emptyDir('./npm/plugins-fs-storage');
 await build({
   ...sharedOptions,
@@ -236,5 +237,71 @@ await build({
   },
 });
 
+// ─────────────────────────────────────────────────────────────
+// Build @hotsauce/plugins-s3-storage
+//
+// Scoped to the s3-storage plugin only, for the same reason as fs-storage
+// above: the parent @hotsauce/plugins package pulls in browser-targeting
+// puck/React code. Pure fetch + Web Crypto, so no shims are needed.
+// ─────────────────────────────────────────────────────────────
+console.log('\n[6/6] Building @hotsauce/plugins-s3-storage...');
+await emptyDir('./npm/plugins-s3-storage');
+await build({
+  ...sharedOptions,
+  entryPoints: [
+    './packages/plugins/s3-storage/mod.ts',
+    {
+      name: './types',
+      path: './packages/plugins/s3-storage/types.ts',
+    },
+    {
+      // Standalone SigV4 utilities (mirrors the JSR ./s3-storage/signing export)
+      name: './signing',
+      path: './packages/plugins/s3-storage/signing.ts',
+    },
+  ],
+  outDir: './npm/plugins-s3-storage',
+  package: {
+    name: '@hotsauce/plugins-s3-storage',
+    version,
+    description:
+      'S3-compatible object storage plugin for @hotsauce/cms (AWS S3, MinIO, R2, ...)',
+    license: 'MIT',
+    repository: {
+      type: 'git',
+      url: repoUrl,
+      directory: 'packages/plugins/s3-storage',
+    },
+    bugs: { url: `${repoUrlShort}/issues` },
+    engines: { node: '>=20.0.0' },
+  },
+  mappings: {
+    [`${baseUrl}/packages/core/mod.ts`]: {
+      name: '@hotsauce/core',
+      version: `>=${version}`,
+    },
+    [`${baseUrl}/packages/ui/mod.ts`]: {
+      name: '@hotsauce/ui',
+      version: `>=${version}`,
+    },
+    [`${baseUrl}/packages/cms/mod.ts`]: {
+      name: '@hotsauce/cms',
+      version: `>=${version}`,
+    },
+  },
+  postBuild() {
+    Deno.copyFileSync(
+      'packages/plugins/LICENSE',
+      'npm/plugins-s3-storage/LICENSE',
+    );
+    Deno.copyFileSync(
+      'packages/plugins/s3-storage/README.md',
+      'npm/plugins-s3-storage/README.md',
+    );
+  },
+});
+
 console.log('\n✅ All packages built successfully!');
-console.log('   npm/core, npm/ui, npm/auth, npm/cms, npm/plugins-fs-storage');
+console.log(
+  '   npm/core, npm/ui, npm/auth, npm/cms, npm/plugins-fs-storage, npm/plugins-s3-storage',
+);

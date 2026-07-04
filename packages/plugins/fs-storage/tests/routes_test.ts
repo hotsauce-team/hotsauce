@@ -216,6 +216,16 @@ Deno.test('assertSafeKey: rejects absolute paths and backslashes', () => {
   assertThrows(() => assertSafeKey(''));
 });
 
+Deno.test('assertSafeKey: rejects percent-encoding', () => {
+  // Encoded separators/dot-segments a URL consumer might decode into traversal.
+  assertThrows(
+    () => assertSafeKey('posts/%2e%2e%2fetc/passwd'),
+    Error,
+    'percent',
+  );
+  assertThrows(() => assertSafeKey('posts/a%2fb'), Error, 'percent');
+});
+
 Deno.test('keyToPath: maps a safe key under rootDir', () => {
   assertEquals(
     keyToPath('/var/data/', 'posts/image/42/x.png'),
@@ -225,6 +235,17 @@ Deno.test('keyToPath: maps a safe key under rootDir', () => {
 
 Deno.test('keyToPath: throws on traversal before producing a path', () => {
   assertThrows(() => keyToPath('/var/data', 'posts/../../etc/passwd'));
+});
+
+Deno.test('createDiskFsAdapter: rejects a filesystem- or drive-root rootDir', () => {
+  // POSIX roots collapse to an empty base; Windows drive/UNC roots would map
+  // keys onto the drive root. All are rejected.
+  for (const root of ['/', '///', 'C:\\', 'C:', 'C:/', '\\\\']) {
+    assertThrows(() => createDiskFsAdapter(root), Error, 'root');
+  }
+  // A real subdirectory (POSIX or Windows) is accepted.
+  createDiskFsAdapter('/var/data');
+  createDiskFsAdapter('C:\\uploads');
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -317,6 +338,69 @@ Deno.test('disk adapter: put streams to disk and enforces expectedSize', async (
     assertEquals((await fs.list('posts/image/2/')).length, 0);
     // No leftover temp files under the dir for the rejected key.
     assertEquals((await fs.list('posts/image/2')).length, 0);
+  });
+});
+
+// NOTE: symlink-containment escape/toggle cases live in
+// npm-tests/fs-storage.test.js — Deno.symlink requires unscoped fs
+// permissions the test harness withholds, while Node creates symlinks freely
+// (and that also covers the Node realpath branch). The disk tests here all run
+// with containment ON by default, so they cover the non-escape realpath path.
+
+Deno.test('disk adapter: rejects keys under the reserved staging dir', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+
+    // A key inside .uploads-tmp would be hidden from list() and reaped by the
+    // stale-temp sweeper — reserved for staging, so every method rejects it.
+    for (const key of ['.uploads-tmp', '.uploads-tmp/evil.bin']) {
+      await assertRejects(
+        () => fs.put(key, new Uint8Array([1])),
+        Error,
+        'reserved',
+      );
+      await assertRejects(() => fs.get(key), Error, 'reserved');
+      await assertRejects(() => fs.delete(key), Error, 'reserved');
+    }
+
+    // A merely dot-prefixed sibling is still a legal key.
+    await fs.put('.uploads/ok.bin', new Uint8Array([1]));
+    assertEquals((await fs.list('.uploads/')).length, 1);
+  });
+});
+
+Deno.test('disk adapter: sequential puts both commit (memoized temp dir)', async () => {
+  await withDiskDir(async (dir) => {
+    const fs = createDiskFsAdapter(dir);
+
+    // The staging dir is created once and memoized; a second put must reuse
+    // it and still land both files under their final keys.
+    await fs.put('posts/image/1/a.bin', new Uint8Array([1, 2]));
+    await fs.put('posts/image/1/b.bin', streamOf(new Uint8Array([3, 4, 5])), {
+      expectedSize: 3,
+    });
+
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, 'posts/image/1/a.bin')),
+      new Uint8Array([1, 2]),
+    );
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, 'posts/image/1/b.bin')),
+      new Uint8Array([3, 4, 5]),
+    );
+
+    // Out-of-band deletion of the staging dir (tmp reaper, operator cleanup)
+    // must not wedge the adapter: the interrupted put fails, but the memo is
+    // dropped so the next put recreates the dir and succeeds.
+    await Deno.remove(`${dir}/.uploads-tmp`, { recursive: true });
+    await assertRejects(() =>
+      fs.put('posts/image/1/c.bin', new Uint8Array([6]))
+    );
+    await fs.put('posts/image/1/c.bin', new Uint8Array([6]));
+    assertEquals(
+      await Deno.readFile(keyToPath(dir, 'posts/image/1/c.bin')),
+      new Uint8Array([6]),
+    );
   });
 });
 
@@ -814,28 +898,8 @@ Deno.test('routes: _upload rejects an invalid token', async () => {
   assertEquals(res.status, 403);
 });
 
-Deno.test('routes: _upload cancels the unread body stream when rejecting early', async () => {
-  const { plugin } = makePlugin();
-  const uploadRoute = findRoute(plugin, '_upload', 'POST');
-  let cancelled = false;
-  const bodyStream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      controller.enqueue(new Uint8Array([1]));
-    },
-    cancel() {
-      cancelled = true;
-    },
-  });
-  const res = await uploadRoute.handler(makeCtx({
-    method: 'POST',
-    requestUrl: 'http://localhost/admin/fs-storage/_upload?token=garbage',
-    bodyStream,
-  })) as Response;
-  assertEquals(res.status, 403);
-  // Cancellation is fire-and-forget; give the microtask a beat to land.
-  await new Promise((resolve) => setTimeout(resolve, 0));
-  assertEquals(cancelled, true);
-});
+// NOTE: early-reject cancellation of the unread body stream is owned by
+// dispatch now — covered in packages/cms/tests/plugin_route_body_size_test.ts.
 
 Deno.test('routes: _upload rejects a size mismatch', async () => {
   const { plugin } = makePlugin();

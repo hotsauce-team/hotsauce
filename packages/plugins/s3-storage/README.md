@@ -6,15 +6,38 @@ S3-compatible storage plugin for HotSauce CMS. Enables direct browser-to-S3 uplo
 
 - **Direct uploads** — Files go straight from browser to S3 (no server bottleneck)
 - **Presigned URLs** — Secure, time-limited upload/download URLs using AWS Signature V4
-- **Policy-aware downloads** — Respects row/column policies for file access control
+- **Policy-aware downloads** — Presigned downloads respect row/column policies for file access control (see the [`cdnBaseUrl` caveat](#policy-integration))
 - **Multi-provider** — Works with AWS S3, MinIO, Cloudflare R2, Backblaze B2, DigitalOcean Spaces
 - **Zero dependencies** — Pure Web Crypto API implementation (no AWS SDK)
 
 ## Installation
 
+**Deno / JSR** — the plugin ships as part of the `@hotsauce/plugins` package:
+
+```bash
+deno add jsr:@hotsauce/plugins
+```
+
 ```ts
 import { createS3StoragePlugin } from '@hotsauce/plugins/s3-storage';
 ```
+
+**Node / npm** — published standalone as
+[`@hotsauce/plugins-s3-storage`](https://www.npmjs.com/package/@hotsauce/plugins-s3-storage)
+(note the different import specifier):
+
+```bash
+npm install @hotsauce/plugins-s3-storage
+```
+
+```ts
+import { createS3StoragePlugin } from '@hotsauce/plugins-s3-storage';
+```
+
+Sub-exports follow the same shape on both registries: types at
+`@hotsauce/plugins/s3-storage/types` (JSR) /
+`@hotsauce/plugins-s3-storage/types` (npm), and the standalone SigV4 signing
+utilities at `.../signing`.
 
 ## Basic Usage
 
@@ -47,17 +70,18 @@ The plugin automatically configures `connectSrc` for its upload page via route-l
 
 ## Configuration Options
 
-| Option            | Type                 | Required | Description                                            |
-| ----------------- | -------------------- | -------- | ------------------------------------------------------ |
-| `basePath`        | `string`             | Yes      | CMS base path (e.g., `/admin`)                         |
-| `endpoint`        | `string`             | Yes      | S3 endpoint URL                                        |
-| `region`          | `string`             | Yes      | AWS region (e.g., `us-east-1`)                         |
-| `bucket`          | `string \| Function` | Yes      | Bucket name or function for dynamic routing            |
-| `accessKeyId`     | `string`             | Yes      | AWS access key                                         |
-| `secretAccessKey` | `string`             | Yes      | AWS secret key                                         |
-| `storageId`       | `string`             | No       | Storage ID (default: `'s3'`)                           |
-| `publicEndpoint`  | `string`             | No       | Browser-facing endpoint (if different from `endpoint`) |
-| `expirySeconds`   | `number`             | No       | Presigned URL expiry in seconds (default: `900`)       |
+| Option            | Type                 | Required | Description                                                                                                                    |
+| ----------------- | -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `basePath`        | `string`             | Yes      | CMS base path (e.g., `/admin`)                                                                                                 |
+| `endpoint`        | `string`             | Yes      | S3 endpoint URL                                                                                                                |
+| `region`          | `string`             | Yes      | AWS region (e.g., `us-east-1`)                                                                                                 |
+| `bucket`          | `string \| Function` | Yes      | Bucket name or function for dynamic routing                                                                                    |
+| `accessKeyId`     | `string`             | Yes      | AWS access key                                                                                                                 |
+| `secretAccessKey` | `string`             | Yes      | AWS secret key                                                                                                                 |
+| `storageId`       | `string`             | No       | Storage ID (default: `'s3'`)                                                                                                   |
+| `publicEndpoint`  | `string`             | No       | Browser-facing endpoint (if different from `endpoint`)                                                                         |
+| `expirySeconds`   | `number`             | No       | Presigned URL expiry in seconds (default: `900`)                                                                               |
+| `cdnBaseUrl`      | `string`             | No       | Serve downloads via a CDN. ⚠️ Emits **unsigned, non-expiring** URLs — see the [Policy Integration caveat](#policy-integration) |
 
 ## Local Development with MinIO
 
@@ -263,6 +287,16 @@ policies: {
   media: ownedBy(schema.media, 'userId'),
 }
 ```
+
+> ⚠️ **`cdnBaseUrl` caveat.** Policy is enforced at the `/files/` route each
+> time it issues a download URL. The default presigned URL is signed and
+> expires, so a leaked link stops working. A `cdnBaseUrl` URL is **unsigned and
+> non-expiring**, so once issued it is permanent and shareable and bypasses
+> policy on later fetches. Use it for public assets, or ensure the CDN enforces
+> access itself (signed cookies / a private distribution). See
+> [`cdnBaseUrl`](#configuration-options). Per-object signed CDN URLs (with
+> expiry) are on the roadmap —
+> [#91](https://github.com/hotsauce-team/hotsauce/issues/91).
 
 ### CORS Configuration
 

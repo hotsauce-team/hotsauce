@@ -17,6 +17,7 @@ import {
   readFile,
   rm,
   stat,
+  symlink,
   utimes,
   writeFile,
 } from 'node:fs/promises';
@@ -134,6 +135,115 @@ describe('@hotsauce/plugins-fs-storage disk adapter (Node)', () => {
     assert.deepEqual(
       (await fs.list('posts/image/1/')).map((e) => e.key),
       ['posts/image/1/real.bin'],
+    );
+  });
+
+  // Symlink containment: exercised here (not in the Deno suite) because
+  // Deno.symlink needs unscoped fs permissions the Deno test harness withholds,
+  // whereas Node creates symlinks freely — and this covers the Node realpath
+  // branch of assertContained.
+  it('symlink containment blocks a key that resolves outside rootDir', async () => {
+    const dir = await freshDir();
+    const outside = await freshDir();
+    await writeFile(join(outside, 'secret.txt'), 'TOP SECRET');
+    // A symlink planted under rootDir pointing at a file outside it.
+    await symlink(join(outside, 'secret.txt'), join(dir, 'escape.txt'));
+
+    const fs = createDiskFsAdapter(dir); // containment on by default
+    await assert.rejects(fs.get('escape.txt'), /outside rootDir/);
+    await assert.rejects(fs.getStream('escape.txt'), /outside rootDir/);
+  });
+
+  it('delete() removes a planted escaping symlink but leaves its target', async () => {
+    const dir = await freshDir();
+    const outside = await freshDir();
+    await writeFile(join(outside, 'secret.txt'), 'TOP SECRET');
+    await symlink(join(outside, 'secret.txt'), join(dir, 'escape.txt'));
+
+    const fs = createDiskFsAdapter(dir);
+    // delete unlinks the link itself (safe) rather than following it — so the
+    // planted link is removable and the outside target is untouched.
+    await fs.delete('escape.txt');
+    assert.equal(
+      await lstat(join(dir, 'escape.txt')).then(() => false).catch(() => true),
+      true,
+    );
+    assert.equal(
+      await readFile(join(outside, 'secret.txt'), 'utf8'),
+      'TOP SECRET',
+    );
+  });
+
+  it('delete() still rejects a path that escapes via an intermediate directory symlink', async () => {
+    const dir = await freshDir();
+    const outside = await freshDir();
+    await mkdir(join(outside, 'image', '1'), { recursive: true });
+    await writeFile(join(outside, 'image', '1', 'victim.bin'), 'VICTIM');
+    await symlink(outside, join(dir, 'posts')); // posts -> outside
+
+    const fs = createDiskFsAdapter(dir);
+    await assert.rejects(
+      fs.delete('posts/image/1/victim.bin'),
+      /outside rootDir/,
+    );
+    // The out-of-root victim was not deleted through the directory symlink.
+    assert.equal(
+      await readFile(join(outside, 'image', '1', 'victim.bin'), 'utf8'),
+      'VICTIM',
+    );
+  });
+
+  it('list() never enumerates a planted symlink as a key', async () => {
+    const dir = await freshDir();
+    const outside = await freshDir();
+    await writeFile(join(outside, 'secret.txt'), 'TOP SECRET DATA');
+    const fs = createDiskFsAdapter(dir);
+    await fs.put('posts/image/1/real.bin', new Uint8Array([1, 2]));
+
+    // A file symlink and a directory symlink, both escaping rootDir.
+    await symlink(
+      join(outside, 'secret.txt'),
+      join(dir, 'posts/image/1/leak.bin'),
+    );
+    await symlink(outside, join(dir, 'posts/image/1/leakdir'));
+
+    // Only the real key is listed — no phantom keys, no foreign metadata, and
+    // walk() doesn't traverse out through the directory symlink.
+    const keys = (await fs.list('posts/image/1/')).map((e) => e.key);
+    assert.deepEqual(keys, ['posts/image/1/real.bin']);
+    assert.deepEqual(
+      (await fs.list('')).map((e) => e.key),
+      ['posts/image/1/real.bin'],
+    );
+  });
+
+  it('symlink containment can be turned off', async () => {
+    const dir = await freshDir();
+    const outside = await freshDir();
+    await writeFile(join(outside, 'secret.txt'), 'TOP SECRET');
+    await symlink(join(outside, 'secret.txt'), join(dir, 'escape.txt'));
+
+    const fs = createDiskFsAdapter(dir, { symlinkContainment: false });
+    // Off: the symlink is followed and the outside file leaks through.
+    assert.equal(
+      new TextDecoder().decode(await fs.get('escape.txt')),
+      'TOP SECRET',
+    );
+  });
+
+  it('symlink containment allows links that stay inside rootDir', async () => {
+    const dir = await freshDir();
+    const fs = createDiskFsAdapter(dir);
+    await fs.put('posts/image/1/real.bin', new Uint8Array([7, 8, 9]));
+    // A symlink whose target is also under rootDir resolves cleanly.
+    await symlink(
+      join(dir, 'posts/image/1/real.bin'),
+      join(dir, 'inside-link.bin'),
+    );
+
+    assert.deepEqual(
+      await fs.get('inside-link.bin'),
+      new Uint8Array([7, 8, 9]),
     );
   });
 });

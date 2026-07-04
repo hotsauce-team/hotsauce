@@ -14,6 +14,11 @@
  * @module
  */
 
+// Sign/verify run on every presign, upload, and serve; reuse one encoder and
+// decoder instead of constructing fresh ones on that hot path.
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder();
+
 function bytesToBase64Url(bytes: Uint8Array): string {
   let bin = '';
   for (let i = 0; i < bytes.length; i++) {
@@ -32,7 +37,7 @@ function base64UrlToBytes(s: string): Uint8Array<ArrayBuffer> {
 }
 
 function encodeJson(value: unknown): string {
-  return bytesToBase64Url(new TextEncoder().encode(JSON.stringify(value)));
+  return bytesToBase64Url(textEncoder.encode(JSON.stringify(value)));
 }
 
 // The signing secret is fixed for the plugin's lifetime, but tokens are
@@ -46,7 +51,7 @@ function importKey(secret: string): Promise<CryptoKey> {
   if (!key) {
     key = crypto.subtle.importKey(
       'raw',
-      new TextEncoder().encode(secret),
+      textEncoder.encode(secret),
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign', 'verify'],
@@ -105,7 +110,7 @@ export async function signToken(
   const sig = await crypto.subtle.sign(
     'HMAC',
     key,
-    new TextEncoder().encode(encoded),
+    textEncoder.encode(encoded),
   );
   return `${encoded}.${bytesToBase64Url(new Uint8Array(sig))}`;
 }
@@ -137,7 +142,7 @@ export async function verifyToken<K extends TokenPayload['kind']>(
       'HMAC',
       key,
       base64UrlToBytes(sigPart),
-      new TextEncoder().encode(encoded),
+      textEncoder.encode(encoded),
     );
   } catch {
     return null;
@@ -146,7 +151,7 @@ export async function verifyToken<K extends TokenPayload['kind']>(
 
   let payload: TokenPayload;
   try {
-    payload = JSON.parse(new TextDecoder().decode(base64UrlToBytes(encoded)));
+    payload = JSON.parse(textDecoder.decode(base64UrlToBytes(encoded)));
   } catch {
     return null;
   }

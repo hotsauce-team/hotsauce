@@ -686,10 +686,12 @@ async function handlePluginRoute(
   const effectiveHeaders = options.routeSecurityHeaders.get(routeKey) ??
     options.securityHeaders;
 
-  // Dispatch based on route type
-  if (route.handler) {
-    // In-process handler
-    try {
+  // Dispatch based on route type. Dispatch owns bodyStream cleanup: once the
+  // handler settles, an unconsumed capped stream is cancelled below so the
+  // client transfer is aborted (handlers used to do this themselves).
+  try {
+    if (route.handler) {
+      // In-process handler
       const result = await route.handler(ctx);
       if (result instanceof Response) {
         const ct = result.headers.get('content-type') ?? '';
@@ -712,27 +714,10 @@ async function handlePluginRoute(
           ...effectiveHeaders,
         },
       });
-    } catch (error) {
-      // Generate request ID to correlate error logs with user-facing response
-      const requestId = crypto.randomUUID();
-      options.onError?.(error as Error, {
-        source: 'handler',
-        request,
-        url: new URL(request.url),
-        route: null, // Plugin routes don't use ParsedRoute
-        action: routeAction,
-        requestId,
-        plugin: plugin.name,
-      });
-      return new Response(`Plugin error (request: ${requestId})`, {
-        status: 500,
-      });
     }
-  }
 
-  if (route.render && pluginService) {
-    // Worker render - use executor
-    try {
+    if (route.render && pluginService) {
+      // Worker render - use executor
       const html = await pluginService.executeRouteRender(
         plugin.name,
         route.render,
@@ -744,26 +729,37 @@ async function handlePluginRoute(
           ...effectiveHeaders,
         },
       });
-    } catch (error) {
-      // Generate request ID to correlate error logs with user-facing response
-      const requestId = crypto.randomUUID();
-      options.onError?.(error as Error, {
-        source: 'handler',
-        request,
-        url: new URL(request.url),
-        route: null, // Plugin routes don't use ParsedRoute
-        action: routeAction,
-        requestId,
-        plugin: plugin.name,
-      });
-      return new Response(`Plugin error (request: ${requestId})`, {
-        status: 500,
-      });
+    }
+
+    // No handler or render configured (should be caught by validation)
+    return new Response('Route not configured', { status: 500 });
+  } catch (error) {
+    // Generate request ID to correlate error logs with user-facing response
+    const requestId = crypto.randomUUID();
+    options.onError?.(error as Error, {
+      source: 'handler',
+      request,
+      url: new URL(request.url),
+      route: null, // Plugin routes don't use ParsedRoute
+      action: routeAction,
+      requestId,
+      plugin: plugin.name,
+    });
+    return new Response(`Plugin error (request: ${requestId})`, {
+      status: 500,
+    });
+  } finally {
+    // A handler that consumed the body via getReader()/pipeTo() holds the
+    // stream's lock; a fully-drained, closed stream is unlocked but cancel()
+    // is then a resolved no-op. NOTE: new Response(bodyStream) does NOT lock
+    // the stream until serialization, so returning the raw stream as a
+    // response body is unsupported (it would be cancelled here) — see the
+    // bodyStream contract in workers/types.ts. Swallow rejections — an
+    // unhandled rejection is fatal on Node.
+    if (bodyStream && !bodyStream.locked) {
+      bodyStream.cancel().catch(() => {});
     }
   }
-
-  // No handler or render configured (should be caught by validation)
-  return new Response('Route not configured', { status: 500 });
 }
 
 /**

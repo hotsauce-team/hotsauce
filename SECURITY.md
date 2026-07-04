@@ -249,6 +249,84 @@ const policies = {
 - Combine with row policies for defense-in-depth
 - Test that restricted columns are truly absent from API responses
 
+### 9. File Storage (fs-storage plugin)
+
+The filesystem storage plugin maps storage keys onto a directory tree under
+`rootDir`. Two layers keep a request from reaching a file it shouldn't:
+
+- **Key validation** — every key is checked before it touches disk: absolute
+  paths, `..`/`.`/empty segments, backslashes, control characters, and the
+  reserved upload-staging directory are all rejected. This blocks _textual_
+  path traversal.
+- **Symlink containment** (`symlinkContainment`, default **on**) — a key's real
+  path is resolved and an operation is refused if a symlink under `rootDir`
+  redirects it outside. Reads (`get`/`getStream`) resolve the full key and
+  reject any escape. Writes and deletes resolve the parent directory, so an
+  escape via an intermediate directory symlink is rejected while a final-segment
+  symlink is replaced (`put`) or unlinked (`delete`) in place rather than
+  followed — the link is removed, its outside target untouched. Listing skips
+  symlinked entries entirely (they are never keys the adapter created). Key
+  validation alone can't catch any of this: a symlink is a legitimate path with
+  no `..` in it. Containment costs one `realpath` syscall per file operation.
+
+```typescript
+createFsStoragePlugin({
+  basePath: '/admin',
+  rootDir: './uploads',
+  // symlinkContainment defaults to true; only disable it if `rootDir` is a
+  // directory your app exclusively controls AND you intentionally use
+  // symlinks inside it.
+  symlinkContainment: false,
+});
+```
+
+**Best Practices:**
+
+- Point `rootDir` at a directory your application **exclusively controls**. The
+  symlink risk only exists if another (untrusted) process can create entries
+  under `rootDir` — e.g. a shared or multi-tenant mount.
+- Keep `symlinkContainment` on unless you have a specific reason to allow
+  symlinks inside `rootDir`. It is **not** TOCTOU-proof: a symlink swapped in
+  between the check and the file open still wins. For hard multi-tenant
+  isolation, enforce containment at the OS level (a dedicated mount, a
+  container, or `openat2(RESOLVE_BENEATH)`) rather than relying on it alone.
+- Scope the runtime's filesystem permissions to `rootDir` (e.g. Deno
+  `--allow-read`/`--allow-write` scoped to that path) as defense-in-depth —
+  though note a symlink under `rootDir` textually resolves within the granted
+  scope, so permission scoping does not by itself stop symlink escape.
+- Only set `publicBaseUrl` for directories safe to expose: a raw static mount
+  serves bytes without the CMS row/column policy checks the `/files/` route
+  enforces.
+
+### 10. Object Storage (s3-storage plugin)
+
+The S3 plugin serves downloads two ways, with different exposure:
+
+- **Presigned URLs (default)** — each download is a SigV4-signed URL that
+  expires (`expirySeconds`, default 15 min). The `/files/` route enforces
+  row/column policy before issuing one, and the short lifetime bounds the
+  damage of a leaked link.
+- **CDN URLs (`cdnBaseUrl`)** — `${cdnBaseUrl}/${key}`, **unsigned and
+  non-expiring**. Faster and cache-friendly, but the URL is permanent and
+  guessable, so once issued it bypasses CMS policy on every later fetch.
+
+**Best Practices:**
+
+- Use `cdnBaseUrl` for objects that are safe to serve publicly (published
+  media, avatars). For access-controlled files, either keep the presigned
+  default, or put the CDN behind access control it enforces itself — e.g.
+  **signed cookies** scoped to the session (CloudFront/Cloudflare) or a private
+  distribution. The plugin emits a **bare** URL, so a CDN that requires
+  per-request **signed URLs** (rather than cookies) is not supported by this
+  option yet — per-object signed CDN URLs are on the roadmap
+  ([#91](https://github.com/hotsauce-team/hotsauce/issues/91)).
+- A CDN gated by signed cookies enforces access at the CDN's granularity
+  (typically path or session), which is **coarser** than the CMS's per-record
+  row/column policy — size the cookie scope accordingly.
+- Configure SVG / scriptable-file handling at the bucket/CDN (see the
+  [s3-storage README](packages/plugins/s3-storage/README.md#svg-and-scriptable-files))
+  so a stored `.svg` can't execute scripts in a victim's origin.
+
 ## Environment Variables
 
 ### Required Secrets

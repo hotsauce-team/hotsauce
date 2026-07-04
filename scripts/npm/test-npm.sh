@@ -62,6 +62,7 @@ cp -r "$PROJECT_DIR/npm/ui" "$TEMP_DIR/packages/"
 cp -r "$PROJECT_DIR/npm/auth" "$TEMP_DIR/packages/"
 cp -r "$PROJECT_DIR/npm/cms" "$TEMP_DIR/packages/"
 cp -r "$PROJECT_DIR/npm/plugins-fs-storage" "$TEMP_DIR/packages/"
+cp -r "$PROJECT_DIR/npm/plugins-s3-storage" "$TEMP_DIR/packages/"
 
 # Step 2a: Install dependencies (needs network)
 echo "Installing dependencies..."

@@ -425,6 +425,18 @@ export interface PluginRouteContext {
    * NOTE: a `ReadableStream` is not serializable, so this field makes the
    * context *not* fully serializable. It is therefore in-process only and is
    * never populated for (or sent to) Worker render routes.
+   *
+   * Lifecycle: dispatch owns cleanup. After the handler settles, the CMS
+   * cancels `bodyStream` if it is not locked, aborting the client transfer.
+   * Handlers that consume the body must begin reading (acquire the stream's
+   * lock via `getReader()`, `pipeTo()`, or `for await`) before returning —
+   * do not stash the stream for post-response reading, and do NOT return
+   * `bodyStream` (or a stream piped from it) as a Response body:
+   * `new Response(stream)` does not lock the stream until the response is
+   * serialized, which happens after dispatch's cleanup — the body would be
+   * cancelled before a byte is sent. Handlers that reject a request early
+   * can simply return the error Response; dispatch cancels the unread
+   * stream for them.
    */
   bodyStream?: ReadableStream<Uint8Array>;
   /** Additional route params from pattern matching */

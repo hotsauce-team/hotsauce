@@ -74,8 +74,8 @@ export interface FsStoragePluginOptions {
    * own serving route is bypassed.
    *
    * ⚠️ A raw static mount serves bytes **without** the CMS row/column policy
-   * checks that the `/files/` route enforces. Only set this for buckets that
-   * are safe to expose publicly.
+   * checks that the `/files/` route enforces. Only set this for directories
+   * that are safe to expose publicly.
    *
    * @example 'https://cdn.example.com/files'
    */
@@ -96,6 +96,18 @@ export interface FsStoragePluginOptions {
    * @default 11_534_336 (11MB — the 10MB default max file size plus headroom)
    */
   maxUploadBytes?: number;
+
+  /**
+   * Resolve each stored key's real path and reject it if a symlink under
+   * `rootDir` redirects it outside (one extra `realpath` syscall per file
+   * operation). Applies only to the default disk adapter — ignored when a
+   * custom {@link FsStoragePluginOptions.fs} adapter is provided. Turn off
+   * only when `rootDir` is a directory your app exclusively controls and you
+   * intentionally place symlinks inside it. See SECURITY.md.
+   *
+   * @default true
+   */
+  symlinkContainment?: boolean;
 
   /**
    * Custom filesystem backend. Defaults to a disk-backed adapter rooted at

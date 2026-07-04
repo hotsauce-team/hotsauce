@@ -129,6 +129,7 @@ export function validatePresignRequest(
     const patterns = accept.split(',').map((p) => p.trim().toLowerCase());
     const type = body.contentType.toLowerCase();
     const matched = patterns.some((pattern) => {
+      if (pattern === '*/*') return true;
       if (pattern === type) return true;
       if (pattern.endsWith('/*')) {
         return type.startsWith(pattern.slice(0, -1));
@@ -170,6 +171,53 @@ function generateObjectKey(
   const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
   // Use shared prefix from core to ensure consistency with key validation
   return `${getFileKeyPrefix(table, column, recordId)}${uuid}-${safeFilename}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Key safety
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Validate that a storage key is safe to embed in a URL path.
+ *
+ * `isValidFileKey` (core) checks that a key carries the right
+ * `{table}/{column}/{recordId}/` prefix, but it does NOT guard against path
+ * traversal. This does: it rejects absolute paths, backslashes, `.`/`..`
+ * segments, empty segments, and control characters — so a tampered or
+ * malicious key can never escape the CDN base or bucket prefix.
+ *
+ * @throws Error if the key is unsafe.
+ */
+function assertSafeKey(key: string): void {
+  if (typeof key !== 'string' || key.length === 0) {
+    throw new Error('Invalid storage key: empty');
+  }
+  // No absolute paths, no Windows drive letters, no backslashes.
+  if (key.startsWith('/') || key.startsWith('\\') || /^[a-zA-Z]:/.test(key)) {
+    throw new Error(`Invalid storage key: absolute path "${key}"`);
+  }
+  if (key.includes('\\')) {
+    throw new Error(`Invalid storage key: backslash in "${key}"`);
+  }
+  // deno-lint-ignore no-control-regex
+  if (/[\x00-\x1f\x7f]/.test(key)) {
+    throw new Error('Invalid storage key: control character');
+  }
+  // Reject percent-encoding. Keys are minted from a restricted charset and
+  // never contain '%'; it is only meaningful as an encoded byte, which a URL
+  // consumer fronting downloads (e.g. a CDN behind `cdnBaseUrl`) may decode
+  // into a separator or dot-segment (%2f -> '/', %2e -> '.'), smuggling
+  // traversal past the literal checks above. The `..`/segment checks below run
+  // on the raw key, so reject the encoded form at the source.
+  if (key.includes('%')) {
+    throw new Error(`Invalid storage key: percent-encoding in "${key}"`);
+  }
+  const segments = key.split('/');
+  for (const segment of segments) {
+    if (segment === '' || segment === '.' || segment === '..') {
+      throw new Error(`Invalid storage key: unsafe segment in "${key}"`);
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -248,6 +296,11 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
      * Generate a signed GET URL for downloads.
      */
     async signDownloadUrl(ctx: SignDownloadContext): Promise<string> {
+      // Core's isValidFileKey only validates the key prefix — reject
+      // traversal/unsafe keys here before either branch links or signs them
+      // (mirrors fs-storage's signDownloadUrl).
+      assertSafeKey(ctx.key);
+
       const bucket = typeof options.bucket === 'function'
         ? options.bucket({
           request: ctx.request ?? new Request('https://internal'),
@@ -259,10 +312,19 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
         })
         : options.bucket;
 
-      // If CDN is configured, use it for download URLs
+      // If CDN is configured, serve downloads through it.
       if (options.cdnBaseUrl) {
-        // CDN URLs don't need signing (CDN handles auth via origin)
-        return `${options.cdnBaseUrl}/${ctx.key}`;
+        // NOTE: this returns a BARE, unsigned URL — access control is delegated
+        // entirely to the CDN. Safe only when the objects are public or the CDN
+        // gates them itself (e.g. signed cookies / a private distribution);
+        // otherwise it bypasses the CMS row/column policy the /files/ route
+        // enforced before redirecting here. See `cdnBaseUrl` in types.ts.
+        // Build via the URL API so key encoding matches the presigned branch
+        // (buildObjectUrl): unsafe characters are encoded and existing %XX
+        // escapes preserved — though assertSafeKey above already rejects '%'.
+        const url = new URL(options.cdnBaseUrl);
+        url.pathname = `${url.pathname.replace(/\/+$/, '')}/${ctx.key}`;
+        return url.toString();
       }
 
       // Build object URL using publicEndpoint (browser-facing)
