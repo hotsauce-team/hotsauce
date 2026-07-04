@@ -329,6 +329,12 @@ export const users = pgTable('users', {
 
 The core schema introspection is database-agnostic via Drizzle's abstractions. Database-specific features (arrays, native enums) degrade gracefully on other databases.
 
+## Performance
+
+Server-rendered doesn't mean slow. A full admin list page — routing, query, policy checks, HTML render — completes in **~290 µs** end to end (~3,400 req/s single-threaded on in-memory SQLite; Apple M1 Pro). Route parsing is ~180 ns and full schema introspection ~15 µs, so cold starts stay light.
+
+Run `deno task bench` to reproduce, and see [BENCHMARKS.md](BENCHMARKS.md) for methodology, the full suite, and the [live trend chart](https://hotsauce-team.github.io/hotsauce/bench/). Every PR is benchmarked against its base commit to catch regressions.
+
 ## Development
 
 This project is developed with **Deno** — no Node.js or npm required locally.
