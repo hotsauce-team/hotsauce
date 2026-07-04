@@ -298,6 +298,34 @@ createFsStoragePlugin({
   serves bytes without the CMS row/column policy checks the `/files/` route
   enforces.
 
+### 10. Object Storage (s3-storage plugin)
+
+The S3 plugin serves downloads two ways, with different exposure:
+
+- **Presigned URLs (default)** — each download is a SigV4-signed URL that
+  expires (`expirySeconds`, default 15 min). The `/files/` route enforces
+  row/column policy before issuing one, and the short lifetime bounds the
+  damage of a leaked link.
+- **CDN URLs (`cdnBaseUrl`)** — `${cdnBaseUrl}/${key}`, **unsigned and
+  non-expiring**. Faster and cache-friendly, but the URL is permanent and
+  guessable, so once issued it bypasses CMS policy on every later fetch.
+
+**Best Practices:**
+
+- Use `cdnBaseUrl` for objects that are safe to serve publicly (published
+  media, avatars). For access-controlled files, either keep the presigned
+  default, or put the CDN behind access control it enforces itself — e.g.
+  **signed cookies** scoped to the session (CloudFront/Cloudflare) or a private
+  distribution. The plugin emits a **bare** URL, so a CDN that requires
+  per-request **signed URLs** (rather than cookies) is not supported by this
+  option.
+- A CDN gated by signed cookies enforces access at the CDN's granularity
+  (typically path or session), which is **coarser** than the CMS's per-record
+  row/column policy — size the cookie scope accordingly.
+- Configure SVG / scriptable-file handling at the bucket/CDN (see the
+  [s3-storage README](packages/plugins/s3-storage/README.md#svg-and-scriptable-files))
+  so a stored `.svg` can't execute scripts in a victim's origin.
+
 ## Environment Variables
 
 ### Required Secrets

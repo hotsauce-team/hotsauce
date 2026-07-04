@@ -74,8 +74,8 @@ export interface FsStoragePluginOptions {
    * own serving route is bypassed.
    *
    * ⚠️ A raw static mount serves bytes **without** the CMS row/column policy
-   * checks that the `/files/` route enforces. Only set this for buckets that
-   * are safe to expose publicly.
+   * checks that the `/files/` route enforces. Only set this for directories
+   * that are safe to expose publicly.
    *
    * @example 'https://cdn.example.com/files'
    */

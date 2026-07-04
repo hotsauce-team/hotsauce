@@ -312,13 +312,16 @@ function createStorageProvider(options: ResolvedS3Options): StorageProvider {
         })
         : options.bucket;
 
-      // If CDN is configured, use it for download URLs
+      // If CDN is configured, serve downloads through it.
       if (options.cdnBaseUrl) {
-        // CDN URLs don't need signing (CDN handles auth via origin). Build
-        // via the URL API so key encoding matches the presigned branch
-        // (buildObjectUrl): unsafe characters are encoded, but existing %XX
-        // escapes are preserved — a pre-encoded legacy key addresses the
-        // same object on both branches instead of being double-encoded.
+        // NOTE: this returns a BARE, unsigned URL — access control is delegated
+        // entirely to the CDN. Safe only when the objects are public or the CDN
+        // gates them itself (e.g. signed cookies / a private distribution);
+        // otherwise it bypasses the CMS row/column policy the /files/ route
+        // enforced before redirecting here. See `cdnBaseUrl` in types.ts.
+        // Build via the URL API so key encoding matches the presigned branch
+        // (buildObjectUrl): unsafe characters are encoded and existing %XX
+        // escapes preserved — though assertSafeKey above already rejects '%'.
         const url = new URL(options.cdnBaseUrl);
         url.pathname = `${url.pathname.replace(/\/+$/, '')}/${ctx.key}`;
         return url.toString();

@@ -150,9 +150,26 @@ export interface S3StoragePluginOptions {
   publicEndpoint?: string;
 
   /**
-   * Optional CDN base URL for serving files.
-   * When set, download URLs use this instead of S3 endpoint.
-   * Provider-agnostic - works with any CDN (CloudFront, Fastly, etc.).
+   * Optional CDN base URL for serving downloads. When set, `signDownloadUrl`
+   * returns `${cdnBaseUrl}/${key}` instead of a presigned S3 URL.
+   * Provider-agnostic — works with any CDN (CloudFront, Fastly, R2, …).
+   *
+   * ⚠️ Unlike the default presigned downloads (SigV4-signed and short-lived via
+   * `expirySeconds`), a CDN URL here is **unsigned and non-expiring**. The
+   * `/files/` route still checks row/column policy before redirecting, but the
+   * issued URL is permanent and shareable, so it bypasses that policy on any
+   * later fetch. Set this only when either:
+   * - the objects are safe to expose publicly (public assets — edge caching is
+   *   the goal), or
+   * - the CDN enforces access control itself, e.g. **signed cookies** scoped to
+   *   the session (CloudFront/Cloudflare signed cookies) or a private
+   *   distribution, so a bare object URL is still gated at the CDN. Note this
+   *   gates at the CDN's granularity (typically path/session), which is coarser
+   *   than the CMS's per-record policy.
+   *
+   * This option emits a **bare** URL; it does not generate per-object CDN
+   * *signed URLs*, so a CDN configured to require signed URLs (rather than
+   * cookies) will reject it. Use signed cookies or a public/gated distribution.
    *
    * @example 'https://cdn.example.com'
    */
