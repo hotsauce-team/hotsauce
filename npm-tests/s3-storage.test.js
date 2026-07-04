@@ -93,5 +93,15 @@ describe('@hotsauce/plugins-s3-storage (Node)', () => {
       }),
       /Invalid storage key/,
     );
+
+    // Percent-encoded traversal (a CDN might decode %2e%2e%2f -> ../) is
+    // rejected at the key validator before it reaches the URL.
+    await assert.rejects(
+      provider.signDownloadUrl({
+        storage: 's3',
+        key: 'media/file/1/%2e%2e%2f%2e%2e%2fetc/passwd',
+      }),
+      /percent-encoding/,
+    );
   });
 });

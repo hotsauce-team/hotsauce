@@ -203,6 +203,15 @@ function assertSafeKey(key: string): void {
   if (/[\x00-\x1f\x7f]/.test(key)) {
     throw new Error('Invalid storage key: control character');
   }
+  // Reject percent-encoding. Keys are minted from a restricted charset and
+  // never contain '%'; it is only meaningful as an encoded byte, which a URL
+  // consumer fronting downloads (e.g. a CDN behind `cdnBaseUrl`) may decode
+  // into a separator or dot-segment (%2f -> '/', %2e -> '.'), smuggling
+  // traversal past the literal checks above. The `..`/segment checks below run
+  // on the raw key, so reject the encoded form at the source.
+  if (key.includes('%')) {
+    throw new Error(`Invalid storage key: percent-encoding in "${key}"`);
+  }
   const segments = key.split('/');
   for (const segment of segments) {
     if (segment === '' || segment === '.' || segment === '..') {

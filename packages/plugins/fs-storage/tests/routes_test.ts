@@ -216,6 +216,16 @@ Deno.test('assertSafeKey: rejects absolute paths and backslashes', () => {
   assertThrows(() => assertSafeKey(''));
 });
 
+Deno.test('assertSafeKey: rejects percent-encoding', () => {
+  // Encoded separators/dot-segments a URL consumer might decode into traversal.
+  assertThrows(
+    () => assertSafeKey('posts/%2e%2e%2fetc/passwd'),
+    Error,
+    'percent',
+  );
+  assertThrows(() => assertSafeKey('posts/a%2fb'), Error, 'percent');
+});
+
 Deno.test('keyToPath: maps a safe key under rootDir', () => {
   assertEquals(
     keyToPath('/var/data/', 'posts/image/42/x.png'),

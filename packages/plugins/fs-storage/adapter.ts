@@ -194,6 +194,15 @@ export function assertSafeKey(key: string): void {
   if (/[\x00-\x1f\x7f]/.test(key)) {
     throw new Error('Invalid storage key: control character');
   }
+  // Reject percent-encoding. Keys are minted from a restricted charset and
+  // never contain '%'. On disk `%2f`/`%2e` are literal characters (the path is
+  // not URL-decoded), but the `publicBaseUrl` static-serve branch embeds the
+  // key in a URL a proxy/CDN may decode into a separator or dot-segment
+  // (%2f -> '/', %2e -> '.') — smuggling traversal past the literal checks
+  // below. Reject the encoded form at the source, matching s3-storage.
+  if (key.includes('%')) {
+    throw new Error(`Invalid storage key: percent-encoding in "${key}"`);
+  }
   const segments = key.split('/');
   for (const segment of segments) {
     if (segment === '' || segment === '.' || segment === '..') {

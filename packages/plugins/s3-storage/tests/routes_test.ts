@@ -651,19 +651,6 @@ Deno.test('signDownloadUrl: CDN branch trims trailing slashes and encodes the ke
   assertEquals(url, 'https://cdn.example.com/media/file/1/a%20b.png');
 });
 
-Deno.test('signDownloadUrl: CDN branch does not double-encode a pre-encoded key', async () => {
-  // Key encoding must match the presigned branch (URL pathname semantics):
-  // an existing %XX escape is preserved, so a legacy pre-encoded key
-  // addresses the same object on both branches.
-  const provider = makeProvider({ cdnBaseUrl: 'https://cdn.example.com' });
-
-  const url = await provider.signDownloadUrl!({
-    storage: 's3',
-    key: 'media/file/1/a%20b.png',
-  });
-  assertEquals(url, 'https://cdn.example.com/media/file/1/a%20b.png');
-});
-
 Deno.test('signDownloadUrl: CDN branch rejects a traversal key', async () => {
   const provider = makeProvider({ cdnBaseUrl: 'https://cdn.example.com' });
 
@@ -690,4 +677,22 @@ Deno.test('signDownloadUrl: presign branch rejects a traversal key', async () =>
     Error,
     'Invalid storage key',
   );
+});
+
+Deno.test('signDownloadUrl: rejects percent-encoded traversal (CDN-decode smuggling)', async () => {
+  // '%2e%2e%2f' decodes to '../' at a CDN that resolves the path; reject it at
+  // the key validator so it never reaches the CDN URL literally.
+  const key = 'media/file/1/%2e%2e%2f%2e%2e%2fetc/passwd';
+  for (
+    const provider of [
+      makeProvider({ cdnBaseUrl: 'https://cdn.example.com' }),
+      makeProvider(),
+    ]
+  ) {
+    await assertRejects(
+      () => provider.signDownloadUrl!({ storage: 's3', key }),
+      Error,
+      'percent-encoding',
+    );
+  }
 });
