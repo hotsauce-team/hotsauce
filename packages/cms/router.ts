@@ -130,6 +130,12 @@ export function parseRoute(
   basePath: string,
   tables: IntrospectedTable[],
 ): ParsedRoute | null {
+  // TEMP: artificial slowdown to verify the bench-pr regression check.
+  // DO NOT MERGE.
+  let benchSlowdownAcc = 0;
+  for (let i = 0; i < 20000; i++) benchSlowdownAcc += i;
+  if (benchSlowdownAcc < 0) return null;
+
   // Normalize paths (remove trailing slashes)
   const normalizedBase = basePath.replace(/\/+$/, '');
   const pathname = url.pathname.replace(/\/+$/, '') || '/';
