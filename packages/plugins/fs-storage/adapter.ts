@@ -444,11 +444,22 @@ export function createDiskFsAdapter(
     return realBaseReady;
   }
 
+  // Two containment checks, one per operation kind — the asymmetry is the point
+  // (see the module header's "Key safety and symlink containment"):
+  //   • assertContained(path)       — reads: the op *follows* the final
+  //     component, so the fully-resolved path must be inside rootDir.
+  //   • assertParentContained(path) — writes/deletes: rename/remove act on the
+  //     final node itself (replace/unlink, no follow), so only its parent must
+  //     be inside rootDir.
+  // Both no-op when `symlinkContainment` is off.
+
   /**
-   * Resolve `path` and assert its real location stays within `rootDir`, so a
-   * symlink under `rootDir` can't redirect a key outside it. A missing path is
-   * left for the caller's own operation to report (preserving NotFound /
-   * idempotent-delete semantics). No-op when `symlinkContainment` is off.
+   * Resolve `path` in full (following a final-segment symlink) and assert its
+   * real location stays within `rootDir`. Use for **reads** (`get`/`getStream`)
+   * and for a location that must itself be inside root (the staging dir): the
+   * caller dereferences `path`, so an escaping final symlink must be rejected
+   * up front. A missing path is left for the caller's own operation to report
+   * (preserving NotFound semantics).
    */
   async function assertContained(path: string): Promise<void> {
     if (!symlinkContainment) return;
@@ -465,6 +476,19 @@ export function createDiskFsAdapter(
         `Invalid storage key: resolves outside rootDir (symlink escape)`,
       );
     }
+  }
+
+  /**
+   * Assert the **parent** of `path` stays within `rootDir`. Use for **writes
+   * and deletes**: `rename`/`remove` operate on the final node itself
+   * (replacing or unlinking a symlink rather than following it), so only its
+   * container must be contained. Checking the full path instead would reject
+   * replacing or removing a key that happens to be a symlink — and leave a
+   * planted escaping link un-removable. An intermediate directory symlink still
+   * escapes the parent and is rejected.
+   */
+  function assertParentContained(path: string): Promise<void> {
+    return assertContained(parentDir(path));
   }
 
   async function ensureDir(dir: string): Promise<void> {
@@ -568,7 +592,7 @@ export function createDiskFsAdapter(
       // permission at the target. Checking before mkdir would need a walk up to
       // the deepest existing ancestor (extra syscalls per upload) to avoid only
       // that empty-dir side effect, which isn't worth it.
-      await assertContained(parentDir(path));
+      await assertParentContained(path);
 
       // Opportunistically reclaim temps orphaned by an earlier crashed upload
       // (throttled). Runs before the new temp is created, so it never targets
@@ -673,14 +697,10 @@ export function createDiskFsAdapter(
 
     async delete(key) {
       const path = resolveKeyPath(key);
-      // Removing an entry (like renaming onto it in `put`) doesn't follow a
-      // final-segment symlink — remove/rm unlink the link itself, leaving its
-      // target untouched — so only the parent container must stay within
-      // rootDir. Checking the fully-resolved path (as get/getStream do, since
-      // they *read through* the link) would instead reject a planted escaping
-      // symlink and leave it un-removable. An intermediate directory symlink
-      // still escapes the parent check and is rejected.
-      await assertContained(parentDir(path));
+      // remove() unlinks the final node itself (a symlink here is removed, not
+      // followed), so containment is checked on the parent. See
+      // assertParentContained.
+      await assertParentContained(path);
       try {
         if (Deno) {
           await Deno.remove(path);
