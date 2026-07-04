@@ -294,7 +294,9 @@ policies: {
 > non-expiring**, so once issued it is permanent and shareable and bypasses
 > policy on later fetches. Use it for public assets, or ensure the CDN enforces
 > access itself (signed cookies / a private distribution). See
-> [`cdnBaseUrl`](#configuration-options).
+> [`cdnBaseUrl`](#configuration-options). Per-object signed CDN URLs (with
+> expiry) are on the roadmap —
+> [#91](https://github.com/hotsauce-team/hotsauce/issues/91).
 
 ### CORS Configuration
 

@@ -170,6 +170,8 @@ export interface S3StoragePluginOptions {
    * This option emits a **bare** URL; it does not generate per-object CDN
    * *signed URLs*, so a CDN configured to require signed URLs (rather than
    * cookies) will reject it. Use signed cookies or a public/gated distribution.
+   * (Per-object signed CDN URLs are on the roadmap — see
+   * https://github.com/hotsauce-team/hotsauce/issues/91.)
    *
    * @example 'https://cdn.example.com'
    */

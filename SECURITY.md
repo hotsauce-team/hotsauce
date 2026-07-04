@@ -318,7 +318,8 @@ The S3 plugin serves downloads two ways, with different exposure:
   **signed cookies** scoped to the session (CloudFront/Cloudflare) or a private
   distribution. The plugin emits a **bare** URL, so a CDN that requires
   per-request **signed URLs** (rather than cookies) is not supported by this
-  option.
+  option yet — per-object signed CDN URLs are on the roadmap
+  ([#91](https://github.com/hotsauce-team/hotsauce/issues/91)).
 - A CDN gated by signed cookies enforces access at the CDN's granularity
   (typically path or session), which is **coarser** than the CMS's per-record
   row/column policy — size the cookie scope accordingly.
