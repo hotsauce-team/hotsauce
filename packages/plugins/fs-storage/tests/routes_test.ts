@@ -237,10 +237,15 @@ Deno.test('keyToPath: throws on traversal before producing a path', () => {
   assertThrows(() => keyToPath('/var/data', 'posts/../../etc/passwd'));
 });
 
-Deno.test('createDiskFsAdapter: rejects a filesystem-root rootDir', () => {
-  // '/', '//', … collapse to an empty base and would map keys onto '/'.
-  assertThrows(() => createDiskFsAdapter('/'), Error, 'filesystem root');
-  assertThrows(() => createDiskFsAdapter('///'), Error, 'filesystem root');
+Deno.test('createDiskFsAdapter: rejects a filesystem- or drive-root rootDir', () => {
+  // POSIX roots collapse to an empty base; Windows drive/UNC roots would map
+  // keys onto the drive root. All are rejected.
+  for (const root of ['/', '///', 'C:\\', 'C:', 'C:/', '\\\\']) {
+    assertThrows(() => createDiskFsAdapter(root), Error, 'root');
+  }
+  // A real subdirectory (POSIX or Windows) is accepted.
+  createDiskFsAdapter('/var/data');
+  createDiskFsAdapter('C:\\uploads');
 });
 
 // ─────────────────────────────────────────────────────────────

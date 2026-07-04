@@ -355,14 +355,18 @@ export function createDiskFsAdapter(
   const Deno = denoNs();
   const symlinkContainment = opts.symlinkContainment ?? true;
 
-  const base = rootDir.replace(/\/+$/, '');
-  // A root-only rootDir ('/', '//', …) collapses to '' and would map keys onto
-  // the filesystem root (`/${key}`). Reject it up front: otherwise operations
-  // fail later with a confusing realPath('') NotFound, and without containment
-  // it would silently write at `/`.
-  if (base === '') {
+  // Trim trailing separators, forward and back (Windows accepts both).
+  const base = rootDir.replace(/[/\\]+$/, '');
+  // Reject a root that maps keys onto a filesystem/drive root rather than a
+  // dedicated subdirectory — POSIX '/'/'//' (→ ''), or a Windows drive/UNC
+  // root like 'C:\', 'C:', 'C:/', or '\\'. Otherwise a key would resolve to
+  // `${root}/${key}` at the very top of a volume: without containment it writes
+  // there silently, and with it operations fail later with a confusing
+  // realPath NotFound. `base` is what remains after trailing separators are
+  // stripped, so a root-only value is an optional drive letter plus separators.
+  if (/^([a-zA-Z]:)?[/\\]*$/.test(base)) {
     throw new Error(
-      'fs-storage: rootDir must not be the filesystem root; use a dedicated subdirectory.',
+      'fs-storage: rootDir must not be a filesystem or drive root; use a dedicated subdirectory.',
     );
   }
   // In-flight uploads are written here, not beside their final path, so a temp

@@ -294,7 +294,7 @@ createFsStoragePlugin({
   `--allow-read`/`--allow-write` scoped to that path) as defense-in-depth —
   though note a symlink under `rootDir` textually resolves within the granted
   scope, so permission scoping does not by itself stop symlink escape.
-- Only set `publicBaseUrl` for buckets safe to expose: a raw static mount
+- Only set `publicBaseUrl` for directories safe to expose: a raw static mount
   serves bytes without the CMS row/column policy checks the `/files/` route
   enforces.
 
