@@ -79,7 +79,7 @@ Deno.test('integration: JWT auth tests', async (t) => {
     );
     // The login page embeds a per-request CSRF token; a cached copy would
     // serve stale tokens (and break login) from any intermediary cache.
-    assertEquals(response.headers.get('Cache-Control'), 'no-store');
+    assertEquals(response.headers.get('Cache-Control'), 'no-store, max-age=0');
 
     const html = await response.text();
     assertStringIncludes(html, 'form');
@@ -269,7 +269,10 @@ Deno.test('integration: JWT auth tests', async (t) => {
 
     assertEquals(dashboardRes.status, 200);
     // Authenticated admin screens must never be stored by any cache.
-    assertEquals(dashboardRes.headers.get('Cache-Control'), 'no-store');
+    assertEquals(
+      dashboardRes.headers.get('Cache-Control'),
+      'no-store, max-age=0',
+    );
     const html = await dashboardRes.text();
     assertStringIncludes(html, 'users');
   });

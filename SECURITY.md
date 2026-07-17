@@ -388,9 +388,19 @@ The CMS sets these headers on all HTML responses:
   'Content-Security-Policy': "default-src 'self'; ...",
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
-  'Referrer-Policy': 'strict-origin-when-cross-origin'
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), ...',
+  'Cache-Control': 'no-store, max-age=0'
 }
 ```
+
+> **⚠️ CDN caveat:** `Cache-Control: no-store` only protects you if your
+> CDN/proxy respects origin headers. A CDN configured to override them —
+> e.g. Cloudflare "Cache Everything" with an Edge Cache TTL override, or a
+> Varnish VCL that forces a TTL — will store and serve admin and account
+> pages (session-specific HTML, CSRF tokens) to other visitors regardless
+> of what the CMS sends. Exclude the admin and account paths from any such
+> cache-override rules.
 
 **Additional recommended headers** (set at reverse proxy level):
 

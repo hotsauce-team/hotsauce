@@ -40,16 +40,19 @@ Deno.test('htmlResponse: custom status code', () => {
 
 Deno.test('htmlResponse: admin HTML is never cacheable', () => {
   const defaultHeaders = htmlResponse('<p>Hello</p>');
-  assertEquals(defaultHeaders.headers.get('Cache-Control'), 'no-store');
+  assertEquals(
+    defaultHeaders.headers.get('Cache-Control'),
+    'no-store, max-age=0',
+  );
 
   // Also when call sites pass the resolved security headers explicitly
   const resolved = htmlResponse('<p>Hello</p>', 200, buildSecurityHeaders());
-  assertEquals(resolved.headers.get('Cache-Control'), 'no-store');
+  assertEquals(resolved.headers.get('Cache-Control'), 'no-store, max-age=0');
 });
 
 Deno.test('buildSecurityHeaders: includes no-store with custom CSP options', () => {
   const headers = buildSecurityHeaders({ imgSrc: ['https://cdn.example.com'] });
-  assertEquals(headers['Cache-Control'], 'no-store');
+  assertEquals(headers['Cache-Control'], 'no-store, max-age=0');
 });
 
 Deno.test('redirect: creates redirect response', () => {

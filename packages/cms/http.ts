@@ -21,8 +21,10 @@ import type { CspOptions } from './types.ts';
  * - Permissions-Policy: Denies browser feature access (camera, mic, geolocation, etc.)
  * - Cache-Control: no-store — admin screens are per-user (session cookies,
  *   CSRF tokens), so nothing may land in shared caches or survive logout on
- *   disk. Endpoints that want caching (file redirects, static assets) set
- *   their own Cache-Control after spreading these headers, which wins.
+ *   disk. max-age=0 covers caches that ignore no-store but honor freshness:
+ *   anything wrongly stored is instantly stale. Endpoints that want caching
+ *   (file redirects, static assets) set their own Cache-Control after
+ *   spreading these headers, which wins.
  */
 
 /**
@@ -49,7 +51,7 @@ export function buildSecurityHeaders(
     'Referrer-Policy': 'strict-origin-when-cross-origin',
     'Permissions-Policy':
       'camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), xr-spatial-tracking=()',
-    'Cache-Control': 'no-store',
+    'Cache-Control': 'no-store, max-age=0',
   };
 }
 
