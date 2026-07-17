@@ -72,6 +72,9 @@ const SECURITY_HEADERS = {
   'Referrer-Policy': 'strict-origin-when-cross-origin',
   'Content-Security-Policy':
     "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
+  // Account pages are per-user and the 2FA setup page renders the TOTP
+  // secret — nothing here may be stored by any cache.
+  'Cache-Control': 'no-store, max-age=0',
 };
 
 /**

@@ -389,6 +389,12 @@ Deno.test('integration: file upload tests', async (t) => {
       response.headers.get('Location'),
       'https://cdn.example.com/images/remote.png',
     );
+    // The endpoint's own cache header must win over the no-store default
+    // that rides along in the spread security headers.
+    assertEquals(
+      response.headers.get('Cache-Control'),
+      'private, max-age=3600',
+    );
   });
 
   await t.step(
