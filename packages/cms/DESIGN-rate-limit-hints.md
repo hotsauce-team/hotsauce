@@ -218,6 +218,14 @@ track-sc0 src`; `http-response sc-inc-gpc0(0) if { res.hdr(X-Rate-Limit-Level)
 increments by 1 — no weighted delta; count level-3 only, or use one counter
 per level. Stick tables replicate via peers (clustered enforcement).
 
+**Caddy.** No native consumer: Caddy has no scripting runtime and
+`mholt/caddy-ratelimit` is request-side only (cannot see origin response
+headers). The path is a small custom Go module implementing the same
+penalty-box pattern — handover spec in
+[DESIGN-caddy-hint-penaltybox.md](./DESIGN-caddy-hint-penaltybox.md).
+Stopgap: static `rate_limit` zones matched on path prefixes (accepts the
+path-coupling this design otherwise avoids).
+
 **Stripping** is the integrator's responsibility, in whichever layer
 consumes the header; docs include the one-line check
 (`curl -sI https://site/admin/login | grep -i x-rate-limit` → empty).
