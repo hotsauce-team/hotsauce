@@ -1449,8 +1449,27 @@ submits, file serving, storage presigns/uploads), or 3 (strict: login,
 2FA verification, password changes) — for your infrastructure to enforce.
 Levels derive from two facts a route declares: `bruteForceable` (responds
 differently to guessed secrets → 3) and `resourceIntensive`
-(disproportionate CPU/bandwidth/storage per request → 2). Plugin routes
-declare the same facts (see `PluginRoute`).
+(disproportionate CPU/bandwidth/storage per request → 2).
+
+Built-in classification:
+
+| Level | Routes                                                                                                                          |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------- |
+| 3     | login `POST` (password check and TOTP phase), `POST {basePath}/account/password`, `POST {basePath}/account/2fa/enable\|disable` |
+| 2     | list views, create/update/delete submits, `{basePath}/files/...`, s3-storage presign, fs-storage presign/upload/serve           |
+| 1     | everything else (dashboard, detail/edit forms, assets, login page) — absence of the header also means 1                         |
+
+Plugin routes declare the same facts on `PluginRoute`:
+
+```ts
+routes: [{
+  pattern: 'verify-code',
+  methods: ['POST'],
+  bruteForceable: true, // → level 3; resourceIntensive: true → level 2
+  // rateLimitLevel: 2, // explicit override for routes the facts don't fit
+  handler: myHandler,
+}],
+```
 
 ```ts
 // Default false: no classification, no header — zero overhead.
@@ -1480,7 +1499,10 @@ async function fetch(request: Request): Promise<Response> {
 ```
 
 In-memory counters are only valid for single-isolate deployments — note that
-`deno serve --parallel` already runs multiple isolates.
+`deno serve --parallel` already runs multiple isolates. If every constructed
+handler has hints disabled, `getRouteInfo` logs a one-time warning — it
+catches enforcement middleware pointed at a handler that was never given
+`rateLimitHints`.
 
 **Wire header (`'header'`)** — sets `X-Rate-Limit-Level: 1|2|3` on every
 response so a proxy or CDN can enforce (HAProxy stick tables, Fastly
@@ -1492,8 +1514,51 @@ one proxy config covers both. **Strip the header in whichever layer consumes
 it** (`curl -sI https://your-site/admin/login | grep -i x-rate-limit` should
 return nothing from the public internet).
 
-Design, threat model, and proxy recipes:
-[DESIGN-rate-limit-hints.md](./DESIGN-rate-limit-hints.md).
+##### Proxy recipes
+
+No proxy consumes a rate-limit header natively — there is no standard header
+to be compatible with. Both recipes below reference `X-Rate-Limit-Level` by
+name; verify them against your proxy version before deploying.
+
+**Fastly** (Edge Rate Limiting, a paid entitlement). The level works
+directly as the counter `delta`, so one counter accumulates weighted budget;
+cache hits never reach `vcl_fetch`, so only origin work is counted:
+
+```vcl
+ratecounter rc_origin {}
+penaltybox pb_abuse {}
+
+sub vcl_recv {
+  if (ratelimit.penaltybox_has(pb_abuse, client.ip)) { error 429; }
+}
+sub vcl_fetch {
+  if (std.atoi(beresp.http.X-Rate-Limit-Level) >= 2) {
+    if (ratelimit.check_rate(client.ip, rc_origin,
+        std.atoi(beresp.http.X-Rate-Limit-Level), 60, 30, pb_abuse, 5m)) {}
+  }
+}
+sub vcl_deliver {
+  unset resp.http.X-Rate-Limit-Level;
+}
+```
+
+**HAProxy.** Stick tables replicate via the peers protocol (clustered
+enforcement). `sc-inc-gpc0` increments by 1 — no weighted delta — so count
+level-3 responses only, or use one counter per level:
+
+```haproxy
+backend cms
+  stick-table type ip size 100k expire 10m store gpc0,gpc0_rate(60s)
+  http-request  track-sc0 src
+  http-request  deny deny_status 429 if { sc0_gpc0_rate gt 10 }
+  http-response sc-inc-gpc0(0) if { res.hdr(X-Rate-Limit-Level) -m str 3 }
+  http-response del-header X-Rate-Limit-Level
+```
+
+**Caddy** has no native consumer (no scripting runtime;
+`mholt/caddy-ratelimit` is request-side only and cannot see origin response
+headers) — see [DESIGN-caddy-hint-penaltybox.md](./DESIGN-caddy-hint-penaltybox.md)
+for the planned module implementing the same penalty-box pattern.
 
 ### Multi-Tenancy (Shared Database)
 

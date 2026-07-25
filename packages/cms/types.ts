@@ -447,7 +447,8 @@ export interface CmsOptionsBase {
   csp?: CspOptions;
 
   /**
-   * Rate-limit hint levels (see packages/cms/DESIGN-rate-limit-hints.md).
+   * Rate-limit hint levels (see the "Rate-limit hints" section of the
+   * package README).
    *
    * The CMS never enforces rate limits — it labels each response with a
    * recommended throttle strictness (1–3) that your proxy, CDN, or wrapping

@@ -1,4 +1,4 @@
-// Rate-limit hint level tests (see ../DESIGN-rate-limit-hints.md)
+// Rate-limit hint level tests (see ../README.md, "Rate-limit hints")
 //
 // The exhaustive classification step is the contract: every built-in route
 // class and plugin-route declaration must map to an explicit expected level.

@@ -1,5 +1,5 @@
 // Rate-limit hint levels — request classification and the in-process channel.
-// Design and rationale: ./DESIGN-rate-limit-hints.md
+// Documented in README.md ("Rate-limit hints").
 //
 // The CMS never enforces rate limits; it labels routes so the integrator's
 // infrastructure (proxy, CDN, or wrapping middleware) can. Level semantics:

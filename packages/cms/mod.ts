@@ -343,7 +343,7 @@ export type {
 export { isWorkerPlugin } from './plugins/types.ts';
 
 // ─────────────────────────────────────────────────────────────
-// Rate-limit hints — route classification (see DESIGN-rate-limit-hints.md)
+// Rate-limit hints — route classification (README: "Rate-limit hints")
 // ─────────────────────────────────────────────────────────────
 export {
   deriveRateLimitLevel,
@@ -1045,7 +1045,7 @@ export function createCmsHandler(options: CmsOptions): Handler {
     return accept.includes('application/json');
   };
 
-  // Rate-limit hints (see DESIGN-rate-limit-hints.md). Registered even when
+  // Rate-limit hints (README: "Rate-limit hints"). Registered even when
   // disabled so getRouteInfo() can warn about querying a disabled handler.
   const rateLimitHints = options.rateLimitHints ?? false;
   registerRateLimitHintsMode(rateLimitHints !== false);

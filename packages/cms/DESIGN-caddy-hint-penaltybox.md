@@ -2,10 +2,11 @@
 
 Status: **handover — not started.** This document briefs the developer who
 will implement the module. It is the Caddy counterpart to the HAProxy and
-Fastly consumption recipes for the CMS's rate-limit hint header — read
-[DESIGN-rate-limit-hints.md](./DESIGN-rate-limit-hints.md) first; this doc
-assumes its wire contract. External vendor facts below were verified
-2026-07-25 (Fastly) or follow HAProxy's stable stick-table config surface.
+Fastly consumption recipes for the CMS's rate-limit hint header — read the
+["Rate-limit hints" section of the CMS README](./README.md#rate-limit-hints)
+first; this doc assumes its wire contract. External vendor facts below were
+verified 2026-07-25 (Fastly) or follow HAProxy's stable stick-table config
+surface.
 
 ## Why this module exists
 
@@ -59,8 +60,8 @@ threat, not first-hit).
 
 Reference implementations of the other two columns (keep these in the
 module README so users can cross-check): the Fastly VCL and HAProxy
-snippets in
-[DESIGN-rate-limit-hints.md → Consumption recipes](./DESIGN-rate-limit-hints.md#consumption-recipes-documentation-not-code-we-ship).
+snippets in the
+[CMS README → Rate-limit hints → Proxy recipes](./README.md#rate-limit-hints).
 
 ## Behavior specification (normative)
 
@@ -207,7 +208,7 @@ vendors' documentation — that is a stated product goal, not nice-to-have:
 ## References
 
 - Wire contract + sibling recipes:
-  [DESIGN-rate-limit-hints.md](./DESIGN-rate-limit-hints.md)
+  [CMS README → Rate-limit hints](./README.md#rate-limit-hints)
 - Fastly (verified 2026-07-25):
   [check_rate](https://www.fastly.com/documentation/reference/vcl/functions/rate-limiting/ratelimit-check-rate/),
   [penaltybox_has](https://www.fastly.com/documentation/reference/vcl/functions/rate-limiting/ratelimit-penaltybox-has/),
