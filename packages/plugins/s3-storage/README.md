@@ -367,9 +367,10 @@ traffic and log noise cheaply. The route is authenticated and policy-checked,
 but has no built-in rate limiting — enforcement belongs to your proxy or
 middleware.
 
-The plugin declares the route `resourceIntensive`, so when the CMS is created
-with `rateLimitHints` enabled the presign response carries
-`X-Rate-Limit-Level: 2` (and `getRouteInfo(response)` reports it in-process).
+The plugin declares the route `resourceIntensive`, which derives hint
+level 2. With `rateLimitHints: 'header'` the presign response carries
+`X-Rate-Limit-Level: 2`; with `'in-process'` (or `'header'`) wrapping
+middleware can read the same level via `getRouteInfo(response)`.
 Throttle on that label instead of hard-coding the route path — the label
 survives basePath changes and route moves. See the
 [CMS rate-limiting docs](../../cms/README.md#rate-limiting) for the header
