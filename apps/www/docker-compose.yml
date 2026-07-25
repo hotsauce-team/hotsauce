@@ -1,0 +1,29 @@
+services:
+  wwww:
+    image: denoland/deno:alpine
+    working_dir: /app/apps/www
+    ports:
+      - '127.0.0.1:3010:3010'
+    volumes:
+      # Mount the entire workspace (needed for workspace package resolution)
+      - ../../:/app
+      # Persist database between restarts
+      - www-data:/app/apps/www/data
+    environment:
+      - NODE_ENV=local
+      - HOST=0.0.0.0
+      - CMS_CSRF_SECRET=www-csrf-secret-at-least-32-characters-long
+      - CMS_JWT_SECRET=www-jwt-secret-at-least-32-characters-long
+    entrypoint: ['/bin/sh', '/app/apps/www/docker-entrypoint.sh']
+
+  caddy:
+    build: ./caddy
+    ports:
+      # Browse via Caddy: http://localhost:3011 (hint header consumed
+      # and stripped here; the wwww port stays exposed for bypassing it)
+      - '127.0.0.1:3011:80'
+    depends_on:
+      - wwww
+
+volumes:
+  www-data:

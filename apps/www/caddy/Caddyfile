@@ -1,0 +1,23 @@
+# Local edge for the www app: penalty-box rate limiting driven by the
+# X-Rate-Limit-Level hint header the CMS emits (and this module strips
+# before responses leave Caddy — the "our server strips it" in
+# admin.ts is this).
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	route {
+		hint_penaltybox {
+			# Placeholder budgets for the PoC — a follow-up will align these
+			# with SECURITY.md's recommended limits (single shared budget
+			# can't yet express per-tier policy; see module repo).
+			min_level 2
+			window 60s
+			limit 30
+			penalty_ttl 5m
+		}
+		reverse_proxy wwww:3010
+	}
+}
