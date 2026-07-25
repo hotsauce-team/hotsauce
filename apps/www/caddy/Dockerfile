@@ -4,7 +4,7 @@
 # 'header' mode — enabled in apps/www/admin/admin.ts).
 FROM caddy:2.11.4-builder AS builder
 RUN xcaddy build v2.11.4 \
-	--with github.com/hotsauce-team/caddy-hint-penaltybox@43c4e1b0437d995779bca0a33196e48d2dba0556
+	--with github.com/hotsauce-team/caddy-hint-penaltybox@d279116e159666bd2551f1d3857750721e93a690
 
 FROM caddy:2.11.4
 COPY --from=builder /usr/bin/caddy /usr/bin/caddy

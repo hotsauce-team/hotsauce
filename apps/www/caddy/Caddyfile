@@ -10,13 +10,22 @@
 :80 {
 	route {
 		hint_penaltybox {
-			# Placeholder budgets for the PoC — a follow-up will align these
-			# with SECURITY.md's recommended limits (single shared budget
-			# can't yet express per-tier policy; see module repo).
-			min_level 2
-			window 60s
-			limit 30
-			penalty_ttl 5m
+			# Per-tier budgets aligned with SECURITY.md's recommended limits.
+			# Tier budgets are independent; within a tier one response costs 1.
+			tier 3 {
+				# Brute-forceable routes (login, 2FA, password change):
+				# 5 per 15 minutes, long box — security offense.
+				window 15m
+				limit 5
+				penalty_ttl 30m
+			}
+			tier 2 {
+				# Resource-intensive routes (lists, mutations, presigns,
+				# file serving): capacity protection.
+				window 60s
+				limit 30
+				penalty_ttl 5m
+			}
 		}
 		reverse_proxy wwww:3010
 	}
