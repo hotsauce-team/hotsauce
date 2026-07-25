@@ -1557,8 +1557,8 @@ backend cms
 
 **Caddy** has no native consumer (no scripting runtime;
 `mholt/caddy-ratelimit` is request-side only and cannot see origin response
-headers) — see [DESIGN-caddy-hint-penaltybox.md](./DESIGN-caddy-hint-penaltybox.md)
-for the planned module implementing the same penalty-box pattern.
+headers). A small custom Go module implementing the same penalty-box
+pattern is planned.
 
 ### Multi-Tenancy (Shared Database)
 
