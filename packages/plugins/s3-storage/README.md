@@ -373,8 +373,8 @@ level 2. With `rateLimitHints: 'header'` the presign response carries
 middleware can read the same level via `getRouteInfo(response)`.
 Throttle on that label instead of hard-coding the route path — the label
 survives basePath changes and route moves. See the
-[CMS rate-limiting docs](../../cms/README.md#rate-limiting) for the header
-contract and consumption recipes.
+[CMS rate-limit hints docs](../../cms/README.md#rate-limit-hints) for the
+header contract and consumption recipes.
 
 Illustrative quotas (tune to your storage costs): 30 presigns per minute per
 user sustained, with a small burst allowance; return `429` with `Retry-After`.

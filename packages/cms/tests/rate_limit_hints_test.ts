@@ -51,6 +51,14 @@ const hintTestPlugin: PluginConfig = {
       rateLimitLevel: 3,
       handler: () => new Response('ok'),
     },
+    {
+      // Response.redirect() has immutable headers — exercises the
+      // rebuild path in 'header' mode.
+      pattern: 'immutable',
+      methods: ['GET'],
+      resourceIntensive: true,
+      handler: () => Response.redirect('http://localhost/admin', 302),
+    },
   ],
 };
 
@@ -105,6 +113,7 @@ Deno.test('rate-limit hints: exhaustive route classification', () => {
     ['GET', '/admin/hint-test/verify', 3],
     ['GET', '/admin/hint-test/heavy', 2],
     ['GET', '/admin/hint-test/override', 3],
+    ['GET', '/admin/hint-test/immutable', 2],
     // Nothing matched — baseline
     ['GET', '/admin/no-such-table', 1],
     ['GET', '/outside-cms', 1],
@@ -227,6 +236,22 @@ Deno.test('rate-limit hints: handler end-to-end', async (t) => {
       );
       assertEquals(response.headers.get(RATE_LIMIT_LEVEL_HEADER), '2');
       await response.body?.cancel();
+    },
+  );
+
+  await t.step(
+    'immutable-header responses are rebuilt in header mode',
+    async () => {
+      const handler = createHandler('header');
+      const response = await handler(
+        new Request('http://localhost/admin/hint-test/immutable'),
+      );
+      // Redirect survives the rebuild, header is present, accessor is keyed
+      // to the returned (rebuilt) object.
+      assertEquals(response.status, 302);
+      assertEquals(response.headers.get('Location'), 'http://localhost/admin');
+      assertEquals(response.headers.get(RATE_LIMIT_LEVEL_HEADER), '2');
+      assertEquals(getRouteInfo(response)?.level, 2);
     },
   );
 

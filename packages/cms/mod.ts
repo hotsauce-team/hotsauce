@@ -715,17 +715,26 @@ async function handlePluginRoute(
       const result = await route.handler(ctx);
       if (result instanceof Response) {
         const ct = result.headers.get('content-type') ?? '';
-        if (ct.startsWith('text/html')) {
-          // Enforce all security headers for HTML responses
-          // (plugins cannot override CSP, X-Frame-Options, etc.)
-          for (const [k, v] of Object.entries(effectiveHeaders)) {
-            result.headers.set(k, v);
+        const applySecurityHeaders = (res: Response): Response => {
+          if (ct.startsWith('text/html')) {
+            // Enforce all security headers for HTML responses
+            // (plugins cannot override CSP, X-Frame-Options, etc.)
+            for (const [k, v] of Object.entries(effectiveHeaders)) {
+              res.headers.set(k, v);
+            }
+          } else {
+            // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
+            res.headers.set('X-Content-Type-Options', 'nosniff');
           }
-        } else {
-          // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
-          result.headers.set('X-Content-Type-Options', 'nosniff');
+          return res;
+        };
+        try {
+          return applySecurityHeaders(result);
+        } catch {
+          // Immutable headers (Response.redirect(), a proxied fetch()):
+          // rebuild so the security headers are still enforced.
+          return applySecurityHeaders(new Response(result.body, result));
         }
-        return result;
       }
       // String result - wrap in HTML response with security headers
       return new Response(result, {
@@ -1734,21 +1743,25 @@ export function createCmsHandler(options: CmsOptions): Handler {
   }
 
   return async (request: Request): Promise<Response> => {
-    const response = await handleRequest(request);
+    let response = await handleRequest(request);
     const info = classifyCmsRequest(request, {
       basePath: opts.basePath,
       tables: opts.introspected.tables,
       plugins: opts.plugins?.getPluginConfigs() ?? [],
     });
-    storeRouteInfo(response, info);
     if (rateLimitHints === 'header') {
       try {
         response.headers.set(RATE_LIMIT_LEVEL_HEADER, String(info.level));
       } catch {
-        // Headers can be immutable (e.g. a Response proxied straight from
-        // fetch()); the WeakMap entry above still carries the level.
+        // Immutable headers (Response.redirect(), or a Response proxied
+        // straight from fetch() by a plugin route): rebuild so the
+        // header-mode contract holds for every response.
+        response = new Response(response.body, response);
+        response.headers.set(RATE_LIMIT_LEVEL_HEADER, String(info.level));
       }
     }
+    // After any rebuild, so the accessor is keyed to the returned object.
+    storeRouteInfo(response, info);
     return response;
   };
 }
