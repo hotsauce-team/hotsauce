@@ -26,6 +26,12 @@ import {
   mapColumnToFieldType,
 } from '@hotsauce/core';
 import { matchPluginRoute, parseRoute, resolveAction } from './router.ts';
+import {
+  classifyCmsRequest,
+  RATE_LIMIT_LEVEL_HEADER,
+  registerRateLimitHintsMode,
+  storeRouteInfo,
+} from './rate-limit-hints.ts';
 import type { PluginRouteMatch } from './router.ts';
 import type {
   FilterContext,
@@ -335,6 +341,20 @@ export type {
 } from './plugins/types.ts';
 
 export { isWorkerPlugin } from './plugins/types.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Rate-limit hints — route classification (see DESIGN-rate-limit-hints.md)
+// ─────────────────────────────────────────────────────────────
+export {
+  deriveRateLimitLevel,
+  getRouteInfo,
+  RATE_LIMIT_LEVEL_HEADER,
+} from './rate-limit-hints.ts';
+export type {
+  RateLimitLevel,
+  RouteFacts,
+  RouteInfo,
+} from './rate-limit-hints.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Auth - JWT authentication (re-exported from @hotsauce/auth)
@@ -1025,7 +1045,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
     return accept.includes('application/json');
   };
 
-  return async (request: Request): Promise<Response> => {
+  // Rate-limit hints (see DESIGN-rate-limit-hints.md). Registered even when
+  // disabled so getRouteInfo() can warn about querying a disabled handler.
+  const rateLimitHints = options.rateLimitHints ?? false;
+  registerRateLimitHintsMode(rateLimitHints !== false);
+
+  const handleRequest = async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     const pathname = url.pathname.replace(/\/+$/, '') || '/';
 
@@ -1702,6 +1727,29 @@ export function createCmsHandler(options: CmsOptions): Handler {
         headers: opts.securityHeaders,
       });
     }
+  };
+
+  if (rateLimitHints === false) {
+    return handleRequest;
+  }
+
+  return async (request: Request): Promise<Response> => {
+    const response = await handleRequest(request);
+    const info = classifyCmsRequest(request, {
+      basePath: opts.basePath,
+      tables: opts.introspected.tables,
+      plugins: opts.plugins?.getPluginConfigs() ?? [],
+    });
+    storeRouteInfo(response, info);
+    if (rateLimitHints === 'header') {
+      try {
+        response.headers.set(RATE_LIMIT_LEVEL_HEADER, String(info.level));
+      } catch {
+        // Headers can be immutable (e.g. a Response proxied straight from
+        // fetch()); the WeakMap entry above still carries the level.
+      }
+    }
+    return response;
   };
 }
 

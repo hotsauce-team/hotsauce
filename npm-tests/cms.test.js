@@ -11,7 +11,11 @@ import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { sql } from 'drizzle-orm';
 
-import { createCmsHandler } from '@hotsauce/cms';
+import {
+  createCmsHandler,
+  getRouteInfo,
+  RATE_LIMIT_LEVEL_HEADER,
+} from '@hotsauce/cms';
 import * as schema from './schema.js';
 
 describe('@hotsauce/cms CRUD', () => {
@@ -189,5 +193,52 @@ describe('@hotsauce/cms CRUD', () => {
     // Verify deleted
     const readRes = await request('GET', '/users/1');
     assert.equal(readRes.status, 404);
+  });
+});
+
+describe('@hotsauce/cms rate-limit hints', () => {
+  let pglite;
+  let handler;
+
+  before(async () => {
+    pglite = new PGlite();
+    const db = drizzle(pglite, { schema });
+
+    await db.execute(sql`
+      CREATE TABLE users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) NOT NULL UNIQUE,
+        name VARCHAR(100) NOT NULL,
+        bio TEXT,
+        is_admin BOOLEAN NOT NULL DEFAULT false,
+        created_at TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+
+    handler = createCmsHandler({
+      db,
+      schema: { users: schema.users },
+      basePath: '/admin',
+      auth: 'dangerously-open',
+      policies: 'dangerously-open',
+      csrfSecret: 'test-csrf-secret-at-least-32-chars!',
+      rateLimitHints: 'header',
+    });
+  });
+
+  after(async () => {
+    await pglite?.close();
+  });
+
+  it('labels login POST level 3 and list level 2', async () => {
+    const loginRes = await handler(
+      new Request('http://localhost/admin/login', { method: 'POST' }),
+    );
+    assert.equal(loginRes.headers.get(RATE_LIMIT_LEVEL_HEADER), '3');
+
+    const listRes = await handler(new Request('http://localhost/admin/users'));
+    assert.equal(listRes.status, 200);
+    assert.equal(listRes.headers.get(RATE_LIMIT_LEVEL_HEADER), '2');
+    assert.equal(getRouteInfo(listRes)?.level, 2);
   });
 });

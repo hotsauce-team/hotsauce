@@ -518,6 +518,28 @@ export interface PluginRoute {
   maxBodySize?: number;
 
   /**
+   * Rate-limit hint fact: this route responds differently to guessed secrets
+   * (e.g. verifies a code or password). Derives hint level 3.
+   * Consumed only when the CMS is created with `rateLimitHints` enabled.
+   */
+  bruteForceable?: boolean;
+
+  /**
+   * Rate-limit hint fact: this route consumes disproportionate CPU,
+   * bandwidth, storage, or downstream quota per request (uploads, presigns,
+   * exports). Derives hint level 2.
+   * Consumed only when the CMS is created with `rateLimitHints` enabled.
+   */
+  resourceIntensive?: boolean;
+
+  /**
+   * Explicit rate-limit hint level (1–3). Escape hatch for routes that don't
+   * decompose into the two facts above — when set, it wins over the derived
+   * level. Prefer declaring facts.
+   */
+  rateLimitLevel?: 1 | 2 | 3;
+
+  /**
    * How the request body is delivered to an in-process `handler`.
    *
    * - `'text'` (default): the body is read and UTF-8 decoded into

@@ -445,6 +445,24 @@ export interface CmsOptionsBase {
    * ```
    */
   csp?: CspOptions;
+
+  /**
+   * Rate-limit hint levels (see packages/cms/DESIGN-rate-limit-hints.md).
+   *
+   * The CMS never enforces rate limits — it labels each response with a
+   * recommended throttle strictness (1–3) that your proxy, CDN, or wrapping
+   * middleware can enforce.
+   *
+   * - `false` (default): no classification, no header — responses are
+   *   byte-identical to hints not existing.
+   * - `'in-process'`: classification readable via `getRouteInfo(response)`;
+   *   nothing on the wire.
+   * - `'header'`: additionally sets `X-Rate-Limit-Level: 1|2|3` on every
+   *   response. Strip the header at the layer that consumes it.
+   *
+   * @default false
+   */
+  rateLimitHints?: false | 'in-process' | 'header';
 }
 
 /**

@@ -503,8 +503,22 @@ export class PluginRegistry {
     }
 
     this.validateMaxBodySize(pluginName, route);
+    this.validateRateLimitLevel(pluginName, route);
 
     // Worker routes are validated separately
+  }
+
+  /**
+   * Validate a route's optional explicit rate-limit level (must be 1, 2, or 3)
+   */
+  private validateRateLimitLevel(pluginName: string, route: PluginRoute): void {
+    if (route.rateLimitLevel === undefined) return;
+    if (![1, 2, 3].includes(route.rateLimitLevel)) {
+      throw new PluginValidationError(
+        pluginName,
+        `Route "${route.pattern}" rateLimitLevel must be 1, 2, or 3`,
+      );
+    }
   }
 
   /**
@@ -581,6 +595,7 @@ export class PluginRegistry {
     }
 
     this.validateMaxBodySize(pluginName, route);
+    this.validateRateLimitLevel(pluginName, route);
   }
 }
 

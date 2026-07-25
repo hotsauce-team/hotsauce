@@ -1440,6 +1440,61 @@ const handler = withRateLimiter(cmsHandler, {
 });
 ```
 
+#### Rate-limit hints
+
+**The CMS never enforces limits; it labels routes.** With the
+`rateLimitHints` option, every response is classified with a recommended
+throttle strictness — level 1 (normal), 2 (elevated: list views, mutation
+submits, file serving, storage presigns/uploads), or 3 (strict: login,
+2FA verification, password changes) — for your infrastructure to enforce.
+Levels derive from two facts a route declares: `bruteForceable` (responds
+differently to guessed secrets → 3) and `resourceIntensive`
+(disproportionate CPU/bandwidth/storage per request → 2). Plugin routes
+declare the same facts (see `PluginRoute`).
+
+```ts
+// Default false: no classification, no header — zero overhead.
+createCmsHandler({ ..., rateLimitHints: 'in-process' }); // accessor only
+createCmsHandler({ ..., rateLimitHints: 'header' }); // accessor + header
+```
+
+**In-process (`'in-process'`)** — read the classification from the wrapper
+that directly invokes the handler (a cloned/reconstructed Response is not
+found), and enforce however you like, e.g. a penalty box keyed by client IP:
+
+```ts
+import { getRouteInfo } from '@hotsauce/cms';
+
+async function fetch(request: Request): Promise<Response> {
+  if (isInPenaltyBox(clientIp(request))) {
+    return new Response('Too many requests', {
+      status: 429,
+      headers: { 'Retry-After': '60' },
+    });
+  }
+  const response = await cmsHandler(request);
+  const level = getRouteInfo(response)?.level ?? 1; // undefined → not CMS → 1
+  if (level >= 2) recordWeightedHit(clientIp(request), level);
+  return response;
+}
+```
+
+In-memory counters are only valid for single-isolate deployments — note that
+`deno serve --parallel` already runs multiple isolates.
+
+**Wire header (`'header'`)** — sets `X-Rate-Limit-Level: 1|2|3` on every
+response so a proxy or CDN can enforce (HAProxy stick tables, Fastly
+penalty boxes, Cloudflare response-based counting). The contract is public
+API: header `X-Rate-Limit-Level`, values `"1" | "2" | "3"`, absence = 1.
+Routes your app serves outside the CMS default to level 1 by construction;
+set the same header on your own abuse-prone routes (form POSTs, search) and
+one proxy config covers both. **Strip the header in whichever layer consumes
+it** (`curl -sI https://your-site/admin/login | grep -i x-rate-limit` should
+return nothing from the public internet).
+
+Design, threat model, and proxy recipes:
+[DESIGN-rate-limit-hints.md](./DESIGN-rate-limit-hints.md).
+
 ### Multi-Tenancy (Shared Database)
 
 For multi-tenant applications using a shared database with a `tenant_id` column, create a custom policy helper:
