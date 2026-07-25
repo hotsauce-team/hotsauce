@@ -24,8 +24,10 @@ export function createAdminHandler(db: DB) {
     },
     // Empty policies = full access to all tables
     policies: {},
-    // Emits X-Rate-Limit-Level for proxy throttling; our server strips it
-    // before responses reach clients.
+    // Emits X-Rate-Limit-Level for edge throttling. The app does not strip
+    // it — the consuming proxy must (locally: the caddy service in
+    // ../docker-compose.yml, whose hint_penaltybox module strips by
+    // default; production: equivalent proxy config required).
     rateLimitHints: 'header',
     onError: (error, context) => {
       // deno-lint-ignore no-console
