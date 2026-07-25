@@ -24,6 +24,9 @@ export function createAdminHandler(db: DB) {
     },
     // Empty policies = full access to all tables
     policies: {},
+    // Emits X-Rate-Limit-Level for proxy throttling; our server strips it
+    // before responses reach clients.
+    rateLimitHints: 'header',
     onError: (error, context) => {
       // deno-lint-ignore no-console
       console.error('CMS Error:', { error, context });
