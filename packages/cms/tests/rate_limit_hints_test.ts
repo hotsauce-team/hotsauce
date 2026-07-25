@@ -251,6 +251,8 @@ Deno.test('rate-limit hints: handler end-to-end', async (t) => {
       assertEquals(response.status, 302);
       assertEquals(response.headers.get('Location'), 'http://localhost/admin');
       assertEquals(response.headers.get(RATE_LIMIT_LEVEL_HEADER), '2');
+      // Security-header enforcement survives the rebuild too
+      assertEquals(response.headers.get('X-Content-Type-Options'), 'nosniff');
       assertEquals(getRouteInfo(response)?.level, 2);
     },
   );

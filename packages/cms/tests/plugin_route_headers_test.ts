@@ -57,6 +57,19 @@ Deno.test('plugin route: security headers', async (t) => {
                 headers: { 'Content-Type': 'application/json' },
               }),
           },
+          {
+            // Response.redirect() has immutable headers; enforcement must
+            // rebuild rather than 500 (regression: headers.set threw and
+            // escaped into the generic error path).
+            pattern: 'immutable-redirect',
+            handler: () => Response.redirect('http://localhost/admin', 302),
+          },
+          {
+            // Response.error() (status 0) is not expressible as HTTP; the
+            // pipeline must degrade to the sanitized 500, not crash.
+            pattern: 'network-error',
+            handler: () => Response.error(),
+          },
         ],
       },
     ],
@@ -127,6 +140,29 @@ Deno.test('plugin route: security headers', async (t) => {
       assertEquals(res.headers.get('X-Frame-Options'), null);
       assertEquals(res.headers.get('Referrer-Policy'), null);
       assertEquals(res.headers.get('Content-Security-Policy'), null);
+    },
+  );
+
+  await t.step(
+    'immutable-header Response is rebuilt with security headers enforced',
+    async () => {
+      const res = await handler(
+        new Request('http://localhost/admin/header-test/immutable-redirect'),
+      );
+      assertEquals(res.status, 302);
+      assertEquals(res.headers.get('Location'), 'http://localhost/admin');
+      assertEquals(res.headers.get('X-Content-Type-Options'), 'nosniff');
+    },
+  );
+
+  await t.step(
+    'Response.error() degrades to the sanitized 500',
+    async () => {
+      const res = await handler(
+        new Request('http://localhost/admin/header-test/network-error'),
+      );
+      assertEquals(res.status, 500);
+      assertEquals((await res.text()).startsWith('Plugin error'), true);
     },
   );
 });
