@@ -757,6 +757,7 @@ export function createS3StoragePlugin(
       {
         pattern: ':table/:id/:column',
         methods: ['POST'],
+        resourceIntensive: true,
         handler: async (ctx) => {
           const { table, id, column } = ctx.params;
 

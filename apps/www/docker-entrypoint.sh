@@ -1,0 +1,13 @@
+#!/bin/sh
+# Container entrypoint for the www app: initialise + seed the SQLite
+# database on first run, then serve on all interfaces (the deno.jsonc
+# tasks bind 127.0.0.1 for host dev, which breaks the compose port map).
+set -e
+
+if [ ! -f data/www.db ]; then
+  deno task init
+  deno task seed
+fi
+
+exec deno serve --parallel --port=3010 --host=0.0.0.0 \
+  --permission-set=local server.ts

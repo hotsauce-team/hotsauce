@@ -1,0 +1,32 @@
+# Local edge for the www app: penalty-box rate limiting driven by the
+# X-Rate-Limit-Level hint header the CMS emits (and this module strips
+# before responses leave Caddy — the "our server strips it" in
+# admin.ts is this).
+{
+	admin off
+	auto_https off
+}
+
+:80 {
+	route {
+		hint_penaltybox {
+			# Per-tier budgets aligned with SECURITY.md's recommended limits.
+			# Tier budgets are independent; within a tier one response costs 1.
+			tier 3 {
+				# Brute-forceable routes (login, 2FA, password change):
+				# 5 per 15 minutes, long box — security offense.
+				window 15m
+				limit 5
+				penalty_ttl 30m
+			}
+			tier 2 {
+				# Resource-intensive routes (lists, mutations, presigns,
+				# file serving): capacity protection.
+				window 60s
+				limit 30
+				penalty_ttl 5m
+			}
+		}
+		reverse_proxy wwww:3010
+	}
+}

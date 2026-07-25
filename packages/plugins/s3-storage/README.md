@@ -358,6 +358,29 @@ file: jsonb('file').$cms({ file: true }),
 file: text('file', { mode: 'json' }).$cms({ file: true }),
 ```
 
+### Rate Limiting
+
+The presign endpoint (`POST {basePath}/s3-storage/:table/:id/:column`) is a
+cost-amplification target: each request performs SigV4 signing and mints a
+presigned upload URL, so an abuser with a valid session can generate object-store
+traffic and log noise cheaply. The route is authenticated and policy-checked,
+but has no built-in rate limiting — enforcement belongs to your proxy or
+middleware.
+
+The plugin declares the route `resourceIntensive`, which derives hint
+level 2. With `rateLimitHints: 'header'` the presign response carries
+`X-Rate-Limit-Level: 2`; with `'in-process'` (or `'header'`) wrapping
+middleware can read the same level via `getRouteInfo(response)`.
+Throttle on that label instead of hard-coding the route path — the label
+survives basePath changes and route moves. See the
+[CMS rate-limit hints docs](../../cms/README.md#rate-limit-hints) for the
+header contract and consumption recipes.
+
+Illustrative quotas (tune to your storage costs): 30 presigns per minute per
+user sustained, with a small burst allowance; return `429` with `Retry-After`.
+Monitor presign volume and 4xx/429 rates per user, and alert on unusual
+key-prefix activity.
+
 ## Schema Design for Create-Time Uploads
 
 Tables with `$cms({ autoDraft: true })` get automatic draft row creation. Every non-PK column must either have a **database default** or be **nullable** — the CMS validates this at startup.

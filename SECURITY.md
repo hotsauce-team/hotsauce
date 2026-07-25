@@ -430,6 +430,12 @@ app.use(
 - Login attempts: 5 per 15 minutes per IP
 - API requests: 100 per minute per user
 - Admin panel: 1000 per hour per user
+- Storage presign/upload (s3-storage, fs-storage): 30 per minute per user
+
+The CMS never enforces limits itself, but it can label each response with a
+recommended throttle strictness for your proxy or middleware to enforce — see
+[Rate-limit hints](packages/cms/README.md#rate-limit-hints)
+(`rateLimitHints` option; `X-Rate-Limit-Level: 1|2|3` header, absence = 1).
 
 ### Database Security
 

@@ -26,6 +26,12 @@ import {
   mapColumnToFieldType,
 } from '@hotsauce/core';
 import { matchPluginRoute, parseRoute, resolveAction } from './router.ts';
+import {
+  classifyCmsRequest,
+  RATE_LIMIT_LEVEL_HEADER,
+  registerRateLimitHintsMode,
+  storeRouteInfo,
+} from './rate-limit-hints.ts';
 import type { PluginRouteMatch } from './router.ts';
 import type {
   FilterContext,
@@ -335,6 +341,20 @@ export type {
 } from './plugins/types.ts';
 
 export { isWorkerPlugin } from './plugins/types.ts';
+
+// ─────────────────────────────────────────────────────────────
+// Rate-limit hints — route classification (README: "Rate-limit hints")
+// ─────────────────────────────────────────────────────────────
+export {
+  deriveRateLimitLevel,
+  getRouteInfo,
+  RATE_LIMIT_LEVEL_HEADER,
+} from './rate-limit-hints.ts';
+export type {
+  RateLimitLevel,
+  RouteFacts,
+  RouteInfo,
+} from './rate-limit-hints.ts';
 
 // ─────────────────────────────────────────────────────────────
 // Auth - JWT authentication (re-exported from @hotsauce/auth)
@@ -695,17 +715,26 @@ async function handlePluginRoute(
       const result = await route.handler(ctx);
       if (result instanceof Response) {
         const ct = result.headers.get('content-type') ?? '';
-        if (ct.startsWith('text/html')) {
-          // Enforce all security headers for HTML responses
-          // (plugins cannot override CSP, X-Frame-Options, etc.)
-          for (const [k, v] of Object.entries(effectiveHeaders)) {
-            result.headers.set(k, v);
+        const applySecurityHeaders = (res: Response): Response => {
+          if (ct.startsWith('text/html')) {
+            // Enforce all security headers for HTML responses
+            // (plugins cannot override CSP, X-Frame-Options, etc.)
+            for (const [k, v] of Object.entries(effectiveHeaders)) {
+              res.headers.set(k, v);
+            }
+          } else {
+            // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
+            res.headers.set('X-Content-Type-Options', 'nosniff');
           }
-        } else {
-          // Non-HTML: enforce nosniff (prevents MIME-sniffing of CSS/JS/JSON)
-          result.headers.set('X-Content-Type-Options', 'nosniff');
+          return res;
+        };
+        try {
+          return applySecurityHeaders(result);
+        } catch {
+          // Immutable headers (Response.redirect(), a proxied fetch()):
+          // rebuild so the security headers are still enforced.
+          return applySecurityHeaders(new Response(result.body, result));
         }
-        return result;
       }
       // String result - wrap in HTML response with security headers
       return new Response(result, {
@@ -1025,7 +1054,12 @@ export function createCmsHandler(options: CmsOptions): Handler {
     return accept.includes('application/json');
   };
 
-  return async (request: Request): Promise<Response> => {
+  // Rate-limit hints (README: "Rate-limit hints"). Registered even when
+  // disabled so getRouteInfo() can warn about querying a disabled handler.
+  const rateLimitHints = options.rateLimitHints ?? false;
+  registerRateLimitHintsMode(rateLimitHints !== false);
+
+  const handleRequest = async (request: Request): Promise<Response> => {
     const url = new URL(request.url);
     const pathname = url.pathname.replace(/\/+$/, '') || '/';
 
@@ -1702,6 +1736,33 @@ export function createCmsHandler(options: CmsOptions): Handler {
         headers: opts.securityHeaders,
       });
     }
+  };
+
+  if (rateLimitHints === false) {
+    return handleRequest;
+  }
+
+  return async (request: Request): Promise<Response> => {
+    let response = await handleRequest(request);
+    const info = classifyCmsRequest(request, {
+      basePath: opts.basePath,
+      tables: opts.introspected.tables,
+      plugins: opts.plugins?.getPluginConfigs() ?? [],
+    });
+    if (rateLimitHints === 'header') {
+      try {
+        response.headers.set(RATE_LIMIT_LEVEL_HEADER, String(info.level));
+      } catch {
+        // Immutable headers (Response.redirect(), or a Response proxied
+        // straight from fetch() by a plugin route): rebuild so the
+        // header-mode contract holds for every response.
+        response = new Response(response.body, response);
+        response.headers.set(RATE_LIMIT_LEVEL_HEADER, String(info.level));
+      }
+    }
+    // After any rebuild, so the accessor is keyed to the returned object.
+    storeRouteInfo(response, info);
+    return response;
   };
 }
 

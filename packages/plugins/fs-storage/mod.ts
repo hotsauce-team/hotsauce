@@ -577,6 +577,7 @@ export function createFsStoragePlugin(
       {
         pattern: ':table/:id/:column',
         methods: ['POST'],
+        resourceIntensive: true,
         handler: async (ctx) => {
           const { table, id, column } = ctx.params;
           if (!table || !id || !column) {
@@ -658,6 +659,7 @@ export function createFsStoragePlugin(
         methods: ['POST'],
         maxBodySize: options.maxUploadBytes,
         bodyType: 'stream',
+        resourceIntensive: true,
         handler: async (ctx) => {
           // Rejections before `fs.put` leave the request body unread; dispatch
           // cancels the unconsumed stream after the handler settles, so early
@@ -737,6 +739,7 @@ export function createFsStoragePlugin(
       {
         pattern: '_serve',
         methods: ['GET'],
+        resourceIntensive: true,
         handler: async (ctx) => {
           let token: string | null = null;
           try {
