@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1785741454752,
+  "lastUpdate": 1786343759740,
   "repoUrl": "https://github.com/hotsauce-team/hotsauce",
   "entries": {
     "hotsauce-cms benchmarks": [
@@ -1718,6 +1718,220 @@ window.BENCHMARK_DATA = {
             "value": 6386899,
             "unit": "ns/iter",
             "extra": "p75: 6326507 ns, p99: 10232552 ns, n: 88"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "name": "earthlingdavey",
+            "username": "earthlingdavey",
+            "email": "15802017+earthlingdavey@users.noreply.github.com"
+          },
+          "committer": {
+            "name": "GitHub",
+            "username": "web-flow",
+            "email": "noreply@github.com"
+          },
+          "id": "d93c77539c99326aef9be2709fe43b24d0a91931",
+          "message": "Merge pull request #98 from hotsauce-team/rate-limit-hints\n\nfeat(cms): rate-limit hint levels (1-3) for infrastructure enforcement",
+          "timestamp": "2026-07-25T20:43:46Z",
+          "url": "https://github.com/hotsauce-team/hotsauce/commit/d93c77539c99326aef9be2709fe43b24d0a91931"
+        },
+        "date": 1786343759244,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "auth / signJwt (HS256)",
+            "value": 83722,
+            "unit": "ns/iter",
+            "extra": "p75: 87981 ns, p99: 155959 ns, n: 5982"
+          },
+          {
+            "name": "auth / verifyJwt (HS256)",
+            "value": 88819,
+            "unit": "ns/iter",
+            "extra": "p75: 98524 ns, p99: 143128 ns, n: 5639"
+          },
+          {
+            "name": "auth / createJwtPayload",
+            "value": 66.90937878787881,
+            "unit": "ns/iter",
+            "extra": "p75: 66.6236 ns, p99: 83.2358 ns, n: 759"
+          },
+          {
+            "name": "auth / getTokenFromCookies: 3-cookie header",
+            "value": 834.6372414285715,
+            "unit": "ns/iter",
+            "extra": "p75: 814.1707 ns, p99: 1614.9835 ns, n: 70"
+          },
+          {
+            "name": "auth / createAuthCookie",
+            "value": 234.52767098214278,
+            "unit": "ns/iter",
+            "extra": "p75: 236.9485 ns, p99: 267.8614 ns, n: 224"
+          },
+          {
+            "name": "cms / e2e: GET /admin — dashboard",
+            "value": 178289,
+            "unit": "ns/iter",
+            "extra": "p75: 185246 ns, p99: 451094 ns, n: 2813"
+          },
+          {
+            "name": "cms / e2e: GET /admin/posts/1 — detail page",
+            "value": 466414,
+            "unit": "ns/iter",
+            "extra": "p75: 468737 ns, p99: 915524 ns, n: 1082"
+          },
+          {
+            "name": "cms / e2e: GET /admin/posts/1/edit — edit form",
+            "value": 612513,
+            "unit": "ns/iter",
+            "extra": "p75: 613799 ns, p99: 1155151 ns, n: 826"
+          },
+          {
+            "name": "cms / e2e: GET /admin/posts — list with JWT auth + row/column policies",
+            "value": 1240769,
+            "unit": "ns/iter",
+            "extra": "p75: 1200407 ns, p99: 1974906 ns, n: 413"
+          },
+          {
+            "name": "cms / e2e: POST /admin/posts/new — create (form submit)",
+            "value": 849418,
+            "unit": "ns/iter",
+            "extra": "p75: 851364 ns, p99: 1793226 ns, n: 440"
+          },
+          {
+            "name": "cms / e2e list page / e2e: GET /admin/users — list page (25-row table)",
+            "value": 612161,
+            "unit": "ns/iter",
+            "extra": "p75: 613778 ns, p99: 1124144 ns, n: 828"
+          },
+          {
+            "name": "cms / e2e list page / e2e: GET /admin/posts — default page of 25 (1,000-row table)",
+            "value": 794151,
+            "unit": "ns/iter",
+            "extra": "p75: 777816 ns, p99: 1387647 ns, n: 639"
+          },
+          {
+            "name": "cms / e2e list page / e2e: GET /admin/posts?limit=100 — page of 100 (1,000-row table)",
+            "value": 1546054,
+            "unit": "ns/iter",
+            "extra": "p75: 1514089 ns, p99: 2688772 ns, n: 334"
+          },
+          {
+            "name": "cms / buildPolicyWhere: pk check + policy condition",
+            "value": 1836.1036289473677,
+            "unit": "ns/iter",
+            "extra": "p75: 1813.6575 ns, p99: 2543.9936 ns, n: 38"
+          },
+          {
+            "name": "cms / createPolicyContext",
+            "value": 5.072426793676557,
+            "unit": "ns/iter",
+            "extra": "p75: 4.9263 ns, p99: 7.2966 ns, n: 9868"
+          },
+          {
+            "name": "cms / column filtering / filterRecordsColumns: 100 rows",
+            "value": 54696,
+            "unit": "ns/iter",
+            "extra": "p75: 53400 ns, p99: 101931 ns, n: 9152"
+          },
+          {
+            "name": "cms / column filtering / filterRecordsColumns: 1,000 rows",
+            "value": 559387,
+            "unit": "ns/iter",
+            "extra": "p75: 543978 ns, p99: 1095440 ns, n: 904"
+          },
+          {
+            "name": "cms / parseRoute: list URL",
+            "value": 352.3900907894738,
+            "unit": "ns/iter",
+            "extra": "p75: 353.0578 ns, p99: 405.4118 ns, n: 152"
+          },
+          {
+            "name": "cms / parseRoute: detail URL",
+            "value": 454.45299250000005,
+            "unit": "ns/iter",
+            "extra": "p75: 455.7209 ns, p99: 706.4341 ns, n: 120"
+          },
+          {
+            "name": "cms / parseRoute: edit URL",
+            "value": 496.5337405405404,
+            "unit": "ns/iter",
+            "extra": "p75: 492.9496 ns, p99: 563.0438 ns, n: 111"
+          },
+          {
+            "name": "cms / parseRoute: unknown table (404)",
+            "value": 371.3749951724138,
+            "unit": "ns/iter",
+            "extra": "p75: 372.8378 ns, p99: 384.4896 ns, n: 145"
+          },
+          {
+            "name": "cms / resolveAction: GET list",
+            "value": 16.880835094212554,
+            "unit": "ns/iter",
+            "extra": "p75: 16.7724 ns, p99: 18.1029 ns, n: 2972"
+          },
+          {
+            "name": "cms / matchPluginRoute: 20 routes, match last",
+            "value": 4748.863538095238,
+            "unit": "ns/iter",
+            "extra": "p75: 4729.6801 ns, p99: 5101.9518 ns, n: 21"
+          },
+          {
+            "name": "core / introspectFullSchema: blog schema (6 tables + relations)",
+            "value": 28047,
+            "unit": "ns/iter",
+            "extra": "p75: 25459 ns, p99: 75064 ns, n: 17837"
+          },
+          {
+            "name": "core / introspectTable: single table",
+            "value": 1621.5858707317072,
+            "unit": "ns/iter",
+            "extra": "p75: 1621.4324 ns, p99: 1680.0877 ns, n: 41"
+          },
+          {
+            "name": "core / mapColumnsToFields: single table",
+            "value": 5825.285078947368,
+            "unit": "ns/iter",
+            "extra": "p75: 5839.6295 ns, p99: 6015.7034 ns, n: 19"
+          },
+          {
+            "name": "ui / escapeHtml: 60-char mixed string",
+            "value": 921.5749399999999,
+            "unit": "ns/iter",
+            "extra": "p75: 916.067 ns, p99: 1198.4223 ns, n: 65"
+          },
+          {
+            "name": "ui / html tagged template: small fragment",
+            "value": 1650.184929268293,
+            "unit": "ns/iter",
+            "extra": "p75: 1621.6575 ns, p99: 2172.9288 ns, n: 41"
+          },
+          {
+            "name": "ui / gridItems: 100 thumbnails",
+            "value": 621301,
+            "unit": "ns/iter",
+            "extra": "p75: 601227 ns, p99: 1154595 ns, n: 815"
+          },
+          {
+            "name": "ui / list view render / listTable: 25 rows × 5 columns",
+            "value": 149303,
+            "unit": "ns/iter",
+            "extra": "p75: 145313 ns, p99: 273824 ns, n: 3360"
+          },
+          {
+            "name": "ui / list view render / listTable: 100 rows × 5 columns",
+            "value": 604246,
+            "unit": "ns/iter",
+            "extra": "p75: 588082 ns, p99: 1033357 ns, n: 838"
+          },
+          {
+            "name": "ui / list view render / listTable: 1,000 rows × 5 columns",
+            "value": 6144998,
+            "unit": "ns/iter",
+            "extra": "p75: 6071099 ns, p99: 9974687 ns, n: 91"
           }
         ]
       }
